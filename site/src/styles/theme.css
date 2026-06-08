@@ -1,0 +1,336 @@
+/* =====================================================================
+   SpecShip docs — matches the SpecShip Desktop design system.
+   Dark-first (graph as hero). Geist + Geist Mono. Blue spec accent.
+   Node-color family (purple / blue / green / teal) reserved for the
+   diagram + product cards. Hairline rules, square corners.
+   ===================================================================== */
+
+/* ---- Fonts ---- */
+:root {
+	--ss-font-sans: 'Geist Variable', 'Geist', system-ui, -apple-system,
+		BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif;
+	--ss-font-mono: 'Geist Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+
+	--sl-font: var(--ss-font-sans);
+	--sl-font-mono: var(--ss-font-mono);
+}
+
+/* ============================================================
+   DARK (default) — desktop's bg-canvas #0E1014
+   ============================================================ */
+:root,
+:root[data-theme='dark'] {
+	color-scheme: dark;
+
+	/* Starlight tokens */
+	--sl-color-accent-low: #1c2c44;
+	--sl-color-accent: #3b82f6;
+	--sl-color-accent-high: #6fa0f6;
+	--sl-color-white: #e8ebf0;
+	--sl-color-gray-1: #d6d9df;
+	--sl-color-gray-2: #b1b6c0;
+	--sl-color-gray-3: #9aa3b2;
+	--sl-color-gray-4: #6b7280;
+	--sl-color-gray-5: #424b59;
+	--sl-color-gray-6: #20262f;
+	--sl-color-gray-7: #161a21;
+	--sl-color-black: #0b0d11;
+
+	--sl-color-bg: #0e1014;
+	--sl-color-bg-nav: #0e1014;
+	--sl-color-bg-sidebar: #0b0d11;
+	--sl-color-bg-inline-code: #1a1f28;
+	--sl-color-bg-accent: #3b82f6;
+
+	--sl-color-text: #e8ebf0;
+	--sl-color-text-accent: #6fa0f6;
+	--sl-color-text-invert: #0e1014;
+
+	--sl-color-hairline: #e8ebf0;
+	--sl-color-hairline-light: rgba(255, 255, 255, 0.07);
+	--sl-color-hairline-shade: rgba(255, 255, 255, 0.12);
+
+	/* SpecShip Desktop tokens — mirrors web-ng/_tokens.scss exactly. */
+	--ss-bg: #0e1014;
+	--ss-bg-2: #161a21;
+	--ss-bg-elev: #20262f;
+	--ss-bg-press: #1a1f28;
+	--ss-bg-void: #0b0d11;
+	--ss-ink: #e8ebf0;
+	--ss-ink-2: #9aa3b2;
+	--ss-ink-3: #5c6573;
+	--ss-ink-4: #424b59;
+	--ss-accent: #3b82f6;
+	--ss-accent-2: #6fa0f6;
+	--ss-accent-strong: #2563eb;
+	--ss-accent-soft: rgba(59, 130, 246, 0.14);
+	--ss-rule: rgba(255, 255, 255, 0.07);
+	--ss-rule-strong: rgba(255, 255, 255, 0.12);
+
+	--ss-node-spec: #5b93f2;
+	--ss-node-code: #a586f5;
+	--ss-node-test: #46c26b;
+	--ss-node-route: #29d2be;
+	--ss-node-spec-soft: rgba(91, 147, 242, 0.14);
+	--ss-node-code-soft: rgba(165, 134, 245, 0.14);
+	--ss-node-test-soft: rgba(70, 194, 107, 0.14);
+	--ss-node-route-soft: rgba(41, 210, 190, 0.14);
+}
+
+/* ============================================================
+   LIGHT — desktop's light theme (bg #F4F6F8)
+   ============================================================ */
+:root[data-theme='light'] {
+	color-scheme: light;
+
+	--sl-color-accent-low: #dbe7fa;
+	--sl-color-accent: #2563eb;
+	--sl-color-accent-high: #1a4cc4;
+	--sl-color-white: #161b22;
+	--sl-color-gray-1: #1f2530;
+	--sl-color-gray-2: #4a5566;
+	--sl-color-gray-3: #6b7484;
+	--sl-color-gray-4: #7b8696;
+	--sl-color-gray-5: #a9b2c0;
+	--sl-color-gray-6: #d8dde4;
+	--sl-color-gray-7: #e9ecf1;
+	--sl-color-black: #f4f6f8;
+
+	--sl-color-bg: #f4f6f8;
+	--sl-color-bg-nav: #f4f6f8;
+	--sl-color-bg-sidebar: #ffffff;
+	--sl-color-bg-inline-code: #e9ecf1;
+	--sl-color-bg-accent: #2563eb;
+
+	--sl-color-text: #161b22;
+	--sl-color-text-accent: #1a4cc4;
+	--sl-color-text-invert: #f4f6f8;
+
+	--sl-color-hairline: #161b22;
+	--sl-color-hairline-light: rgba(15, 23, 42, 0.1);
+	--sl-color-hairline-shade: rgba(15, 23, 42, 0.18);
+
+	--ss-bg: #f4f6f8;
+	--ss-bg-2: #ffffff;
+	--ss-bg-elev: #ffffff;
+	--ss-bg-press: #e9ecf1;
+	--ss-bg-void: #e9ecf1;
+	--ss-ink: #161b22;
+	--ss-ink-2: #4a5566;
+	--ss-ink-3: #7b8696;
+	--ss-ink-4: #a9b2c0;
+	--ss-accent: #2563eb;
+	--ss-accent-2: #1a4cc4;
+	--ss-accent-strong: #2563eb;
+	--ss-accent-soft: rgba(37, 99, 235, 0.1);
+	--ss-rule: rgba(15, 23, 42, 0.1);
+	--ss-rule-strong: rgba(15, 23, 42, 0.18);
+
+	--ss-node-spec: #2f6fe0;
+	--ss-node-code: #7c56e0;
+	--ss-node-test: #1e9e4c;
+	--ss-node-route: #0e9c8e;
+	--ss-node-spec-soft: rgba(47, 111, 224, 0.12);
+	--ss-node-code-soft: rgba(124, 86, 224, 0.12);
+	--ss-node-test-soft: rgba(30, 158, 76, 0.12);
+	--ss-node-route-soft: rgba(14, 156, 142, 0.12);
+}
+
+/* ---- Global resets ---- */
+*,
+*::before,
+*::after {
+	border-radius: 0 !important;
+}
+
+:root {
+	--sl-shadow-sm: none;
+	--sl-shadow-md: none;
+	--sl-shadow-lg: none;
+}
+
+body {
+	background: var(--ss-bg);
+	color: var(--ss-ink);
+	font-family: var(--ss-font-sans);
+	font-feature-settings: 'cv01', 'cv03', 'ss03';
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+}
+
+:where(h1, h2, h3, .sl-markdown-content h1, .sl-markdown-content h2, .sl-markdown-content h3) {
+	font-family: var(--ss-font-sans);
+	font-weight: 650;
+	letter-spacing: -0.018em;
+	line-height: 1.18;
+	color: var(--ss-ink);
+}
+:where(.sl-markdown-content h1) {
+	font-size: clamp(1.95rem, 3vw, 2.55rem);
+	font-weight: 700;
+}
+:where(.sl-markdown-content h2) {
+	font-size: clamp(1.55rem, 2.3vw, 1.95rem);
+	margin-top: 2.4em;
+	padding-top: 0.7em;
+	border-top: 1px solid var(--ss-rule);
+}
+:where(.sl-markdown-content h3) {
+	font-size: clamp(1.2rem, 1.7vw, 1.38rem);
+	margin-top: 1.8em;
+}
+
+:where(.sl-markdown-content p, .sl-markdown-content li) {
+	color: var(--ss-ink-2);
+}
+:where(.sl-markdown-content p) {
+	line-height: 1.65;
+	font-size: 1.02rem;
+}
+:where(.sl-markdown-content strong) {
+	color: var(--ss-ink);
+	font-weight: 600;
+}
+
+/* ---- Docs chrome ---- */
+.header {
+	background: var(--ss-bg);
+	-webkit-backdrop-filter: none;
+	backdrop-filter: none;
+}
+header.header {
+	border-bottom: 1px solid var(--ss-rule);
+}
+.header .header {
+	border-bottom: 0;
+}
+
+#starlight__sidebar,
+.sidebar-pane {
+	border-inline-end: 1px solid var(--ss-rule);
+	background: var(--ss-bg-sidebar, var(--ss-bg-2));
+}
+
+.sidebar-content details > summary,
+.sidebar-content > ul > li > span,
+.sidebar-content .large {
+	font-weight: 700;
+	letter-spacing: 0.07em;
+	text-transform: uppercase;
+	font-size: 0.7rem;
+	color: var(--ss-ink-3);
+	font-family: var(--ss-font-sans);
+}
+
+.sidebar-content a {
+	color: var(--ss-ink-2);
+	font-family: var(--ss-font-sans);
+}
+.sidebar-content a:hover {
+	background: var(--ss-bg-press);
+	color: var(--ss-ink);
+}
+.sidebar-content a[aria-current='page'],
+.sidebar-content a[aria-current='page']:hover {
+	background: transparent;
+	color: var(--ss-accent-2);
+	font-weight: 600;
+	border-inline-start: 2px solid var(--ss-accent);
+}
+
+starlight-toc a {
+	color: var(--ss-ink-3);
+}
+starlight-toc a[aria-current='true'] {
+	color: var(--ss-accent-2);
+	font-weight: 600;
+}
+
+.pagination-links a {
+	border: 1px solid var(--ss-rule-strong);
+	box-shadow: none;
+	background: var(--ss-bg-2);
+	color: var(--ss-ink);
+}
+.pagination-links a:hover {
+	background: var(--ss-bg-press);
+	border-color: var(--ss-accent);
+}
+
+.sl-markdown-content :not(pre) > code {
+	border: 1px solid var(--ss-rule);
+	background: var(--ss-bg-2);
+	color: var(--ss-node-spec);
+	font-size: 0.875em;
+	padding: 0.06em 0.42em;
+	font-family: var(--ss-font-mono);
+}
+
+.card,
+.starlight-aside {
+	border: 1px solid var(--ss-rule-strong);
+	box-shadow: none;
+}
+.starlight-aside--note {
+	border-inline-start: 3px solid var(--ss-accent);
+}
+
+button[data-open-modal] {
+	border: 1px solid var(--ss-rule-strong);
+	background: var(--ss-bg-2);
+	color: var(--ss-ink-2);
+}
+
+.sl-markdown-content hr {
+	border: 0;
+	border-top: 1px solid var(--ss-rule);
+	margin-block: 3rem;
+}
+
+.sl-markdown-content a {
+	color: var(--ss-accent-2);
+	text-underline-offset: 3px;
+	text-decoration-color: var(--ss-accent);
+	text-decoration-thickness: 1px;
+}
+.sl-markdown-content a:hover {
+	text-decoration-thickness: 2px;
+}
+
+.sl-markdown-content table {
+	border: 1px solid var(--ss-rule-strong);
+}
+.sl-markdown-content th,
+.sl-markdown-content td {
+	border-bottom: 1px solid var(--ss-rule);
+}
+.sl-markdown-content th {
+	font-family: var(--ss-font-sans);
+	font-weight: 600;
+	letter-spacing: 0.05em;
+	text-transform: uppercase;
+	font-size: 0.74rem;
+	color: var(--ss-ink-3);
+	background: var(--ss-bg-2);
+}
+
+.sl-markdown-content blockquote {
+	font-family: var(--ss-font-sans);
+	font-style: normal;
+	font-size: 1.08rem;
+	line-height: 1.55;
+	border-inline-start: 3px solid var(--ss-accent);
+	padding-inline-start: 1.2rem;
+	color: var(--ss-ink-2);
+}
+
+@media (min-width: 72rem) {
+	.main-pane {
+		--sl-content-margin-inline: auto;
+	}
+}
+
+::selection {
+	background: var(--ss-accent-soft);
+	color: var(--ss-ink);
+}

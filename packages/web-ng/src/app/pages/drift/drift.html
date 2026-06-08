@@ -1,0 +1,54 @@
+@if (resource.state().noProject) {
+  <app-pick-project-empty surface="The drift queue" />
+} @else {
+<div class="page">
+  <header class="page-head">
+    <div class="title-block">
+      <div class="title">Drift queue</div>
+      <div class="sub">{{ resource.state().loading ? 'loading…' : allLinks().length + ' links need attention' }}</div>
+    </div>
+  </header>
+
+  <div class="filter-bar">
+    @for (s of states; track s) {
+      <button
+        type="button"
+        class="filter-chip"
+        [class.active]="stateFilter()[s]"
+        [attr.data-state]="s"
+        (click)="toggleFilter(s)"
+      >
+        <span class="cap">{{ s }}</span>
+        <span class="count">{{ counts()[s] }}</span>
+      </button>
+    }
+  </div>
+
+  <div class="scroll-y list-frame">
+    @if (visibleLinks().length === 0) {
+      <div class="empty">
+        <div class="empty-icon">✓</div>
+        <div class="empty-title">All links in good standing</div>
+        <div class="empty-sub">Nothing has drifted. Every spec link points at code that still matches.</div>
+      </div>
+    } @else {
+      @for (l of visibleLinks(); track l.id) {
+        <div class="link-row" [attr.data-state]="l.state">
+          <span class="state-pill">{{ l.state }}@if (l.driftAxis) { · {{ l.driftAxis }} }</span>
+          <div class="spec-block">
+            <div class="spec-id mono">{{ l.specId }}</div>
+            @if (l.specTitle) { <div class="spec-title">{{ l.specTitle }}</div> }
+          </div>
+          <div class="target">
+            <span class="target-arrow">→</span>
+            <span class="mono target-path">{{ l.targetFilePath }}<span class="muted">:</span>{{ l.targetQualifiedName }}</span>
+          </div>
+          <span class="provenance">{{ l.provenance }}</span>
+          <span class="age mono muted">{{ ageOf(l) }}</span>
+        </div>
+      }
+    }
+  </div>
+</div>
+
+}

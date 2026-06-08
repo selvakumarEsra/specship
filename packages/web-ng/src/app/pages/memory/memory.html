@@ -1,0 +1,241 @@
+<div class="memory-page col">
+  <div class="page-head">
+    <div class="row gap-10">
+      <app-icon name="memory" [size]="18" />
+      <div class="col gap-2 grow">
+        <div class="title">Memory</div>
+        <div class="sub">Everything the agent remembers — across levels and types</div>
+      </div>
+      <div class="seg">
+        <button class="seg-btn" [class.active]="view() === 'sources'" (click)="onViewChange('sources')">Sources</button>
+        <button class="seg-btn" [class.active]="view() === 'effective'" (click)="onViewChange('effective')">Effective</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="stat-strip row gap-10">
+    <div class="stat row gap-8">
+      <app-icon name="memory" [size]="14" />
+      <div><div class="lbl">Loaded</div><div class="val mono">{{ fmtK(totalTokens()) }} tokens</div></div>
+    </div>
+    <div class="stat row gap-8">
+      <app-icon name="memory" [size]="14" />
+      <div><div class="lbl">Instructions</div><div class="val mono">{{ instructionCount() }}</div></div>
+    </div>
+    <div class="stat row gap-8">
+      <app-icon name="tips" [size]="14" style="color: var(--node-test);" />
+      <div><div class="lbl">Notes</div><div class="val mono">{{ noteCount() }}</div></div>
+    </div>
+    <div class="stat row gap-8">
+      <app-icon name="external" [size]="14" style="color: var(--node-route);" />
+      <div><div class="lbl">Imports</div><div class="val mono">{{ importCount() }}</div></div>
+    </div>
+    <span class="grow"></span>
+    @if (source() === 'seed') {
+      <span class="pill warn" title="No /api/memory data yet — showing illustrative seed">seed data</span>
+    } @else {
+      <span class="pill ok" title="Live from /api/memory">live</span>
+    }
+    <button class="btn btn-secondary btn-sm" (click)="reload()">
+      <app-icon name="refresh" [size]="13" />
+      Reload memory
+    </button>
+  </div>
+
+  <div class="filter-bar row gap-6">
+    <app-icon name="filter" [size]="13" style="color: var(--text-muted);" />
+    @for (chip of typeChips(); track chip.key) {
+      <button class="chip row gap-6"
+        [class.active]="typeFilter() === chip.key"
+        [style.--chip-color]="chip.color"
+        [style.--chip-bg]="chip.soft"
+        (click)="onTypeFilter(chip.key)"
+      >
+        @if (chip.key !== 'all') {
+          <span class="dot" [style.background]="chip.color"></span>
+        }
+        {{ chip.label }}
+        @if (chip.count !== undefined) {
+          <span class="cnt mono tabular">{{ chip.count }}</span>
+        }
+      </button>
+    }
+    <span class="grow"></span>
+    @if (typeFilter() !== 'all'; as tf) {
+      <span class="muted xs">{{ typeDesc() }}</span>
+    }
+  </div>
+
+  @if (view() === 'sources') {
+    <div class="split row">
+      <div class="rail col">
+        <div class="rail-scroll scroll-y">
+          @for (g of railGroups(); track g.key) {
+            <div class="rail-group">
+              <div class="rail-group-head row gap-6">
+                <span class="eyebrow">{{ L[g.key].label }}</span>
+                <span class="muted xs">{{ L[g.key].desc }}</span>
+              </div>
+              @for (f of rowItems(g); track f.id) {
+                <div class="src-row row gap-8"
+                  [class.selected]="selectedId() === f.id"
+                  [class.indent]="isIndented(f)"
+                  (click)="onSelectByObj(f)"
+                >
+                  <span class="pill-dot" [style.background]="L[f.level].color"></span>
+                  <app-icon [name]="iconFor(f)" [size]="13" />
+                  <div class="col gap-2 grow">
+                    <div class="row gap-6">
+                      <span class="src-name mono">{{ nameFor(f) }}</span>
+                      @if (f.readOnly) {
+                        <app-icon name="lock" [size]="10" style="color: var(--warn);" />
+                      }
+                    </div>
+                    <div class="src-path mono muted">{{ f.path }}</div>
+                  </div>
+                  <span class="src-tokens mono tabular muted">{{ fmtK(f.tokens) }}</span>
+                </div>
+              }
+            </div>
+          }
+        </div>
+      </div>
+
+      <div class="detail col">
+        @if (current(); as f) {
+          <div class="detail-scroll scroll-y">
+            <div class="row gap-8 head-pills">
+              <span class="pill" [style.background]="T[f.type].soft" [style.color]="T[f.type].color">
+                <app-icon [name]="T[f.type].icon" [size]="10" />
+                {{ T[f.type].label }}
+              </span>
+              <span class="pill" [style.background]="L[f.level].soft" [style.color]="L[f.level].color">{{ L[f.level].label }}</span>
+              <span class="secondary xs">{{ L[f.level].desc }}</span>
+              <span class="grow"></span>
+              @if (f.readOnly) {
+                <span class="pill warn"><app-icon name="lock" [size]="10" /> read-only</span>
+              }
+            </div>
+
+            <div class="row gap-8 path-row">
+              <span class="path mono">{{ f.path }}</span>
+            </div>
+
+            <div class="kv-strip row">
+              <div class="kv"><div class="lbl">Tokens</div><div class="val mono tabular">{{ fmtK(f.tokens) }}</div></div>
+              <div class="kv"><div class="lbl">Lines</div><div class="val mono tabular">{{ f.lines }}</div></div>
+              <div class="kv"><div class="lbl">Scope</div><div class="val mono tabular">{{ L[f.level].label }}</div></div>
+              <div class="kv"><div class="lbl">Modified</div><div class="val mono tabular">{{ f.modified }}</div></div>
+              @if (f.type === 'note' && f.session) {
+                <div class="kv">
+                  <div class="lbl">Saved in</div>
+                  <button class="val mono session-link">{{ f.session }}</button>
+                </div>
+              }
+            </div>
+
+            @if (f.type === 'note' && f.tags?.length) {
+              <div class="tags row gap-6">
+                @for (tg of f.tags; track tg) {
+                  <span class="tag mono">#{{ tg }}</span>
+                }
+              </div>
+            }
+
+            <div class="card card-pad body" [innerHTML]="currentBody()"></div>
+
+            @if (currentImports().length > 0) {
+              <div class="imports">
+                <div class="eyebrow">Imports · {{ currentImports().length }}</div>
+                <div class="col gap-6">
+                  @for (im of currentImports(); track im.id) {
+                    <div class="import-row row gap-8">
+                      <app-icon name="external" [size]="12" style="color: var(--node-route);" />
+                      <span class="mono grow">{{ im.path }}</span>
+                      <span class="mono tabular muted">{{ fmtK(im.tokens) }}</span>
+                    </div>
+                  }
+                </div>
+              </div>
+            }
+
+            <div class="actions row gap-8">
+              @if (!f.readOnly) {
+                <button class="btn btn-secondary btn-sm">
+                  <app-icon name="reveal" [size]="13" />
+                  {{ f.type === 'note' ? 'Edit note' : 'Edit memory' }}
+                </button>
+              }
+              <button class="btn btn-secondary btn-sm">
+                <app-icon name="copy" [size]="13" />
+                Copy contents
+              </button>
+              @if (f.type === 'note') {
+                <button class="btn btn-ghost btn-sm danger">
+                  <app-icon name="x" [size]="13" />
+                  Forget
+                </button>
+              }
+            </div>
+          </div>
+        }
+      </div>
+    </div>
+  } @else {
+    <div class="eff-scroll scroll-y">
+      <div class="row gap-8 eff-head">
+        <app-icon name="layers" [size]="15" style="color: var(--accent);" />
+        <span class="eff-title">Effective memory</span>
+        <span class="secondary xs">· everything the agent loads</span>
+      </div>
+      <div class="secondary eff-desc">
+        Instructions merge in precedence order — managed policy is authoritative and lower blocks fill in where higher ones are silent. Saved notes are appended as retrieved context.
+      </div>
+
+      @if (effectiveInstructions().length > 0) {
+        <div class="eyebrow eff-section-head">Instructions · precedence order</div>
+        <div class="col gap-10">
+          @for (f of effectiveInstructions(); track f.id; let i = $index) {
+            <div class="card eff-block row">
+              <div class="bar" [style.background]="L[f.level].color"></div>
+              <div class="body col">
+                <div class="row gap-8 head">
+                  <span class="ord mono tabular muted">{{ i + 1 }}</span>
+                  <span class="pill" [style.background]="L[f.level].soft" [style.color]="L[f.level].color">{{ L[f.level].label }}</span>
+                  <span class="path mono">{{ f.path }}</span>
+                  <span class="grow"></span>
+                  @if (f.readOnly) { <app-icon name="lock" [size]="11" style="color: var(--warn);" /> }
+                  <span class="mono tabular muted">{{ fmtK(f.tokens) }}</span>
+                </div>
+                <div class="md" [innerHTML]="renderBody(f.body)"></div>
+              </div>
+            </div>
+          }
+        </div>
+      }
+
+      @if (effectiveNotes().length > 0) {
+        <div class="row gap-6 eff-section-head notes-head">
+          <span class="eyebrow">Notes · memory tool</span>
+          <span class="muted xs">retrieved facts, not precedence-ranked</span>
+        </div>
+        <div class="col gap-10">
+          @for (f of effectiveNotes(); track f.id) {
+            <div class="card eff-block row">
+              <div class="bar" [style.background]="L[f.level].color"></div>
+              <div class="body col">
+                <div class="row gap-8 head">
+                  <span class="pill" [style.background]="L[f.level].soft" [style.color]="L[f.level].color">{{ L[f.level].label }}</span>
+                  <span class="path mono">{{ f.path }}</span>
+                  <span class="grow"></span>
+                  <span class="mono tabular muted">{{ fmtK(f.tokens) }}</span>
+                </div>
+                <div class="md" [innerHTML]="renderBody(f.body)"></div>
+              </div>
+            </div>
+          }
+        </div>
+      }
+    </div>
+  }
+</div>

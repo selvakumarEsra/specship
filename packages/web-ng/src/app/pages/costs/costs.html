@@ -1,0 +1,87 @@
+<div class="page scroll-y">
+  <header class="page-head">
+    <div class="title-block">
+      <div class="title">Costs</div>
+      <div class="sub">Where the money goes</div>
+    </div>
+    <div class="range-selector">
+      @for (r of ranges; track r) {
+        <button type="button" class="range-opt" [class.active]="range() === r" (click)="setRange(r)">
+          {{ r === 'today' ? 'Today' : r === 'week' ? 'Week' : r === 'month' ? 'Month' : 'All' }}
+        </button>
+      }
+    </div>
+  </header>
+
+  <div class="top-grid">
+    <div class="card card-pad chart-card">
+      <div class="chart-header">
+        <div>
+          <div class="big-number mono">{{ fmt$(total()) }}</div>
+          <div class="muted">total · {{ range() }}</div>
+        </div>
+        @if (hovered()) {
+          <div class="hovered mono">
+            <div class="hov-cost">{{ fmt$(hovered()!.cost) }}</div>
+            <div class="muted">{{ hovered()!.prompts }} prompts · day {{ hovered()!.day }}</div>
+          </div>
+        }
+      </div>
+      <app-line-chart
+        [series]="series()"
+        color="var(--accent)"
+        [height]="200"
+        (hover)="onHover($event)"
+      ></app-line-chart>
+    </div>
+
+    <div class="card card-pad donut-card">
+      <div class="card-title">By model</div>
+      <app-donut
+        [data]="byModel()"
+        [size]="150"
+        [centerLabel]="'$' + total().toFixed(0)"
+        [centerSub]="range() + ' window'"
+      ></app-donut>
+      <div class="model-legend">
+        @for (m of byModel(); track m.model) {
+          <div class="legend-row">
+            <span class="swatch" [style.background]="m.color"></span>
+            <span class="mono grow">{{ m.short }}</span>
+            <span class="mono">{{ fmt$(m.cost) }}</span>
+            <span class="mono muted">{{ percentOf(m.cost, total()) }}%</span>
+          </div>
+        }
+      </div>
+    </div>
+  </div>
+
+  <div class="card card-pad">
+    <div class="card-title row-title">
+      Most expensive prompts <span class="muted">· top {{ topPrompts().length }}</span>
+    </div>
+    @if (resource.state().loading) {
+      @for (i of [0,1,2,3]; track i) { <div class="skel row-skel"></div> }
+    } @else {
+      @for (p of topPrompts(); let i = $index; track p.id) {
+        <div class="prompt-row" [class.first]="i === 0">
+          <span class="mono muted rank">{{ i + 1 }}</span>
+          <div class="prompt-grow">
+            <div class="prompt-text">{{ p.text }}</div>
+            <div class="bar-track">
+              <span
+                class="bar-fill"
+                [style.width.%]="(p.cost_usd / maxPrompt()) * 100"
+                [style.background]="p.cost_usd / maxPrompt() > 0.66 ? 'var(--error)' : 'var(--accent)'"
+              ></span>
+            </div>
+          </div>
+          <span class="mono muted prompt-model">{{ modelShort(p.model) }}</span>
+          <span class="mono muted prompt-toks">{{ fmtK(promptTokens(p)) }}</span>
+          <span class="mono cache-cell" [style.color]="cacheColor(cacheRate(p))">{{ (cacheRate(p) * 100) | number:'1.0-0' }}%</span>
+          <span class="mono cost-cell">{{ fmt$(p.cost_usd) }}</span>
+        </div>
+      }
+    }
+  </div>
+</div>

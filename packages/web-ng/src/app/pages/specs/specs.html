@@ -1,0 +1,49 @@
+@if (resource.state().noProject) {
+  <app-pick-project-empty surface="Specs" />
+} @else {
+<div class="page">
+  <header class="page-head">
+    <div class="title-block">
+      <div class="title">Specs</div>
+      <div class="sub">{{ resource.state().loading ? 'loading…' : ((resource.state().data?.specs?.length ?? 0) + ' specs') }}</div>
+    </div>
+  </header>
+
+  <div class="split">
+    <aside class="tree scroll-y">
+      @if (groups().length === 0 && !resource.state().loading) {
+        <div class="empty">No specs found. Run <code class="mono">specship init -i</code> against a project with a <code class="mono">specs/</code> directory.</div>
+      } @else {
+        @for (g of groups(); track g.path) {
+          <div class="group">
+            <div class="group-head mono">{{ g.title }}</div>
+            @for (s of g.specs; track s.id) {
+              <button type="button" class="spec-item" [class.active]="sel() === s.id" (click)="select(s.id)">
+                <span class="kind-pill" [attr.data-kind]="s.kind"></span>
+                <span class="spec-id mono">{{ s.id }}</span>
+                <span class="spec-title">{{ s.title }}</span>
+              </button>
+            }
+          </div>
+        }
+      }
+    </aside>
+    <main class="detail scroll-y">
+      @if (selectedSpec(); as s) {
+        <div class="detail-head">
+          <div class="d-id mono">{{ s.id }}</div>
+          <div class="d-title">{{ s.title }}</div>
+          <div class="d-meta">
+            <span class="pill" [attr.data-kind]="s.kind">{{ s.kind }}</span>
+            @if (s.priority) { <span class="pill pill-priority">{{ s.priority }}</span> }
+            @if (s.owner) { <span class="d-owner">owner: <span class="mono">{{ s.owner }}</span></span> }
+          </div>
+        </div>
+        <div class="d-body">{{ s.body }}</div>
+      } @else {
+        <div class="empty centered">Pick a spec from the left.</div>
+      }
+    </main>
+  </div>
+</div>
+}

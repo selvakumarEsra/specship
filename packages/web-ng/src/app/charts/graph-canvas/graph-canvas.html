@@ -1,0 +1,82 @@
+<div class="gc-host" #host>
+  <svg class="gc-edges" width="100%" height="100%">
+    <defs>
+      <marker id="gc-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M0 0 L10 5 L0 10 z" fill="rgba(160,170,190,0.5)" />
+      </marker>
+      <marker id="gc-arrow-hi" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0 0 L10 5 L0 10 z" fill="var(--accent)" />
+      </marker>
+    </defs>
+    <g [attr.transform]="'translate(' + view().tx + ' ' + view().ty + ') scale(' + view().k + ')'">
+      @for (e of edges(); track $index) {
+        @if (edgePath(e); as d) {
+          <path
+            [attr.d]="d"
+            fill="none"
+            [attr.stroke]="edgeHot(e) ? 'var(--accent)' : 'rgba(150,160,180,0.34)'"
+            [attr.stroke-width]="edgeHot(e) ? 1.8 : 1.2"
+            [attr.opacity]="edgeHot(e) ? 0.95 : 0.7"
+            [attr.stroke-dasharray]="e.kind === 'synth' ? '5 4' : null"
+            [attr.marker-end]="edgeHot(e) ? 'url(#gc-arrow-hi)' : 'url(#gc-arrow)'"
+          />
+        }
+      }
+    </g>
+  </svg>
+
+  <div
+    class="gc-nodes"
+    [style.transform]="'translate(' + view().tx + 'px, ' + view().ty + 'px) scale(' + view().k + ')'"
+  >
+    @for (n of positioned(); track n.id) {
+      @let b = box(n);
+      @let col = nodeColor(n);
+      <div
+        class="gc-node"
+        [attr.data-node]="n.id"
+        [class.is-selected]="isSelected(n)"
+        [class.is-hovered]="isHovered(n)"
+        [style.left.px]="n.x"
+        [style.top.px]="n.y"
+        [style.opacity]="nodeOpacity(n)"
+        (mouseenter)="onHoverEnter(n.id)"
+        (mouseleave)="onHoverLeave()"
+      >
+        @if (b.shape === 'dot') {
+          <div
+            class="gc-dot"
+            [style.background]="col"
+            [style.box-shadow]="isSelected(n) ? '0 0 0 4px ' + col + '44, 0 0 14px ' + col : '0 0 8px ' + col + '66'"
+          ></div>
+        } @else {
+          <div
+            class="gc-chip"
+            [class.is-rect]="b.shape === 'rect'"
+            [style.min-width.px]="b.w"
+            [style.background]="'color-mix(in srgb, ' + col + ' 16%, var(--bg-panel))'"
+            [style.border-color]="isSelected(n) ? col : 'color-mix(in srgb, ' + col + ' 45%, transparent)'"
+            [style.box-shadow]="isSelected(n) ? '0 0 0 4px ' + col + '33, 0 4px 16px ' + col + '44' : '0 2px 8px rgba(0,0,0,0.4)'"
+          >
+            <span class="gc-chip-bullet" [style.background]="col" [style.box-shadow]="'0 0 6px ' + col"></span>
+            {{ n.label }}
+            @if (n.state === 'drifted' || n.state === 'broken' || n.state === 'orphaned') {
+              <span class="gc-chip-state" [style.background]="n.state === 'drifted' ? 'var(--warn)' : 'var(--error)'"></span>
+            }
+          </div>
+        }
+        @if ((isHovered(n) || isSelected(n)) && n.sub) {
+          <div class="gc-tooltip">{{ n.sub }}</div>
+        }
+      </div>
+    }
+  </div>
+
+  <div class="gc-controls">
+    <button type="button" class="gc-btn" (click)="zoom(1.2)" aria-label="Zoom in">+</button>
+    <button type="button" class="gc-btn" (click)="zoom(1 / 1.2)" aria-label="Zoom out">−</button>
+    <button type="button" class="gc-btn" (click)="fitView()" aria-label="Fit to view">⤢</button>
+  </div>
+
+  <div class="gc-zoom-label">{{ zoomLabel() }}</div>
+</div>

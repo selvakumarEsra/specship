@@ -1,0 +1,110 @@
+name: spec-fix
+description: Fix a bug surfaced as a drifted/broken spec link. Diagnose → approve → fix → verify → re-verify link.
+tags: [spec, default]
+requires: [specship, git]
+
+worktree:
+  enabled: true
+
+inputs:
+  - name: SPEC_ID
+    description: The spec ID with the drifted or broken link
+    required: true
+
+systemPromptAppend: |
+  You are fixing code so a spec's link returns to "verified" state.
+  Call specship_spec($INPUT.SPEC_ID) first to see the current state and
+  drift_axis. After fixing, call specship_link_verify({result: "pass"})
+  on each affected link before reporting done.
+
+nodes:
+  - id: diagnose
+    kind: prompt
+    output_type: diagnosis
+    allowed_tools:
+      - mcp__specship__specship_spec
+      - mcp__specship__specship_node
+      - mcp__specship__specship_explore
+      - Read
+    prompt: |
+      Spec ID: $INPUT.SPEC_ID
+
+      Call specship_spec to inspect this spec's current state. Look at:
+      - which linked_code entries are drifted, broken, or orphaned
+      - their drift_axis (spec → spec body changed; code → code changed)
+      - the spec body itself
+
+      Output: (a) which links are out-of-spec, (b) for each, what likely
+      broke (code refactor, signature change, spec edit), and (c) a
+      proposed fix.
+
+  - id: approve_fix
+    kind: approval
+    depends_on: [diagnose]
+    message: |
+      Diagnosis for $INPUT.SPEC_ID:
+
+      $diagnose.output
+
+      Approve to apply the proposed fix, or reject with guidance.
+    capture_response: true
+
+  - id: apply
+    kind: prompt
+    depends_on: [approve_fix]
+    output_type: diff
+    allowed_tools:
+      - Read
+      - Edit
+      - Write
+      - Bash
+      - mcp__specship__specship_node
+      - mcp__specship__specship_spec
+    prompt: |
+      Apply the fix proposed in the diagnosis. Follow any guidance from
+      the reviewer.
+
+      Diagnosis:
+      $diagnose.output
+
+      Reviewer feedback (if any):
+      $approve_fix.output
+
+      Output: a short list of files changed.
+
+  - id: verify
+    kind: bash
+    depends_on: [apply]
+    output_type: test_results
+    timeout: 600000
+    bash: |
+      if [ -f package.json ]; then
+        npm test
+      elif [ -f Cargo.toml ]; then
+        cargo test
+      elif [ -f pyproject.toml ] || [ -f requirements.txt ]; then
+        python -m pytest
+      else
+        echo "no recognised test framework; skipping"
+      fi
+
+  - id: link_verify
+    kind: prompt
+    depends_on: [verify]
+    output_type: link_summary
+    allowed_tools:
+      - mcp__specship__specship_spec
+      - mcp__specship__specship_link_assert
+      - mcp__specship__specship_link_verify
+    prompt: |
+      For each link that was drifted/broken on $INPUT.SPEC_ID, now that
+      the fix has been applied and tests pass, call specship_link_verify
+      with result="pass" (or "fail" if a test failed for that link).
+
+      If a link is orphaned because the symbol moved, call
+      specship_link_assert at the new location.
+
+      Test results:
+      $verify.output
+
+      Output: one line per link with the new state.

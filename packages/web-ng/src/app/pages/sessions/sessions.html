@@ -1,0 +1,52 @@
+<div class="page">
+  <header class="page-head">
+    <div class="title-block">
+      <div class="title">Sessions</div>
+      <div class="sub">
+        {{ resource.state().loading ? 'loading…' : (sorted().length + ' sessions') }}
+      </div>
+    </div>
+    <div class="range-selector">
+      @for (r of ranges; track r) {
+        <button type="button" class="range-opt" [class.active]="range() === r" (click)="setRange(r)">
+          {{ r === 'today' ? 'Today' : r === 'week' ? 'Week' : r === 'month' ? 'Month' : 'All' }}
+        </button>
+      }
+    </div>
+  </header>
+
+  <div class="filter-bar">
+    <span class="muted">sort</span>
+    <div class="seg">
+      <button type="button" [class.active]="sort() === 'cost'" (click)="setSort('cost')">Cost</button>
+      <button type="button" [class.active]="sort() === 'prompts'" (click)="setSort('prompts')">Prompts</button>
+    </div>
+  </div>
+
+  <div class="scroll-y card list">
+    <div class="header-row">
+      <span class="col-id">Session</span>
+      <span class="col-project">Project</span>
+      <span class="col-window grow">Window</span>
+      <span class="col-num">Prompts</span>
+      <span class="col-num">Cache</span>
+      <span class="col-num">Cost</span>
+    </div>
+    @if (resource.state().loading) {
+      @for (i of [0,1,2,3,4]; track i) {
+        <div class="row skeleton-row"><div class="skel"></div></div>
+      }
+    } @else {
+      @for (s of sorted(); track s.fullId) {
+        <div class="row">
+          <span class="mono col-id">{{ s.id }}</span>
+          <span class="col-project pill">{{ s.project }}</span>
+          <span class="mono muted col-window grow">{{ s.started }} – {{ s.ended }} · {{ s.model }}</span>
+          <span class="mono col-num">{{ s.prompts }}</span>
+          <span class="mono col-num" [style.color]="cacheColor(s.cache)">{{ (s.cache * 100) | number:'1.0-0' }}%</span>
+          <span class="mono col-num cost">${{ s.cost.toFixed(2) }}</span>
+        </div>
+      }
+    }
+  </div>
+</div>

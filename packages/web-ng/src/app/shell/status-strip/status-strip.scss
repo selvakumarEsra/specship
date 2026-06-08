@@ -1,0 +1,28 @@
+:host { display: contents; }
+.status-strip {
+  height: var(--status-h);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-panel-2);
+  font-size: 11.5px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.seg { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.lbl { color: var(--text-muted); font-size: 11px; }
+.val { color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.val.warn { color: var(--warn); }
+.val.success { color: var(--success); }
+.divider { width: 1px; height: 12px; background: var(--border-subtle); flex-shrink: 0; }
+.grow { flex: 1; }
+.muted { color: var(--text-muted); }
+.refresh {
+  background: transparent; border: none; color: var(--text-muted);
+  cursor: pointer; font-size: 14px; padding: 2px 6px;
+  border-radius: 4px;
+}
+.refresh:hover { background: var(--bg-hover); color: var(--text-primary); }

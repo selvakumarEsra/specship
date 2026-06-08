@@ -1,0 +1,14 @@
+<svg
+  [attr.viewBox]="'0 0 ' + width + ' ' + height()"
+  [attr.height]="height()"
+  width="100%"
+  preserveAspectRatio="none"
+  (mousemove)="onMove($event)"
+  (mouseleave)="onLeave()"
+  class="line-chart"
+>
+  @if (pathD()) {
+    <path [attr.d]="fillD()" [attr.fill]="color()" opacity="0.10"/>
+    <path [attr.d]="pathD()" fill="none" [attr.stroke]="color()" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+  }
+</svg>

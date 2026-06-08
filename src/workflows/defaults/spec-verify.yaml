@@ -1,0 +1,51 @@
+name: spec-verify
+description: Run verification across all 'implemented' spec links. Use as a CI gate or pre-commit check.
+tags: [spec, default, ci]
+requires: [specship, tests]
+
+# No worktree — runs in-place against the current checkout.
+worktree:
+  enabled: false
+
+nodes:
+  - id: run_tests
+    kind: bash
+    output_type: test_results
+    timeout: 600000
+    bash: |
+      if [ -f package.json ]; then
+        npm test
+      elif [ -f Cargo.toml ]; then
+        cargo test
+      elif [ -f pyproject.toml ] || [ -f requirements.txt ]; then
+        python -m pytest
+      else
+        echo "no recognised test framework; skipping" >&2
+        exit 0
+      fi
+
+  - id: summarize
+    kind: prompt
+    depends_on: [run_tests]
+    output_type: link_summary
+    trigger_rule: all_done
+    allowed_tools:
+      - mcp__specship__specship_drifted
+      - mcp__specship__specship_spec
+      - mcp__specship__specship_link_verify
+    prompt: |
+      Test run completed. Output (truncated):
+
+      $run_tests.output
+
+      1. Call specship_drifted to see any drifted/broken/orphaned links.
+      2. If tests passed (no failures reported), iterate over each
+         'implemented' link and call specship_link_verify(result: "pass")
+         to promote them to "verified". (Skip links that are already
+         verified.)
+      3. If tests failed, identify which specs the failing tests are
+         tied to and call specship_link_verify(result: "fail", reason:
+         "<test name>") on those links.
+
+      Output: a short summary of how many links moved to verified,
+      how many to broken, and which specs are still drifted.

@@ -1,0 +1,23 @@
+<div class="status-strip">
+  @if (status.state().data) {
+    @let s = status.state().data!;
+    <span class="seg mono">{{ s.projectPath }}</span>
+    <span class="divider"></span>
+    <span class="seg"><span class="lbl">backend</span> <span class="mono val">{{ s.backend }}</span></span>
+    <span class="divider"></span>
+    <span class="seg"><span class="lbl">nodes</span> <span class="mono val">{{ s.nodeCount.toLocaleString() }}</span></span>
+    <span class="seg"><span class="lbl">edges</span> <span class="mono val">{{ s.edgeCount.toLocaleString() }}</span></span>
+    <span class="divider"></span>
+    <span class="seg">
+      <span class="lbl">drift</span>
+      <span class="mono val" [class.warn]="s.drift > 0" [class.success]="s.drift === 0">{{ s.drift }}</span>
+    </span>
+    <span class="grow"></span>
+    <span class="seg"><span class="lbl">indexed</span> <span class="mono val">{{ indexedLabel() }}</span></span>
+    <button class="refresh" (click)="refresh()" [disabled]="status.state().loading">↻</button>
+  } @else if (status.state().loading) {
+    <span class="mono muted">loading status…</span>
+  } @else {
+    <span class="mono muted">no backend</span>
+  }
+</div>

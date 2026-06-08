@@ -1,0 +1,53 @@
+<div class="page scroll-y">
+  <header class="page-head">
+    <div class="title-block">
+      <div class="title">Tips</div>
+      <div class="sub">A senior teammate reviewed your transcripts</div>
+    </div>
+    <div class="pills">
+      <span class="pill pill-error">{{ counts().error }} urgent</span>
+      <span class="pill pill-warn">{{ counts().warn }} warn</span>
+      <span class="pill pill-info">{{ counts().info }} info</span>
+    </div>
+  </header>
+
+  @if (resource.state().loading) {
+    @for (i of [0,1,2,3]; track i) { <div class="skel card-skel"></div> }
+  } @else if (ordered().length === 0) {
+    <div class="empty">No tips. ✨</div>
+  } @else {
+    <div class="tips-grid">
+      @for (t of ordered(); track t.id) {
+        <div class="tip-card" [attr.data-sev]="t.severity">
+          <div class="sev-bar"></div>
+          <div class="tip-body">
+            <div class="tip-title">{{ t.title }}</div>
+            <div class="tip-why">{{ t.why }}</div>
+
+            <div class="tip-grid">
+              <div class="kv-block">
+                <div class="eyebrow">Evidence</div>
+                <div class="mono evidence-session">{{ t.evidence.session }}</div>
+                <div class="mono evidence-detail">{{ t.evidence.detail }}</div>
+              </div>
+              <div class="kv-block">
+                <div class="eyebrow">Impact</div>
+                <div class="impact mono">{{ t.saving }}</div>
+              </div>
+            </div>
+
+            <div class="actions">
+              <div class="fix-row">
+                <span class="fix-label">fix</span>
+                <code class="mono fix-code">{{ t.fix }}</code>
+                <button type="button" class="ghost copy" (click)="copy(t.fix)" title="Copy">⎘</button>
+              </div>
+              <button type="button" class="primary">Apply</button>
+              <button type="button" class="secondary">Dismiss</button>
+            </div>
+          </div>
+        </div>
+      }
+    </div>
+  }
+</div>

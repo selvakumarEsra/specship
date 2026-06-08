@@ -1,0 +1,25 @@
+:host { display: block; }
+.hbar-list { display: flex; flex-direction: column; gap: 4px; }
+.hbar-row {
+  display: grid; grid-template-columns: 130px 1fr 70px 14px;
+  align-items: center; gap: 10px;
+  padding: 5px 8px;
+  background: transparent; border: 1px solid transparent;
+  border-radius: 6px; cursor: pointer;
+  color: var(--text-primary); font-family: inherit;
+  text-align: left;
+}
+.hbar-row:hover { background: var(--bg-hover); }
+.hbar-row.selected {
+  background: var(--bg-active);
+  border-color: var(--border-strong);
+}
+.bar-label { font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bar-track {
+  height: 14px;
+  background: rgba(255,255,255,0.05);
+  border-radius: 4px; overflow: hidden;
+}
+.bar-fill { display: block; height: 100%; border-radius: 4px; }
+.bar-value { font-size: 11px; text-align: right; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.chev { color: var(--text-muted); font-size: 14px; }

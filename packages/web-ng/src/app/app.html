@@ -1,0 +1,17 @@
+<div class="shell">
+  <app-sidebar [collapsed]="sidebarCollapsed()"></app-sidebar>
+  <div class="main">
+    <app-status-strip></app-status-strip>
+    <app-top-bar
+      (toggleSidebar)="toggleSidebar()"
+      (openPalette)="onOpenPalette()"
+    ></app-top-bar>
+    <div class="page-frame">
+      <router-outlet></router-outlet>
+    </div>
+  </div>
+  <app-command-palette
+    [open]="paletteOpen()"
+    (close)="onClosePalette()"
+  ></app-command-palette>
+</div>

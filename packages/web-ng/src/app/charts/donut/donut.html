@@ -1,0 +1,11 @@
+<div class="donut" [style.width.px]="size()" [style.height.px]="size()">
+  <svg [attr.width]="size()" [attr.height]="size()" [attr.viewBox]="'0 0 ' + size() + ' ' + size()">
+    @for (a of arcs(); track a.label) {
+      <path [attr.d]="a.d" [attr.fill]="a.color"/>
+    }
+  </svg>
+  <div class="donut-center">
+    <div class="center-label">{{ centerLabel() }}</div>
+    @if (centerSub()) { <div class="center-sub">{{ centerSub() }}</div> }
+  </div>
+</div>

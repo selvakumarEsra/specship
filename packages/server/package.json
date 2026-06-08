@@ -1,0 +1,34 @@
+{
+  "name": "@selvakumaresra/specship-server",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Fastify HTTP API + bundled SpecShip Desktop UI around specship core, the spec graph, workflow engine, and Claude Code transcript analytics.",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "specship-desktop": "dist/cli.js",
+    "specship-server": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "public"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json && chmod +x dist/cli.js",
+    "build:web": "cd ../web-ng && npx ng build --configuration=production",
+    "build:bundle": "node scripts/copy-web.mjs",
+    "build:all": "npm run build:web && npm run build && npm run build:bundle",
+    "dev": "tsc -w -p tsconfig.json",
+    "start": "node dist/cli.js"
+  },
+  "dependencies": {
+    "@fastify/cors": "^9.0.1",
+    "@selvakumaresra/specship": "file:../..",
+    "fastify": "^4.28.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.30",
+    "typescript": "^5.0.0"
+  }
+}

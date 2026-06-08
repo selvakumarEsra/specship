@@ -1,0 +1,6 @@
+{
+  "name": "specship",
+  "version": "0.1.0",
+  "description": "Local code intelligence for Claude Code — semantic search, flow tracing, and impact analysis backed by a SQLite knowledge graph. Auto-syncs after every Edit/Write.",
+  "author": { "name": "selvakumarEsra" }
+}

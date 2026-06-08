@@ -1,0 +1,35 @@
+<div class="page scroll-y">
+  <header class="page-head">
+    <div class="title-block">
+      <div class="title">Settings</div>
+      <div class="sub">Theme, API connection, build info</div>
+    </div>
+  </header>
+
+  <section class="setting-card">
+    <div class="card-title">Appearance</div>
+    <div class="control-row">
+      <span class="lbl">Theme</span>
+      <div class="seg">
+        <button type="button" [class.active]="theme.pref() === 'dark'" (click)="setTheme('dark')">Dark</button>
+        <button type="button" [class.active]="theme.pref() === 'light'" (click)="setTheme('light')">Light</button>
+        <button type="button" [class.active]="theme.pref() === 'system'" (click)="setTheme('system')">System</button>
+      </div>
+      <span class="mono muted">currently: {{ theme.effective() }}</span>
+    </div>
+  </section>
+
+  <section class="setting-card">
+    <div class="card-title">API connection</div>
+    <div class="control-row">
+      <span class="lbl">Backend URL</span>
+      <code class="mono val">{{ api.apiBase ?? 'not configured' }}</code>
+      <span class="mono muted">{{ api.isConfigured ? '● live' : '● offline' }}</span>
+    </div>
+    <div class="hint">
+      Override with <code class="mono">?api=http://host:port</code> in the URL,
+      <code class="mono">localStorage.specship.api</code>, or
+      <code class="mono">window.SPECSHIP_API_URL</code>.
+    </div>
+  </section>
+</div>

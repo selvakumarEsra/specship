@@ -1,0 +1,35 @@
+:host { display: contents; }
+.topbar {
+  height: 44px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-canvas);
+}
+.ghost { background: transparent; border: 1px solid transparent; color: var(--text-secondary); cursor: pointer; }
+.ghost:hover { background: var(--bg-hover); color: var(--text-primary); }
+.icon-btn { padding: 6px 9px; border-radius: 5px; font-size: 16px; }
+.palette-trigger {
+  flex: 1; max-width: 380px;
+  height: 30px; padding: 0 11px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-subtle); border-radius: 8px;
+  cursor: text;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  text-align: left;
+  display: flex; align-items: center; gap: 8px;
+}
+.palette-trigger:hover { border-color: var(--border-strong); color: var(--text-secondary); }
+.palette-trigger app-icon { color: var(--text-muted); }
+.palette-trigger span { flex: 1; }
+kbd {
+  font-family: var(--font-mono); font-size: 10px;
+  color: var(--text-muted); background: var(--bg-canvas);
+  border: 1px solid var(--border-subtle); border-radius: 4px;
+  padding: 2px 6px;
+}
+.grow { flex: 1; }

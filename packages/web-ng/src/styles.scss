@@ -1,0 +1,12 @@
+/* SpecShip Web (Angular) — global styles.
+ *
+ * Order:
+ *   1. Tailwind v4 utility classes
+ *   2. Design tokens (CSS variables + dark/light theme + base resets,
+ *      ported from the React prototype's styles.css). Uses :root and
+ *      [data-theme="light"] selectors so theme switching happens at the
+ *      document level — no recompilation, no NgClass juggling.
+ *   3. App-wide animations and component utility classes.
+ */
+@use "tailwindcss";
+@use "app/styles/tokens";

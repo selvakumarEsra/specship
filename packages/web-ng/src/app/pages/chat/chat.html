@@ -1,0 +1,25 @@
+<div class="page">
+  <header class="page-head">
+    <div class="title-block">
+      <div class="title">Chat</div>
+      <div class="sub">specship-aware companion (wiring to Claude SSE next pass)</div>
+    </div>
+  </header>
+  <div class="thread scroll-y">
+    @for (m of messages(); track $index) {
+      <div class="msg" [attr.data-role]="m.role">
+        <div class="bubble">{{ m.text }}</div>
+      </div>
+    }
+  </div>
+  <div class="composer">
+    <textarea
+      class="input"
+      placeholder="Ask about specs, code, or recent sessions…"
+      [value]="draft()"
+      (input)="setDraft($any($event.target).value)"
+      (keydown)="onKey($event)"
+    ></textarea>
+    <button type="button" class="send" (click)="send()">Send</button>
+  </div>
+</div>

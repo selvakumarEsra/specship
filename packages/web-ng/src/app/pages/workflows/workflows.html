@@ -1,0 +1,33 @@
+@if (resource.state().noProject) {
+  <app-pick-project-empty surface="Workflows" />
+} @else {
+<div class="page scroll-y">
+  <header class="page-head">
+    <div class="title-block">
+      <div class="title">Workflows</div>
+      <div class="sub">{{ entries().length }} workflows · bundled + global + project</div>
+    </div>
+  </header>
+  <div class="wf-grid">
+    @for (e of entries(); track e.workflow.name) {
+      <div class="wf-card">
+        <div class="wf-head">
+          <span class="scope-pill" [attr.data-scope]="e.scope">{{ e.scope }}</span>
+          <span class="mono wf-name">{{ e.workflow.name }}</span>
+        </div>
+        <div class="wf-desc">{{ e.workflow.description || '—' }}</div>
+        <div class="wf-meta">
+          <span class="meta-label">requires</span>
+          <span class="mono">{{ (e.workflow.requires || []).join(', ') || '—' }}</span>
+        </div>
+        <div class="wf-actions">
+          <button type="button" class="primary">▶ Run</button>
+          @if (e.workflow.inputs?.length) {
+            <span class="muted">needs: {{ e.workflow.inputs!.map(i => i.name).join(', ') }}</span>
+          }
+        </div>
+      </div>
+    }
+  </div>
+</div>
+}

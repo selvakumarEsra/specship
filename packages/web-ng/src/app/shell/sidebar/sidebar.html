@@ -1,0 +1,46 @@
+<nav class="sidebar" [class.collapsed]="collapsed()">
+  <div class="brand">
+    <app-logo-mark [size]="26" />
+    @if (!collapsed()) {
+      <div class="brand-text">SpecShip <span class="muted">Desktop</span></div>
+    }
+  </div>
+
+  <div class="scroll-y nav-scroll">
+    @for (group of nav; track group.group) {
+      <div class="nav-group">
+        @if (!collapsed()) { <div class="eyebrow group-label">{{ group.group }}</div> }
+        @for (item of group.items; track item.id) {
+          <a
+            [routerLink]="['/', item.id]"
+            routerLinkActive="active"
+            class="nav-item"
+            [title]="collapsed() ? item.label : null"
+          >
+            <span class="indicator"></span>
+            <span class="nav-icon"><app-icon [name]="item.icon" [size]="16" /></span>
+            @if (!collapsed()) {
+              <span class="nav-label">{{ item.label }}</span>
+              @if (badgeOf(item) > 0) {
+                <span class="badge" [attr.data-kind]="item.badgeKind">{{ badgeOf(item) }}</span>
+              }
+            }
+          </a>
+        }
+      </div>
+    }
+  </div>
+
+  <div class="pinned">
+    <a routerLink="/design" routerLinkActive="active" class="nav-item" [title]="collapsed() ? 'Design system' : null">
+      <span class="indicator"></span>
+      <span class="nav-icon"><app-icon name="palette" [size]="16" /></span>
+      @if (!collapsed()) { <span class="nav-label">Design system</span> }
+    </a>
+    <a routerLink="/settings" routerLinkActive="active" class="nav-item" [title]="collapsed() ? 'Settings' : null">
+      <span class="indicator"></span>
+      <span class="nav-icon"><app-icon name="settings" [size]="16" /></span>
+      @if (!collapsed()) { <span class="nav-label">Settings</span> }
+    </a>
+  </div>
+</nav>

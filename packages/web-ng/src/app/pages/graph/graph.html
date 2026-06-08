@@ -1,0 +1,146 @@
+@if (status.state().noProject) {
+  <app-pick-project-empty surface="The graph" />
+} @else {
+<div class="gp-root">
+  <div class="gp-main">
+    <div class="gp-toolbar">
+      <div class="gp-search">
+        <input
+          type="text"
+          placeholder="Search symbol… (function, class, route)"
+          [value]="searchInput()"
+          (input)="onSearchInput($any($event.target).value)"
+          aria-label="Symbol search"
+        />
+        @if (searchResults.state().loading) {
+          <span class="gp-spinner" aria-hidden="true"></span>
+        }
+        @if (searchResults.state().data && (searchResults.state().data!.results.length > 0)) {
+          <div class="gp-results" role="listbox">
+            @for (r of searchResults.state().data!.results; track r.node.id) {
+              <button type="button" class="gp-result" (click)="pickResult(r.node)">
+                <span class="gp-result-dot" [class.is-spec]="r.node.kind === 'spec'" [class.is-route]="r.node.kind === 'route'"></span>
+                <span class="gp-result-name mono">{{ r.node.name }}</span>
+                <span class="gp-result-kind">{{ r.node.kind }}</span>
+                <span class="gp-result-path mono">{{ shortPath(r.node.filePath) }}</span>
+              </button>
+            }
+          </div>
+        }
+      </div>
+
+      <div class="gp-filters">
+        @for (k of kindKeys; track k) {
+          <button
+            type="button"
+            class="gp-chip"
+            [class.is-active]="isFilterActive(k)"
+            (click)="toggleFilter(k)"
+          >
+            <span class="gp-chip-dot" [attr.data-kind]="k"></span>
+            {{ kindLabel(k) }}
+            <span class="gp-chip-count">{{ countFor(k) }}</span>
+          </button>
+        }
+      </div>
+
+      <div class="gp-spacer"></div>
+
+      @if (selectedDetail()) {
+        <button type="button" class="gp-action" (click)="recenter()">Recenter</button>
+        <button type="button" class="gp-action gp-action-ghost" (click)="clearSelection()">Clear</button>
+      }
+    </div>
+
+    <div class="gp-canvas-wrap">
+      @if (!selectedSymbol()) {
+        <div class="gp-empty">
+          <h3>Explore the graph</h3>
+          <p>Search for a function, method or class to start. The graph renders the symbol with its callers, callees and any linked specs.</p>
+          @if (status.state().data; as s) {
+            <p class="gp-stats">{{ s.nodeCount.toLocaleString() }} nodes · {{ s.edgeCount.toLocaleString() }} edges · {{ s.fileCount.toLocaleString() }} files</p>
+          }
+        </div>
+      } @else if (nodeDetail.state().loading) {
+        <div class="gp-empty"><p>Loading…</p></div>
+      } @else if (nodeDetail.state().error) {
+        <div class="gp-empty">
+          <h3>Couldn't load that symbol</h3>
+          <p>{{ nodeDetail.state().error }}</p>
+        </div>
+      } @else if (!selectedDetail()) {
+        <div class="gp-empty"><p>No match for "{{ selectedSymbol() }}".</p></div>
+      } @else {
+        <app-graph-canvas
+          [nodes]="visibleNodes()"
+          [edges]="visibleEdges()"
+          [selectedId]="selectedDetail()!.id"
+          [fitKey]="fitKey()"
+          (nodeClick)="pickFromCanvas($event)"
+        />
+      }
+    </div>
+  </div>
+
+  @if (selectedDetail(); as d) {
+    <aside class="gp-panel">
+      <header class="gp-panel-head">
+        <div class="gp-panel-title">
+          <span class="gp-kind-pill">{{ d.kind }}</span>
+          <h3 class="mono">{{ d.name }}</h3>
+        </div>
+        <div class="gp-panel-path mono">{{ d.filePath }}<span class="muted"> · L{{ d.startLine }}</span></div>
+      </header>
+
+      @if (d.signature) {
+        <section>
+          <div class="gp-panel-eyebrow">Signature</div>
+          <pre class="gp-code mono">{{ d.signature }}</pre>
+        </section>
+      }
+
+      @if (d.linkedSpecs.length) {
+        <section>
+          <div class="gp-panel-eyebrow">Linked specs ({{ d.linkedSpecs.length }})</div>
+          @for (link of d.linkedSpecs; track link.id) {
+            <div class="gp-row">
+              <span class="gp-state-pill" [attr.data-state]="link.state">{{ link.state }}</span>
+              <span class="mono gp-row-text">{{ link.specId }}</span>
+              <span class="muted gp-row-meta">{{ link.specTitle || '' }}</span>
+            </div>
+          }
+        </section>
+      }
+
+      <section>
+        <div class="gp-panel-eyebrow">Callers <span class="muted">({{ d.callers.length }})</span></div>
+        @if (d.callers.length) {
+          @for (n of d.callers; track n.id) {
+            <button type="button" class="gp-row gp-row-button" (click)="pickResult(n)">
+              <span class="mono gp-row-text">{{ n.name }}</span>
+              <span class="muted gp-row-meta">{{ shortPath(n.filePath) }}</span>
+            </button>
+          }
+        } @else {
+          <div class="muted gp-empty-line">No callers</div>
+        }
+      </section>
+
+      <section>
+        <div class="gp-panel-eyebrow">Callees <span class="muted">({{ d.callees.length }})</span></div>
+        @if (d.callees.length) {
+          @for (n of d.callees; track n.id) {
+            <button type="button" class="gp-row gp-row-button" (click)="pickResult(n)">
+              <span class="mono gp-row-text">{{ n.name }}</span>
+              <span class="muted gp-row-meta">{{ shortPath(n.filePath) }}</span>
+            </button>
+          }
+        } @else {
+          <div class="muted gp-empty-line">No callees</div>
+        }
+      </section>
+    </aside>
+  }
+</div>
+
+}

@@ -1,0 +1,57 @@
+:host { display: contents; }
+.page { flex: 1; display: flex; flex-direction: column; min-height: 0; padding: 16px 18px 0; }
+.title { font-size: var(--fs-title); font-weight: 600; letter-spacing: -0.01em; }
+.sub { color: var(--text-secondary); margin-top: 2px; }
+.page-head { margin-bottom: 12px; }
+.mono { font-family: var(--font-mono); }
+.muted { color: var(--text-muted); }
+
+.split {
+  display: grid; grid-template-columns: 320px 1fr;
+  gap: 0; flex: 1; min-height: 0;
+  border-top: 1px solid var(--border-subtle);
+  margin: 0 -18px;
+}
+.tree {
+  border-right: 1px solid var(--border-subtle);
+  padding: 8px 0;
+}
+.group { padding: 8px 0; }
+.group-head { padding: 6px 16px; font-size: 11px; color: var(--text-muted); font-weight: 600; }
+.spec-item {
+  display: flex; gap: 8px; align-items: center;
+  width: 100%; padding: 6px 16px;
+  background: transparent; border: none; cursor: pointer;
+  text-align: left; font-family: inherit;
+  color: var(--text-primary); font-size: 12.5px;
+}
+.spec-item:hover { background: var(--bg-hover); }
+.spec-item.active { background: var(--bg-active); }
+.kind-pill {
+  width: 6px; height: 6px; border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--node-spec);
+}
+.kind-pill[data-kind="document"] { background: var(--accent); }
+.kind-pill[data-kind="acceptance"] { background: var(--node-test); }
+.spec-id { font-size: 11.5px; color: var(--accent); flex-shrink: 0; }
+.spec-title { font-size: 12px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.detail { padding: 20px 24px; }
+.detail-head { margin-bottom: 16px; }
+.d-id { font-size: 12px; color: var(--accent); margin-bottom: 4px; }
+.d-title { font-size: 22px; font-weight: 600; margin-bottom: 8px; letter-spacing: -0.01em; }
+.d-meta { display: flex; gap: 8px; align-items: center; }
+.d-owner { font-size: 12px; color: var(--text-secondary); }
+.pill {
+  font-size: 10.5px; font-weight: 600; padding: 2px 8px; border-radius: var(--r-pill);
+  background: var(--node-spec-soft); color: var(--node-spec);
+  text-transform: capitalize;
+}
+.pill[data-kind="document"] { background: var(--accent-soft); color: var(--accent); }
+.pill[data-kind="acceptance"] { background: var(--node-test-soft); color: var(--node-test); }
+.pill-priority { background: var(--warn-soft); color: var(--warn); text-transform: uppercase; }
+.d-body { font-size: 13.5px; line-height: 1.6; color: var(--text-secondary); white-space: pre-wrap; }
+
+.empty { padding: 30px 18px; color: var(--text-muted); font-size: 12.5px; }
+.empty.centered { display: grid; place-items: center; height: 100%; text-align: center; }

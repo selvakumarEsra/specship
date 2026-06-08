@@ -1,0 +1,81 @@
+name: spec-relink
+description: Re-attach an orphaned spec link after a refactor. Search for the moved/renamed symbol → approve → assert new link.
+tags: [spec, default]
+requires: [specship]
+
+worktree:
+  enabled: false
+
+inputs:
+  - name: SPEC_ID
+    description: The spec ID with an orphaned link
+    required: true
+
+systemPromptAppend: |
+  You are reattaching a spec link whose target symbol has moved or been
+  renamed. Use specship_search and specship_explore to locate the new
+  symbol; do NOT edit code in this workflow.
+
+nodes:
+  - id: present_orphan
+    kind: prompt
+    output_type: orphan_summary
+    allowed_tools:
+      - mcp__specship__specship_spec
+    prompt: |
+      Spec ID: $INPUT.SPEC_ID
+
+      Call specship_spec to find the orphaned link(s). For each:
+      output its old target_file_path and target_qualified_name plus
+      a short description of what the spec asks for.
+
+  - id: search_candidates
+    kind: prompt
+    depends_on: [present_orphan]
+    output_type: candidates
+    allowed_tools:
+      - mcp__specship__specship_search
+      - mcp__specship__specship_explore
+      - mcp__specship__specship_node
+    prompt: |
+      The orphan(s):
+      $present_orphan.output
+
+      For each orphaned target_qualified_name, use specship_search to
+      see if a symbol by that name (or a closely related name) exists
+      anywhere in the current codebase. Then call specship_explore on
+      the most likely matches to see if their bodies match the spec's
+      intent.
+
+      Output: a numbered list of CANDIDATES with file:symbol and a
+      one-line justification.
+
+  - id: approve_relink
+    kind: approval
+    depends_on: [search_candidates]
+    message: |
+      Candidates for $INPUT.SPEC_ID:
+
+      $search_candidates.output
+
+      Reply with the number of the correct candidate (or "none" to
+      abandon and leave the link orphaned).
+    capture_response: true
+
+  - id: assert_link
+    kind: prompt
+    depends_on: [approve_relink]
+    output_type: link_summary
+    allowed_tools:
+      - mcp__specship__specship_link_assert
+    prompt: |
+      The reviewer chose candidate #$approve_relink.output for spec
+      $INPUT.SPEC_ID.
+
+      Candidates were:
+      $search_candidates.output
+
+      Call specship_link_assert with the chosen candidate's path and
+      qualified_name (and the original kind, default "implements").
+
+      Output: confirmation of the new link.

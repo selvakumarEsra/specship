@@ -1,0 +1,35 @@
+@if (resource.state().noProject) {
+  <app-pick-project-empty surface="Runs" />
+} @else {
+<div class="page">
+  <header class="page-head">
+    <div class="title-block">
+      <div class="title">Runs</div>
+      <div class="sub">{{ resource.state().loading ? 'loading…' : (runs().length + ' runs') }}</div>
+    </div>
+  </header>
+
+  <div class="card list scroll-y">
+    <div class="header-row">
+      <span class="col-status">Status</span>
+      <span class="col-wf">Workflow</span>
+      <span class="col-id mono">Run ID</span>
+      <span class="col-dur">Duration</span>
+      <span class="col-when">When</span>
+    </div>
+    @if (runs().length === 0 && !resource.state().loading) {
+      <div class="empty">No runs yet. Start one from the Workflows page.</div>
+    } @else {
+      @for (r of runs(); track r.id) {
+        <a class="row row-link" [routerLink]="['/runs', r.id]">
+          <span class="status-pill" [attr.data-status]="r.status">{{ r.status }}</span>
+          <span class="col-wf mono">{{ r.workflowName }}</span>
+          <span class="col-id mono muted">{{ r.id.slice(0, 8) }}</span>
+          <span class="col-dur mono">{{ durationOf(r) }}</span>
+          <span class="col-when muted">{{ timeAgo(r) }}</span>
+        </a>
+      }
+    }
+  </div>
+</div>
+}

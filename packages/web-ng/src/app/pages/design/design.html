@@ -1,0 +1,143 @@
+<div class="design-page scroll-y">
+  <div class="hero card card-pad row gap-16">
+    <app-logo-mark [size]="56" />
+    <div class="col gap-4">
+      <div class="title">SpecShip — Design system</div>
+      <div class="sub secondary">Dark-first. Graph as hero. Geist + Geist Mono. Every token shipped in this app comes from this page.</div>
+    </div>
+  </div>
+
+  <section>
+    <div class="eyebrow">Palette · surfaces</div>
+    <div class="swatches">
+      @for (t of surfaces; track t.name) {
+        <div class="swatch" [style.background]="'var(' + t.name + ')'">
+          <div class="lbl mono">{{ t.name }}</div>
+          <div class="sub mono muted">{{ t.value }}</div>
+        </div>
+      }
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Palette · text</div>
+    <div class="text-samples card card-pad col gap-6">
+      @for (t of text; track t.name) {
+        <div class="row gap-10">
+          <span class="text-sample" [style.color]="'var(' + t.name + ')'">The quick brown fox jumps over the lazy dog · 0123456789</span>
+          <span class="grow"></span>
+          <span class="mono muted xs">{{ t.name }}</span>
+        </div>
+      }
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Node colors · 4px legibility test</div>
+    <div class="card card-pad">
+      <div class="row gap-16 nodes-row">
+        @for (n of nodeColors; track n.name) {
+          <div class="col gap-6 node-col">
+            <div class="node-label mono">{{ n.name }}</div>
+            <div class="node-stack row gap-4">
+              @for (s of fineSizes; track s) {
+                <div class="node-dot" [style.width.px]="s" [style.height.px]="s" [style.background]="'var(' + n.varName + ')'"></div>
+              }
+            </div>
+            <div class="mono muted xs">{{ n.varName }}</div>
+          </div>
+        }
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Semantic states</div>
+    <div class="row gap-10">
+      @for (s of semantic; track s.name) {
+        <div class="state-tile col gap-4" [style.--c]="'var(' + s.varName + ')'">
+          <div class="dot" [style.background]="'var(' + s.varName + ')'"></div>
+          <div class="title">{{ s.name }}</div>
+          <div class="mono muted xs">{{ s.varName }}</div>
+        </div>
+      }
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Buttons</div>
+    <div class="card card-pad row gap-10 wrap">
+      <button class="btn btn-primary">
+        <app-icon name="play" [size]="14" />
+        Primary
+      </button>
+      <button class="btn btn-secondary">
+        <app-icon name="refresh" [size]="14" />
+        Secondary
+      </button>
+      <button class="btn btn-ghost">
+        <app-icon name="filter" [size]="14" />
+        Ghost
+      </button>
+      <button class="btn btn-destructive">
+        <app-icon name="x" [size]="14" />
+        Destructive
+      </button>
+      <button class="btn btn-secondary btn-sm">
+        <app-icon name="copy" [size]="13" />
+        Small
+      </button>
+      <button class="btn btn-secondary btn-xs">XS</button>
+      <button class="btn btn-primary" disabled>Disabled</button>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Run state pills</div>
+    <div class="card card-pad row gap-8 wrap">
+      @for (p of statePills; track p.kind) {
+        <span class="pill state-{{ p.cls }}">{{ p.kind }}</span>
+      }
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Spec link states</div>
+    <div class="card card-pad row gap-8 wrap">
+      @for (p of specStates; track p.kind) {
+        <span class="pill state-{{ p.cls }}">{{ p.kind }}</span>
+      }
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Inputs</div>
+    <div class="card card-pad col gap-10">
+      <input class="input" placeholder="Default input — try focusing" />
+      <input class="input" value="3B82F6" />
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Iconography · Lucide</div>
+    <div class="card card-pad icons-grid">
+      @for (name of iconSample; track name) {
+        <div class="icon-cell col gap-4">
+          <app-icon [name]="name" [size]="18" />
+          <span class="mono muted xs">{{ name }}</span>
+        </div>
+      }
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Typography</div>
+    <div class="card card-pad col gap-10">
+      <div class="t-title">22px · Page title — Geist 650</div>
+      <div class="t-section">14px · Section title — Geist 600</div>
+      <div class="t-body">13px · Body copy — Geist 450</div>
+      <div class="mono">12px · Mono — Geist Mono 500 — node_count = 9289</div>
+      <div class="muted xs">11px · Eyebrow / caption</div>
+    </div>
+  </section>
+</div>

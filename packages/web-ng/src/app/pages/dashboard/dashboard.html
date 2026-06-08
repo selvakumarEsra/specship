@@ -1,0 +1,229 @@
+<div class="scroll-y dashboard">
+  <header class="page-head">
+    <div class="title-block">
+      <div class="title">Dashboard</div>
+      <div class="sub">
+        specship · {{ nodeCountLabel().toLocaleString() }} nodes ·
+        last session {{ fmt$(lastSessionCost()) }}
+      </div>
+    </div>
+    <div class="range-selector">
+      @for (r of ranges; track r) {
+        <button
+          type="button"
+          class="range-opt"
+          [class.active]="range() === r"
+          (click)="setRange(r)"
+        >
+          {{ r === 'today' ? 'Today' : r === 'week' ? 'This week' : r === 'month' ? 'This month' : 'All time' }}
+        </button>
+      }
+    </div>
+  </header>
+
+  <!-- Stat tiles -->
+  <div class="stat-grid">
+    <button class="stat-tile" (click)="go('sessions')">
+      <div class="stat-head row gap-8">
+        <app-icon name="coins" [size]="13" style="color: var(--accent);" />
+        <span class="eyebrow">Last session cost</span>
+      </div>
+      <div class="stat-value" [class.skel]="sessions.state().loading">
+        @if (!sessions.state().loading) { {{ fmt$(lastSessionCost()) }} } @else { &nbsp; }
+      </div>
+    </button>
+
+    <button class="stat-tile" (click)="go('heatmap')">
+      <div class="stat-head row gap-8">
+        <app-icon name="wrench" [size]="13" style="color: var(--node-spec);" />
+        <span class="eyebrow">Tool calls · {{ range() }}</span>
+      </div>
+      <div class="stat-value" [class.skel]="heatmap.state().loading">
+        @if (!heatmap.state().loading) { {{ toolCallCount().toLocaleString() }} } @else { &nbsp; }
+      </div>
+    </button>
+
+    <button class="stat-tile" (click)="go('heatmap')">
+      <div class="stat-head row gap-8">
+        <app-icon name="bot" [size]="13" style="color: var(--node-code);" />
+        <span class="eyebrow">Subagent spend</span>
+      </div>
+      <div class="stat-value" [class.skel]="heatmap.state().loading">
+        @if (!heatmap.state().loading) { {{ subagentShare() }}% } @else { &nbsp; }
+      </div>
+    </button>
+
+    <button class="stat-tile" (click)="go('drift')">
+      <div class="stat-head row gap-8">
+        <app-icon name="drift" [size]="13" style="color: var(--warn);" />
+        <span class="eyebrow">Drift queue</span>
+      </div>
+      <div class="stat-value" [class.skel]="status.state().loading">
+        @if (!status.state().loading) { {{ driftCount() }} } @else { &nbsp; }
+      </div>
+    </button>
+  </div>
+
+  <!-- Center row: graph placeholder + tips -->
+  <div class="center-grid">
+    <div class="card graph-card">
+      <div class="card-head">
+        <div class="card-title row gap-8">
+          <app-icon name="graph" [size]="14" style="color: var(--accent);" />
+          <span>Recent neighborhood</span>
+          <span class="muted">· last edited files</span>
+          @if (miniGraphSource() === 'seed') {
+            <span class="pill seed-pill" title="No /api/graph/search data yet — illustrative">seed</span>
+          }
+        </div>
+        <a routerLink="/graph" class="ghost">Open graph →</a>
+      </div>
+      <div class="mini-graph">
+        <app-graph-canvas
+          [nodes]="miniGraphNodes()"
+          [edges]="miniGraphEdges()"
+          (nodeClick)="onMiniGraphPick($event)"
+        />
+      </div>
+    </div>
+
+    <div class="card tips-card">
+      <div class="card-head">
+        <div class="card-title">Tips
+          @if ((tips.state().data?.tips ?? []).length > 0) {
+            @let urgent = (tips.state().data?.tips ?? []).filter(t => t.severity === 'error').length;
+            @if (urgent > 0) {
+              <span class="pill pill-error">{{ urgent }} urgent</span>
+            }
+          }
+        </div>
+        <a routerLink="/tips" class="ghost">All</a>
+      </div>
+      <div class="tips-body scroll-y">
+        @if (tips.state().loading) {
+          @for (i of [0,1,2,3]; track i) { <div class="skel tip-skel"></div> }
+        } @else if ((tips.state().data?.tips ?? []).length === 0) {
+          <div class="empty">No tips yet. Run more sessions to populate.</div>
+        } @else {
+          @for (t of (tips.state().data?.tips ?? []).slice(0, 4); track t.id) {
+            <div class="tip" [attr.data-sev]="t.severity">
+              <div class="tip-bar"></div>
+              <div class="tip-body">
+                <div class="tip-title">{{ t.title }}</div>
+                <div class="tip-meta">
+                  @if (t.fix) { <code class="mono fix">{{ t.fix }}</code> }
+                  <span class="grow"></span>
+                  @if (t.saving) { <span class="saving">{{ t.saving }}</span> }
+                </div>
+              </div>
+            </div>
+          }
+        }
+      </div>
+    </div>
+  </div>
+
+  <!-- Heatstrip -->
+  <div class="card card-pad heatstrip-card">
+    <div class="card-head" style="margin-bottom: 10px">
+      <div class="card-title">Tool-call heatmap
+        <span class="muted">· by file, {{ range() }} window</span>
+      </div>
+      <a routerLink="/heatmap" class="ghost">Open heatmap →</a>
+    </div>
+    @if (heatmap.state().loading) {
+      <div class="skel heatstrip-skel"></div>
+    } @else if (topFiles().length === 0) {
+      <div class="empty">No tool calls in the selected window.</div>
+    } @else {
+      <div class="heatstrip">
+        @for (f of topFiles(); track f.path) {
+          <div
+            class="hot-cell"
+            [style.background]="fileBg(f.calls)"
+            [style.color]="fileColor(f.calls)"
+            [style.flex]="'1 1 ' + (f.path.length * 3 + 40) + 'px'"
+            [title]="f.path + ' — ' + f.calls + ' calls'"
+          >
+            <span class="mono">{{ f.path }}</span>
+          </div>
+        }
+      </div>
+    }
+  </div>
+
+  <!-- Bottom row -->
+  <div class="bottom-grid">
+    <div class="card card-pad">
+      <div class="card-head" style="margin-bottom: 6px">
+        <div class="card-title">Recent prompts <span class="muted">· by cost</span></div>
+        <a routerLink="/costs" class="ghost">Cost ranking →</a>
+      </div>
+      @if (costs.state().loading) {
+        @for (i of [0,1,2,3,4]; track i) { <div class="skel row-skel"></div> }
+      } @else if (topPrompts().length === 0) {
+        <div class="empty">No prompts ingested for this range.</div>
+      } @else {
+        @for (p of topPrompts(); track p.id) {
+          <div class="prompt-row" (click)="go('sessions')">
+            <div class="prompt-text">{{ p.text || '(no text)' }}</div>
+            <div class="prompt-bar">
+              <div class="bar-fill" [style.width.%]="promptFrac(p.cost_usd) * 100" [style.background]="promptBarColor(p.cost_usd)"></div>
+            </div>
+            <div class="prompt-right">
+              <div class="cost mono" [class.expensive]="p.cost_usd / maxPromptCost() > 0.7">{{ fmt$(p.cost_usd) }}</div>
+              <div class="prompt-meta mono muted">
+                {{ fmtK(promptTotalTokens(p)) }} · {{ (promptCacheRate(p) * 100) | number:'1.0-0' }}%
+              </div>
+            </div>
+          </div>
+        }
+      }
+    </div>
+
+    <div class="card card-pad cache-card">
+      <div class="card-head">
+        <div class="card-title">Cache analytics</div>
+      </div>
+      @if (cache.state().loading) {
+        <div class="skel cache-skel"></div>
+      } @else if (cache.state().data) {
+        @let c = cache.state().data!;
+        <div class="cache-headline">
+          <div class="cache-rate">{{ (c.readRate * 100) | number:'1.0-0' }}%</div>
+          <div class="cache-rate-sub">cache read rate</div>
+        </div>
+        <div class="cache-divider"></div>
+        <div class="cache-kv-grid">
+          <div class="kv">
+            <div class="kv-label">Creation</div>
+            <div class="kv-value mono">{{ fmtK(c.creationTokens) }}</div>
+            <div class="kv-sub mono muted">ephemeral</div>
+          </div>
+          <div class="kv">
+            <div class="kv-label">Read</div>
+            <div class="kv-value mono">{{ fmtK(c.readTokens) }}</div>
+            <div class="kv-sub mono muted">~10% rate</div>
+          </div>
+          <div class="kv">
+            <div class="kv-label">Saved (est.)</div>
+            <div class="kv-value mono success">{{ fmt$(c.dollarsSaved) }}</div>
+            <div class="kv-sub mono muted">vs no cache</div>
+          </div>
+          <div class="kv">
+            <div class="kv-label">Total spend</div>
+            <div class="kv-value mono">{{ fmt$(c.totalCost) }}</div>
+            <div class="kv-sub mono muted">{{ range() }}</div>
+          </div>
+        </div>
+      }
+    </div>
+  </div>
+
+  <footer class="dash-footer mono muted">
+    {{ range() }} window total: {{ fmt$(rangeTotal()) }}
+    ·
+    <span [class.dot-live]="liveSource() === 'live'" [class.dot-mock]="liveSource() === 'mock'">●</span>
+    {{ liveSource() }}
+  </footer>
+</div>

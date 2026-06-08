@@ -1,0 +1,93 @@
+<div class="rd-root">
+  <header class="rd-head">
+    <a class="rd-back" [routerLink]="['/runs']" aria-label="Back to runs">←</a>
+    <div class="rd-head-main">
+      @if (run(); as r) {
+        <div class="rd-title-row">
+          <span class="status-pill" [attr.data-status]="r.status">{{ r.status }}</span>
+          <h2 class="mono">{{ r.workflowName }}</h2>
+          <span class="rd-stream" [attr.data-stream]="streamStatus()" [title]="streamStatus()">
+            <span class="rd-dot"></span>{{ streamStatus() === 'live' ? 'live' : streamStatus() }}
+          </span>
+        </div>
+        <div class="rd-sub mono muted">
+          {{ r.id }}<span> · started {{ fmtTime(r.startedAt) }} · {{ fmtDuration(r.startedAt, r.completedAt) }}</span>
+        </div>
+      } @else if (loading()) {
+        <div class="muted">Loading run…</div>
+      } @else if (error()) {
+        <div class="rd-error">{{ error() }}</div>
+      }
+    </div>
+    <div class="rd-actions">
+      @if (run(); as r) {
+        @if (approvalPending()) {
+          <button type="button" class="btn btn-primary" (click)="approve()" [disabled]="actionPending() !== null">Approve</button>
+          <button type="button" class="btn btn-ghost-warn" (click)="reject()" [disabled]="actionPending() !== null">Reject</button>
+        }
+        @if (r.status === 'paused') {
+          <button type="button" class="btn btn-primary" (click)="resume()" [disabled]="actionPending() !== null">Resume</button>
+        }
+        @if (r.status === 'running' || r.status === 'paused') {
+          <button type="button" class="btn btn-ghost-danger" (click)="cancel()" [disabled]="actionPending() !== null">Cancel</button>
+        }
+      }
+    </div>
+  </header>
+
+  @if (actionError()) {
+    <div class="rd-banner-error">Action failed: {{ actionError() }}</div>
+  }
+  @if (run()?.errorMessage; as msg) {
+    <div class="rd-banner-error">{{ msg }}</div>
+  }
+
+  <div class="rd-body">
+    <section class="rd-section">
+      <h3 class="rd-h3">Steps <span class="muted">({{ steps().length }})</span></h3>
+      @if (steps().length === 0) {
+        <div class="muted rd-empty">Waiting for the first step to start…</div>
+      } @else {
+        @for (s of steps(); track s.id) {
+          <article class="rd-step" [attr.data-step-status]="s.status">
+            <header class="rd-step-head">
+              <span class="rd-step-status" [attr.data-step-status]="s.status">{{ s.status }}</span>
+              <span class="mono rd-step-id">{{ s.id }}</span>
+              @if (s.kind) { <span class="rd-step-kind">{{ s.kind }}</span> }
+              <span class="rd-spacer"></span>
+              <span class="muted mono rd-step-dur">{{ fmtDuration(s.startedAt, s.endedAt) }}</span>
+            </header>
+            @if (s.error) {
+              <pre class="rd-step-error mono">{{ s.error }}</pre>
+            }
+            @if (s.output !== undefined) {
+              <pre class="rd-step-output mono">{{ s.output | json }}</pre>
+            }
+          </article>
+        }
+      }
+    </section>
+
+    <section class="rd-section">
+      <h3 class="rd-h3">Event timeline <span class="muted">({{ events().length }})</span></h3>
+      @if (events().length === 0) {
+        <div class="muted rd-empty">No events yet.</div>
+      } @else {
+        <ol class="rd-timeline">
+          @for (e of events(); track e.id) {
+            <li class="rd-event" [attr.data-event-type]="e.eventType">
+              <span class="rd-event-time mono muted">{{ fmtTime(e.createdAt) }}</span>
+              <span class="rd-event-dot"></span>
+              <div class="rd-event-body">
+                <div class="rd-event-label">{{ eventLabel(e) }}</div>
+                @if (eventDetail(e); as d) {
+                  <div class="rd-event-detail mono muted">{{ d }}</div>
+                }
+              </div>
+            </li>
+          }
+        </ol>
+      }
+    </section>
+  </div>
+</div>

@@ -1,0 +1,8 @@
+@if (data().length >= 2) {
+  <svg [attr.width]="width()" [attr.height]="height()" [attr.viewBox]="'0 0 ' + width() + ' ' + height()">
+    @if (fill()) {
+      <path [attr.d]="fillD()" [attr.fill]="color()" opacity="0.18"/>
+    }
+    <path [attr.d]="pathD()" fill="none" [attr.stroke]="color()" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>
+}
