@@ -59,9 +59,11 @@
     "@types/better-sqlite3": "^7.6.0",
     "@types/node": "^20.19.30",
     "@types/picomatch": "^4.0.2",
-    "better-sqlite3": "^11.10.0",
     "typescript": "^5.0.0",
     "vitest": "^2.1.9"
+  },
+  "optionalDependencies": {
+    "better-sqlite3": "^11.10.0"
   },
   "engines": {
     "node": ">=20.0.0 <25.0.0"

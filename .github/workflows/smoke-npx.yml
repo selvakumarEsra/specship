@@ -1,0 +1,163 @@
+name: Smoke (published npx)
+
+# Validates the PUBLISHED @selvakumaresra/specship tarball on a real user's
+# happy path: `npx … install` → `init` → `index` → `query`. The point is to
+# exercise the SQLite FTS5 codepath on every Node version inside engines.node
+# so a regression that only shows up without `better-sqlite3` installed (i.e.
+# the v0.1.2 "no such module: fts5" crash) fails CI instead of shipping.
+#
+# Why this is a separate workflow from `npm test`:
+#  - `npm test` runs from the repo with devDependencies installed, so
+#    `better-sqlite3` is always resolvable and the adapter never falls
+#    through to `node:sqlite`. End users don't have that crutch.
+#  - This workflow runs in an empty temp dir, installs specship via npx
+#    only, and never installs `better-sqlite3` — matching the real
+#    end-user environment.
+#
+# When it runs:
+#  - manually (`workflow_dispatch`)
+#  - automatically after a successful Release (`workflow_run`), so a bad
+#    publish gets caught before users notice
+#  - nightly, to catch registry-side regressions (mirror lag, yanked
+#    transitive dep, etc.) independent of our own releases
+on:
+  workflow_dispatch: {}
+  workflow_run:
+    workflows: ["Release"]
+    types: [completed]
+  schedule:
+    - cron: "17 9 * * *"  # 09:17 UTC daily
+
+jobs:
+  smoke:
+    # If chained off Release, skip when Release itself failed — re-running
+    # a broken release through this smoke just adds noise.
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+    strategy:
+      fail-fast: false  # surface every broken combo, not just the first
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        # Every Node major inside package.json engines (>=20 <25).
+        # The FTS5 crash is specifically the 20/22/23 path — node:sqlite
+        # only ships FTS5 on Node 24. If you ever bump engines, bump this.
+        node-version: ['20', '22', '24']
+        # Default matrix runs with optionalDependencies installed (better-sqlite3
+        # comes in, FTS5 works everywhere). Below we additionally include the
+        # `--omit=optional` path for Node 24 ONLY — that's the documented
+        # standalone contract: "Node 24's node:sqlite ships FTS5, so the
+        # optional better-sqlite3 isn't needed." We don't run --omit=optional
+        # on Nodes 20/22 because we KNOW it fails (no FTS5 in node:sqlite),
+        # and a CI matrix that's red-by-design is just noise. If users on
+        # Node <24 set --omit=optional, the error message and CHANGELOG note
+        # are the contract.
+        omit-optional: [false]
+        include:
+          - os: ubuntu-latest
+            node-version: '24'
+            omit-optional: true
+          - os: macos-latest
+            node-version: '24'
+            omit-optional: true
+          - os: windows-latest
+            node-version: '24'
+            omit-optional: true
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        # Git Bash on windows-latest — keeps heredocs / && uniform across OSes.
+        shell: bash
+    steps:
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Print toolchain
+        run: |
+          node -v
+          npm -v
+          echo "OS: ${{ matrix.os }}"
+          echo "omit-optional: ${{ matrix.omit-optional }}"
+
+      # The smoke runs in a fresh temp dir OUTSIDE the repo. Anything inside
+      # the repo would let Node's require resolution walk up into the repo's
+      # node_modules and find better-sqlite3 — defeating the test. We don't
+      # even check out the repo here; the only thing tested is the published
+      # artifact.
+      - name: Make a clean workspace
+        id: ws
+        run: |
+          set -euo pipefail
+          WS="$RUNNER_TEMP/specship-smoke"
+          rm -rf "$WS"
+          mkdir -p "$WS/fixture/src"
+          # Minimal JS fixture: one named function the indexer will pick up
+          # and `specship query` can find. Keep it tiny — the goal is to
+          # exercise schema init (FTS5 virtual tables) + a single insert +
+          # a single query, not benchmark.
+          cat > "$WS/fixture/package.json" <<'EOF'
+          { "name": "smoke-fixture", "version": "0.0.0", "private": true }
+          EOF
+          cat > "$WS/fixture/src/hello.js" <<'EOF'
+          export function smokeMarker() { return 'hello from specship smoke'; }
+          EOF
+          echo "ws=$WS" >> "$GITHUB_OUTPUT"
+
+      - name: Install specship via npx (the user-facing path)
+        # --yes makes install non-interactive and defaults to --location=global
+        # (see src/bin/specship.ts:1825). We do NOT pre-install better-sqlite3
+        # — that's the whole point.
+        #
+        # When matrix.omit-optional is true, npm_config_omit=optional tells the
+        # underlying npm (used by npx to fetch the package) to skip
+        # optionalDependencies. This is what `--omit=optional` does for plain
+        # `npm install`; npx doesn't accept it as a CLI flag, so the env-var
+        # form is the reliable cross-platform route.
+        env:
+          npm_config_omit: ${{ matrix.omit-optional && 'optional' || '' }}
+        run: |
+          set -euo pipefail
+          # Force a fresh npx fetch each run; a cached older 0.1.x in
+          # ~/.npm/_npx would mask a fix landing in latest.
+          npx --yes @selvakumaresra/specship@latest install --yes
+          # Confirm the binary is now on PATH.
+          which specship || command -v specship
+          specship --version
+
+      - name: init + index (FTS5 trip-wire)
+        # `specship index` is where v0.1.2 crashed with `no such module: fts5`.
+        # If a future release reintroduces that regression on Node 20/22/23,
+        # this step is the one that goes red.
+        working-directory: ${{ steps.ws.outputs.ws }}/fixture
+        run: |
+          set -euo pipefail
+          specship init .
+          specship index .
+
+      - name: query returns the fixture symbol
+        working-directory: ${{ steps.ws.outputs.ws }}/fixture
+        run: |
+          set -euo pipefail
+          # --json keeps the assertion mechanical instead of grepping
+          # pretty-printed terminal output.
+          OUT=$(specship query smokeMarker --json)
+          echo "$OUT"
+          # Cheap structural check: the symbol name must appear in the result.
+          # If the index step "succeeded" but the FTS5 table is empty (a
+          # silent-failure variant), this catches it.
+          echo "$OUT" | node -e "
+            let s=''; process.stdin.on('data',d=>s+=d).on('end',()=>{
+              const j=JSON.parse(s);
+              const arr=Array.isArray(j)?j:(j.results||j.nodes||[]);
+              const hit=arr.some(n=>(n.name||n.symbol||'').includes('smokeMarker'));
+              if(!hit){console.error('FAIL: smokeMarker not in query results');process.exit(1)}
+              console.log('OK: smokeMarker found ('+arr.length+' results)');
+            });
+          "
+
+      - name: status reports a backend
+        # Belt-and-suspenders: status should report which SQLite backend
+        # actually loaded. On Node 20/22/23 without better-sqlite3 that'll
+        # be `node-sqlite`; on Node 24 it'll be whichever the bundle picks.
+        # Useful diagnostic in the failure log even when other steps pass.
+        working-directory: ${{ steps.ws.outputs.ws }}/fixture
+        run: specship status . --json

@@ -21,6 +21,10 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Workflow runtime surface.** `specship workflow run|resume|cancel|approve|reject|runs|list` for direct control; approval gates pause the workflow and persist state to `.specship/specship.db`, so a paused run survives Claude Code restarts.
 - **Code-comment backstop.** Drop `// @implements REQ-AUTH-005` in a function's docstring and the next index picks it up as a spec link automatically. Doesn't replace `specship_link_assert` from the agent, but it catches what the agent forgets.
 
+### Fixes
+
+- **`specship index` no longer crashes with `no such module: fts5` on Node 20/22/23.** SpecShip's schema uses SQLite FTS5 virtual tables for symbol search, but Node's built-in `node:sqlite` only ships FTS5 on Node 24+. `better-sqlite3` (which ships its own SQLite with FTS5) is now an optional dependency, so a default `npx @selvakumaresra/specship install` works on every Node version inside `engines.node`. If your install skips optional dependencies (`--omit=optional` or `npm_config_omit=optional`), Node 24+ is still required.
+
 ## [0.1.0] - 2026-06-06
 
 First publication of the Claude Code–only fork to npm as `@selvakumaresra/specship`.
