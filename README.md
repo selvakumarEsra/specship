@@ -156,7 +156,7 @@ The handful of cases where manual `specship sync` makes sense: the watcher is di
 
 `specship serve --ui` boots a single-process Fastify + Angular SPA on `http://127.0.0.1:4242/`. One port serves both the API and the desktop UI. No Electron, no auth — loopback only.
 
-![SpecShip Desktop dashboard — stat tiles, recent neighborhood mini-graph, tips, tool-call heatmap and recent-prompt rollup at a glance](assets/screenshots/dashboard.png?v=1)
+![SpecShip Desktop dashboard — stat tiles, recent neighborhood mini-graph, tips, tool-call heatmap and recent-prompt rollup at a glance](https://raw.githubusercontent.com/selvakumarEsra/specship/main/assets/screenshots/dashboard.png?v=1)
 
 The dashboard is designed to answer four questions in one glance — **what is the structural state of my codebase, what needs attention, what did my last session cost, and what should I do about it.** The zones, top-to-bottom:
 

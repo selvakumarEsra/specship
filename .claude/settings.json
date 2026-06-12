@@ -1,0 +1,39 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__specship__specship_explore",
+      "mcp__specship__specship_search",
+      "mcp__specship__specship_node",
+      "mcp__specship__specship_callers",
+      "mcp__specship__specship_callees",
+      "mcp__specship__specship_impact",
+      "mcp__specship__specship_files",
+      "mcp__specship__specship_status"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "specship sync --quiet",
+            "async": true
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "specship sync --quiet"
+          }
+        ]
+      }
+    ]
+  }
+}

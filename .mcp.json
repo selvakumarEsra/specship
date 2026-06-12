@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "specship": {
+      "type": "stdio",
+      "command": "specship",
+      "args": [
+        "serve",
+        "--mcp"
+      ]
+    }
+  }
+}
