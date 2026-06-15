@@ -93,17 +93,30 @@ echo "[offline-install] node:    $(node --version)"
 echo "[offline-install] registry: $(npm config get registry)"
 
 # --- install deps (offline-friendly: respects whatever registry npm is on) ---
+#
+# --ignore-scripts skips native-module postinstalls (notably better-sqlite3,
+# whose node-gyp rebuild needs a C toolchain that an air-gapped workstation
+# usually doesn't have). SpecShip treats better-sqlite3 as optional anyway —
+# without it the wasm SQLite path takes over, which is what the offline-
+# install flow expects.
 if [ -f package-lock.json ]; then
-  echo "[offline-install] npm ci"
-  npm ci
+  echo "[offline-install] npm ci --ignore-scripts"
+  npm ci --ignore-scripts
 else
-  echo "[offline-install] npm install"
-  npm install
+  echo "[offline-install] npm install --ignore-scripts"
+  npm install --ignore-scripts
 fi
 
 # --- build -------------------------------------------------------------------
-echo "[offline-install] npm run build"
-npm run build
+# Skip the build when this is a pre-compiled drop (no tsconfig.json + a
+# populated dist/ already on disk). The release tarball is shipped pre-built;
+# only a source checkout has tsconfig.json and needs `npm run build`.
+if [ -f tsconfig.json ]; then
+  echo "[offline-install] npm run build"
+  npm run build
+else
+  echo "[offline-install] skipping build (pre-compiled dist/ found)"
+fi
 
 # --- link as global specship ------------------------------------------------
 echo "[offline-install] npm link"

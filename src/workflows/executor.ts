@@ -37,6 +37,7 @@ import {
 } from '../types';
 import { SpecQueries } from '../db/spec-queries';
 import { WorktreeProvider } from '../isolation/worktree';
+import { getSpecShipDir } from '../directory';
 import {
   NodeOutput,
   substituteRefs,
@@ -142,7 +143,7 @@ export class WorkflowExecutor {
     }
 
     // Set up artifacts + logs dirs.
-    const specshipRoot = path.join(opts.projectRoot, '.specship');
+    const specshipRoot = getSpecShipDir(opts.projectRoot);
     const artifactsDir = path.join(specshipRoot, 'artifacts', 'runs', runId, 'nodes');
     const logsDir = path.join(specshipRoot, 'logs');
     try {
@@ -195,14 +196,13 @@ export class WorkflowExecutor {
       : opts.projectRoot;
 
     const artifactsDir = path.join(
-      opts.projectRoot,
-      '.specship',
+      getSpecShipDir(opts.projectRoot),
       'artifacts',
       'runs',
       runId,
       'nodes'
     );
-    const logsDir = path.join(opts.projectRoot, '.specship', 'logs');
+    const logsDir = path.join(getSpecShipDir(opts.projectRoot), 'logs');
 
     const now = Date.now();
     const refreshed: WorkflowRun = {

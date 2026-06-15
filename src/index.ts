@@ -29,6 +29,7 @@ import {
   createDirectory,
   removeDirectory,
   validateDirectory,
+  getSpecShipDir,
 } from './directory';
 import {
   ExtractionOrchestrator,
@@ -160,7 +161,7 @@ export class SpecShip {
     this.specQueries = new SpecQueries(db.getDb());
     this.projectRoot = projectRoot;
     this.fileLock = new FileLock(
-      path.join(projectRoot, '.specship', 'specship.lock')
+      path.join(getSpecShipDir(projectRoot), 'specship.lock')
     );
     this.orchestrator = new ExtractionOrchestrator(projectRoot, queries);
     this.resolver = createResolver(projectRoot, queries);

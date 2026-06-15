@@ -2,6 +2,14 @@
  * Directory Management
  *
  * Manages the .specship/ directory structure for SpecShip data.
+ *
+ * Layout: `<projectRoot>/.specship/` holds the SQLite index, lock file,
+ * daemon PID, workflow artifacts, logs, and project-level workflow
+ * definitions. The directory lives **inside the project** by design so
+ * that team-shared assets — notably `.specship/workflows/*.yaml` — are
+ * checked in alongside the code they govern. Per-machine files (the DB,
+ * the lock, the daemon socket, log output) are gitignored by the
+ * `.gitignore` written into the folder on init.
  */
 
 import * as fs from 'fs';
@@ -13,15 +21,17 @@ import * as path from 'path';
 export const SPECSHIP_DIR = '.specship';
 
 /**
- * Get the .specship directory path for a project
+ * Get the .specship directory path for a project. All callers that
+ * compose subdirectories (artifacts, logs, lock files, daemon PID)
+ * should funnel through here so the layout has one source of truth.
  */
 export function getSpecShipDir(projectRoot: string): string {
   return path.join(projectRoot, SPECSHIP_DIR);
 }
 
 /**
- * Check if a project has been initialized with SpecShip
- * Requires both .specship/ directory AND specship.db to exist
+ * Check if a project has been initialized with SpecShip.
+ * Requires both .specship/ directory AND specship.db to exist.
  */
 export function isInitialized(projectRoot: string): boolean {
   const specshipDir = getSpecShipDir(projectRoot);
@@ -86,8 +96,12 @@ export function createDirectory(projectRoot: string): void {
     const gitignoreContent = `# SpecShip data files — local to each machine, not for committing.
 # Ignore everything in .specship/ except this file itself, so transient
 # files (the database, daemon.pid, sockets, logs) never show up in git.
+# Team-shared content (workflows/*.yaml) should be explicitly !-allowed
+# below if you want it tracked.
 *
 !.gitignore
+!workflows/
+!workflows/**
 `;
 
     fs.writeFileSync(gitignorePath, gitignoreContent, 'utf-8');

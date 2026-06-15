@@ -504,7 +504,7 @@ function printIndexResult(clack: typeof import('@clack/prompts'), result: IndexR
       clack.log.info(`The index is fully usable ${getGlyphs().dash} only the failed files are missing.`);
     }
   } else if (projectPath) {
-    const logPath = path.join(projectPath, '.specship', 'errors.log');
+    const logPath = path.join(getSpecShipDir(projectPath), 'errors.log');
     if (fs.existsSync(logPath)) {
       fs.unlinkSync(logPath);
     }
@@ -512,10 +512,11 @@ function printIndexResult(clack: typeof import('@clack/prompts'), result: IndexR
 }
 
 /**
- * Write detailed error log to .specship/errors.log
+ * Write detailed error log into the project's SpecShip data dir.
+ * Path follows whichever layout is active (home folder by default).
  */
 function writeErrorLog(projectPath: string, errors: Array<{ message: string; filePath?: string; severity: string; code?: string }>): void {
-  const cgDir = path.join(projectPath, '.specship');
+  const cgDir = getSpecShipDir(projectPath);
   if (!fs.existsSync(cgDir)) return;
 
   const logPath = path.join(cgDir, 'errors.log');
@@ -2064,7 +2065,7 @@ program
             projectRoot,
             inputs,
             variables: {
-              ARTIFACTS_DIR: path.join(projectRoot, '.specship', 'artifacts'),
+              ARTIFACTS_DIR: path.join(getSpecShipDir(projectRoot), 'artifacts'),
               CONTEXT: projectRoot,
             },
           });
@@ -2111,7 +2112,7 @@ program
             projectRoot,
             inputs: run.inputs,
             variables: {
-              ARTIFACTS_DIR: path.join(projectRoot, '.specship', 'artifacts'),
+              ARTIFACTS_DIR: path.join(getSpecShipDir(projectRoot), 'artifacts'),
               CONTEXT: projectRoot,
             },
           });

@@ -9,6 +9,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { SchemaVersion } from '../types';
 import { runMigrations, getCurrentVersion, CURRENT_SCHEMA_VERSION } from './migrations';
+import { getSpecShipDir } from '../directory';
 
 export { SqliteDatabase, SqliteBackend } from './sqlite-adapter';
 
@@ -255,8 +256,10 @@ export class DatabaseConnection {
 export const DATABASE_FILENAME = 'specship.db';
 
 /**
- * Get the default database path for a project
+ * Get the default database path for a project. Routes through
+ * `getSpecShipDir()` so it follows the active layout (home folder by
+ * default, legacy in-project location when one already exists).
  */
 export function getDatabasePath(projectRoot: string): string {
-  return path.join(projectRoot, '.specship', DATABASE_FILENAME);
+  return path.join(getSpecShipDir(projectRoot), DATABASE_FILENAME);
 }
