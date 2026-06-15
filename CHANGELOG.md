@@ -9,6 +9,10 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Breaking Changes
+
+- **`specship install` now defaults to project-local instead of global.** A no-flag `specship install` writes the MCP server entry + permissions + hooks to `./.mcp.json` and `./.claude/settings.json` (project-scoped) instead of `~/.claude.json` and `~/.claude/settings.json` (global). This keeps SpecShip's MCP tool surface out of Claude Code sessions on projects that haven't opted in — saving ~3k tokens of always-on tool-list overhead per session on unrelated projects. Pass `--location global` to get the old behavior. The matching `specship uninstall` default also flipped so an `--yes` install/uninstall pair stays symmetric. Existing global installs are untouched until you re-run `specship install` or `specship uninstall` against them.
+
 ### New Features
 
 - **Offline-install script is now safe on air-gapped boxes without a C toolchain.** `scripts/offline-install.sh` now passes `--ignore-scripts` to `npm ci`/`npm install` so the better-sqlite3 native-module rebuild can't fail the install, and skips `npm run build` when run against a pre-compiled drop (no `tsconfig.json` on disk).

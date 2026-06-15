@@ -125,20 +125,24 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
     }
   }
 
-  // Step 2: global vs local.
+  // Step 2: global vs local. Default is **local** so the SpecShip MCP
+  // surface (tool list, server instructions) only appears in Claude
+  // Code sessions opened against projects that have actually opted in.
+  // Global is still supported via `--location global`; pick it when you
+  // want the tools advertised in every project regardless.
   let location: Location;
   if (opts.location) {
     location = opts.location;
   } else if (useDefaults) {
-    location = 'global';
+    location = 'local';
   } else {
     const sel = await clack.select({
-      message: 'Apply Claude Code config to all your projects, or just this one?',
+      message: 'Apply Claude Code config to just this project, or all of them?',
       options: [
+        { value: 'local'  as const, label: 'Just this project (recommended)', hint: './.mcp.json + ./.claude/settings.json' },
         { value: 'global' as const, label: 'All projects', hint: '~/.claude.json + ~/.claude/settings.json' },
-        { value: 'local'  as const, label: 'Just this project', hint: './.mcp.json + ./.claude/settings.json' },
       ],
-      initialValue: 'global' as const,
+      initialValue: 'local' as const,
     });
     if (clack.isCancel(sel)) {
       clack.cancel('Installation cancelled.');
@@ -282,20 +286,22 @@ export async function runUninstaller(opts: RunUninstallerOptions): Promise<void>
     );
   }
 
-  // Step 1: location.
+  // Step 1: location. Default tracks install (now local), so a user
+  // who ran `specship install --yes` and `specship uninstall --yes`
+  // touches the same files on both sides.
   let location: Location;
   if (opts.location) {
     location = opts.location;
   } else if (useDefaults) {
-    location = 'global';
+    location = 'local';
   } else {
     const sel = await clack.select({
-      message: 'Remove SpecShip from all your projects, or just this one?',
+      message: 'Remove SpecShip from just this project, or all of them?',
       options: [
-        { value: 'global' as const, label: 'All projects (global)', hint: '~/.claude.json + ~/.claude/settings.json' },
         { value: 'local'  as const, label: 'Just this project (local)', hint: './.mcp.json + ./.claude/settings.json' },
+        { value: 'global' as const, label: 'All projects (global)', hint: '~/.claude.json + ~/.claude/settings.json' },
       ],
-      initialValue: 'global' as const,
+      initialValue: 'local' as const,
     });
     if (clack.isCancel(sel)) {
       clack.cancel('Uninstall cancelled.');
