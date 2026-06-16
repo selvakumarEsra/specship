@@ -195,7 +195,7 @@
 
 .body-card {
   background: var(--bg-panel); border: 1px solid var(--border-subtle);
-  border-radius: 10px; padding: 16px 18px; margin-bottom: 18px;
+  border-radius: 10px; padding: 18px 22px; margin-bottom: 18px;
 }
 
 .imports {
@@ -244,18 +244,46 @@
 
 // ---- markdown body (used by detail body-card + effective blocks) ---------
 .md-content {
+  // Cap prose line length at ~78ch so wide viewports don't produce
+  // 200-character lines that are painful to read. Tables, code blocks,
+  // and the .md-table-scroll wrapper override this so they can use the
+  // full card width.
+  max-width: 78ch;
+
   .md-h1 { font-size: 15px; font-weight: 650; color: var(--text-primary);
     letter-spacing: -0.01em; margin: 0 0 10px; }
-  .md-h2 { font-size: 10.5px; font-weight: 700;
+  .md-h2 { font-size: 13px; font-weight: 650; color: var(--text-primary);
+    letter-spacing: -0.005em; margin: 18px 0 6px;
+    padding-bottom: 4px; border-bottom: 1px solid var(--border-subtle); }
+  .md-h3 { font-size: 12px; font-weight: 650; color: var(--text-primary);
+    margin: 14px 0 6px; }
+  .md-h4 { font-size: 10.5px; font-weight: 700;
     text-transform: uppercase; letter-spacing: 0.06em;
-    color: var(--text-muted); margin: 16px 0 6px; }
+    color: var(--text-muted); margin: 12px 0 4px; }
   .md-p { font-size: 12.5px; line-height: 1.6; color: var(--text-secondary); margin: 0 0 4px;
+    overflow-wrap: anywhere;
     strong { color: var(--text-primary); } }
-  .md-list { list-style: none; padding: 0; margin: 0 0 4px;
-    li { position: relative; padding: 1px 0 1px 18px;
+
+  .md-list, .md-ol {
+    padding: 0; margin: 4px 0 6px;
+    li {
+      position: relative; padding: 2px 0 2px 22px;
       font-size: 12.5px; line-height: 1.6; color: var(--text-secondary);
-      &::before { content: '•'; position: absolute; left: 4px; top: 1px; color: var(--text-faint); }
-      strong { color: var(--text-primary); } } }
+      overflow-wrap: anywhere;
+      strong { color: var(--text-primary); }
+    }
+  }
+  .md-list { list-style: none;
+    li::before { content: '•'; position: absolute; left: 6px; top: 2px; color: var(--text-faint); } }
+  .md-ol { list-style: none; counter-reset: md-ol;
+    li { counter-increment: md-ol;
+      &::before {
+        content: counter(md-ol) '.';
+        position: absolute; left: 0; top: 2px;
+        color: var(--text-faint); font-family: var(--font-mono);
+        font-size: 11.5px; min-width: 18px; text-align: right;
+      } } }
+
   .md-spacer { height: 6px; }
   .md-import { display: inline-block; font-size: 11.5px;
     color: var(--node-route); background: var(--node-route-soft);
@@ -263,6 +291,74 @@
   .md-inline-code { font-size: 11.5px; background: var(--bg-canvas);
     padding: 1px 6px; border-radius: 4px;
     border: 1px solid var(--border-subtle); color: var(--node-spec); }
+  .md-blockquote {
+    margin: 6px 0; padding: 8px 12px;
+    border-left: 3px solid var(--accent);
+    background: var(--accent-soft);
+    color: var(--text-secondary);
+    font-size: 12.5px; line-height: 1.55;
+    border-radius: 0 6px 6px 0;
+  }
+
+  // Fenced code blocks: monospace, scrollable horizontally, with a
+  // language badge in the top-right corner when supplied.
+  .md-pre {
+    position: relative;
+    margin: 8px 0 10px;
+    padding: 12px 14px;
+    background: var(--bg-canvas);
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    overflow-x: auto;
+    max-width: 100%; // override the .md-content cap; code keeps card width
+    code {
+      display: block;
+      font-size: 11.5px; line-height: 1.55;
+      color: var(--text-primary);
+      white-space: pre;
+    }
+  }
+  .md-pre-lang {
+    position: absolute; top: 6px; right: 10px;
+    font-size: 10px; font-weight: 600;
+    color: var(--text-muted);
+    text-transform: lowercase;
+    background: var(--bg-panel);
+    padding: 1px 6px; border-radius: 4px;
+    border: 1px solid var(--border-subtle);
+  }
+
+  // Markdown tables: wrapped in .md-table-scroll so they horizontally
+  // scroll on narrow viewports without breaking the prose column.
+  .md-table-scroll {
+    max-width: 100%; // override .md-content cap; tables span the card
+    overflow-x: auto;
+    margin: 10px 0;
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+  }
+  .md-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11.5px;
+    th, td {
+      padding: 8px 12px;
+      text-align: left;
+      vertical-align: top;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+    thead th {
+      background: var(--bg-panel);
+      font-weight: 650; color: var(--text-primary);
+      font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.04em;
+      border-bottom: 1px solid var(--border-strong);
+      white-space: nowrap;
+    }
+    tbody td { color: var(--text-secondary); }
+    tbody tr:last-child td { border-bottom: 0; }
+    tbody tr:hover { background: var(--bg-hover); }
+  }
+
   > :first-child { margin-top: 0; }
 }
 
