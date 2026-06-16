@@ -103,6 +103,11 @@ export class Memory {
     this.resource.state().data?.files?.length ? 'api' : 'seed',
   );
   protected readonly loading = computed(() => this.resource.state().loading);
+  protected readonly errorMessage = computed<string | null>(() => {
+    const err = this.resource.state().error;
+    return err ? err.message : null;
+  });
+  protected readonly noProject = computed(() => this.resource.state().noProject);
 
   protected readonly totalTokens = computed(() => this.files().reduce((a, b) => a + b.tokens, 0));
   protected readonly instructionCount = computed(() => this.files().filter((f) => f.type === 'instruction').length);
@@ -140,6 +145,12 @@ export class Memory {
     return tf === 'all' ? '' : TYPES[tf].desc;
   });
 
+  /** "memory files" when filter is all, otherwise the active type's plural label in lowercase. */
+  protected readonly filterEmptyNoun = computed<string>(() => {
+    const tf = this.typeFilter();
+    return tf === 'all' ? 'memory files' : TYPES[tf].label.toLowerCase();
+  });
+
   protected readonly typeChips = computed<Array<{ key: TypeFilter; label: string; color: string; soft: string; count?: number }>>(() => [
     { key: 'all', label: 'All', color: 'var(--text-secondary)', soft: 'var(--bg-active)' },
     { key: 'instruction', label: TYPES.instruction.label, color: TYPES.instruction.color, soft: TYPES.instruction.soft, count: this.instructionCount() },
@@ -163,6 +174,12 @@ export class Memory {
         return im ? matchesType(im) : false;
       })),
     );
+  });
+
+  /** Total visible rows across all rail groups under the current filter. */
+  protected readonly visibleCount = computed<number>(() => {
+    const groups = this.railGroups();
+    return groups.reduce((a, g) => a + this.rowItems(g).length, 0);
   });
 
   protected readonly effectiveInstructions = computed<MemFile[]>(() => {
@@ -207,9 +224,17 @@ export class Memory {
     return 'memory';
   }
 
+  /** Human-friendly primary label for a row — basename when meaningful, scope otherwise. */
   protected nameFor(f: MemFile): string {
-    return (f.level === 'import' || f.level === 'note') ? f.name : f.scope;
+    if (f.level === 'import' || f.level === 'note') return f.name;
+    // For CLAUDE.md instruction files the scope ("project root", "src/graph") is more
+    // useful than the filename, which is always "CLAUDE.md" and would collapse to a
+    // wall of identical rows.
+    return f.scope;
   }
+
+  /** Short, human-readable path: ~/, with the home tilde already applied server-side. */
+  protected shortPath(f: MemFile): string { return f.path; }
 
   protected fmtK(n: number): string {
     return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : `${n}`;
@@ -224,22 +249,47 @@ export class Memory {
   protected onTypeFilter(t: TypeFilter): void { this.typeFilter.set(t); }
   protected onSelectByObj(f: MemFile): void { this.selectedId.set(f.id); }
   protected reload(): void { this.resource.refetch(); }
+  protected clearFilter(): void { this.typeFilter.set('all'); }
 }
 
+/**
+ * Render a tiny Markdown subset (h1/h2, bullets, inline code/bold, @imports)
+ * into HTML with semantic classes. All styling lives in memory.scss — no
+ * inline styles so theme variables stay authoritative and the rendered body
+ * matches whatever the rest of the desktop UI does.
+ */
 function renderMd(body: string): string {
-  const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   const inline = (s: string) =>
     esc(s)
-      .replace(/\*\*(.+?)\*\*/g, '<strong style="color:var(--text-primary)">$1</strong>')
-      .replace(/`(.+?)`/g, '<code class="mono" style="font-size:11.5px;background:var(--bg-canvas);padding:1px 5px;border-radius:4px;border:1px solid var(--border-subtle);color:var(--node-spec)">$1</code>');
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/`(.+?)`/g, '<code class="md-inline-code mono">$1</code>');
   const out: string[] = [];
+  let inList = false;
+  const closeList = () => {
+    if (inList) { out.push('</ul>'); inList = false; }
+  };
   for (const ln of body.split('\n')) {
-    if (ln.startsWith('## ')) out.push(`<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);margin:14px 0 6px">${inline(ln.slice(3))}</div>`);
-    else if (ln.startsWith('# ')) out.push(`<div style="font-size:14px;font-weight:650;margin:0 0 8px">${inline(ln.slice(2))}</div>`);
-    else if (ln.startsWith('@')) out.push(`<div class="mono" style="font-size:12px;color:var(--node-route);background:var(--node-route-soft);display:block;width:fit-content;padding:2px 8px;border-radius:5px;margin:3px 0">${esc(ln)}</div>`);
-    else if (/^\s*- /.test(ln)) out.push(`<div style="display:flex;gap:8px;font-size:12.5px;line-height:1.6;color:var(--text-secondary);padding:1px 0"><span style="color:var(--text-faint)">•</span><span>${inline(ln.replace(/^\s*- /, ''))}</span></div>`);
-    else if (ln.trim() === '') out.push('<div style="height:6px"></div>');
-    else out.push(`<div style="font-size:12.5px;line-height:1.6;color:var(--text-secondary)">${inline(ln)}</div>`);
+    if (ln.startsWith('## ')) {
+      closeList();
+      out.push(`<h3 class="md-h2">${inline(ln.slice(3))}</h3>`);
+    } else if (ln.startsWith('# ')) {
+      closeList();
+      out.push(`<h2 class="md-h1">${inline(ln.slice(2))}</h2>`);
+    } else if (ln.startsWith('@')) {
+      closeList();
+      out.push(`<div class="md-import mono">${esc(ln)}</div>`);
+    } else if (/^\s*- /.test(ln)) {
+      if (!inList) { out.push('<ul class="md-list">'); inList = true; }
+      out.push(`<li>${inline(ln.replace(/^\s*- /, ''))}</li>`);
+    } else if (ln.trim() === '') {
+      closeList();
+      out.push('<div class="md-spacer" aria-hidden="true"></div>');
+    } else {
+      closeList();
+      out.push(`<p class="md-p">${inline(ln)}</p>`);
+    }
   }
+  closeList();
   return out.join('');
 }
