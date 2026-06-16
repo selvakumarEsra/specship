@@ -243,13 +243,14 @@
 }
 
 // ---- markdown body (used by detail body-card + effective blocks) ---------
+//
+// The container fills its parent — body-card and .eff-block .body both
+// supply their own visual frame, and on a wide dashboard the user expects
+// the content to use the available width. Long unbreakable tokens are
+// handled by `overflow-wrap: anywhere` on the prose blocks below; that
+// keeps URLs / type names from causing horizontal overflow without
+// shrinking the card to a narrow column.
 .md-content {
-  // Cap prose line length at ~78ch so wide viewports don't produce
-  // 200-character lines that are painful to read. Tables, code blocks,
-  // and the .md-table-scroll wrapper override this so they can use the
-  // full card width.
-  max-width: 78ch;
-
   .md-h1 { font-size: 15px; font-weight: 650; color: var(--text-primary);
     letter-spacing: -0.01em; margin: 0 0 10px; }
   .md-h2 { font-size: 13px; font-weight: 650; color: var(--text-primary);
