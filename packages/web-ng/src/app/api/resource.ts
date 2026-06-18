@@ -17,6 +17,7 @@
  */
 import { Signal, signal, effect, DestroyRef, inject } from '@angular/core';
 import { ApiError, ApiService } from './api';
+import { RefreshService } from './refresh';
 
 export interface ApiResourceState<T> {
   data: T | null;
@@ -49,7 +50,13 @@ export function apiResource<T>(
 ): ApiResource<T> {
   const state = signal<ApiResourceState<T>>({ data: null, loading: true, error: null, source: 'init', noProject: false });
   const destroyRef = inject(DestroyRef);
-  let currentController: AbortController | null = null;
+  // Subscribe to the global refresh broadcast. Reading `tick` inside
+  // the effect below causes every resource to refetch when the status
+  // strip's refresh button fires — without per-page wiring. Resources
+  // that don't want to participate (e.g. one-shot static lookups) can
+  // be added as an opt-out later; today every resource opts in by
+  // virtue of going through this helper.
+  const refresh = inject(RefreshService);
 
   const trigger = signal(0);
   const fetchOnce = () => {
@@ -77,10 +84,17 @@ export function apiResource<T>(
       });
   };
 
+  let currentController: AbortController | null = null;
+
   effect(() => {
-    // Re-run whenever pathFn's tracked signals change OR refetch bumps trigger.
+    // Re-run whenever pathFn's tracked signals change, refetch bumps
+    // the local trigger, OR the global refresh service ticks. The
+    // global tick is what makes the status strip's refresh button
+    // pull Sessions / Heatmap / Costs / Memory / Drift current
+    // without per-page wiring.
     pathFn();
     trigger();
+    refresh.tick();
     fetchOnce();
   });
 

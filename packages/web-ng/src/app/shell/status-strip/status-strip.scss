@@ -24,5 +24,30 @@
   background: transparent; border: none; color: var(--text-muted);
   cursor: pointer; font-size: 14px; padding: 2px 6px;
   border-radius: 4px;
+  transition: background 120ms, color 120ms;
 }
-.refresh:hover { background: var(--bg-hover); color: var(--text-primary); }
+.refresh:hover:not(:disabled) { background: var(--bg-hover); color: var(--text-primary); }
+.refresh:disabled { cursor: progress; opacity: 0.8; }
+.refresh:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+// Spin the ↻ glyph while a refresh is in flight so users see immediate
+// feedback during the (sometimes multi-second) sync + ingest pass.
+.refresh.spinning {
+  display: inline-block;
+  animation: spin 0.9s linear infinite;
+  color: var(--accent);
+}
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+// Tiny warning glyph that surfaces a partial-failure tooltip (sync OK
+// but ingest failed, or vice versa). Cleared by the next successful
+// refresh — no manual dismiss needed.
+.refresh-error {
+  color: var(--warn);
+  font-size: 12px;
+  padding: 0 2px;
+  cursor: help;
+}

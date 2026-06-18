@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/c
 import { ApiService } from '../../api/api';
 import { apiResource } from '../../api/resource';
 import { ProjectsService } from '../../api/projects';
+import { RefreshService } from '../../api/refresh';
 import type { StatusResponse } from '../../api/types';
 
 @Component({
@@ -14,6 +15,7 @@ import type { StatusResponse } from '../../api/types';
 export class StatusStrip {
   private readonly api = inject(ApiService);
   private readonly projects = inject(ProjectsService);
+  protected readonly refreshSvc = inject(RefreshService);
   protected readonly status = apiResource<StatusResponse>(this.api, () => `/api/status${this.projects.projectQuery()}`);
 
   protected readonly indexedLabel = computed(() => {
@@ -29,7 +31,14 @@ export class StatusStrip {
     } catch { return String(ts); }
   });
 
-  protected refresh(): void {
-    this.status.refetch();
+  /**
+   * Global refresh — forces a server-side SpecShip sync + Claude Code
+   * transcript ingest, then bumps RefreshService.tick so every
+   * project-scoped surface on the page (Sessions / Heatmap / Costs /
+   * Memory / Drift / Graph) re-fetches in lockstep. Throttled by the
+   * service's loading flag — overlapping clicks are coalesced.
+   */
+  protected async refresh(): Promise<void> {
+    await this.refreshSvc.triggerGlobalRefresh();
   }
 }

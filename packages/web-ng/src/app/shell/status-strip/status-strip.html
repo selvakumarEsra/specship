@@ -14,7 +14,16 @@
     </span>
     <span class="grow"></span>
     <span class="seg"><span class="lbl">indexed</span> <span class="mono val">{{ indexedLabel() }}</span></span>
-    <button class="refresh" (click)="refresh()" [disabled]="status.state().loading">↻</button>
+    @if (refreshSvc.error(); as err) {
+      <span class="refresh-error mono" [title]="err">⚠</span>
+    }
+    <button class="refresh"
+            (click)="refresh()"
+            [disabled]="refreshSvc.loading()"
+            [class.spinning]="refreshSvc.loading()"
+            [attr.aria-label]="refreshSvc.loading() ? 'Refreshing…' : 'Refresh everything — sync index + ingest Claude Code transcripts'"
+            [title]="refreshSvc.loading() ? 'Refreshing…' : 'Refresh: sync index + re-ingest Claude Code transcripts. Updates Sessions, Heatmap, Costs, Memory, Drift, Graph.'"
+    >↻</button>
   } @else if (status.state().loading) {
     <span class="mono muted">loading status…</span>
   } @else {
