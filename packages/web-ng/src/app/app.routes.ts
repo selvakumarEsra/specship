@@ -55,6 +55,11 @@ export const routes: Routes = [
     data: { nav: 'sessions', title: 'Sessions' },
   },
   {
+    path: 'sessions/:id',
+    loadComponent: () => import('./pages/session-detail/session-detail').then((m) => m.SessionDetail),
+    data: { nav: 'sessions', title: 'Session detail' },
+  },
+  {
     path: 'heatmap',
     loadComponent: () => import('./pages/heatmap/heatmap').then((m) => m.Heatmap),
     data: { nav: 'heatmap', title: 'Heatmap' },

@@ -1,0 +1,175 @@
+<div class="page">
+  <header class="page-head">
+    <a class="back-link" [routerLink]="['/sessions']">
+      <app-icon name="x" [size]="14" />
+      <span>All sessions</span>
+    </a>
+    <div class="title-block">
+      <div class="title">
+        Session <span class="mono session-id">{{ id().slice(0, 12) }}</span>
+        @if (session()?.last_model) {
+          <span class="model-pill mono">{{ session()!.last_model }}</span>
+        }
+      </div>
+      @if (session(); as s) {
+        <div class="sub">
+          {{ s.project_path }}
+          @if (s.started_at && s.ended_at) {
+            · {{ fmtClock(s.started_at) }} – {{ fmtClock(s.ended_at) }}
+            ({{ fmtDurationSec(s.started_at, s.ended_at) }})
+          }
+        </div>
+      }
+    </div>
+    <div class="page-actions">
+      <button
+        type="button"
+        class="btn btn-secondary btn-sm refresh-btn"
+        [class.spinning]="localRefreshing() || refresh.loading()"
+        [disabled]="refresh.loading()"
+        (click)="forceRefresh()"
+        title="Force refresh: sync the index + re-ingest Claude Code transcripts"
+        aria-label="Refresh session detail"
+      >
+        <app-icon name="refresh" [size]="13" />
+        {{ (localRefreshing() || refresh.loading()) ? 'Refreshing…' : 'Refresh' }}
+      </button>
+    </div>
+  </header>
+
+  @if (resource.state().loading && !session()) {
+    <div class="loading">Loading session…</div>
+  } @else if (resource.state().error) {
+    <div class="error">
+      <div class="error-title">Couldn't load session</div>
+      <div class="error-detail">{{ resource.state().error?.message }}</div>
+      <button class="btn btn-secondary btn-sm" (click)="forceRefresh()">Retry</button>
+    </div>
+  } @else if (session(); as s) {
+    <!-- Stat strip — at-a-glance totals -->
+    <div class="stat-strip">
+      <div class="stat">
+        <div class="stat-lbl">Cost</div>
+        <div class="stat-val cost">${{ s.total_cost_usd.toFixed(4) }}</div>
+      </div>
+      <div class="stat">
+        <div class="stat-lbl">Prompts</div>
+        <div class="stat-val mono">{{ s.prompt_count }}</div>
+      </div>
+      <div class="stat">
+        <div class="stat-lbl">Tool calls</div>
+        <div class="stat-val mono">{{ totalToolCalls() }}</div>
+      </div>
+      <div class="stat">
+        <div class="stat-lbl">Input</div>
+        <div class="stat-val mono">{{ fmtTokens(s.total_input_tokens) }}</div>
+      </div>
+      <div class="stat">
+        <div class="stat-lbl">Output</div>
+        <div class="stat-val mono">{{ fmtTokens(s.total_output_tokens) }}</div>
+      </div>
+      <div class="stat">
+        <div class="stat-lbl">Cache write</div>
+        <div class="stat-val mono">{{ fmtTokens(s.total_cache_creation_tokens) }}</div>
+      </div>
+      <div class="stat">
+        <div class="stat-lbl">Cache read</div>
+        <div class="stat-val mono">{{ fmtTokens(s.total_cache_read_tokens) }}</div>
+      </div>
+      <div class="stat">
+        <div class="stat-lbl">Cache rate</div>
+        <div class="stat-val mono" [style.color]="cacheColor(cacheReadRate())">
+          {{ (cacheReadRate() * 100) | number:'1.0-0' }}%
+        </div>
+      </div>
+    </div>
+
+    <!-- Prompt list controls -->
+    <div class="filter-bar">
+      <span class="muted xs">prompts · {{ groups().length }}</span>
+      <span class="grow"></span>
+      <button class="btn btn-ghost btn-sm" type="button" (click)="expandAll()">Expand all</button>
+      <button class="btn btn-ghost btn-sm" type="button" (click)="collapseAll()">Collapse all</button>
+    </div>
+
+    <!-- Prompts: one row each, click to expand into per-prompt detail -->
+    <div class="prompts">
+      @for (g of groups(); track g.prompt.id) {
+        <div class="prompt card">
+          <button
+            type="button"
+            class="prompt-head"
+            [class.expanded]="isExpanded(g.prompt.id)"
+            [attr.aria-expanded]="isExpanded(g.prompt.id)"
+            (click)="toggleExpand(g.prompt.id)"
+          >
+            <span class="chevron mono" [class.open]="isExpanded(g.prompt.id)">›</span>
+            <span class="prompt-time mono muted">{{ fmtClock(g.prompt.ts) }}</span>
+            @if (g.prompt.is_sidechain === 1) {
+              <span class="pill subagent">subagent</span>
+            }
+            <span class="prompt-text">
+              @if (g.prompt.text) { {{ g.prompt.text.length > 140 ? g.prompt.text.slice(0, 140) + '…' : g.prompt.text }} }
+              @else { <span class="muted">(no user text — assistant-only turn)</span> }
+            </span>
+            <span class="grow"></span>
+            <span class="prompt-meta mono muted">
+              {{ g.tools.length }} tool{{ g.tools.length === 1 ? '' : 's' }}
+              · {{ fmtTokens(g.totalTokens) }}t
+              · ${{ g.prompt.cost_usd.toFixed(4) }}
+            </span>
+          </button>
+
+          @if (isExpanded(g.prompt.id)) {
+            <div class="prompt-body">
+              @if (g.prompt.text) {
+                <section class="prompt-section">
+                  <div class="section-lbl">User prompt</div>
+                  <pre class="prompt-pre">{{ g.prompt.text }}</pre>
+                </section>
+              }
+
+              <section class="prompt-section">
+                <div class="section-lbl">Token breakdown</div>
+                <div class="kv-row">
+                  <div class="kv"><div class="kv-lbl">Input</div><div class="kv-val mono">{{ fmtTokens(g.prompt.input_tokens) }}</div></div>
+                  <div class="kv"><div class="kv-lbl">Output</div><div class="kv-val mono">{{ fmtTokens(g.prompt.output_tokens) }}</div></div>
+                  <div class="kv"><div class="kv-lbl">Cache write</div><div class="kv-val mono">{{ fmtTokens(g.prompt.cache_creation_tokens) }}</div></div>
+                  <div class="kv"><div class="kv-lbl">Cache read</div><div class="kv-val mono">{{ fmtTokens(g.prompt.cache_read_tokens) }}</div></div>
+                  <div class="kv"><div class="kv-lbl">Cost</div><div class="kv-val mono cost">${{ g.prompt.cost_usd.toFixed(4) }}</div></div>
+                  @if (g.prompt.model) {
+                    <div class="kv"><div class="kv-lbl">Model</div><div class="kv-val mono">{{ g.prompt.model }}</div></div>
+                  }
+                </div>
+              </section>
+
+              @if (g.tools.length > 0) {
+                <section class="prompt-section">
+                  <div class="section-lbl">Tool calls · {{ g.tools.length }} · returned {{ fmtBytes(g.toolBytes) }}</div>
+                  <div class="tools">
+                    @for (t of g.tools; track t.id) {
+                      <div class="tool-row">
+                        <span class="tool-name mono" [style.color]="toolColor(t.tool_name)">{{ t.tool_name }}</span>
+                        @if (t.input_summary) {
+                          <span class="tool-input mono">{{ t.input_summary }}</span>
+                        }
+                        <span class="grow"></span>
+                        @if (t.result_length) {
+                          <span class="tool-bytes mono muted">{{ fmtBytes(t.result_length) }}</span>
+                        }
+                      </div>
+                    }
+                  </div>
+                </section>
+              }
+            </div>
+          }
+        </div>
+      } @empty {
+        <div class="empty">No prompts logged for this session yet.</div>
+      }
+    </div>
+  } @else {
+    <div class="empty">Session not found.</div>
+  }
+</div>
