@@ -1,0 +1,247 @@
+name: claude-design-implement
+description: Import a Claude Design file (snapshot + tokens + source record), draft the spec, gate at review, write the spec — ready to hand off to /ss-implement.
+tags: [spec, ui, claude-design, default]
+requires: [specship, git]
+
+# Worktree isolation: the spec draft and snapshot live in the user's
+# working tree (not the worktree) so the artifacts survive the run,
+# but the worktree gives the spec author a clean diff to review and
+# means a rejected run leaves no half-written specs/<slug>.md.
+worktree:
+  enabled: true
+
+inputs:
+  - name: CONNECTOR_URL
+    description: The full Claude Design URL (https://claude.ai/design/p/<id>/?file=<name>.html)
+    required: true
+  - name: FILE_LABEL
+    description: Human label for the imported file (e.g. "Data Flow")
+    required: true
+  - name: SLUG
+    description: Kebab-case directory name under specs/ (e.g. "data-flow")
+    required: true
+  - name: OWNER
+    description: Spec owner — used in frontmatter when set
+    required: false
+  - name: PRIORITY
+    description: high / medium / low — used in frontmatter when set
+    required: false
+
+systemPromptAppend: |
+  You are implementing a Claude Design import for SpecShip.
+
+  The fidelity principle: never paraphrase or summarise design content
+  when capturing it. The snapshot HTML and tokens.css are the
+  zero-loss reference layer; the spec captures contract only (behaviour,
+  accessibility, responsive, interaction states, data shape).
+
+  Use whichever Claude Design tooling is available (an MCP connector,
+  the figma-implement-design skill, or a direct fetch) to pull the
+  source file. Save it byte-for-byte to specs/$INPUT.SLUG/snapshot.html.
+  Never edit the snapshot during this workflow.
+
+nodes:
+  - id: snapshot
+    kind: prompt
+    output_type: snapshot_summary
+    allowed_tools:
+      - Read
+      - Write
+      - Bash
+      - mcp__specship__specship_explore
+      - mcp__specship__specship_search
+    prompt: |
+      Source URL:  $INPUT.CONNECTOR_URL
+      File label:  $INPUT.FILE_LABEL
+      Slug:        $INPUT.SLUG
+
+      Goal: snapshot the Claude Design source into specs/$INPUT.SLUG/
+      so the rest of the workflow has a zero-loss reference layer.
+
+      1. Create the directory `specs/$INPUT.SLUG/` if it doesn't exist.
+
+      2. Fetch the design content from $INPUT.CONNECTOR_URL. Try in
+         this order:
+           a. Any Claude Design MCP connector tool available in this
+              session (look for `mcp__*design*` or similar).
+           b. The `figma-implement-design` or `figma-use` skill if
+              loaded — Claude Design and Figma share a similar handoff
+              shape.
+           c. A direct `curl` of the URL, as a last resort.
+
+         Save the FULL rendered HTML byte-for-byte to
+         `specs/$INPUT.SLUG/snapshot.html`. Do NOT filter, summarise, or
+         re-format. If the design has linked CSS / asset files, save
+         them alongside.
+
+      3. Write `specs/$INPUT.SLUG/source.md` with the import audit
+         record:
+
+         ```markdown
+         # $INPUT.FILE_LABEL — Claude Design import
+
+         **Imported:** <today's date in YYYY-MM-DD>
+         **Connector URL:** $INPUT.CONNECTOR_URL
+         **Project ID:** <extracted from the URL — the segment after /p/>
+         **File:** $INPUT.FILE_LABEL
+
+         **Snapshot:** snapshot.html (byte-for-byte capture)
+         **Tokens:** tokens.css (extracted CSS custom properties)
+
+         **Original prompt:**
+         > Import this Claude Design project using the Claude Design connector:
+         > $INPUT.CONNECTOR_URL
+         > Implement: $INPUT.FILE_LABEL
+         ```
+
+      4. Extract CSS custom properties + literal token-like values
+         (colors, spacing, font sizes, radii, transitions) from the
+         snapshot to `specs/$INPUT.SLUG/tokens.css`. Use
+         `specship_explore` first to find the project's existing token
+         system — if a value in the snapshot matches an existing
+         project token, map it by name instead of duplicating.
+
+      Output: a ≤250-word summary covering:
+        - Snapshot structure (top-level layout, key components).
+        - Token mapping (which match existing project tokens, which are
+          new and added to tokens.css).
+        - Any visible interaction or state cues in the CSS (`:hover`,
+          `:focus`, `:disabled`, `[aria-*]` selectors) the spec
+          author should be aware of.
+
+  - id: draft_spec
+    kind: prompt
+    depends_on: [snapshot]
+    output_type: spec_markdown
+    allowed_tools:
+      - Read
+      - mcp__specship__specship_explore
+      - mcp__specship__specship_search
+      - mcp__specship__specship_node
+      - mcp__specship__specship_spec
+    prompt: |
+      Use the spec-author skill (~/.claude/skills/spec-author/SKILL.md
+      and its references/) to draft a SpecShip-compatible spec for the
+      Claude Design import. Inputs available on disk:
+
+        - specs/$INPUT.SLUG/snapshot.html  (visual + structural source)
+        - specs/$INPUT.SLUG/tokens.css     (design tokens)
+        - specs/$INPUT.SLUG/source.md      (audit record)
+
+      Spec scope: $INPUT.FILE_LABEL component(s).
+      Optional inputs: owner=$INPUT.OWNER  priority=$INPUT.PRIORITY
+
+      Cover, as separate REQs:
+        - Behavioural contract (what the component renders, given what data).
+        - Each visible state (default, hover, focused, pressed, disabled,
+          loading, error, empty) — derive from the CSS, gap-fill the rest.
+        - Accessibility (keyboard nav, ARIA roles, focus order, contrast,
+          screen-reader behaviour).
+        - Responsive behaviour (breakpoints by name, not pixels).
+        - Data shape + failure-mode contracts.
+        - Performance contract (initial render budget, interaction
+          latency, if applicable).
+
+      DO NOT put exact hex colors, pixel values, font names, or animation
+      durations in the spec. Reference design tokens by name
+      (`MUST use the --error color token`). The values themselves live
+      in tokens.css.
+
+      Embed the import-source record in the spec's frontmatter so the
+      spec carries its provenance:
+
+      ```yaml
+      ---
+      id: <SLUG-DOC>
+      title: <FILE_LABEL>
+      owner: <OWNER or "[needs review]">
+      priority: <PRIORITY or "[needs review]">
+      source: specs/<SLUG>/source.md
+      snapshot: specs/<SLUG>/snapshot.html
+      tokens: specs/<SLUG>/tokens.css
+      ---
+      ```
+
+      Output: the full Markdown body of the proposed spec
+      (with frontmatter, embedded `<!-- id: -->` markers, RFC 2119
+      keywords, acceptance bullets with .A1/.A2 IDs). DO NOT write
+      it to disk yet — the next node is a review gate.
+
+  - id: gap_review
+    kind: approval
+    depends_on: [draft_spec]
+    message: |
+      Spec draft ready for $INPUT.FILE_LABEL.
+
+      Walk the [needs review] markers and gap-fill questions, then
+      approve to write the file. Reject with feedback to revise.
+
+      ─────── DRAFT ───────
+      $draft_spec.output
+    capture_response: true
+    on_reject:
+      prompt: |
+        The draft was rejected with this feedback. Revise the spec
+        per the feedback; keep ALL existing REQ IDs stable so any
+        downstream tracking survives the rewrite.
+
+        Feedback:
+        $gap_review.output
+
+        Current draft:
+        $draft_spec.output
+
+        Output the revised draft.
+      max_attempts: 3
+
+  - id: write_spec
+    kind: prompt
+    depends_on: [gap_review]
+    output_type: file_path
+    allowed_tools:
+      - Write
+      - Read
+      - Bash
+    prompt: |
+      Write the approved spec to `specs/$INPUT.SLUG.md` using the
+      Write tool.
+
+      If `specs/$INPUT.SLUG.md` already exists (re-importing an
+      iteration), APPEND the new requirements to it instead of
+      overwriting; preserve all existing REQ IDs. Tell the user
+      explicitly what you did.
+
+      Approved draft:
+      $gap_review.output
+
+      Then run:
+        specship sync
+
+      Output: the relative path of the file written + the first REQ
+      ID (e.g. "REQ-DATA-FLOW-001") so the next step can hand it to
+      /ss-implement.
+
+  - id: handoff
+    kind: prompt
+    depends_on: [write_spec]
+    output_type: handoff_message
+    allowed_tools:
+      - Read
+    prompt: |
+      The spec is now indexed. Output a short hand-off message for the
+      user with EXACTLY these elements:
+
+        1. The path of the spec file: `specs/$INPUT.SLUG.md`.
+        2. The full list of REQ IDs the spec defines, one per line.
+        3. The reference files the implementation phase should read:
+             - specs/$INPUT.SLUG/snapshot.html
+             - specs/$INPUT.SLUG/tokens.css
+             - specs/$INPUT.SLUG/source.md
+        4. The exact next command:
+             /ss-implement <first REQ ID>
+        5. A one-line reminder that the implementation step should
+           load the snapshot for visual fidelity — the spec covers
+           contract only.
+
+      Keep the message ≤200 words. The user is about to switch from
+      this workflow to the implement workflow; this is the bridge.

@@ -101,6 +101,8 @@ const SHIPPED_COMMANDS = [
   // Spec-authoring commands (v0.2):
   'ss-spec-author.md',
   'ss-spec-review.md',
+  // Design-import workflow (v0.2):
+  'ss-design-implement.md',
 ] as const;
 
 /**
