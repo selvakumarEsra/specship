@@ -18,6 +18,6 @@ This:
 3. PAUSES at an approval gate — you review the plan, then run `specship workflow approve <runId>` and `specship workflow resume <runId>`.
 4. Implements, runs tests, asserts spec→code links, pauses for a final review.
 
-If you just want to view the spec without implementing, use `/cg-spec` instead.
+If you just want to view the spec without implementing, use `/ss-spec` instead.
 
 After the workflow completes, the worktree is left for inspection — merge it into your branch when ready, or clean up with `specship workflow cancel <runId>`.

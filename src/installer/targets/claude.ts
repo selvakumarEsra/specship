@@ -88,20 +88,45 @@ function packageAssetPath(...segments: string[]): string {
 
 /** Slash commands the installer copies into Claude's commands dir. */
 const SHIPPED_COMMANDS = [
+  'ss-sync.md',
+  'ss-trace.md',
+  'ss-explore.md',
+  'ss-impact.md',
+  // Spec-layer commands:
+  'ss-spec.md',
+  'ss-implement.md',
+  'ss-drifted.md',
+  'ss-fix.md',
+  'ss-relink.md',
+  // Spec-authoring commands (v0.2):
+  'ss-spec-author.md',
+  'ss-spec-review.md',
+] as const;
+
+/**
+ * Slash commands the installer used to ship under the legacy `cg-`
+ * prefix (historical from when SpecShip was called "code graph").
+ * Renamed to `ss-` in v0.2 so the prefix clearly ties to SpecShip.
+ *
+ * Listed so the installer can self-heal on upgrade: install removes any
+ * of these that an earlier installer wrote, so users don't end up with
+ * both prefixes side-by-side cluttering their slash-command autocomplete.
+ * Uninstall strips them too.
+ */
+const LEGACY_SHIPPED_COMMANDS = [
   'cg-sync.md',
   'cg-trace.md',
   'cg-explore.md',
   'cg-impact.md',
-  // Spec-layer commands (v5):
   'cg-spec.md',
   'cg-implement.md',
   'cg-drifted.md',
   'cg-fix.md',
   'cg-relink.md',
-  // Spec-authoring commands (v0.2):
   'cg-spec-author.md',
   'cg-spec-review.md',
 ] as const;
+
 /** Subagents the installer copies into Claude's agents dir. */
 const SHIPPED_AGENTS = ['specship-explorer.md'] as const;
 
@@ -192,6 +217,11 @@ class ClaudeCodeTarget implements AgentTarget {
     // autoAllow — these only execute when the user / agent invokes them
     // explicitly. Copies the same .md files that ship for the plugin
     // install path, so the two flows can't drift apart.
+    //
+    // 4a. Strip any legacy `cg-*.md` slash commands the pre-v0.2
+    // installer wrote. Self-heals on upgrade so the user's autocomplete
+    // doesn't carry both prefixes side-by-side.
+    for (const f of cleanupLegacyCommandsEntries(loc)) files.push(f);
     for (const f of writeCommandsEntries(loc)) files.push(f);
     for (const f of writeAgentsEntries(loc)) files.push(f);
 
@@ -261,6 +291,10 @@ class ClaudeCodeTarget implements AgentTarget {
 
     // 4. Slash commands + subagent — remove our shipped files; sibling
     // user-written .md files in the same dir are left untouched.
+    // Includes legacy `cg-*.md` from pre-v0.2 installers so uninstall
+    // leaves the commands dir clean regardless of which prefix was
+    // installed.
+    for (const f of cleanupLegacyCommandsEntries(loc)) files.push(f);
     for (const f of removeCommandsEntries(loc)) files.push(f);
     for (const f of removeAgentsEntries(loc)) files.push(f);
 
@@ -527,7 +561,7 @@ export function writeHooksEntry(loc: Location): WriteResult['files'][number] {
 }
 
 /**
- * Copy our shipped slash commands (commands/cg-*.md) into the user's
+ * Copy our shipped slash commands (commands/ss-*.md) into the user's
  * commands dir (~/.claude/commands/ globally, ./.claude/commands/
  * locally). Per-file idempotent: a destination with identical bytes is
  * reported `unchanged`. Sibling user-written .md files in the same dir
@@ -535,6 +569,24 @@ export function writeHooksEntry(loc: Location): WriteResult['files'][number] {
  */
 export function writeCommandsEntries(loc: Location): WriteResult['files'] {
   return SHIPPED_COMMANDS.map((name) => copyAsset(packageAssetPath('commands', name), path.join(commandsDir(loc), name)));
+}
+
+/**
+ * Remove legacy `cg-*.md` slash commands left behind by a pre-v0.2
+ * installer. Called from `install()` so an upgrade self-heals (the user
+ * doesn't end up with both prefixes side-by-side cluttering their
+ * autocomplete) and from `uninstall()` so the legacy files don't
+ * persist after specship is removed. Sibling user-written .md files
+ * in the same dir are never touched — only the exact filenames in
+ * LEGACY_SHIPPED_COMMANDS are candidates.
+ */
+export function cleanupLegacyCommandsEntries(loc: Location): WriteResult['files'] {
+  return LEGACY_SHIPPED_COMMANDS
+    .map((name) => removeFile(path.join(commandsDir(loc), name)))
+    // Only surface files that actually existed and got removed — keeps
+    // the install/uninstall log quiet for users who never had the
+    // legacy `cg-*` prefix on disk.
+    .filter((entry) => entry.action === 'removed');
 }
 
 /**

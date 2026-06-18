@@ -101,7 +101,7 @@ A YAML workflow engine (`specship workflow run <name>`) drives the agent through
 - `spec-verify` — run tests, promote `implemented` links to `verified`
 - `spec-relink` — re-attach an orphan after a refactor
 
-Customize by dropping your own `<project>/.specship/workflows/<name>.yaml` (project tier overrides bundled defaults). The matching slash commands `/cg-spec`, `/cg-implement`, `/cg-drifted`, `/cg-fix`, `/cg-relink` are installed into Claude Code by `specship install`.
+Customize by dropping your own `<project>/.specship/workflows/<name>.yaml` (project tier overrides bundled defaults). The matching slash commands `/ss-spec`, `/ss-implement`, `/ss-drifted`, `/ss-fix`, `/ss-relink` are installed into Claude Code by `specship install`.
 
 ---
 

@@ -39,8 +39,8 @@ export class DraftWithClaudeModal {
 
   protected readonly slashCommand = computed(() => {
     const d = this.description().trim();
-    if (!d) return '/cg-spec-author';
-    return `/cg-spec-author "${d.replace(/"/g, '\\"')}"`;
+    if (!d) return '/ss-spec-author';
+    return `/ss-spec-author "${d.replace(/"/g, '\\"')}"`;
   });
 
   protected readonly canSubmit = computed(() => this.description().trim().length > 0);

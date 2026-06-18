@@ -18,4 +18,4 @@ This:
 3. Pauses for you to approve the proposed fix.
 4. Applies the fix, runs tests, calls `specship_link_verify` to promote the link back to "verified".
 
-Use `/cg-relink` instead if the link is `orphaned` (target symbol no longer exists).
+Use `/ss-relink` instead if the link is `orphaned` (target symbol no longer exists).

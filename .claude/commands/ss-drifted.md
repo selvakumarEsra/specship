@@ -17,7 +17,7 @@ specship drifted $ARGUMENTS
 Add `--fail-on=broken,drifted,orphaned` to make it exit non-zero — useful as a pre-commit or CI gate.
 
 For each link returned:
-- **drifted (drift_axis=spec)**: spec body changed; the code may be stale. Run `/cg-fix <SPEC_ID>` to investigate.
+- **drifted (drift_axis=spec)**: spec body changed; the code may be stale. Run `/ss-fix <SPEC_ID>` to investigate.
 - **drifted (drift_axis=code)**: code's signature changed since the link was set. Re-verify with `mcp__specship__specship_link_verify` if behavior is still correct.
 - **broken**: verification failed. Open the spec, find the failing test, fix the code.
-- **orphaned**: target symbol no longer exists. Use `/cg-relink <SPEC_ID>` to re-attach.
+- **orphaned**: target symbol no longer exists. Use `/ss-relink <SPEC_ID>` to re-attach.

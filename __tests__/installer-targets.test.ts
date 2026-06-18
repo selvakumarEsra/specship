@@ -430,7 +430,7 @@ describe('Claude target — specifics', () => {
   it('install copies the shipped slash commands and subagent', () => {
     claudeTarget.install('global', { autoAllow: false });
 
-    for (const name of ['cg-sync.md', 'cg-trace.md', 'cg-explore.md', 'cg-impact.md', 'cg-spec.md', 'cg-implement.md', 'cg-drifted.md', 'cg-fix.md', 'cg-relink.md', 'cg-spec-author.md', 'cg-spec-review.md']) {
+    for (const name of ['ss-sync.md', 'ss-trace.md', 'ss-explore.md', 'ss-impact.md', 'ss-spec.md', 'ss-implement.md', 'ss-drifted.md', 'ss-fix.md', 'ss-relink.md', 'ss-spec-author.md', 'ss-spec-review.md']) {
       expect(fs.existsSync(path.join(tmpHome, '.claude', 'commands', name))).toBe(true);
     }
     expect(fs.existsSync(path.join(tmpHome, '.claude', 'agents', 'specship-explorer.md'))).toBe(true);
@@ -449,17 +449,42 @@ describe('Claude target — specifics', () => {
     claudeTarget.install('global', { autoAllow: false });
 
     expect(fs.readFileSync(userCmd, 'utf-8')).toBe('---\ndescription: mine\n---\nHello\n');
-    expect(fs.existsSync(path.join(tmpHome, '.claude', 'commands', 'cg-trace.md'))).toBe(true);
+    expect(fs.existsSync(path.join(tmpHome, '.claude', 'commands', 'ss-trace.md'))).toBe(true);
+  });
+
+  it('install removes legacy cg-*.md commands from a pre-v0.2 install', () => {
+    // Simulate a pre-v0.2 install: write the legacy cg-* command set to
+    // the user's commands dir alongside an unrelated user file.
+    const cmdsDir = path.join(tmpHome, '.claude', 'commands');
+    fs.mkdirSync(cmdsDir, { recursive: true });
+    const legacyNames = ['cg-sync.md', 'cg-trace.md', 'cg-spec.md', 'cg-implement.md', 'cg-relink.md'];
+    for (const name of legacyNames) {
+      fs.writeFileSync(path.join(cmdsDir, name), '# legacy from pre-v0.2 installer\n');
+    }
+    const siblingUser = path.join(cmdsDir, 'my-helper.md');
+    fs.writeFileSync(siblingUser, '# user file');
+
+    claudeTarget.install('global', { autoAllow: false });
+
+    // All legacy `cg-*` shipped files are gone — self-healed on upgrade.
+    for (const name of legacyNames) {
+      expect(fs.existsSync(path.join(cmdsDir, name))).toBe(false);
+    }
+    // Current `ss-*` files exist.
+    expect(fs.existsSync(path.join(cmdsDir, 'ss-trace.md'))).toBe(true);
+    expect(fs.existsSync(path.join(cmdsDir, 'ss-spec.md'))).toBe(true);
+    // The user's own file is untouched.
+    expect(fs.readFileSync(siblingUser, 'utf-8')).toBe('# user file');
   });
 
   it('uninstall removes the shipped commands + subagent + current-release hooks', () => {
     claudeTarget.install('global', { autoAllow: true });
-    expect(fs.existsSync(path.join(tmpHome, '.claude', 'commands', 'cg-trace.md'))).toBe(true);
+    expect(fs.existsSync(path.join(tmpHome, '.claude', 'commands', 'ss-trace.md'))).toBe(true);
     expect(fs.existsSync(path.join(tmpHome, '.claude', 'agents', 'specship-explorer.md'))).toBe(true);
 
     claudeTarget.uninstall('global');
 
-    for (const name of ['cg-sync.md', 'cg-trace.md', 'cg-explore.md', 'cg-impact.md', 'cg-spec.md', 'cg-implement.md', 'cg-drifted.md', 'cg-fix.md', 'cg-relink.md', 'cg-spec-author.md', 'cg-spec-review.md']) {
+    for (const name of ['ss-sync.md', 'ss-trace.md', 'ss-explore.md', 'ss-impact.md', 'ss-spec.md', 'ss-implement.md', 'ss-drifted.md', 'ss-fix.md', 'ss-relink.md', 'ss-spec-author.md', 'ss-spec-review.md']) {
       expect(fs.existsSync(path.join(tmpHome, '.claude', 'commands', name))).toBe(false);
     }
     expect(fs.existsSync(path.join(tmpHome, '.claude', 'agents', 'specship-explorer.md'))).toBe(false);

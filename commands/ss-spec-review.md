@@ -36,11 +36,11 @@ If you haven't loaded the skill yet, read `~/.claude/skills/spec-author/SKILL.md
    Net: <summary>. Address structural items before re-indexing.
    ```
 
-5. **End with a one-line verdict**: "Spec is ready to ship", "Needs the structural fixes before it can index", or "Has quality issues worth addressing before /cg-implement runs."
+5. **End with a one-line verdict**: "Spec is ready to ship", "Needs the structural fixes before it can index", or "Has quality issues worth addressing before /ss-implement runs."
 
 ## Anti-patterns to avoid
 
-- **Don't modify the file.** Even if the issues are obvious. The user runs `/cg-spec-author` for that flow.
+- **Don't modify the file.** Even if the issues are obvious. The user runs `/ss-spec-author` for that flow.
 - **Don't paraphrase the checklist.** Reference specific items (S1, Q3, etc.) when you flag a finding so the user can cross-reference.
 - **Don't be polite about real problems.** Implementation leak ("MUST use bcrypt") and untestable bullets ("handles errors gracefully") are pickup-line-quality findings — say so directly.
 - **Don't review the wrong file.** If the path is ambiguous (e.g. multiple specs at similar paths), ask the user which one before reading.

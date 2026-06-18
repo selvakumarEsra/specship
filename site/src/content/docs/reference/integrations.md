@@ -62,11 +62,13 @@ Slash commands and a subagent ship as a Claude Code plugin under `~/.claude/plug
 
 | Command | What it runs |
 |---|---|
-| `/cg-spec <ID>` | Reads the spec via `specship_spec`. |
-| `/cg-implement <ID>` | Kicks off the `spec-implement` workflow. |
-| `/cg-fix <ID>` | Kicks off `spec-fix`. |
-| `/cg-relink <ID>` | Kicks off `spec-relink`. |
-| `/cg-drifted` | Lists everything in the drift queue. |
+| `/ss-spec <ID>` | Reads the spec via `specship_spec`. |
+| `/ss-implement <ID>` | Kicks off the `spec-implement` workflow. |
+| `/ss-fix <ID>` | Kicks off `spec-fix`. |
+| `/ss-relink <ID>` | Kicks off `spec-relink`. |
+| `/ss-drifted` | Lists everything in the drift queue. |
+| `/ss-spec-author <description>` | Drafts a new spec using the `spec-author` skill. |
+| `/ss-spec-review <ID-or-path>` | Reviews an existing spec against the quality rubric. |
 
 ## Manual wiring
 

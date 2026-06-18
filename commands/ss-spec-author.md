@@ -32,7 +32,7 @@ Run the loop conversationally:
 7. **Hand off.** Tell the user:
    - The file path you wrote
    - Run `specship sync` to index it
-   - Run `/cg-implement <REQ-ID>` when ready to build
+   - Run `/ss-implement <REQ-ID>` when ready to build
 
 If the user wants the more disciplined path with formal approval gates and worktree isolation, point them at:
 
