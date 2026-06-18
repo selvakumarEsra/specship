@@ -1,0 +1,214 @@
+name: spec-author
+description: Author a new spec. Draft → gap-fill review → quality review → final approval → write file.
+tags: [spec, default]
+requires: [specship, git]
+
+# Worktree isolation isn't strictly needed for spec authoring (no code
+# changes) — but enabling it keeps the artifact directory under the same
+# umbrella the other spec workflows use, and a future expansion that adds
+# example-code touches stays safe.
+worktree:
+  enabled: true
+
+inputs:
+  - name: DESCRIPTION
+    description: One-line description of the feature you want to spec
+    required: true
+  - name: PARENT_DOC
+    description: Optional spec ID of an existing doc to attach the new requirements under
+    required: false
+  - name: OWNER
+    description: Owner team or person (e.g. "security", "payments-team")
+    required: false
+  - name: PRIORITY
+    description: high / medium / low
+    required: false
+
+systemPromptAppend: |
+  You are authoring a SpecShip-compatible Markdown spec. Use the
+  spec-author skill loop and references throughout this workflow.
+  The output of every node should be markdown that is ready for the
+  next stage — do NOT write the file until the `write_file` node.
+
+nodes:
+  - id: ground
+    kind: prompt
+    output_type: code_grounding
+    allowed_tools:
+      - mcp__specship__specship_explore
+      - mcp__specship__specship_search
+      - mcp__specship__specship_files
+      - Read
+    prompt: |
+      Feature: $INPUT.DESCRIPTION
+
+      Walk the codebase to find where this feature would live:
+
+      1. Use specship_explore on terms drawn from the description to
+         surface relevant existing symbols.
+      2. Note any existing conventions, similar features, or shared
+         primitives the new spec should align with.
+      3. List candidate file paths + qualified symbol names that the
+         new implementation might touch — these become the `implementations:`
+         block of the spec.
+
+      If this is greenfield (no relevant existing code), say so explicitly
+      and propose a target directory under src/ where the implementation
+      will live.
+
+      Output: a ≤300-word grounding report — paths, conventions, and
+      candidate symbols. Do NOT write the spec yet.
+
+  - id: draft
+    kind: prompt
+    depends_on: [ground]
+    output_type: spec_draft
+    allowed_tools:
+      - mcp__specship__specship_spec
+      - mcp__specship__specship_explore
+      - mcp__specship__specship_node
+      - Read
+    prompt: |
+      Feature: $INPUT.DESCRIPTION
+      Optional parent doc: $INPUT.PARENT_DOC
+      Optional owner: $INPUT.OWNER
+      Optional priority: $INPUT.PRIORITY
+
+      Code grounding:
+      $ground.output
+
+      Produce a complete first-draft Markdown spec following the spec-author
+      skill's `references/format.md`:
+
+      - YAML frontmatter with id/title/owner/priority (use the inputs if
+        provided; mark as `[needs review]` if not).
+      - Embedded `<!-- id: -->` markers above every heading.
+      - RFC 2119 keyword (MUST / SHOULD / MAY) in each requirement title.
+      - One concern per requirement.
+      - `## Acceptance` section with bulleted criteria, each carrying its
+        own `.A<N>` ID. Cover both happy path and failure path.
+      - Optional `implementations:` block, populated from the grounding
+        report (or empty for greenfield).
+      - Wherever the description doesn't tell you something, insert a
+        `[needs user confirmation]` marker — DO NOT invent.
+
+      Output: the full spec markdown, ready for the gap-fill review.
+
+  - id: gap_review
+    kind: approval
+    depends_on: [draft]
+    message: |
+      Draft is ready. The gap-fill questions below identify areas the
+      description didn't cover. Approve with answers (e.g. "owner: security,
+      TTL: 1h, on non-existent email: 200 OK"), or reject with feedback to
+      revise.
+
+      Draft:
+      $draft.output
+
+      Gap-fill questions for THIS draft — walk references/gap-questions.md
+      and surface only the unanswered ones (max 5):
+      [the agent fills these in based on the draft above]
+    capture_response: true
+    on_reject:
+      prompt: |
+        The draft was rejected with this feedback. Revise the draft to
+        address it. Keep all existing IDs stable so any pre-existing links
+        survive.
+
+        Feedback:
+        $gap_review.output
+      max_attempts: 3
+
+  - id: incorporate
+    kind: prompt
+    depends_on: [gap_review]
+    output_type: spec_draft
+    allowed_tools:
+      - Read
+    prompt: |
+      Apply the gap-fill answers to the draft. Replace `[needs user
+      confirmation]` markers with the user's answers where given; leave
+      others as `[needs review]` if they explicitly skipped.
+
+      Draft:
+      $draft.output
+
+      Answers:
+      $gap_review.output
+
+      Output: the updated spec markdown.
+
+  - id: quality_review
+    kind: prompt
+    depends_on: [incorporate]
+    output_type: review_findings
+    allowed_tools:
+      - mcp__specship__specship_explore
+      - mcp__specship__specship_node
+      - mcp__specship__specship_search
+      - Read
+    prompt: |
+      Run the spec-author skill's `references/review-checklist.md` against
+      this draft and produce a structured findings list.
+
+      Updated draft:
+      $incorporate.output
+
+      Group findings into STRUCTURAL (blocks the file write), QUALITY (block
+      on critical, warn on minor), HYGIENE (warn only). For each, give:
+      line number, what's wrong, suggested fix. Don't be polite — sharp
+      signal is more useful than soft language.
+
+      If any STRUCTURAL findings exist, propose a corrected version of the
+      affected sections inline.
+
+  - id: finalize
+    kind: approval
+    depends_on: [quality_review]
+    message: |
+      Quality review complete. Approve to write the spec file, or reject to
+      revise further.
+
+      Review:
+      $quality_review.output
+
+      Final draft:
+      $incorporate.output
+    capture_response: true
+    on_reject:
+      prompt: |
+        Final approval was rejected. Revise the draft per the feedback,
+        re-run the quality review pass, and produce a new draft.
+
+        Feedback:
+        $finalize.output
+
+        Current draft:
+        $incorporate.output
+      max_attempts: 2
+
+  - id: write_file
+    kind: prompt
+    depends_on: [finalize]
+    output_type: file_path
+    allowed_tools:
+      - Write
+      - Read
+      - Bash
+    prompt: |
+      Write the approved spec to disk.
+
+      Final draft:
+      $incorporate.output
+
+      Use the `Write` tool to create `specs/<slug>.md` at the project root,
+      where `<slug>` is derived from the feature name (kebab-case, no date
+      prefix). If a file with that name already exists, APPEND the new
+      requirements to it (preserving any pre-existing content) instead of
+      overwriting; the user will resolve the merge in review.
+
+      After writing:
+      - Run `specship sync` to index the new spec.
+      - Output the relative path of the file written + a one-line note
+        about what to do next (typically: `/cg-implement <REQ-ID>`).

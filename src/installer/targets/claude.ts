@@ -98,6 +98,9 @@ const SHIPPED_COMMANDS = [
   'cg-drifted.md',
   'cg-fix.md',
   'cg-relink.md',
+  // Spec-authoring commands (v0.2):
+  'cg-spec-author.md',
+  'cg-spec-review.md',
 ] as const;
 /** Subagents the installer copies into Claude's agents dir. */
 const SHIPPED_AGENTS = ['specship-explorer.md'] as const;

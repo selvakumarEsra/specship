@@ -430,7 +430,7 @@ describe('Claude target — specifics', () => {
   it('install copies the shipped slash commands and subagent', () => {
     claudeTarget.install('global', { autoAllow: false });
 
-    for (const name of ['cg-sync.md', 'cg-trace.md', 'cg-explore.md', 'cg-impact.md', 'cg-spec.md', 'cg-implement.md', 'cg-drifted.md', 'cg-fix.md', 'cg-relink.md']) {
+    for (const name of ['cg-sync.md', 'cg-trace.md', 'cg-explore.md', 'cg-impact.md', 'cg-spec.md', 'cg-implement.md', 'cg-drifted.md', 'cg-fix.md', 'cg-relink.md', 'cg-spec-author.md', 'cg-spec-review.md']) {
       expect(fs.existsSync(path.join(tmpHome, '.claude', 'commands', name))).toBe(true);
     }
     expect(fs.existsSync(path.join(tmpHome, '.claude', 'agents', 'specship-explorer.md'))).toBe(true);
@@ -459,7 +459,7 @@ describe('Claude target — specifics', () => {
 
     claudeTarget.uninstall('global');
 
-    for (const name of ['cg-sync.md', 'cg-trace.md', 'cg-explore.md', 'cg-impact.md', 'cg-spec.md', 'cg-implement.md', 'cg-drifted.md', 'cg-fix.md', 'cg-relink.md']) {
+    for (const name of ['cg-sync.md', 'cg-trace.md', 'cg-explore.md', 'cg-impact.md', 'cg-spec.md', 'cg-implement.md', 'cg-drifted.md', 'cg-fix.md', 'cg-relink.md', 'cg-spec-author.md', 'cg-spec-review.md']) {
       expect(fs.existsSync(path.join(tmpHome, '.claude', 'commands', name))).toBe(false);
     }
     expect(fs.existsSync(path.join(tmpHome, '.claude', 'agents', 'specship-explorer.md'))).toBe(false);
