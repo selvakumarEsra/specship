@@ -1,0 +1,45 @@
+@if (open) {
+  <div class="backdrop" (click)="onBackdropClick()" role="presentation"></div>
+  <div class="modal" role="dialog" aria-labelledby="draft-modal-title" aria-modal="true">
+    <header class="head">
+      <div class="title-block">
+        <div id="draft-modal-title" class="title">Draft a new spec with Claude</div>
+        <div class="sub">Describe the feature in one sentence. Claude takes it from there.</div>
+      </div>
+      <button class="close" type="button" (click)="onCloseClick()" aria-label="Close">
+        <app-icon name="x" [size]="16" />
+      </button>
+    </header>
+
+    <div class="body">
+      <label class="field-label" for="draft-description">Feature description</label>
+      <textarea
+        id="draft-description"
+        class="field"
+        rows="3"
+        placeholder="e.g. Failed payment retries should back off with T+1d, T+3d, T+7d then downgrade the account."
+        [value]="description()"
+        (input)="onDescriptionInput($event)"
+        autofocus
+      ></textarea>
+
+      <div class="preview-label">This will run in Claude Code:</div>
+      <pre class="preview mono">{{ slashCommand() }}</pre>
+    </div>
+
+    <footer class="foot">
+      @if (toast(); as t) {
+        <div class="toast">{{ t }}</div>
+      }
+      <span class="grow"></span>
+      <button class="btn btn-secondary btn-sm" type="button" (click)="onCopyToClipboard()" [disabled]="!canSubmit()">
+        <app-icon name="copy" [size]="13" />
+        Copy prompt
+      </button>
+      <button class="btn btn-primary btn-sm" type="button" (click)="onOpenInClaude()" [disabled]="!canSubmit()">
+        <app-icon name="external" [size]="13" />
+        Open in Claude Code
+      </button>
+    </footer>
+  </div>
+}

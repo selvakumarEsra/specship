@@ -7,6 +7,12 @@
       <div class="title">Specs</div>
       <div class="sub">{{ resource.state().loading ? 'loading…' : ((resource.state().data?.specs?.length ?? 0) + ' specs') }}</div>
     </div>
+    <div class="page-actions">
+      <button class="btn btn-secondary btn-sm" type="button" (click)="onDraftWithClaudeClick()">
+        <app-icon name="memory" [size]="13" />
+        Draft new spec with Claude
+      </button>
+    </div>
   </header>
 
   <div class="split">
@@ -30,20 +36,48 @@
     </aside>
     <main class="detail scroll-y">
       @if (selectedSpec(); as s) {
-        <div class="detail-head">
-          <div class="d-id mono">{{ s.id }}</div>
-          <div class="d-title">{{ s.title }}</div>
-          <div class="d-meta">
-            <span class="pill" [attr.data-kind]="s.kind">{{ s.kind }}</span>
-            @if (s.priority) { <span class="pill pill-priority">{{ s.priority }}</span> }
-            @if (s.owner) { <span class="d-owner">owner: <span class="mono">{{ s.owner }}</span></span> }
+        @if (editing()) {
+          @if (editingSource() === null) {
+            <div class="loading-detail">Loading source for {{ s.id }}…</div>
+          } @else {
+            <app-spec-editor
+              [value]="editingSource()!"
+              [path]="s.sourcePath"
+              (valueChange)="onEditorValueChange($event)"
+              (save)="onEditorSave()"
+              (cancel)="onEditorCancel()"
+            />
+          }
+          @if (saveError(); as err) {
+            <div class="save-error">{{ err }}</div>
+          }
+          @if (saving()) { <div class="save-status">Saving…</div> }
+        } @else {
+          <div class="detail-head">
+            <div class="d-id mono">{{ s.id }}</div>
+            <div class="d-title">{{ s.title }}</div>
+            <div class="d-meta">
+              <span class="pill" [attr.data-kind]="s.kind">{{ s.kind }}</span>
+              @if (s.priority) { <span class="pill pill-priority">{{ s.priority }}</span> }
+              @if (s.owner) { <span class="d-owner">owner: <span class="mono">{{ s.owner }}</span></span> }
+              <span class="grow"></span>
+              <button class="btn btn-secondary btn-sm" type="button" (click)="onEditClick()">
+                <app-icon name="reveal" [size]="13" />
+                Edit
+              </button>
+            </div>
           </div>
-        </div>
-        <div class="d-body">{{ s.body }}</div>
+          <div class="d-body">{{ s.body }}</div>
+        }
       } @else {
         <div class="empty centered">Pick a spec from the left.</div>
       }
     </main>
   </div>
 </div>
+
+<app-draft-with-claude-modal
+  [open]="draftModalOpen()"
+  (close)="onDraftModalClose()"
+/>
 }

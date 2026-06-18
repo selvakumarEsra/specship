@@ -78,6 +78,19 @@ export class ApiService {
     return res.json() as Promise<T>;
   }
 
+  async put<T>(path: string, body: unknown, signal?: AbortSignal): Promise<T> {
+    if (!this.base) throw new Error('no API base configured');
+    const url = this.base + (path.startsWith('/') ? path : '/' + path);
+    const res = await fetch(url, {
+      method: 'PUT',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+      body: body == null ? undefined : JSON.stringify(body),
+      signal,
+    });
+    if (!res.ok) throw await buildApiError('PUT', path, res);
+    return res.json() as Promise<T>;
+  }
+
   /**
    * SSE helper — used by the run-detail page for live event streaming.
    *
@@ -136,7 +149,7 @@ export class ApiError extends Error {
   ) { super(message); }
 }
 
-async function buildApiError(method: 'GET' | 'POST', path: string, res: Response): Promise<ApiError> {
+async function buildApiError(method: 'GET' | 'POST' | 'PUT', path: string, res: Response): Promise<ApiError> {
   const text = await res.text().catch(() => '');
   let payload: unknown = null;
   let code: string | null = null;

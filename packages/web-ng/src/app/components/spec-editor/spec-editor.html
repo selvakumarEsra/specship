@@ -1,0 +1,42 @@
+<div class="editor-shell col">
+  <div class="toolbar row gap-8">
+    <app-icon name="memory" [size]="14" />
+    <span class="title">Spec editor</span>
+    @if (path) {
+      <span class="path mono" [title]="path">{{ path }}</span>
+    }
+    <span class="grow"></span>
+
+    <span class="status-pill" [class.ok]="statusKind() === 'ok'"
+                              [class.warn]="statusKind() === 'warn'"
+                              [class.error]="statusKind() === 'error'">
+      <span class="dot"></span>
+      {{ statusLabel() }}
+    </span>
+
+    <span class="tokens mono tabular muted" [title]="'~' + tokenCount() + ' tokens (rough estimate)'">
+      ~{{ tokenCount() }}t
+    </span>
+
+    <button class="btn btn-secondary btn-sm" type="button" (click)="onCancel()">
+      Cancel
+    </button>
+    <button class="btn btn-primary btn-sm" type="button"
+            (click)="onSave()"
+            [disabled]="!dirty() || errorCount() > 0"
+            [title]="errorCount() > 0 ? 'Fix errors before saving' : (dirty() ? 'Save changes' : 'No changes to save')">
+      <app-icon name="check" [size]="13" />
+      Save
+    </button>
+  </div>
+
+  <div class="panes row">
+    <div class="editor-pane">
+      @if (loading()) {
+        <div class="loading">Loading editor…</div>
+      }
+      <div class="monaco-host" #host></div>
+    </div>
+    <div class="preview-pane md-content" [innerHTML]="previewHtml()"></div>
+  </div>
+</div>
