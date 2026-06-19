@@ -1,5 +1,27 @@
-:host { display: flex; flex: 1; min-height: 0; }
-.memory-page { flex: 1; min-height: 0; }
+// Layout intentionally explicit — don't rely on the global `.row` / `.col`
+// utility classes here. The Memory page combines a vertical stack of
+// header / stats / banners / filters with a horizontal split below it,
+// and one wrong-direction inheritance from `.row` (which sets
+// `align-items: center`) was visibly centering the rail vertically
+// inside `.split` and bleeding it over the stats. Pin every container's
+// direction + alignment in scope so future utility-class refactors
+// can't regress the layout.
+
+:host {
+  display: flex;
+  flex-direction: column;   // app-memory hosts ONE child (.memory-page); column or row doesn't matter, but explicit.
+  flex: 1;
+  min-height: 0;
+}
+
+.memory-page {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;          // contain children — long rail lists can't escape into the page-head's vertical band.
+}
 
 // ---- shared atoms --------------------------------------------------------
 .xs { font-size: 11px; }
@@ -12,7 +34,13 @@
 }
 
 // ---- page header ---------------------------------------------------------
-.page-head { padding: 16px 18px 4px; }
+// Block-level; the inner `.row.gap-10` is what lays the icon/title/seg
+// horizontally. flex-shrink:0 keeps the header at its natural height
+// when the page is short and the split below wants to grow.
+.page-head {
+  flex-shrink: 0;
+  padding: 16px 18px 4px;
+}
 .page-head .title { font-size: 16px; font-weight: 650; letter-spacing: -0.01em; }
 .page-head .sub { color: var(--text-secondary); font-size: 12px; }
 
@@ -32,7 +60,17 @@
 }
 
 // ---- stat strip ----------------------------------------------------------
-.stat-strip { padding: 12px 18px; flex-wrap: wrap; align-items: center; }
+// Pin display + direction so this row never inherits anything weird from
+// global utility classes. flex-shrink:0 prevents the row from collapsing
+// when the split below wants more height.
+.stat-strip {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+  padding: 12px 18px;
+}
 .stat {
   display: inline-flex; align-items: center; gap: 8px;
   padding: 8px 12px;
@@ -54,7 +92,17 @@
 }
 
 // ---- filter bar ----------------------------------------------------------
-.filter-bar { padding: 0 18px 14px; flex-wrap: wrap; align-items: center; }
+// Same pinning as stat-strip — explicit display + direction + flex-shrink:0
+// so the chips stay above the split and the split can keep its remaining
+// height claim.
+.filter-bar {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+  padding: 0 18px 14px;
+}
 .chip {
   height: 26px; padding: 0 11px; border-radius: 999px;
   border: 1px solid var(--border-subtle); background: var(--bg-panel);
@@ -71,6 +119,7 @@
 
 // ---- state banners -------------------------------------------------------
 .state-banner {
+  flex-shrink: 0;
   margin: 0 18px 14px;
   padding: 10px 14px; border-radius: 8px; border: 1px solid;
   font-size: 12.5px; line-height: 1.5;
@@ -86,12 +135,38 @@
 }
 
 // ---- split + rail --------------------------------------------------------
-.split { flex: 1; min-height: 0; border-top: 1px solid var(--border-subtle); }
-.rail {
-  width: 320px; flex-shrink: 0; min-width: 0; min-height: 0;
-  border-right: 1px solid var(--border-subtle); background: var(--bg-panel);
+// `.split.row` previously inherited `align-items: center` from the global
+// `.row` utility, which vertically-centered the rail inside `.split` and
+// produced the visible overlap with the stats above. Pin display +
+// direction + cross-axis alignment in scope so the global utility's
+// defaults can't drift us off course again.
+.split {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  border-top: 1px solid var(--border-subtle);
 }
-.rail-scroll { flex: 1; padding: 10px 8px 16px; }
+.rail {
+  display: flex;
+  flex-direction: column;
+  width: 320px;
+  flex-shrink: 0;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;          // contain the rail scroll within the rail's bounds.
+  border-right: 1px solid var(--border-subtle);
+  background: var(--bg-panel);
+}
+.rail-scroll {
+  flex: 1;
+  min-height: 0;
+  padding: 10px 8px 16px;
+  overflow-y: auto;          // scroll long rail lists in place; don't push siblings.
+  overflow-x: hidden;
+}
 .rail-group { margin-bottom: 14px; }
 .rail-group-head {
   padding: 8px 10px 4px;
@@ -141,8 +216,23 @@
 }
 
 // ---- detail panel --------------------------------------------------------
-.detail { flex: 1; min-width: 0; min-height: 0; }
-.detail-scroll { flex: 1; padding: 20px 24px; }
+// Explicit column flex so .detail-scroll's flex:1 actually claims the
+// remaining height inside .detail. Without `display: flex; flex-direction:
+// column` here, .detail-scroll would render at its natural (content)
+// height, and a long body would push past the rail's visual bounds.
+.detail {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+.detail-scroll {
+  flex: 1;
+  min-height: 0;
+  padding: 20px 24px;
+  overflow-y: auto;
+}
 .detail-empty {
   flex: 1; display: flex; flex-direction: column;
   align-items: center; justify-content: center;
@@ -215,7 +305,15 @@
 .btn-ghost.danger { color: var(--error); &:hover { background: var(--error-soft); } }
 
 // ---- effective view ------------------------------------------------------
-.eff-scroll { flex: 1; padding: 20px 24px; }
+// Same height-claim shape as .detail-scroll: explicit overflow-y so a
+// long effective view scrolls in place instead of pushing the
+// page-head / stat-strip / filter-bar off-screen.
+.eff-scroll {
+  flex: 1;
+  min-height: 0;
+  padding: 20px 24px;
+  overflow-y: auto;
+}
 .eff-head { margin-bottom: 6px; align-items: center; }
 .eff-title { font-weight: 600; font-size: 14px; }
 .eff-desc { font-size: 12.5px; line-height: 1.55; margin-bottom: 18px; color: var(--text-secondary); }
