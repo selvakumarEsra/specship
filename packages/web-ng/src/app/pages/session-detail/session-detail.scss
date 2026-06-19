@@ -105,7 +105,16 @@
 
 // ---- prompt list ----------------------------------------------------------
 
+// flex: 1 + min-height: 0 is load-bearing: the page is a flex column inside
+// a height-constrained shell, with .page-head / .stat-strip / .session-summary /
+// .filter-bar above this list. Without `flex: 1` the list takes its natural
+// content height; before the summary panel landed, that was small enough to
+// fit alongside everything else, but the summary cards push total content
+// past the viewport and the list collapses to zero height (or scrolls off-
+// screen). Claim the remaining space and scroll internally so the prompts
+// stay visible regardless of how much the panels above grow.
 .prompts {
+  flex: 1 1 0;
   display: flex; flex-direction: column; gap: 8px;
   min-height: 0; overflow-y: auto;
   padding-bottom: 12px;
@@ -428,6 +437,10 @@
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 12px;
   margin: 0 0 16px 0;
+  // Stay at natural height; if any card grows tall (e.g. Files touched
+  // with 10 rows), the card itself scrolls internally rather than
+  // pushing the whole panel.
+  flex-shrink: 0;
 }
 
 .summary-card {
