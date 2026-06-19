@@ -382,11 +382,24 @@ function processLines(
   let promptsInserted = 0;
   let toolCallsInserted = 0;
 
-  // Track active prompt context (promptId picks up from user entries; the
-  // following assistant entries belong to it). When no promptId is known
-  // (rare — happens at the start of a session before any user entry), use
-  // the assistant's uuid as a stable proxy.
+  // Track active prompt context. Only user entries carry a `promptId` in the
+  // JSONL — assistant entries belong to whichever prompt the most-recent user
+  // entry started. When we resume from a saved offset, the first lines in the
+  // batch are typically assistant turns answering a prompt whose user entry
+  // landed in an earlier batch, so `activePromptId` starts null and we must
+  // recover it from the DB; otherwise tool_use blocks queue with a fabricated
+  // promptId and the eventual tool_result insert violates the prompt_id FK,
+  // rolling back the whole batch transaction and stalling the file forever.
   let activePromptId: string | null = null;
+  const lookupLatestPrompt = db.prepare(
+    `SELECT id FROM claude_prompts WHERE session_id = ? ORDER BY ts DESC LIMIT 1`
+  );
+  const resolveActivePromptId = (sessionId: string): string | null => {
+    if (activePromptId) return activePromptId;
+    const row = lookupLatestPrompt.get(sessionId) as { id: string } | undefined;
+    if (row?.id) activePromptId = row.id;
+    return activePromptId;
+  };
 
   // Tool_use waiting for a tool_result: tool_use_id → pending row.
   // `inputJson` carries the verbatim JSON-stringified `input` field so the
@@ -468,7 +481,11 @@ function processLines(
       // Make sure session row exists.
       insSession.run(sessionId, projectPath, filePath, ts, ts, entry.message?.model ?? null);
 
-      const promptId = activePromptId ?? entry.uuid ?? null;
+      // Resolve the prompt this assistant turn belongs to. Never fall back to
+      // `entry.uuid` — that's the assistant's per-message id, not a row in
+      // claude_prompts, and using it would re-introduce the FK violation that
+      // caused this entire path to stall.
+      const promptId = resolveActivePromptId(sessionId);
       if (!promptId) continue;
 
       const usage = entry.message?.usage;
