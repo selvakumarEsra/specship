@@ -366,6 +366,10 @@ CREATE TABLE IF NOT EXISTS claude_prompts (
     cache_read_tokens           INTEGER DEFAULT 0,
     cost_usd        REAL DEFAULT 0,
     is_sidechain    INTEGER DEFAULT 0,
+    -- Added in schema v7: assistant + thinking content the ingestor used to
+    -- parse and discard. NULL on rows ingested before v7.
+    assistant_text  TEXT,
+    thinking_text   TEXT,
     FOREIGN KEY (session_id) REFERENCES claude_sessions(id) ON DELETE CASCADE
 );
 
@@ -381,6 +385,11 @@ CREATE TABLE IF NOT EXISTS claude_tool_calls (
     tool_use_id         TEXT,
     tool_name           TEXT NOT NULL,
     input_summary       TEXT,
+    -- Added in schema v7: verbatim JSON-stringified tool input. The summary
+    -- column stays as the truncated display value; input_json is the source
+    -- of truth for review surfaces that want to see the full input. NULL on
+    -- rows ingested before v7.
+    input_json          TEXT,
     result_length       INTEGER DEFAULT 0,
     ts                  INTEGER NOT NULL,
     FOREIGN KEY (prompt_id) REFERENCES claude_prompts(id) ON DELETE CASCADE,

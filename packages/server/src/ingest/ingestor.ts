@@ -351,8 +351,31 @@ function processLines(
       cost_usd = excluded.cost_usd
   `);
   const insToolCall = db.prepare(`
-    INSERT INTO claude_tool_calls (prompt_id, session_id, assistant_uuid, tool_use_id, tool_name, input_summary, result_length, ts)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO claude_tool_calls (prompt_id, session_id, assistant_uuid, tool_use_id, tool_name, input_summary, input_json, result_length, ts)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  /**
+   * Append the assistant's text + thinking blocks from one assistant turn
+   * onto the prompt row. A single user prompt can span multiple assistant
+   * turns (model re-renders / continues after a tool round-trip), so we
+   * concatenate with `||` instead of overwriting. Empty contributions
+   * (e.g. an assistant turn that's all tool_use) leave the column NULL
+   * if nothing was previously accumulated — kept as NULL so the UI can
+   * cleanly hide the section.
+   */
+  const appendPromptText = db.prepare(`
+    UPDATE claude_prompts SET
+      assistant_text = CASE
+        WHEN ? = '' THEN assistant_text
+        WHEN assistant_text IS NULL THEN ?
+        ELSE assistant_text || ?
+      END,
+      thinking_text = CASE
+        WHEN ? = '' THEN thinking_text
+        WHEN thinking_text IS NULL THEN ?
+        ELSE thinking_text || ?
+      END
+    WHERE id = ?
   `);
 
   let lastSessionId: string | null = null;
@@ -366,12 +389,17 @@ function processLines(
   let activePromptId: string | null = null;
 
   // Tool_use waiting for a tool_result: tool_use_id → pending row.
+  // `inputJson` carries the verbatim JSON-stringified `input` field so the
+  // dashboard can show the full tool input alongside the truncated display
+  // summary. Captured at queue-time (when the assistant emits the tool_use)
+  // so it lands together with the matched tool_result.
   interface PendingTool {
     promptId: string;
     sessionId: string;
     assistantUuid: string;
     toolName: string;
     summary: string;
+    inputJson: string | null;
     ts: number;
   }
   const pendingTools = new Map<string, PendingTool>();
@@ -426,6 +454,7 @@ function processLines(
                 block.tool_use_id,
                 pending.toolName,
                 pending.summary,
+                pending.inputJson,
                 len,
                 pending.ts
               );
@@ -469,22 +498,55 @@ function processLines(
       // when the user entry landed.
       incSessionAggregates.run(0, inputTok, outputTok, cacheCreate, cacheRead, cost, sessionId);
 
-      // Scan content for tool_use blocks → queue as pending.
+      // Scan content for tool_use, text, and thinking blocks. tool_use →
+      // queued for a later tool_result match; text + thinking → appended
+      // onto the prompt row so the dashboard can show the assistant's
+      // actual response, not just token counts. One pass over the array
+      // so we don't iterate twice on what can be a large list.
       const content = entry.message?.content;
       const assistantUuid = entry.uuid ?? '';
-      if (Array.isArray(content) && assistantUuid) {
+      let assistantTextChunk = '';
+      let thinkingTextChunk = '';
+      if (Array.isArray(content)) {
         for (const block of content as ClaudeContentBlock[]) {
-          if (block && block.type === 'tool_use' && block.id && block.name) {
+          if (!block) continue;
+          if (block.type === 'tool_use' && block.id && block.name && assistantUuid) {
+            // JSON-stringify the full input. Schema column is TEXT;
+            // large inputs (e.g. Bash with long heredocs) are fine as-is.
+            // Falsy / undefined / circular inputs degrade to a quiet null
+            // rather than throwing — the summary column still captures
+            // a display value.
+            let inputJson: string | null = null;
+            try {
+              inputJson = JSON.stringify(block.input ?? null);
+            } catch { inputJson = null; }
             pendingTools.set(block.id, {
               promptId,
               sessionId,
               assistantUuid,
               toolName: block.name,
               summary: summarizeToolInput(block.name, block.input),
+              inputJson,
               ts,
             });
+          } else if (block.type === 'text' && typeof (block as { text?: unknown }).text === 'string') {
+            // The assistant's prose response. Concatenated with the
+            // existing assistant_text via the appendPromptText UPDATE
+            // below — one prompt can span multiple assistant turns.
+            assistantTextChunk += (block as { text: string }).text;
+          } else if (block.type === 'thinking' && typeof (block as { text?: unknown }).text === 'string') {
+            // Extended thinking. Same accumulation pattern as text.
+            thinkingTextChunk += (block as { text: string }).text;
           }
         }
+      }
+      if (assistantTextChunk || thinkingTextChunk) {
+        // Separate consecutive turn contributions with a blank line so
+        // multi-turn responses render with paragraph breaks instead of
+        // collapsing into a single run-on block.
+        const at = assistantTextChunk ? assistantTextChunk + '\n\n' : '';
+        const tt = thinkingTextChunk ? thinkingTextChunk + '\n\n' : '';
+        appendPromptText.run(at, at, at, tt, tt, tt, promptId);
       }
     }
     // attachment / queue-operation / last-prompt entries are ignored for v1.
@@ -502,6 +564,7 @@ function processLines(
       toolUseId,
       pending.toolName,
       pending.summary,
+      pending.inputJson,
       0,
       pending.ts
     );

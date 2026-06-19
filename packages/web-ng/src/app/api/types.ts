@@ -57,6 +57,10 @@ export interface ClaudePrompt {
   cache_read_tokens: number;
   cost_usd: number;
   is_sidechain: 0 | 1;
+  /** Concatenated assistant text blocks (schema v7+). NULL on older rows. */
+  assistant_text?: string | null;
+  /** Concatenated extended-thinking blocks (schema v7+). NULL on older rows. */
+  thinking_text?: string | null;
 }
 
 export interface ClaudeToolCall {
@@ -67,6 +71,8 @@ export interface ClaudeToolCall {
   tool_use_id: string | null;
   tool_name: string;
   input_summary: string | null;
+  /** Verbatim JSON-stringified tool input (schema v7+). NULL on older rows. */
+  input_json?: string | null;
   result_length: number;
   ts: number;
 }

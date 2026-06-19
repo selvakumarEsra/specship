@@ -30,6 +30,26 @@
   padding: 2px 8px; border-radius: 999px;
   background: var(--accent-soft); color: var(--accent);
 }
+
+// Live-update indicator. Pulses while SSE is connected so the user
+// can tell at a glance whether they're getting push or polling.
+.live-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 10.5px; font-weight: 600;
+  padding: 2px 8px; border-radius: 999px;
+  white-space: nowrap; cursor: help;
+  .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  &.live    { color: var(--success); background: var(--success-soft);
+    .dot { background: var(--success); animation: live-pulse 1.6s ease-in-out infinite; } }
+  &.polling { color: var(--warn);    background: var(--warn-soft);
+    .dot { background: var(--warn); } }
+  &.idle    { color: var(--text-muted); background: var(--bg-canvas);
+    .dot { background: var(--text-muted); } }
+}
+@keyframes live-pulse {
+  0%, 100% { opacity: 0.4; transform: scale(0.85); }
+  50%      { opacity: 1.0; transform: scale(1.05); }
+}
 .sub {
   color: var(--text-secondary); font-size: 12px;
   margin-top: 2px;
@@ -191,15 +211,32 @@
 .kv-val.cost { color: var(--accent); }
 
 .tools { display: flex; flex-direction: column; gap: 3px; }
+.tool-block { display: flex; flex-direction: column; gap: 0; }
+
+// Tool row is now a real <button> so the expand chevron is keyboard-focusable
+// and screen-reader-announced. `:disabled` covers the case where the row has
+// no input_json (older row, pre-v7 ingest) — the chevron is hidden and the
+// click is a no-op, but the row still hovers for visual consistency.
 .tool-row {
+  appearance: none; background: var(--bg-panel); border: 1px solid var(--border-subtle);
+  color: inherit; font-family: inherit; text-align: left;
   display: flex; align-items: center; gap: 8px;
-  padding: 5px 10px;
+  width: 100%; padding: 5px 10px;
   border-radius: 6px;
-  background: var(--bg-panel);
-  border: 1px solid var(--border-subtle);
   font-size: 11.5px;
+  cursor: pointer;
 }
-.tool-row:hover { background: var(--bg-hover); }
+.tool-row:hover:not(:disabled) { background: var(--bg-hover); }
+.tool-row:disabled { cursor: default; }
+.tool-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.tool-row.expanded { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+.tool-chevron {
+  width: 10px; color: var(--text-muted);
+  transition: transform 120ms;
+  font-size: 12px; flex-shrink: 0;
+  display: inline-block;
+}
+.tool-chevron.open { transform: rotate(90deg); color: var(--accent); }
 .tool-name { font-weight: 600; flex-shrink: 0; }
 .tool-input {
   color: var(--text-secondary);
@@ -208,6 +245,167 @@
   font-size: 11px;
 }
 .tool-bytes { font-size: 10.5px; flex-shrink: 0; }
+
+// The verbatim JSON input revealed by expanding a tool row. Sits flush
+// against the tool-row above so they read as one block.
+.tool-input-json {
+  margin: 0;
+  padding: 10px 14px;
+  background: var(--bg-canvas);
+  border: 1px solid var(--border-subtle);
+  border-top: 0;
+  border-radius: 0 0 6px 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+// Assistant response renders the markdown subset via the shared renderer.
+// Container styling mirrors .prompt-pre (same surface tone) but lets the
+// markdown's own typography (h1/h2/p/code/etc) do the layout work.
+.assistant-body {
+  padding: 10px 14px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-subtle);
+  border-radius: 7px;
+  font-size: 12.5px; line-height: 1.55;
+  color: var(--text-primary);
+  max-height: 480px; // tall responses scroll within the section instead of pushing the page
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+}
+
+.thinking-details {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-subtle);
+  border-radius: 7px;
+  padding: 8px 12px;
+}
+.thinking-summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex; align-items: center; gap: 6px;
+  font-size: 10px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+.thinking-summary::-webkit-details-marker { display: none; }
+.thinking-summary::before {
+  content: '›';
+  display: inline-block;
+  transition: transform 120ms;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+.thinking-details[open] .thinking-summary::before { transform: rotate(90deg); color: var(--accent); }
+.thinking-body {
+  margin-top: 10px;
+  padding: 8px 0 0;
+  border-top: 1px dashed var(--border-subtle);
+  font-size: 12px; line-height: 1.55;
+  color: var(--text-secondary);
+  max-height: 320px;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+}
+
+// ---- shared markdown body styling ---------------------------------------
+// Same .md-content rules the spec-editor preview pane uses, scoped here so
+// assistant_text + thinking_text + tool-input-json render with the same
+// typography as the rest of the dashboard's markdown surfaces.
+.md-content {
+  .md-h1 { font-size: 14px; font-weight: 650; color: var(--text-primary);
+    letter-spacing: -0.01em; margin: 0 0 8px; }
+  .md-h2 { font-size: 12.5px; font-weight: 650; color: var(--text-primary);
+    margin: 14px 0 4px; padding-bottom: 3px; border-bottom: 1px solid var(--border-subtle); }
+  .md-h3 { font-size: 12px; font-weight: 650; color: var(--text-primary);
+    margin: 12px 0 4px; }
+  .md-h4 { font-size: 10.5px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--text-muted); margin: 10px 0 4px; }
+  .md-p { font-size: 12.5px; line-height: 1.6; color: var(--text-primary); margin: 0 0 4px;
+    overflow-wrap: anywhere;
+    strong { color: var(--text-primary); font-weight: 650; } }
+  .md-list, .md-ol {
+    padding: 0; margin: 4px 0 6px;
+    li {
+      position: relative; padding: 2px 0 2px 20px;
+      font-size: 12.5px; line-height: 1.55; color: var(--text-primary);
+      overflow-wrap: anywhere;
+    }
+  }
+  .md-list { list-style: none;
+    li::before { content: '•'; position: absolute; left: 4px; top: 1px; color: var(--text-faint); } }
+  .md-ol { list-style: none; counter-reset: md-ol;
+    li { counter-increment: md-ol;
+      &::before {
+        content: counter(md-ol) '.';
+        position: absolute; left: 0; top: 1px;
+        color: var(--text-faint); font-family: var(--font-mono);
+        font-size: 11px; min-width: 16px; text-align: right;
+      } } }
+  .md-spacer { height: 5px; }
+  .md-import { display: inline-block; font-size: 11px;
+    color: var(--node-route); background: var(--node-route-soft);
+    padding: 1px 6px; border-radius: 4px; margin: 3px 0; }
+  .md-inline-code { font-size: 11px; background: var(--bg-canvas);
+    padding: 1px 5px; border-radius: 3px;
+    border: 1px solid var(--border-subtle); color: var(--node-spec); }
+  .md-blockquote {
+    margin: 5px 0; padding: 6px 10px;
+    border-left: 3px solid var(--accent);
+    background: var(--accent-soft);
+    color: var(--text-secondary);
+    font-size: 12px; line-height: 1.5;
+    border-radius: 0 5px 5px 0;
+  }
+  .md-pre {
+    position: relative;
+    margin: 6px 0 8px;
+    padding: 10px 12px;
+    background: var(--bg-canvas);
+    border: 1px solid var(--border-subtle);
+    border-radius: 6px;
+    overflow-x: auto;
+    code {
+      display: block;
+      font-size: 11px; line-height: 1.5;
+      color: var(--text-primary);
+      white-space: pre;
+    }
+  }
+  .md-pre-lang {
+    position: absolute; top: 4px; right: 8px;
+    font-size: 9.5px; font-weight: 600;
+    color: var(--text-muted);
+    text-transform: lowercase;
+    background: var(--bg-panel);
+    padding: 1px 5px; border-radius: 3px;
+    border: 1px solid var(--border-subtle);
+  }
+  .md-table-scroll {
+    overflow-x: auto;
+    margin: 8px 0;
+    border: 1px solid var(--border-subtle);
+    border-radius: 6px;
+  }
+  .md-table {
+    width: 100%; border-collapse: collapse; font-size: 11px;
+    th, td { padding: 6px 10px; text-align: left; vertical-align: top;
+      border-bottom: 1px solid var(--border-subtle); }
+    thead th { background: var(--bg-panel); font-weight: 650; color: var(--text-primary);
+      font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em;
+      border-bottom: 1px solid var(--border-strong); white-space: nowrap; }
+    tbody td { color: var(--text-primary); }
+    tbody tr:last-child td { border-bottom: 0; }
+  }
+  > :first-child { margin-top: 0; }
+}
 
 // ---- loading / error / empty ---------------------------------------------
 

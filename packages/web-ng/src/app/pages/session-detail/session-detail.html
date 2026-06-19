@@ -10,6 +10,18 @@
         @if (session()?.last_model) {
           <span class="model-pill mono">{{ session()!.last_model }}</span>
         }
+        <span class="live-pill"
+              [class.live]="liveMode() === 'live'"
+              [class.polling]="liveMode() === 'polling'"
+              [class.idle]="liveMode() === 'idle'"
+              [title]="liveMode() === 'live'
+                ? 'Live — new prompts push to this page as Claude Code writes them (~0.5s).'
+                : liveMode() === 'polling'
+                  ? 'Polling — SSE unavailable, refetching every 5s while this tab is visible.'
+                  : 'Idle — live updates paused (tab hidden or session not loaded).'">
+          <span class="dot"></span>
+          {{ liveMode() === 'live' ? 'Live' : liveMode() === 'polling' ? 'Polling' : 'Idle' }}
+        </span>
       </div>
       @if (session(); as s) {
         <div class="sub">
@@ -129,6 +141,24 @@
                 </section>
               }
 
+              @if (g.prompt.assistant_text) {
+                <section class="prompt-section">
+                  <div class="section-lbl">Assistant response</div>
+                  <div class="assistant-body md-content" [innerHTML]="renderAssistant(g.prompt.assistant_text)"></div>
+                </section>
+              }
+
+              @if (g.prompt.thinking_text) {
+                <section class="prompt-section">
+                  <details class="thinking-details">
+                    <summary class="section-lbl thinking-summary">
+                      Extended thinking <span class="muted xs">(click to expand)</span>
+                    </summary>
+                    <div class="thinking-body md-content" [innerHTML]="renderAssistant(g.prompt.thinking_text)"></div>
+                  </details>
+                </section>
+              }
+
               <section class="prompt-section">
                 <div class="section-lbl">Token breakdown</div>
                 <div class="kv-row">
@@ -148,14 +178,30 @@
                   <div class="section-lbl">Tool calls · {{ g.tools.length }} · returned {{ fmtBytes(g.toolBytes) }}</div>
                   <div class="tools">
                     @for (t of g.tools; track t.id) {
-                      <div class="tool-row">
-                        <span class="tool-name mono" [style.color]="toolColor(t.tool_name)">{{ t.tool_name }}</span>
-                        @if (t.input_summary) {
-                          <span class="tool-input mono">{{ t.input_summary }}</span>
-                        }
-                        <span class="grow"></span>
-                        @if (t.result_length) {
-                          <span class="tool-bytes mono muted">{{ fmtBytes(t.result_length) }}</span>
+                      <div class="tool-block">
+                        <button
+                          type="button"
+                          class="tool-row"
+                          [class.has-input]="!!t.input_json"
+                          [class.expanded]="isToolInputExpanded(t.id)"
+                          [attr.aria-expanded]="isToolInputExpanded(t.id)"
+                          [disabled]="!t.input_json"
+                          (click)="toggleToolInput(t.id)"
+                        >
+                          <span class="tool-chevron mono" [class.open]="isToolInputExpanded(t.id)" aria-hidden="true">
+                            @if (t.input_json) { › }
+                          </span>
+                          <span class="tool-name mono" [style.color]="toolColor(t.tool_name)">{{ t.tool_name }}</span>
+                          @if (t.input_summary) {
+                            <span class="tool-input mono">{{ t.input_summary }}</span>
+                          }
+                          <span class="grow"></span>
+                          @if (t.result_length) {
+                            <span class="tool-bytes mono muted">{{ fmtBytes(t.result_length) }}</span>
+                          }
+                        </button>
+                        @if (t.input_json && isToolInputExpanded(t.id)) {
+                          <pre class="tool-input-json mono">{{ formatToolInput(t.input_json) }}</pre>
                         }
                       </div>
                     }

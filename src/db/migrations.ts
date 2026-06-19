@@ -9,7 +9,7 @@ import { SqliteDatabase } from './sqlite-adapter';
 /**
  * Current schema version
  */
-export const CURRENT_SCHEMA_VERSION = 6;
+export const CURRENT_SCHEMA_VERSION = 7;
 
 /**
  * Migration definition
@@ -362,6 +362,27 @@ const migrations: Migration[] = [
         ['claude-haiku-4',     0.80, 4.0,  1.0,  0.08],
       ];
       for (const r of rates) seed.run(r[0], r[1], r[2], r[3], r[4], now);
+    },
+  },
+  {
+    version: 7,
+    description:
+      'Capture assistant response text + thinking blocks on claude_prompts; capture full tool input JSON on claude_tool_calls (previously parsed by ingestor and discarded)',
+    up: (db) => {
+      // Three new columns, all nullable so rows ingested before this
+      // migration stay valid and the UI hides empty sections naturally.
+      // `hasColumn` guards keep the migration idempotent — safe to re-run
+      // against a DB that already has the columns (e.g. when the schema.sql
+      // path created them on a fresh init).
+      if (!hasColumn(db, 'claude_prompts', 'assistant_text')) {
+        db.exec(`ALTER TABLE claude_prompts ADD COLUMN assistant_text TEXT;`);
+      }
+      if (!hasColumn(db, 'claude_prompts', 'thinking_text')) {
+        db.exec(`ALTER TABLE claude_prompts ADD COLUMN thinking_text TEXT;`);
+      }
+      if (!hasColumn(db, 'claude_tool_calls', 'input_json')) {
+        db.exec(`ALTER TABLE claude_tool_calls ADD COLUMN input_json TEXT;`);
+      }
     },
   },
 ];

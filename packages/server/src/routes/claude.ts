@@ -123,6 +123,105 @@ export async function registerClaudeRoutes(app: FastifyInstance): Promise<void> 
     return { session, prompts, toolCalls };
   });
 
+  /**
+   * SSE event stream for a single session — pushes new prompts and tool
+   * calls as the JSONL ingest watcher lands them, so the dashboard's
+   * Session Detail page can update without polling. Mirrors the shape used
+   * by /api/workflows/runs/:id/events.
+   *
+   * Polling cadence inside the loop is 500 ms — fast enough that the
+   * end-to-end "user hit Enter in Claude Code → prompt visible in
+   * dashboard" latency stays well under one second (300 ms watcher
+   * debounce + ≤50 ms ingest + ≤500 ms poll). Heartbeat every 15 s
+   * keeps idle connections alive past any proxy or browser tab-throttle
+   * cutoff.
+   *
+   * The client (LiveSessionTail in session-detail.ts) doesn't merge events
+   * incrementally — it just calls resource.refetch() on every event since
+   * the detail endpoint is local + cheap. Server-side, that means we only
+   * need to push enough info for the client to know "something changed"
+   * (id + ts), not the full row payloads. We send the full row anyway so
+   * a future client could merge incrementally without an API change.
+   */
+  app.get('/api/claude/session/:id/events', async (req: FastifyRequest<{ Params: { id: string }; Querystring: { sincePromptTs?: string; sinceToolTs?: string } }>, reply: FastifyReply) => {
+    const cg = requirePrimary(reply); if (!cg) return;
+    const db = getDb(cg);
+    const sessionId = req.params.id;
+
+    // Confirm the session exists before opening the stream — saves a
+    // doomed connection from polling forever against a typo.
+    const sessionRow = db.prepare('SELECT id FROM claude_sessions WHERE id = ?').get(sessionId);
+    if (!sessionRow) {
+      return reply.code(404).send({ error: 'session not found' });
+    }
+
+    // Resume points — clients can pick up after a disconnect without
+    // re-receiving every prompt. Defaults to "now" so an opening client
+    // only sees future events.
+    let lastPromptTs = parseInt(req.query.sincePromptTs ?? '0', 10);
+    let lastToolTs = parseInt(req.query.sinceToolTs ?? '0', 10);
+    if (!lastPromptTs || Number.isNaN(lastPromptTs)) {
+      const row = db.prepare('SELECT MAX(ts) as m FROM claude_prompts WHERE session_id = ?').get(sessionId) as { m: number | null } | undefined;
+      lastPromptTs = row?.m ?? 0;
+    }
+    if (!lastToolTs || Number.isNaN(lastToolTs)) {
+      const row = db.prepare('SELECT MAX(ts) as m FROM claude_tool_calls WHERE session_id = ?').get(sessionId) as { m: number | null } | undefined;
+      lastToolTs = row?.m ?? 0;
+    }
+
+    reply.raw.setHeader('Content-Type', 'text/event-stream');
+    reply.raw.setHeader('Cache-Control', 'no-cache');
+    reply.raw.setHeader('Connection', 'keep-alive');
+    reply.raw.setHeader('X-Accel-Buffering', 'no'); // nginx-friendly
+    reply.raw.flushHeaders();
+
+    // Initial snapshot — gives the client a clean baseline (so it knows
+    // SSE is wired up even before any new event fires) and the cursor
+    // positions it should resume from on reconnect.
+    reply.raw.write(`event: snapshot\ndata: ${JSON.stringify({ sessionId, lastPromptTs, lastToolTs })}\n\n`);
+
+    let closed = false;
+    req.raw.on('close', () => { closed = true; });
+
+    const newPromptsStmt = db.prepare('SELECT * FROM claude_prompts WHERE session_id = ? AND ts > ? ORDER BY ts ASC');
+    const newToolsStmt = db.prepare('SELECT * FROM claude_tool_calls WHERE session_id = ? AND ts > ? ORDER BY ts ASC');
+
+    let lastHeartbeat = Date.now();
+
+    const tick = (): void => {
+      if (closed) return;
+      try {
+        const freshPrompts = newPromptsStmt.all(sessionId, lastPromptTs) as Array<{ ts: number }>;
+        for (const p of freshPrompts) {
+          reply.raw.write(`event: prompt_added\ndata: ${JSON.stringify(p)}\n\n`);
+          if (p.ts > lastPromptTs) lastPromptTs = p.ts;
+        }
+        const freshTools = newToolsStmt.all(sessionId, lastToolTs) as Array<{ ts: number }>;
+        for (const t of freshTools) {
+          reply.raw.write(`event: tool_call_added\ndata: ${JSON.stringify(t)}\n\n`);
+          if (t.ts > lastToolTs) lastToolTs = t.ts;
+        }
+
+        // Heartbeat every 15 s — keeps proxies / browser tab throttles
+        // from killing an otherwise-idle connection.
+        const now = Date.now();
+        if (now - lastHeartbeat >= 15_000) {
+          reply.raw.write(`: keepalive ${now}\n\n`);
+          lastHeartbeat = now;
+        }
+      } catch (err) {
+        // Surface DB errors to the client as a named event and end the
+        // stream — the client's onError handler flips to polling.
+        reply.raw.write(`event: stream_error\ndata: ${JSON.stringify({ message: err instanceof Error ? err.message : String(err) })}\n\n`);
+        reply.raw.end();
+        closed = true;
+        return;
+      }
+      setTimeout(tick, 500);
+    };
+    void tick();
+  });
+
   app.get('/api/claude/heatmap', async (req: FastifyRequest<{ Querystring: { range?: string } }>, reply) => {
     const cg = requirePrimary(reply); if (!cg) return;
     const db = getDb(cg);

@@ -11,15 +11,27 @@ import {
 } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
+import { DomSanitizer, type SafeHtml } from '@angular/platform-browser';
 import { ApiService } from '../../api/api';
 import { apiResource } from '../../api/resource';
 import { RefreshService } from '../../api/refresh';
 import { Icon } from '../../shell/icon/icon';
+import { renderMd } from '../../util/render-md';
 import type {
   ClaudePrompt,
   ClaudeToolCall,
   SessionDetailResponse,
 } from '../../api/types';
+
+/** Live-update mode. Drives the indicator pill. */
+type LiveMode = 'live' | 'polling' | 'idle';
+
+/**
+ * Polling fallback cadence. 5s mirrors the Sessions list's 10s but is
+ * tighter because the user is focused on one session in the detail view.
+ * Visibility-gated so a background tab doesn't burn fetches.
+ */
+const POLL_INTERVAL_MS = 5_000;
 
 interface PromptGroup {
   prompt: ClaudePrompt;
@@ -38,7 +50,12 @@ interface PromptGroup {
 export class SessionDetail {
   private readonly api = inject(ApiService);
   private readonly route = inject(ActivatedRoute);
+  private readonly sanitizer = inject(DomSanitizer);
+  private readonly destroyRef = inject(DestroyRef);
   protected readonly refresh = inject(RefreshService);
+
+  /** Current live-update mode — drives the indicator pill in the header. */
+  protected readonly liveMode = signal<LiveMode>('idle');
 
   /** Session id from the route. Signals route changes when the user
    *  clicks a different session via the back-and-forth nav. */
@@ -47,6 +64,13 @@ export class SessionDetail {
 
   protected readonly localRefreshing = signal(false);
   protected readonly expandedIds = signal(new Set<string>());
+  /**
+   * Per-tool-call expansion state for the verbatim input_json reveal. Keyed
+   * by tool_call row id (number). Independent of prompt expansion — a user
+   * can have a prompt expanded but only one of its tool calls' inputs
+   * open at a time.
+   */
+  protected readonly expandedToolInputs = signal(new Set<number>());
 
   protected readonly resource = apiResource<SessionDetailResponse>(
     this.api,
@@ -98,6 +122,104 @@ export class SessionDetail {
       const loading = this.resource.state().loading;
       if (!loading && this.localRefreshing()) this.localRefreshing.set(false);
     });
+
+    // Live tail: SSE primary, polling fallback. Wired in an effect so
+    // navigating between sessions tears down + recreates the stream
+    // cleanly. Reading `this.id()` makes the effect re-run on route change.
+    //
+    // Visibility-gated polling (matches Sessions list pattern): while the
+    // tab is hidden we pause both the SSE listener and the polling
+    // interval, then force-refetch the instant the tab regains focus so
+    // the user doesn't wait for the next tick to see fresh prompts.
+    let sseClose: (() => void) | null = null;
+    let pollInterval: ReturnType<typeof setInterval> | null = null;
+
+    const stopPolling = () => {
+      if (pollInterval !== null) { clearInterval(pollInterval); pollInterval = null; }
+    };
+    const startPolling = () => {
+      if (pollInterval !== null) return;
+      pollInterval = setInterval(() => {
+        if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+          this.resource.refetch();
+        }
+      }, POLL_INTERVAL_MS);
+    };
+    const stopSse = () => {
+      if (sseClose) { sseClose(); sseClose = null; }
+    };
+    const startSse = (sessionId: string) => {
+      if (!sessionId) return;
+      stopSse();
+      sseClose = this.api.openEventStream(
+        `/api/claude/session/${encodeURIComponent(sessionId)}/events`,
+        (type) => {
+          // Any push from the server is reason enough to refetch the
+          // detail endpoint — the response includes the assistant text
+          // we want to show, and re-pulling the whole session keeps the
+          // groups[] computation simple (no merge logic, no out-of-order
+          // worries). The detail GET is cheap; this is fine.
+          if (type === 'prompt_added' || type === 'tool_call_added') {
+            this.resource.refetch();
+          } else if (type === 'snapshot') {
+            // Stream is live — flip the indicator to green.
+            this.liveMode.set('live');
+            stopPolling();
+          } else if (type === 'stream_error') {
+            // Server explicitly errored — fall back to polling.
+            this.liveMode.set('polling');
+            startPolling();
+          }
+        },
+        () => {
+          // Network error, EventSource closed by the browser, server
+          // unreachable. Flip to polling silently — user sees the amber
+          // indicator, fresh data still lands within POLL_INTERVAL_MS.
+          this.liveMode.set('polling');
+          startPolling();
+        },
+        ['prompt_added', 'tool_call_added', 'snapshot', 'stream_error'],
+      );
+    };
+
+    const visibilityHandler = () => {
+      if (typeof document === 'undefined') return;
+      if (document.visibilityState === 'visible') {
+        // Returning to the tab — refetch immediately + reconnect SSE
+        // if we were in polling mode (the browser may have killed the
+        // EventSource while the tab was hidden).
+        this.resource.refetch();
+        const id = this.id();
+        if (id && this.liveMode() === 'polling') startSse(id);
+      } else {
+        // Going hidden — pause polling so we don't burn cycles. SSE
+        // stays connected; the server will see the eventual disconnect.
+        stopPolling();
+      }
+    };
+
+    effect(() => {
+      const id = this.id();
+      stopSse();
+      stopPolling();
+      if (!id) {
+        this.liveMode.set('idle');
+        return;
+      }
+      startSse(id);
+    });
+
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', visibilityHandler);
+    }
+    this.destroyRef.onDestroy(() => {
+      stopSse();
+      stopPolling();
+      this.liveMode.set('idle');
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', visibilityHandler);
+      }
+    });
   }
 
   protected async forceRefresh(): Promise<void> {
@@ -124,6 +246,44 @@ export class SessionDetail {
 
   protected collapseAll(): void {
     this.expandedIds.set(new Set());
+  }
+
+  protected isToolInputExpanded(toolId: number): boolean {
+    return this.expandedToolInputs().has(toolId);
+  }
+
+  protected toggleToolInput(toolId: number): void {
+    this.expandedToolInputs.update((set) => {
+      const next = new Set(set);
+      if (next.has(toolId)) next.delete(toolId);
+      else next.add(toolId);
+      return next;
+    });
+  }
+
+  /**
+   * Render the assistant's response text through the shared markdown
+   * subset renderer. Returns sanitized HTML safe to drop into [innerHTML].
+   * Empty string in → empty string out — the caller hides the section
+   * when the source field is null/empty.
+   */
+  protected renderAssistant(text: string | null | undefined): SafeHtml {
+    return this.sanitizer.bypassSecurityTrustHtml(renderMd(text ?? ''));
+  }
+
+  /**
+   * Pretty-print a tool's input_json. Falls back to the raw string if it
+   * doesn't parse (e.g. a future schema change). Truncates lines longer
+   * than ~200 chars in the rendered output via CSS, not here — the raw
+   * value is preserved so the user can copy it.
+   */
+  protected formatToolInput(json: string | null | undefined): string {
+    if (!json) return '';
+    try {
+      return JSON.stringify(JSON.parse(json), null, 2);
+    } catch {
+      return json;
+    }
   }
 
   protected fmtBytes(n: number): string {
