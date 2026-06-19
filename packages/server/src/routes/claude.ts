@@ -18,6 +18,25 @@
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { SpecShipInstance } from '../project-registry.js';
+import { decodeProjectSlug } from '../ingest/index.js';
+
+/**
+ * Normalize a `?project=` filter value to the form stored in
+ * claude_sessions.project_path. The Sessions page (and any other UI
+ * surface that uses ProjectsService.projectQuery()) sends the directory
+ * SLUG that names the Claude Code transcript dir (e.g.
+ * `-Users-foo-projects-bar`), but the ingestor writes the DECODED path
+ * (e.g. `/Users/foo/projects/bar`) into project_path because that's the
+ * value the agent actually identifies the project by. Comparing slug
+ * against path always fails and the list comes back empty even though
+ * the rows are there — fix by decoding the slug form here.
+ *
+ * A path passed in directly (doesn't start with `-`) round-trips
+ * unchanged, so curl-by-path and the old behavior both keep working.
+ */
+function normalizeProjectFilter(input: string): string {
+  return decodeProjectSlug(input);
+}
 
 type DbHandle = { prepare: (s: string) => { all: (...a: unknown[]) => unknown[]; get: (...a: unknown[]) => unknown; run: (...a: unknown[]) => unknown } };
 
@@ -97,7 +116,7 @@ export async function registerClaudeRoutes(app: FastifyInstance): Promise<void> 
     let whereProject = '';
     if (req.query.project) {
       whereProject = ' AND project_path = ?';
-      params.push(req.query.project);
+      params.push(normalizeProjectFilter(req.query.project));
     }
     params.push(limit);
     const sessions = db.prepare(`
