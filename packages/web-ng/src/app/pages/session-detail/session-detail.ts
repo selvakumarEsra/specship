@@ -21,6 +21,7 @@ import type {
   ClaudePrompt,
   ClaudeToolCall,
   SessionDetailResponse,
+  SessionSummaryResponse,
 } from '../../api/types';
 
 /** Live-update mode. Drives the indicator pill. */
@@ -33,12 +34,30 @@ type LiveMode = 'live' | 'polling' | 'idle';
  */
 const POLL_INTERVAL_MS = 5_000;
 
+interface ToolChip {
+  name: string;
+  count: number;
+  color: string;
+}
+
 interface PromptGroup {
   prompt: ClaudePrompt;
   tools: ClaudeToolCall[];
   totalTokens: number;
   toolBytes: number;
+  /** Slash command extracted from the user prompt text (e.g. "/ss-spec"). */
+  slashCommand: string | null;
+  /** Wall-clock between the prompt's ts and its last tool call. 0 when no tools fired. */
+  durationMs: number;
+  /** Per-tool counts for the collapsed-row chip strip. */
+  toolBreakdown: ToolChip[];
+  /** Unique file paths touched by Read/Edit/Write/NotebookEdit/MultiEdit. */
+  filesTouched: string[];
 }
+
+/** Regex Claude Code wraps every slash command with in the user prompt. */
+const SLASH_COMMAND_TAG = /<command-name>([^<]+)<\/command-name>/;
+const FILE_TOOLS = new Set(['Read', 'Edit', 'Write', 'NotebookEdit', 'MultiEdit']);
 
 @Component({
   selector: 'app-session-detail',
@@ -80,9 +99,23 @@ export class SessionDetail {
     },
   );
 
+  /**
+   * Session-summary aggregation (top tools, slash commands, skills, files
+   * touched). Driven by the same id signal so navigating between sessions
+   * reloads it cleanly. Refetched whenever the global refresh ticks.
+   */
+  protected readonly summary = apiResource<SessionSummaryResponse>(
+    this.api,
+    () => {
+      const id = this.id();
+      return id ? `/api/claude/session/${encodeURIComponent(id)}/summary` : null;
+    },
+  );
+
   protected readonly session = computed(() => this.resource.state().data?.session ?? null);
   protected readonly prompts = computed(() => this.resource.state().data?.prompts ?? []);
   protected readonly toolCalls = computed(() => this.resource.state().data?.toolCalls ?? []);
+  protected readonly summaryData = computed(() => this.summary.state().data ?? null);
 
   /**
    * Group each prompt with the tool calls it issued. Tool calls hang off
@@ -103,7 +136,46 @@ export class SessionDetail {
       const totalTokens = (p.input_tokens || 0) + (p.output_tokens || 0)
         + (p.cache_creation_tokens || 0) + (p.cache_read_tokens || 0);
       const toolBytes = ts.reduce((acc, t) => acc + (t.result_length || 0), 0);
-      return { prompt: p, tools: ts, totalTokens, toolBytes };
+
+      // Slash command: Claude Code wraps it in <command-name>…</command-name>
+      // in the user prompt. Pull the first one; rare to see multiple per
+      // prompt (only happens with prompt-chaining).
+      const slashMatch = p.text ? SLASH_COMMAND_TAG.exec(p.text) : null;
+      const slashCommand = slashMatch ? slashMatch[1].trim() : null;
+
+      // Duration: wall-clock from prompt entry to its last tool call. Doesn't
+      // count assistant-only turns since we have no end-ts for those (the
+      // ingestor records `ts` per entry, not a turn-end). 0 = "no tools / unknown".
+      const lastToolTs = ts.length > 0 ? Math.max(...ts.map((t) => t.ts || 0)) : 0;
+      const durationMs = lastToolTs > p.ts ? lastToolTs - p.ts : 0;
+
+      // Tool breakdown: group by name, count, attach the same color the
+      // tool name uses elsewhere so the chip strip reads consistently.
+      const toolCountMap = new Map<string, number>();
+      for (const t of ts) {
+        toolCountMap.set(t.tool_name, (toolCountMap.get(t.tool_name) ?? 0) + 1);
+      }
+      const toolBreakdown: ToolChip[] = Array.from(toolCountMap.entries())
+        .map(([name, count]) => ({ name, count, color: this.toolColor(name) }))
+        .sort((a, b) => b.count - a.count);
+
+      // Files touched: file path = input_summary for file-mutating tools.
+      // De-dupe so the same path edited twice shows once. Order = first-seen.
+      const filesSet = new Set<string>();
+      for (const t of ts) {
+        if (FILE_TOOLS.has(t.tool_name) && t.input_summary) filesSet.add(t.input_summary);
+      }
+
+      return {
+        prompt: p,
+        tools: ts,
+        totalTokens,
+        toolBytes,
+        slashCommand,
+        durationMs,
+        toolBreakdown,
+        filesTouched: Array.from(filesSet),
+      };
     });
   });
 
@@ -321,6 +393,31 @@ export class SessionDetail {
     if (m < 60) return `${m}m ${s}s`;
     const h = Math.floor(m / 60); const mm = m % 60;
     return `${h}h ${mm}m`;
+  }
+
+  /**
+   * Sub-second-aware duration formatter for per-prompt timing. Most prompts
+   * complete in <60s so the seconds-only form from fmtDurationSec hides
+   * relative timing — 0.4s vs 2.1s vs 8.5s all collapse meaninglessly.
+   */
+  protected fmtDurationMs(ms: number): string {
+    if (!ms || ms <= 0) return '';
+    if (ms < 1000) return `${ms}ms`;
+    const sec = ms / 1000;
+    if (sec < 60) return `${sec.toFixed(sec < 10 ? 1 : 0)}s`;
+    const m = Math.floor(sec / 60); const s = Math.round(sec % 60);
+    if (m < 60) return `${m}m ${s}s`;
+    const h = Math.floor(m / 60); const mm = m % 60;
+    return `${h}h ${mm}m`;
+  }
+
+  /** Display short name for a path: last two segments, or full if short. */
+  protected basename(p: string): string {
+    if (!p) return '';
+    if (p.length <= 40) return p;
+    const parts = p.split('/');
+    if (parts.length <= 2) return p;
+    return '…/' + parts.slice(-2).join('/');
   }
 
   /** Color-code tool names so the eye can scan a long call list quickly. */

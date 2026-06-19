@@ -87,6 +87,21 @@ export interface SessionDetailResponse {
   toolCalls: ClaudeToolCall[];
 }
 
+/**
+ * Rolled-up summary for the Session Detail "what did this session do" panel.
+ * Returned by GET /api/claude/session/:id/summary. Cheap to recompute on
+ * every page load — no caching needed.
+ */
+export interface SessionSummaryResponse {
+  sessionId: string;
+  byTool: Array<{ name: string; calls: number; totalBytes: number }>;
+  byModel: Array<{ model: string; prompts: number; cost: number }>;
+  slashCommands: Array<{ name: string; count: number }>;
+  skills: Array<{ name: string; count: number }>;
+  filesTouched: Array<{ path: string; ops: number; lastOp: string }>;
+  durationMs: number;
+}
+
 export interface HeatmapResponse {
   files: Array<{ path: string; calls: number; resultBytes: number }>;
   tools: Array<{ name: string; calls: number; resultBytes: number }>;

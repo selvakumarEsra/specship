@@ -222,6 +222,114 @@ export async function registerClaudeRoutes(app: FastifyInstance): Promise<void> 
     void tick();
   });
 
+  /**
+   * Session-level aggregation for the Session Detail "Session summary" panel.
+   * Three things callers can't cheaply derive client-side from the per-prompt
+   * list: tool usage rolled up by name, files touched across all turns, and
+   * slash-command / skill invocation counts (which require either a regex
+   * over every prompt's text or json_extract over every Skill tool input).
+   * Computed once per session-detail page load (and after refresh) — cheap
+   * enough to recompute on every call, no caching.
+   */
+  app.get('/api/claude/session/:id/summary', async (req: FastifyRequest<{ Params: { id: string } }>, reply) => {
+    const cg = requirePrimary(reply); if (!cg) return;
+    const db = getDb(cg);
+    const sessionId = req.params.id;
+
+    const session = db.prepare('SELECT id, started_at, ended_at FROM claude_sessions WHERE id = ?').get(sessionId) as { id: string; started_at: number | null; ended_at: number | null } | undefined;
+    if (!session) return reply.code(404).send({ error: 'session not found' });
+
+    // Tools used in this session, rolled up by name. Mirrors the heatmap
+    // tool query but scoped to one session, so the panel can answer "what
+    // did Claude DO in this session" at a glance.
+    const byTool = db.prepare(`
+      SELECT tool_name as name, COUNT(*) as calls, COALESCE(SUM(result_length), 0) as totalBytes
+      FROM claude_tool_calls
+      WHERE session_id = ?
+      GROUP BY tool_name
+      ORDER BY calls DESC
+    `).all(sessionId) as Array<{ name: string; calls: number; totalBytes: number }>;
+
+    // Models used. Most sessions stay on one model but sidechains can fan
+    // out to Haiku, so this surfaces multi-model spend that the session-level
+    // last_model column hides.
+    const byModel = db.prepare(`
+      SELECT model, COUNT(*) as prompts, COALESCE(SUM(cost_usd), 0) as cost
+      FROM claude_prompts
+      WHERE session_id = ? AND model IS NOT NULL
+      GROUP BY model
+      ORDER BY cost DESC
+    `).all(sessionId) as Array<{ model: string; prompts: number; cost: number }>;
+
+    // Files touched via Read/Edit/Write/NotebookEdit. input_summary IS the
+    // file path for those tools (set in the ingestor's parser). Group by
+    // path, count ops, also record which tool last touched it so the UI
+    // can show a "last op" hint (Read vs Edit).
+    const filesTouched = db.prepare(`
+      SELECT input_summary as path, COUNT(*) as ops,
+             (SELECT tool_name FROM claude_tool_calls AS inner_tc
+                WHERE inner_tc.session_id = tc.session_id
+                  AND inner_tc.input_summary = tc.input_summary
+                ORDER BY inner_tc.ts DESC LIMIT 1) as lastOp
+      FROM claude_tool_calls AS tc
+      WHERE tc.session_id = ?
+        AND tc.tool_name IN ('Read','Edit','Write','NotebookEdit','MultiEdit')
+        AND tc.input_summary != ''
+      GROUP BY tc.input_summary
+      ORDER BY ops DESC
+      LIMIT 30
+    `).all(sessionId) as Array<{ path: string; ops: number; lastOp: string }>;
+
+    // Skills invoked via the Skill tool. The ingestor stashes the
+    // JSON-serialized input under input_summary, so json_extract pulls the
+    // skill name straight out without needing the v7 input_json column to
+    // be backfilled.
+    const skills = db.prepare(`
+      SELECT
+        COALESCE(json_extract(input_summary, '$.skill'), json_extract(input_summary, '$.skill_name'), 'unknown') as name,
+        COUNT(*) as count
+      FROM claude_tool_calls
+      WHERE session_id = ? AND tool_name = 'Skill'
+      GROUP BY name
+      ORDER BY count DESC
+    `).all(sessionId) as Array<{ name: string; count: number }>;
+
+    // Slash commands invoked. Claude Code wraps each one in a
+    // <command-name>/foo</command-name> tag in the user-prompt text.
+    // Pull every prompt that has that tag and regex it client-side here
+    // (SQLite has no built-in regex). Cheap — most sessions have <50.
+    const taggedPrompts = db.prepare(`
+      SELECT text FROM claude_prompts WHERE session_id = ? AND text LIKE '%<command-name>%'
+    `).all(sessionId) as Array<{ text: string }>;
+    const cmdCounts = new Map<string, number>();
+    const cmdRe = /<command-name>([^<]+)<\/command-name>/g;
+    for (const { text } of taggedPrompts) {
+      if (!text) continue;
+      for (const m of text.matchAll(cmdRe)) {
+        const raw = m[1]?.trim();
+        if (!raw) continue;
+        cmdCounts.set(raw, (cmdCounts.get(raw) ?? 0) + 1);
+      }
+    }
+    const slashCommands = Array.from(cmdCounts.entries())
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count);
+
+    const durationMs = session.started_at && session.ended_at
+      ? Math.max(0, session.ended_at - session.started_at)
+      : 0;
+
+    return {
+      sessionId,
+      byTool,
+      byModel,
+      slashCommands,
+      skills,
+      filesTouched,
+      durationMs,
+    };
+  });
+
   app.get('/api/claude/heatmap', async (req: FastifyRequest<{ Querystring: { range?: string } }>, reply) => {
     const cg = requirePrimary(reply); if (!cg) return;
     const db = getDb(cg);

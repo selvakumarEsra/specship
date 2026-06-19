@@ -96,6 +96,74 @@
       </div>
     </div>
 
+    <!-- Session summary — top tools, slash commands, skills, files touched. -->
+    @if (summaryData(); as sum) {
+      @if (sum.byTool.length || sum.slashCommands.length || sum.skills.length || sum.filesTouched.length) {
+        <div class="session-summary">
+          @if (sum.byTool.length) {
+            <section class="summary-card">
+              <div class="summary-head">Top tools</div>
+              <div class="summary-body chip-grid">
+                @for (t of sum.byTool.slice(0, 8); track t.name) {
+                  <span class="tool-chip">
+                    <span class="dot" [style.background]="toolColor(t.name)"></span>
+                    <span class="mono">{{ t.name }}</span>
+                    <span class="muted mono">×{{ t.calls }}</span>
+                  </span>
+                }
+              </div>
+            </section>
+          }
+          @if (sum.slashCommands.length || sum.skills.length) {
+            <section class="summary-card">
+              <div class="summary-head">Commands & skills</div>
+              <div class="summary-body chip-grid">
+                @for (c of sum.slashCommands; track c.name) {
+                  <span class="slash-pill" title="Slash command invoked {{ c.count }}×">
+                    <span class="mono">{{ c.name }}</span>
+                    @if (c.count > 1) { <span class="muted mono">×{{ c.count }}</span> }
+                  </span>
+                }
+                @for (s of sum.skills; track s.name) {
+                  <span class="skill-pill" title="Skill invoked {{ s.count }}×">
+                    <span class="mono">⚡ {{ s.name }}</span>
+                    @if (s.count > 1) { <span class="muted mono">×{{ s.count }}</span> }
+                  </span>
+                }
+              </div>
+            </section>
+          }
+          @if (sum.byModel.length > 1) {
+            <section class="summary-card">
+              <div class="summary-head">Models</div>
+              <div class="summary-body chip-grid">
+                @for (m of sum.byModel; track m.model) {
+                  <span class="model-mini mono">{{ m.model }} · {{ m.prompts }}p · ${{ m.cost.toFixed(2) }}</span>
+                }
+              </div>
+            </section>
+          }
+          @if (sum.filesTouched.length) {
+            <section class="summary-card files-card">
+              <div class="summary-head">Files touched · {{ sum.filesTouched.length }}</div>
+              <div class="summary-body files-list">
+                @for (f of sum.filesTouched.slice(0, 10); track f.path) {
+                  <div class="file-row" [title]="f.path">
+                    <span class="file-op mono" [style.color]="toolColor(f.lastOp)">{{ f.lastOp }}</span>
+                    <span class="file-path mono">{{ basename(f.path) }}</span>
+                    <span class="muted mono">×{{ f.ops }}</span>
+                  </div>
+                }
+                @if (sum.filesTouched.length > 10) {
+                  <div class="muted xs">+{{ sum.filesTouched.length - 10 }} more</div>
+                }
+              </div>
+            </section>
+          }
+        </div>
+      }
+    }
+
     <!-- Prompt list controls -->
     <div class="filter-bar">
       <span class="muted xs">prompts · {{ groups().length }}</span>
@@ -120,14 +188,33 @@
             @if (g.prompt.is_sidechain === 1) {
               <span class="pill subagent">subagent</span>
             }
+            @if (g.slashCommand) {
+              <span class="slash-pill prompt-slash" title="Slash command">
+                <span class="mono">{{ g.slashCommand }}</span>
+              </span>
+            }
             <span class="prompt-text">
               @if (g.prompt.text) { {{ g.prompt.text.length > 140 ? g.prompt.text.slice(0, 140) + '…' : g.prompt.text }} }
               @else { <span class="muted">(no user text — assistant-only turn)</span> }
             </span>
             <span class="grow"></span>
+            @if (g.toolBreakdown.length > 0) {
+              <span class="tool-chip-strip">
+                @for (c of g.toolBreakdown.slice(0, 5); track c.name) {
+                  <span class="tool-chip-mini" [title]="c.name + ' × ' + c.count">
+                    <span class="dot" [style.background]="c.color"></span>
+                    <span class="mono">{{ c.name }}</span>
+                    <span class="mono muted">×{{ c.count }}</span>
+                  </span>
+                }
+                @if (g.toolBreakdown.length > 5) {
+                  <span class="tool-chip-mini muted mono" [title]="(g.toolBreakdown.length - 5) + ' more tool types'">+{{ g.toolBreakdown.length - 5 }}</span>
+                }
+              </span>
+            }
             <span class="prompt-meta mono muted">
-              {{ g.tools.length }} tool{{ g.tools.length === 1 ? '' : 's' }}
-              · {{ fmtTokens(g.totalTokens) }}t
+              @if (g.durationMs > 0) { {{ fmtDurationMs(g.durationMs) }} · }
+              {{ fmtTokens(g.totalTokens) }}t
               · ${{ g.prompt.cost_usd.toFixed(4) }}
             </span>
           </button>
@@ -172,6 +259,19 @@
                   }
                 </div>
               </section>
+
+              @if (g.filesTouched.length > 0) {
+                <section class="prompt-section">
+                  <div class="section-lbl">Files touched · {{ g.filesTouched.length }}</div>
+                  <div class="files-touched">
+                    @for (f of g.filesTouched; track f) {
+                      <div class="file-row" [title]="f">
+                        <span class="file-path mono">{{ f }}</span>
+                      </div>
+                    }
+                  </div>
+                </section>
+              }
 
               @if (g.tools.length > 0) {
                 <section class="prompt-section">
