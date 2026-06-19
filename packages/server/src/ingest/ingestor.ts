@@ -382,6 +382,16 @@ function processLines(
   let promptsInserted = 0;
   let toolCallsInserted = 0;
 
+  // Dedupe state for "user entries that share a promptId with one we
+  // already inserted." `insertedPromptIds` covers the in-batch case
+  // (sequential tool_results inside the same JSONL chunk); the prepared
+  // `existsPromptStmt` covers the cross-batch case (tool_results that
+  // arrive after the original prompt landed in a previous batch).
+  const insertedPromptIds = new Set<string>();
+  const existsPromptStmt = db.prepare(
+    `SELECT 1 FROM claude_prompts WHERE id = ?`
+  );
+
   // Track active prompt context. Only user entries carry a `promptId` in the
   // JSONL — assistant entries belong to whichever prompt the most-recent user
   // entry started. When we resume from a saved offset, the first lines in the
@@ -436,19 +446,35 @@ function processLines(
 
       if (promptId) {
         activePromptId = promptId;
-        // Initial insert with zero usage; usage fills in when assistant turns land.
-        insPrompt.run(
-          promptId, sessionId,
-          text || null,
-          ts,
-          entry.leafUuid ?? null,
-          null,
-          0, 0, 0, 0, 0,
-          isSidechain
-        );
-        promptsInserted++;
-        // Bump session prompt count immediately (cost accrues later).
-        incSessionAggregates.run(1, 0, 0, 0, 0, 0, sessionId);
+        // Claude Code emits MULTIPLE user-type entries per logical prompt:
+        // the initial user message + one entry per tool_result the assistant
+        // requested. All share the same `promptId`. The original ingestor
+        // ran insPrompt + bumped prompt_count for every one of them — so a
+        // 50-prompt session with ~15 tool calls each landed in the DB as
+        // 800+ "prompts" and the per-prompt token columns were repeatedly
+        // reset to 0 via the ON CONFLICT DO UPDATE clause. Detect follow-up
+        // tool_result entries by checking whether the prompt row already
+        // exists (in this batch or persisted from an earlier batch) and
+        // skip both the upsert and the aggregate bump for them.
+        const isFollowUp =
+          insertedPromptIds.has(promptId) ||
+          !!existsPromptStmt.get(promptId);
+
+        if (!isFollowUp) {
+          // First time we've seen this promptId — INSERT, count it, mark seen.
+          insPrompt.run(
+            promptId, sessionId,
+            text || null,
+            ts,
+            entry.leafUuid ?? null,
+            null,
+            0, 0, 0, 0, 0,
+            isSidechain
+          );
+          promptsInserted++;
+          insertedPromptIds.add(promptId);
+          incSessionAggregates.run(1, 0, 0, 0, 0, 0, sessionId);
+        }
       }
 
       // Handle tool_result blocks: scan content for tool_result entries and

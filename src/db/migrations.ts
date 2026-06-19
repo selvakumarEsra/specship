@@ -9,7 +9,7 @@ import { SqliteDatabase } from './sqlite-adapter';
 /**
  * Current schema version
  */
-export const CURRENT_SCHEMA_VERSION = 7;
+export const CURRENT_SCHEMA_VERSION = 8;
 
 /**
  * Migration definition
@@ -383,6 +383,22 @@ const migrations: Migration[] = [
       if (!hasColumn(db, 'claude_tool_calls', 'input_json')) {
         db.exec(`ALTER TABLE claude_tool_calls ADD COLUMN input_json TEXT;`);
       }
+    },
+  },
+  {
+    version: 8,
+    description:
+      'Backfill claude_sessions.prompt_count from actual claude_prompts rows. The ingestor was bumping prompt_count once per user-type JSONL entry, but Claude Code emits one user entry per tool_result follow-up — all sharing the original promptId. A typical 50-prompt session landed with 800+ in prompt_count, making the Sessions list show inflated numbers vs. the actual rows visible in Session Detail. Re-run-safe.',
+    up: (db) => {
+      // No schema change — purely a data correction. Idempotent because
+      // the source-of-truth is COUNT(*) over claude_prompts, so running
+      // the migration twice converges to the same value.
+      db.exec(`
+        UPDATE claude_sessions
+        SET prompt_count = (
+          SELECT COUNT(*) FROM claude_prompts p WHERE p.session_id = claude_sessions.id
+        );
+      `);
     },
   },
 ];
