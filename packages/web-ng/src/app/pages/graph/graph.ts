@@ -11,6 +11,7 @@
  *   4. Clicking any neighbor in the canvas recenters the view on it.
  */
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { Router } from '@angular/router';
 import { ApiService } from '../../api/api';
 import { apiResource } from '../../api/resource';
 import { ProjectsService } from '../../api/projects';
@@ -20,15 +21,21 @@ import type {
   GraphNodeResponse,
   GraphNodeDetail,
   GraphNode,
+  GraphHealthResponse,
   StatusResponse,
 } from '../../api/types';
 import { CanvasEdge, CanvasNode, GraphCanvas } from '../../charts/graph-canvas/graph-canvas';
+import { Icon } from '../../shell/icon/icon';
+import { Segmented, type SegmentedOption } from '../../ui/segmented';
+import { StatePill } from '../../ui/state-pill';
+import { CopyBtn } from '../../ui/copy-btn';
 
 type KindKey = 'code' | 'spec' | 'route' | 'test';
+type LayoutMode = 'hierarchical' | 'force' | 'anchored';
 
 @Component({
   selector: 'app-graph',
-  imports: [GraphCanvas, PickProjectEmpty],
+  imports: [GraphCanvas, PickProjectEmpty, Icon, Segmented, StatePill, CopyBtn],
   templateUrl: './graph.html',
   styleUrl: './graph.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -36,8 +43,18 @@ type KindKey = 'code' | 'spec' | 'route' | 'test';
 export class Graph {
   private readonly api = inject(ApiService);
   private readonly projects = inject(ProjectsService);
+  private readonly router = inject(Router);
 
   protected readonly status = apiResource<StatusResponse>(this.api, () => `/api/status${this.projects.projectQuery()}`);
+  protected readonly health = apiResource<GraphHealthResponse>(this.api, () => `/api/graph/health${this.projects.projectQuery()}`);
+
+  // Layout mode
+  protected readonly layoutMode = signal<LayoutMode>('hierarchical');
+  protected readonly layoutOptions: SegmentedOption[] = [
+    { value: 'hierarchical', label: 'Hierarchical' },
+    { value: 'force', label: 'Force' },
+    { value: 'anchored', label: 'Anchored' },
+  ];
 
   // Search box state. Debounced into searchQuery for the API.
   protected readonly searchInput = signal('');
@@ -136,17 +153,56 @@ export class Graph {
   protected readonly visibleNodes = computed(() => this.canvasData().nodes);
   protected readonly visibleEdges = computed(() => this.canvasData().edges);
 
-  // Counts for the kind chips.
+  /** Hidden id set passed to canvas (for kind filter dimming) */
+  protected readonly hiddenIds = computed<Set<string>>(() => {
+    const f = this.filters();
+    const h = new Set<string>();
+    for (const n of this.canvasData().nodes) {
+      if (!f[kindOf(n.kind)]) h.add(n.id);
+    }
+    return h;
+  });
+
+  // Counts for the kind chips (from current canvas data).
   protected readonly kindCounts = computed<Record<KindKey, number>>(() => {
     const c: Record<KindKey, number> = { code: 0, spec: 0, route: 0, test: 0 };
     for (const n of this.canvasData().nodes) c[kindOf(n.kind)]++;
     return c;
   });
 
+  // --- Overview panel (shown when nothing selected) -------------------------
+
+  /** Node counts by kind from the status endpoint */
+  protected readonly overviewKindCounts = computed<Record<KindKey, number>>(() => {
+    const data = this.status.state().data;
+    if (!data?.nodesByKind) return { code: 0, spec: 0, route: 0, test: 0 };
+    const m = data.nodesByKind;
+    const code = (m['function'] ?? 0) + (m['method'] ?? 0) + (m['class'] ?? 0)
+      + (m['variable'] ?? 0) + (m['constant'] ?? 0) + (m['type_alias'] ?? 0)
+      + (m['interface'] ?? 0) + (m['struct'] ?? 0) + (m['enum'] ?? 0)
+      + (m['property'] ?? 0) + (m['field'] ?? 0) + (m['file'] ?? 0)
+      + (m['module'] ?? 0) + (m['namespace'] ?? 0) + (m['component'] ?? 0);
+    return {
+      code,
+      spec: m['spec'] ?? 0,
+      route: m['route'] ?? 0,
+      test: m['test'] ?? 0,
+    };
+  });
+
   protected readonly kindKeys: KindKey[] = ['code', 'spec', 'route', 'test'];
 
   protected isFilterActive(k: KindKey): boolean { return this.filters()[k]; }
   protected countFor(k: KindKey): number { return this.kindCounts()[k]; }
+
+  protected chipColor(k: KindKey): string {
+    switch (k) {
+      case 'spec':  return 'var(--node-spec)';
+      case 'route': return 'var(--node-route)';
+      case 'test':  return 'var(--node-test)';
+      default:      return 'var(--node-code)';
+    }
+  }
 
   // --- Actions --------------------------------------------------------------
 
@@ -181,12 +237,65 @@ export class Graph {
 
   protected recenter(): void { this.fitKey.update((v) => v + 1); }
 
-  protected clearSelection(): void { this.selectedSymbol.set(null); }
+  protected clearSelection(): void {
+    this.selectedSymbol.set(null);
+    this.searchInput.set('');
+  }
 
-  protected shortPath(p: string): string { return shortPath(p); }
+  protected onLayoutChange(mode: string): void {
+    this.layoutMode.set(mode as LayoutMode);
+    this.fitKey.update((k) => k + 1);
+  }
+
+  protected shortPath(p: string | null | undefined): string { return shortPath(p); }
+  protected fileName(p: string | null | undefined): string {
+    if (!p) return '';
+    return p.split('/').pop() ?? '';
+  }
 
   protected kindLabel(k: string): string {
     return k.charAt(0).toUpperCase() + k.slice(1);
+  }
+
+  protected navigateToSpecs(): void {
+    this.router.navigate(['/specs']);
+  }
+
+  protected navigateToDrift(): void {
+    this.router.navigate(['/drift']);
+  }
+
+  /** Color for any arbitrary node kind — used by hub rows in the overview panel. */
+  protected nodeColor(kind: string): string {
+    if (kind === 'spec') return 'var(--node-spec)';
+    if (kind === 'route') return 'var(--node-route)';
+    if (kind === 'test') return 'var(--node-test)';
+    return 'var(--node-code)';
+  }
+
+  /** Select a hub node by name (mirrors pickResult). */
+  protected pickHub(hub: { name: string }): void {
+    this.selectedSymbol.set(hub.name);
+    this.fitKey.update((k) => k + 1);
+  }
+
+  /** Node color for the detail panel header dot + kind pill.
+   *  For spec nodes, check linked spec health to pick drift/broken color.
+   *  (GraphNodeDetail has no `state` field — state lives on SpecLink.)
+   */
+  protected detailColor(d: GraphNodeDetail): string {
+    if (d.kind === 'spec') {
+      // Derive color from the aggregate link health
+      const links = d.linkedSpecs ?? [];
+      const hasBroken = links.some((l) => l.state === 'broken' || l.state === 'orphaned');
+      const hasDrifted = !hasBroken && links.some((l) => l.state === 'drifted');
+      if (hasBroken) return 'var(--error)';
+      if (hasDrifted) return 'var(--warn)';
+      return 'var(--node-spec)';
+    }
+    if (d.kind === 'test') return 'var(--node-test)';
+    if (d.kind === 'route') return 'var(--node-route)';
+    return 'var(--node-code)';
   }
 }
 

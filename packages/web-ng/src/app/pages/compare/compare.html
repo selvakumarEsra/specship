@@ -1,11 +1,8 @@
 <div class="page scroll-y">
-  <header class="page-head">
-    <div class="title-block">
-      <div class="title">Compare projects</div>
-      <div class="sub">Which projects are cost-efficient vs hungry</div>
-    </div>
-  </header>
+  <!-- Page head -->
+  <app-page-head icon="compare" title="Compare projects" sub="Which projects are cost-efficient vs hungry" />
 
+  <!-- Project filter chips -->
   <div class="chip-row">
     @for (p of all(); track p.id) {
       <button
@@ -16,34 +13,89 @@
     }
   </div>
 
+  <!-- Best project callout -->
   @if (best()) {
-    <div class="best-card">
-      <span class="best-icon">✨</span>
-      <div class="grow">
-        <span class="bold">Most efficient:</span>
-        <span class="mono best-name">{{ best()!.name }}</span>
-        <span class="secondary"> — {{ (best()!.cacheHit * 100) | number:'1.0-0' }}% cache hit, {{ fmt$(best()!.avgCost) }} avg/session</span>
+    <div class="best-card card card-pad" style="margin-bottom: 14px; border-color: rgba(70,194,107,0.3); background: var(--success-soft); display: flex; gap: 12px; align-items: center;">
+      <div style="color: var(--success);">
+        <app-icon name="sparkles" [size]="18" />
       </div>
+      <div class="grow">
+        <span style="font-weight: 600; font-size: 13px;">Most efficient: </span>
+        <span class="mono" style="color: var(--success);">{{ best()!.name }}</span>
+        <span class="secondary" style="font-size: 12.5px;"> — {{ (best()!.cacheHit * 100) | number:'1.0-0' }}% cache hit, {{ fmt$(best()!.avgCost) }} avg/session</span>
+      </div>
+      <button class="btn btn-secondary btn-sm">
+        <app-icon name="external" [size]="12" />Export report
+      </button>
     </div>
   }
 
-  <div class="card list">
-    <div class="header-row">
+  <!-- Data table with drift + top tools columns -->
+  <div class="card" style="overflow: hidden; margin-bottom: 14px;">
+    <div class="row header-row">
       <span class="grow">Project</span>
       <span class="num">Cost</span>
       <span class="num">Sessions</span>
       <span class="num">Avg</span>
       <span class="num">Cache</span>
-      <span class="num">Prompts</span>
+      <span class="num" style="width: 60px;">Drift</span>
+      <span style="width: 150px; text-align: right; font-size: 10.5px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600;">Top tools</span>
     </div>
     @for (p of rows(); track p.id) {
-      <div class="data-row" [class.best-row]="best()?.id === p.id">
-        <span class="mono grow project-name">{{ p.name }}</span>
-        <span class="mono num">{{ fmt$(p.cost) }}</span>
-        <span class="mono num">{{ p.sessions }}</span>
-        <span class="mono num">{{ fmt$(p.avgCost) }}</span>
-        <span class="mono num" [style.color]="cacheColor(p.cacheHit)">{{ (p.cacheHit * 100) | number:'1.0-0' }}%</span>
-        <span class="mono num muted">{{ p.prompts }}</span>
+      <div class="row data-row" [class.best-row]="best()?.id === p.id">
+        <span class="mono grow project-name" [style.color]="best()?.id === p.id ? 'var(--success)' : 'var(--text-primary)'">{{ p.name }}</span>
+        <span class="mono tabular num">{{ fmt$(p.cost) }}</span>
+        <span class="mono tabular num">{{ p.sessions }}</span>
+        <span class="mono tabular num">{{ fmt$(p.avgCost) }}</span>
+        <span class="mono tabular num" [style.color]="cacheColor(p.cacheHit)">{{ (p.cacheHit * 100) | number:'1.0-0' }}%</span>
+        <!-- Drift: not in CompareResponse — show '—' -->
+        <span class="mono tabular" style="width: 60px; text-align: right; font-size: 12px; color: var(--text-secondary);">—</span>
+        <!-- Top tools: real data from topTools[] -->
+        <span class="row gap-4" style="width: 150px; justify-content: flex-end; flex-wrap: wrap;">
+          @if (p.topTools.length > 0) {
+            @for (tool of p.topTools; track tool) {
+              <code class="tool-chip mono">{{ tool }}</code>
+            }
+          } @else {
+            <span class="mono" style="font-size: 12px; color: var(--text-secondary);">—</span>
+          }
+        </span>
+      </div>
+    }
+  </div>
+
+  <!-- Cost by model per project (stacked bars) -->
+  <div class="card card-pad">
+    <div class="row" style="justify-content: space-between; margin-bottom: 14px;">
+      <div class="row gap-8">
+        <app-icon name="dollar" [size]="14" style="color: var(--accent);" />
+        <span style="font-weight: 600; font-size: 12.5px;">Cost by model per project</span>
+      </div>
+      <!-- Legend: models actually present in visible rows -->
+      <div class="row gap-12">
+        @for (entry of legend(); track entry.label) {
+          <span class="row gap-4 muted" style="font-size: 10.5px;">
+            <span style="width: 9px; height: 9px; border-radius: 3px;" [style.background]="entry.color"></span>
+            {{ entry.label }}
+          </span>
+        }
+      </div>
+    </div>
+    <!-- Stacked bars scaled to the highest-cost visible project -->
+    @for (p of rows(); track p.id) {
+      <div class="stacked-row">
+        <span class="mono stacked-lbl">{{ p.name }}</span>
+        <div class="stacked-bars">
+          @for (seg of segments(p); track seg.model) {
+            <div
+              class="stacked-seg"
+              [style.width.%]="seg.widthPct"
+              [style.background]="seg.color"
+              [title]="seg.label + ': ' + fmt$(seg.cost)"
+            ></div>
+          }
+        </div>
+        <span class="mono tabular muted stacked-total" style="font-size: 11px;">{{ fmt$(p.cost) }}</span>
       </div>
     }
   </div>

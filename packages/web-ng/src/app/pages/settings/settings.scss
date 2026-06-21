@@ -1,28 +1,128 @@
-:host { display: contents; }
-.page { flex: 1; padding: 18px; max-width: 760px; }
-.title { font-size: var(--fs-title); font-weight: 600; letter-spacing: -0.01em; }
-.sub { color: var(--text-secondary); margin-top: 2px; }
-.page-head { margin-bottom: 16px; }
-.muted { color: var(--text-muted); font-size: 11.5px; }
-.mono { font-family: var(--font-mono); }
+:host { display: flex; flex: 1; min-height: 0; }
 
-.setting-card {
-  background: var(--bg-panel);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--r-lg);
-  padding: 16px;
-  margin-bottom: 12px;
+.settings-page {
+  flex: 1;
+  padding: 18px;
+  overflow-y: auto;
 }
-.card-title { font-weight: 600; font-size: 13px; margin-bottom: 12px; }
-.control-row { display: flex; gap: 12px; align-items: center; }
-.lbl { color: var(--text-secondary); font-size: 12.5px; width: 110px; }
-.val { font-size: 12px; color: var(--text-primary); }
-.seg { display: inline-flex; padding: 2px; gap: 2px; background: var(--bg-canvas); border: 1px solid var(--border-subtle); border-radius: 7px; }
-.seg button {
-  border: none; cursor: pointer; padding: 4px 11px; font-size: 11.5px;
-  background: transparent; color: var(--text-muted);
-  border-radius: 5px; font-family: inherit;
+
+.settings-body {
+  max-width: 720px;
 }
-.seg button.active { background: var(--bg-elevated); color: var(--text-primary); }
-.hint { margin-top: 10px; color: var(--text-muted); font-size: 11.5px; line-height: 1.6; }
-.hint code { background: var(--bg-canvas); padding: 1px 6px; border-radius: 4px; border: 1px solid var(--border-subtle); }
+
+// ---- section card ----------------------------------------------------------
+.section-card {
+  margin-bottom: 14px;
+}
+
+.section-head {
+  align-items: center;
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.section-title {
+  font-weight: 600;
+  font-size: 13.5px;
+}
+
+// ---- field -----------------------------------------------------------------
+.field {
+  margin-bottom: 16px;
+}
+.field-label {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 500;
+  margin-bottom: 6px;
+  color: var(--text-primary);
+}
+.field-hint {
+  color: var(--text-muted);
+  font-size: 11px;
+  margin-top: 5px;
+}
+
+// ---- toggle ----------------------------------------------------------------
+.toggle-row {
+  align-items: center;
+  padding: 8px 0;
+}
+.toggle-label {
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.toggle-btn {
+  width: 36px;
+  height: 20px;
+  border-radius: 999px;
+  border: none;
+  cursor: pointer;
+  padding: 2px;
+  background: var(--bg-elevated);
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  transition: background 120ms;
+  flex-shrink: 0;
+  &.on { background: var(--accent); justify-content: flex-end; }
+  &:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+}
+.toggle-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  flex-shrink: 0;
+}
+
+// ---- pricing ---------------------------------------------------------------
+.pricing-header {
+  font-size: 10.5px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.pricing-row {
+  padding: 6px 0;
+  border-top: 1px solid var(--border-subtle);
+  align-items: center;
+  gap: 10px;
+}
+.price-col {
+  width: 110px;
+  text-align: right;
+}
+.price-input {
+  width: 100px;
+  text-align: right;
+  padding: 4px 8px;
+}
+
+// ---- about -----------------------------------------------------------------
+.about-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 20px;
+}
+.about-row {
+  justify-content: space-between;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.status-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
+// shared
+.muted { color: var(--text-muted); }
+.mono { font-family: var(--font-mono); }
+.grow { flex: 1; }

@@ -14,9 +14,9 @@
           <path
             [attr.d]="d"
             fill="none"
-            [attr.stroke]="edgeHot(e) ? 'var(--accent)' : 'rgba(150,160,180,0.34)'"
-            [attr.stroke-width]="edgeHot(e) ? 1.8 : 1.2"
-            [attr.opacity]="edgeHot(e) ? 0.95 : 0.7"
+            [attr.stroke]="edgeStroke(e)"
+            [attr.stroke-width]="edgeStrokeWidth(e)"
+            [attr.opacity]="edgeOpacity(e)"
             [attr.stroke-dasharray]="e.kind === 'synth' ? '5 4' : null"
             [attr.marker-end]="edgeHot(e) ? 'url(#gc-arrow-hi)' : 'url(#gc-arrow)'"
           />
@@ -32,6 +32,7 @@
     @for (n of positioned(); track n.id) {
       @let b = box(n);
       @let col = nodeColor(n);
+      @let sc = nodeScale(n);
       <div
         class="gc-node"
         [attr.data-node]="n.id"
@@ -47,36 +48,91 @@
           <div
             class="gc-dot"
             [style.background]="col"
-            [style.box-shadow]="isSelected(n) ? '0 0 0 4px ' + col + '44, 0 0 14px ' + col : '0 0 8px ' + col + '66'"
+            [style.transform]="'scale(' + sc + ')'"
+            [style.box-shadow]="isSelected(n)
+              ? '0 0 0 4px ' + col + '44, 0 0 14px ' + col
+              : (isHovered(n) ? '0 0 0 3px ' + col + '33' : '0 0 8px ' + col + '66')"
           ></div>
+          @if (isHovered(n) || isSelected(n)) {
+            <div class="gc-tooltip gc-tooltip-top">{{ n.label }}</div>
+          }
         } @else {
           <div
             class="gc-chip"
             [class.is-rect]="b.shape === 'rect'"
             [style.min-width.px]="b.w"
+            [style.transform]="'scale(' + sc + ')'"
+            [style.transform-origin]="'center center'"
             [style.background]="'color-mix(in srgb, ' + col + ' 16%, var(--bg-panel))'"
-            [style.border-color]="isSelected(n) ? col : 'color-mix(in srgb, ' + col + ' 45%, transparent)'"
-            [style.box-shadow]="isSelected(n) ? '0 0 0 4px ' + col + '33, 0 4px 16px ' + col + '44' : '0 2px 8px rgba(0,0,0,0.4)'"
+            [style.border-color]="(isSelected(n) || (n.kind === 'spec' && (n.state === 'drifted' || n.state === 'broken' || n.state === 'orphaned'))) ? col : 'color-mix(in srgb, ' + col + ' 45%, transparent)'"
+            [style.box-shadow]="isSelected(n)
+              ? '0 0 0 4px ' + col + '33, 0 4px 16px ' + col + '44'
+              : (isHovered(n) ? '0 0 0 3px ' + col + '22' : '0 2px 8px rgba(0,0,0,0.4)')"
           >
-            <span class="gc-chip-bullet" [style.background]="col" [style.box-shadow]="'0 0 6px ' + col"></span>
+            <span
+              class="gc-chip-bullet"
+              [style.background]="col"
+              [style.box-shadow]="'0 0 6px ' + col"
+            ></span>
             {{ n.label }}
             @if (n.state === 'drifted' || n.state === 'broken' || n.state === 'orphaned') {
-              <span class="gc-chip-state" [style.background]="n.state === 'drifted' ? 'var(--warn)' : 'var(--error)'"></span>
+              <span
+                class="gc-chip-state"
+                [style.background]="n.state === 'drifted' ? 'var(--warn)' : 'var(--error)'"
+              ></span>
             }
           </div>
-        }
-        @if ((isHovered(n) || isSelected(n)) && n.sub) {
-          <div class="gc-tooltip">{{ n.sub }}</div>
+          @if (isHovered(n) && (n.sub || n.kind === 'file')) {
+            <div class="gc-tooltip">{{ n.sub }}</div>
+          }
         }
       </div>
     }
   </div>
 
-  <div class="gc-controls">
-    <button type="button" class="gc-btn" (click)="zoom(1.2)" aria-label="Zoom in">+</button>
-    <button type="button" class="gc-btn" (click)="zoom(1 / 1.2)" aria-label="Zoom out">−</button>
-    <button type="button" class="gc-btn" (click)="fitView()" aria-label="Fit to view">⤢</button>
-  </div>
+  @if (interactive()) {
+    <!-- Zoom controls (bottom-right) -->
+    <div class="gc-controls">
+      <button type="button" class="gc-btn btn btn-secondary" (click)="zoom(1.2)" aria-label="Zoom in">
+        <app-icon name="plus" [size]="15" />
+      </button>
+      <button type="button" class="gc-btn btn btn-secondary" (click)="zoom(1 / 1.2)" aria-label="Zoom out">
+        <app-icon name="minus" [size]="15" />
+      </button>
+      <button type="button" class="gc-btn btn btn-secondary" (click)="fitView()" aria-label="Fit to view" title="Fit">
+        <app-icon name="maximize" [size]="15" />
+      </button>
+    </div>
 
-  <div class="gc-zoom-label">{{ zoomLabel() }}</div>
+    <!-- Minimap + zoom% (bottom-left) -->
+    <div class="gc-bottom-left">
+      @if (positioned().length > 0) {
+        <svg class="gc-minimap" width="138" height="88">
+          @for (mn of minimapNodes(); track $index) {
+            <circle
+              [attr.cx]="mn.cx"
+              [attr.cy]="mn.cy"
+              [attr.r]="mn.kind === 'route' ? 1.6 : 2.1"
+              [attr.fill]="minimapNodeColor(mn.kind, mn.state)"
+              opacity="0.9"
+            />
+          }
+          @if (minimapViewport(); as vp) {
+            <rect
+              [attr.x]="vp.x"
+              [attr.y]="vp.y"
+              [attr.width]="vp.w"
+              [attr.height]="vp.h"
+              fill="var(--accent)"
+              fill-opacity="0.12"
+              stroke="var(--accent)"
+              stroke-width="1"
+              rx="2"
+            />
+          }
+        </svg>
+      }
+      <div class="gc-zoom-label">{{ zoomLabel() }}</div>
+    </div>
+  }
 </div>

@@ -19,27 +19,55 @@ import {
   inject,
   signal,
 } from '@angular/core';
-import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { JsonPipe } from '@angular/common';
+import { ActivatedRoute, Router } from '@angular/router';
 import { ApiService } from '../../api/api';
 import { ProjectsService } from '../../api/projects';
+import { StatePill } from '../../ui/state-pill';
+import { Icon } from '../../shell/icon/icon';
 import type { RunDetailResponse, WorkflowEvent, WorkflowRun } from '../../api/types';
 
 type RunStatus = WorkflowRun['status'];
 
-interface StepRow {
+// ── DAG node / edge types ──────────────────────────────────────────────────
+
+interface DagNode {
   id: string;
-  kind?: string;
-  status: 'pending' | 'running' | 'completed' | 'failed' | 'skipped';
-  startedAt?: number;
-  endedAt?: number;
-  output?: unknown;
-  error?: string;
+  label: string;
+  kind: string;
+  /** status derived from events */
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'paused' | 'skipped';
+  /** layout coords in DAG_W × DAG_H space */
+  x: number;
+  y: number;
 }
+
+interface DagEdge {
+  from: string;
+  to: string;
+}
+
+// ── Tab config ─────────────────────────────────────────────────────────────
+
+export interface TabConfig { id: string; label: string; }
+
+// ── event colour map (mirrors design EV_COLOR) ────────────────────────────
+
+const EV_COLOR: Record<string, string> = {
+  step_started: 'var(--info)',
+  step_completed: 'var(--success)',
+  tool_called: 'var(--node-code)',
+  artifact_created: 'var(--node-route)',
+  approval_requested: 'var(--warn)',
+  run_started: 'var(--info)',
+  run_completed: 'var(--success)',
+  run_failed: 'var(--error)',
+  run_cancelled: 'var(--text-muted)',
+  run_paused: 'var(--warn)',
+};
 
 @Component({
   selector: 'app-run-detail',
-  imports: [RouterLink, JsonPipe],
+  imports: [StatePill, Icon],
   templateUrl: './run-detail.html',
   styleUrl: './run-detail.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -51,6 +79,7 @@ export class RunDetail implements OnInit, OnDestroy {
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
 
+  // ── Core signals (backend wiring preserved) ──────────────────────────────
   protected readonly runId = signal<string>('');
   protected readonly run = signal<WorkflowRun | null>(null);
   protected readonly events = signal<WorkflowEvent[]>([]);
@@ -68,39 +97,110 @@ export class RunDetail implements OnInit, OnDestroy {
     return s === 'completed' || s === 'failed' || s === 'cancelled';
   });
 
-  // Derive per-step rows from the event log.
-  protected readonly steps = computed<StepRow[]>(() => {
-    const rows = new Map<string, StepRow>();
-    for (const e of this.events()) {
-      const sid = (e.data?.['stepId'] as string | undefined) ?? e.stepId ?? '';
-      if (!sid) continue;
-      if (!rows.has(sid)) rows.set(sid, { id: sid, status: 'pending' });
-      const r = rows.get(sid)!;
-      if (e.eventType === 'step_started') {
-        r.status = 'running';
-        r.startedAt = e.createdAt;
-        r.kind = (e.data?.['kind'] as string | undefined) ?? r.kind;
-      } else if (e.eventType === 'step_completed') {
-        r.status = 'completed';
-        r.endedAt = e.createdAt;
-        r.output = e.data?.['output'];
-      } else if (e.eventType === 'step_failed') {
-        r.status = 'failed';
-        r.endedAt = e.createdAt;
-        r.error = (e.data?.['error'] as string | undefined) ?? 'failed';
-      } else if (e.eventType === 'step_skipped') {
-        r.status = 'skipped';
-        r.endedAt = e.createdAt;
-      }
-    }
-    return Array.from(rows.values());
-  });
-
   protected readonly approvalPending = computed(() => {
-    const last = [...this.events()].reverse().find((e) => e.eventType === 'approval_requested' || e.eventType === 'approval_granted' || e.eventType === 'approval_rejected');
+    const last = [...this.events()].reverse().find(
+      (e) => e.eventType === 'approval_requested' || e.eventType === 'approval_granted' || e.eventType === 'approval_rejected',
+    );
     return last?.eventType === 'approval_requested';
   });
 
+  // ── Tab state ────────────────────────────────────────────────────────────
+  readonly TABS: TabConfig[] = [
+    { id: 'events', label: 'Events' },
+    { id: 'artifacts', label: 'Artifacts' },
+    { id: 'cost', label: 'Cost' },
+  ];
+  protected readonly activeTab = signal<string>('events');
+
+  // ── DAG layout constants ─────────────────────────────────────────────────
+  readonly DAG_W = 920;
+  readonly DAG_H = 180;
+
+  /**
+   * Build DAG nodes from the workflow definition nodes list (on the run).
+   * The WorkflowRun.metadata may carry `dag` info — fall back to steps
+   * derived from events.
+   */
+  protected readonly dagNodes = computed<DagNode[]>(() => {
+    const r = this.run();
+    // Derive step ids + statuses from the events
+    const stepStatusMap = this.stepStatusMap();
+
+    // If the run has metadata.nodes use those for layout; otherwise build from steps
+    const metaNodes = r?.metadata?.['nodes'] as Array<{ id: string; kind?: string }> | undefined;
+    if (metaNodes?.length) {
+      const cols = this.layoutCols(metaNodes.map((n) => n.id));
+      return metaNodes.map((n, i) => {
+        const col = cols[i] ?? i;
+        return {
+          id: n.id,
+          label: n.id,
+          kind: n.kind ?? 'agent',
+          status: stepStatusMap[n.id] ?? 'pending',
+          x: col * 160 + 20,
+          y: 72,
+        };
+      });
+    }
+
+    // Fall back: unique step ids from events, auto-laid out in a row
+    const stepIds = [...new Set(
+      this.events()
+        .map((e) => (e.data?.['stepId'] as string | undefined) ?? e.stepId ?? '')
+        .filter(Boolean),
+    )];
+    if (!stepIds.length) return [];
+    const spacing = Math.min(160, (this.DAG_W - 40) / Math.max(stepIds.length, 1));
+    return stepIds.map((id, i) => ({
+      id,
+      label: id,
+      kind: (this.events().find((e) => ((e.data?.['stepId'] as string | undefined) ?? e.stepId) === id)?.stepKind) ?? 'step',
+      status: stepStatusMap[id] ?? 'pending',
+      x: i * spacing + 20,
+      y: 72,
+    }));
+  });
+
+  protected readonly dagEdges = computed<DagEdge[]>(() => {
+    const r = this.run();
+    const metaEdges = r?.metadata?.['edges'] as Array<{ from: string; to: string }> | undefined;
+    if (metaEdges?.length) return metaEdges;
+    // Auto-chain nodes sequentially
+    const nodes = this.dagNodes();
+    return nodes.slice(0, -1).map((n, i) => ({ from: n.id, to: nodes[i + 1].id }));
+  });
+
+  protected readonly nodeMap = computed<Record<string, DagNode>>(() => {
+    const m: Record<string, DagNode> = {};
+    for (const n of this.dagNodes()) m[n.id] = n;
+    return m;
+  });
+
+  protected readonly selectedNode = signal<string>('');
+
+  // ── Derived step-status map from events ─────────────────────────────────
+  private readonly stepStatusMap = computed<Record<string, DagNode['status']>>(() => {
+    const m: Record<string, DagNode['status']> = {};
+    for (const e of this.events()) {
+      const sid = (e.data?.['stepId'] as string | undefined) ?? e.stepId ?? '';
+      if (!sid) continue;
+      switch (e.eventType) {
+        case 'step_started': m[sid] = 'running'; break;
+        case 'step_completed': m[sid] = 'completed'; break;
+        case 'step_failed': m[sid] = 'failed'; break;
+        case 'step_skipped': m[sid] = 'skipped'; break;
+      }
+    }
+    // If run is paused, last running step is paused
+    if (this.status() === 'paused') {
+      for (const id of Object.keys(m)) {
+        if (m[id] === 'running') m[id] = 'paused';
+      }
+    }
+    return m;
+  });
+
+  // ── Lifecycle ────────────────────────────────────────────────────────────
   ngOnInit(): void {
     const id = this.route.snapshot.paramMap.get('id') ?? '';
     if (!id) {
@@ -119,7 +219,9 @@ export class RunDetail implements OnInit, OnDestroy {
 
   private async bootstrap(id: string): Promise<void> {
     try {
-      const data = await this.api.get<RunDetailResponse>(`/api/workflows/runs/${encodeURIComponent(id)}${this.projects.projectQuery()}`);
+      const data = await this.api.get<RunDetailResponse>(
+        `/api/workflows/runs/${encodeURIComponent(id)}${this.projects.projectQuery()}`,
+      );
       this.run.set(data.run);
       this.events.set(data.events ?? []);
       this.loading.set(false);
@@ -141,15 +243,13 @@ export class RunDetail implements OnInit, OnDestroy {
           void this.refreshRun();
           return;
         }
-        // Server sends the full WorkflowEvent row as data for every event type.
         const ev = payload as Partial<WorkflowEvent> | null;
         if (!ev || typeof ev !== 'object' || ev.id == null) return;
         this.streamStatus.set('live');
         this.appendEvent(ev as WorkflowEvent);
-        // Run-level events update the run snapshot too.
         if (type.startsWith('run_')) void this.refreshRun();
       },
-      () => { this.streamStatus.set('error'); }
+      () => { this.streamStatus.set('error'); },
     );
     this.closeStream = close;
     this.destroyRef.onDestroy(() => close());
@@ -168,13 +268,14 @@ export class RunDetail implements OnInit, OnDestroy {
     try {
       const id = this.runId();
       if (!id) return;
-      const data = await this.api.get<RunDetailResponse>(`/api/workflows/runs/${encodeURIComponent(id)}${this.projects.projectQuery()}`);
+      const data = await this.api.get<RunDetailResponse>(
+        `/api/workflows/runs/${encodeURIComponent(id)}${this.projects.projectQuery()}`,
+      );
       this.run.set(data.run);
     } catch { /* leave stale */ }
   }
 
-  // --- Actions --------------------------------------------------------------
-
+  // ── Actions ──────────────────────────────────────────────────────────────
   protected async approve(): Promise<void> { await this.action('approve'); }
   protected async reject(): Promise<void> {
     const reason = prompt('Reason for rejecting?') ?? undefined;
@@ -190,9 +291,11 @@ export class RunDetail implements OnInit, OnDestroy {
     this.actionPending.set(kind);
     this.actionError.set(null);
     try {
-      await this.api.post(`/api/workflows/runs/${encodeURIComponent(this.runId())}/${kind}${this.projects.projectQuery()}`, body ?? {});
+      await this.api.post(
+        `/api/workflows/runs/${encodeURIComponent(this.runId())}/${kind}${this.projects.projectQuery()}`,
+        body ?? {},
+      );
       await this.refreshRun();
-      // resume + approve may re-open the stream if the run resumes running.
       if ((kind === 'resume' || kind === 'approve') && !this.isTerminal() && !this.closeStream) {
         this.openStream(this.runId());
       }
@@ -203,8 +306,7 @@ export class RunDetail implements OnInit, OnDestroy {
     }
   }
 
-  // --- Formatters -----------------------------------------------------------
-
+  // ── Formatters ───────────────────────────────────────────────────────────
   protected fmtTime(ts: number | null | undefined): string {
     if (!ts) return '—';
     return new Date(ts).toLocaleTimeString();
@@ -217,27 +319,6 @@ export class RunDetail implements OnInit, OnDestroy {
     if (ms >= 60_000) return Math.round(ms / 60_000) + 'm ' + Math.round((ms % 60_000) / 1000) + 's';
     if (ms >= 1000) return (ms / 1000).toFixed(1) + 's';
     return ms + 'ms';
-  }
-
-  protected eventLabel(e: WorkflowEvent): string {
-    const sid = (e.data?.['stepId'] as string | undefined) ?? e.stepId ?? '';
-    const map: Record<string, string> = {
-      run_started: 'Run started',
-      run_completed: 'Run completed',
-      run_failed: 'Run failed',
-      run_cancelled: 'Run cancelled',
-      run_paused: 'Run paused',
-      step_started: `Step started · ${sid}`,
-      step_completed: `Step completed · ${sid}`,
-      step_failed: `Step failed · ${sid}`,
-      step_skipped: `Step skipped · ${sid}`,
-      tool_called: `Tool called · ${(e.data?.['tool'] as string | undefined) ?? '?'}`,
-      artifact_created: `Artifact · ${(e.data?.['name'] as string | undefined) ?? '?'}`,
-      approval_requested: 'Approval requested',
-      approval_granted: 'Approval granted',
-      approval_rejected: 'Approval rejected',
-    };
-    return map[e.eventType] ?? e.eventType;
   }
 
   protected eventDetail(e: WorkflowEvent): string {
@@ -255,5 +336,61 @@ export class RunDetail implements OnInit, OnDestroy {
     return '';
   }
 
+  protected stepIdOf(e: WorkflowEvent): string {
+    return (e.data?.['stepId'] as string | undefined) ?? e.stepId ?? '';
+  }
+
+  protected evColor(eventType: string): string {
+    return EV_COLOR[eventType] ?? 'var(--text-secondary)';
+  }
+
   protected back(): void { void this.router.navigate(['/runs']); }
+
+  // ── DAG helpers ──────────────────────────────────────────────────────────
+
+  /** SVG cubic bezier path between two nodes */
+  edgePath(a: DagNode, b: DagNode): string {
+    const ax = a.x + 150, ay = a.y + 18;
+    const bx = b.x, by = b.y + 18;
+    const mx = (ax + bx) / 2;
+    return `M ${ax} ${ay} C ${mx} ${ay}, ${mx} ${by}, ${bx} ${by}`;
+  }
+
+  nodeBorderColor(n: DagNode): string {
+    if (this.selectedNode() === n.id) return 'var(--accent)';
+    if (n.status === 'pending' || n.status === 'skipped') return 'var(--border-subtle)';
+    const c: Record<string, string> = {
+      running: 'var(--info)', completed: 'var(--success)',
+      failed: 'var(--error)', paused: 'var(--warn)',
+    };
+    return c[n.status] ?? 'var(--border-subtle)';
+  }
+
+  nodeBoxShadow(n: DagNode): string {
+    if (n.status === 'running') return '0 0 0 3px var(--info-soft)';
+    if (this.selectedNode() === n.id) return '0 4px 14px rgba(0,0,0,0.4)';
+    return 'none';
+  }
+
+  nodeDotBg(n: DagNode): string {
+    if (n.status === 'completed') return 'var(--success)';
+    if (n.status === 'failed') return 'var(--error)';
+    if (n.status === 'paused') return 'var(--warn)';
+    return 'transparent';
+  }
+
+  nodeDotBorder(n: DagNode): string {
+    if (n.status === 'pending' || n.status === 'running' || n.status === 'skipped') {
+      const c: Record<string, string> = {
+        pending: 'var(--text-muted)', running: 'var(--info)', skipped: 'var(--text-muted)',
+      };
+      return `1.5px solid ${c[n.status]}`;
+    }
+    return 'none';
+  }
+
+  /** Distribute node ids into columns (simple sequential layout) */
+  private layoutCols(ids: string[]): number[] {
+    return ids.map((_, i) => i);
+  }
 }

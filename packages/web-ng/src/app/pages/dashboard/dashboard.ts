@@ -1,24 +1,39 @@
 /**
  * Dashboard — the load-bearing home screen.
  *
- * Layout (matches the React/SpecShip design):
- *   Status strip (in app shell)
+ * Layout (matches the React/SpecShip design screens-dashboard.jsx):
+ *   PageHead (icon + title + sub + range Segmented in actions slot)
  *   Stat tiles row · 4 across · cost / tool calls / subagent share / drift
- *   Mini-graph placeholder + Tips panel (2:1 grid)
- *   File heatstrip
- *   Recent prompts + Cache analytics card (1.4:1 grid)
- *
- * Every data slice is fetched as a signal-based resource. Range selector
- * (today/week/month/all) is a signal — the apiResource effect re-fetches
- * automatically when it changes.
+ *     Each tile: icon + eyebrow, big value (23px/650), inline Sparkline, Delta
+ *   Center row 2fr 1fr gap12 height 340:
+ *     left  — "Recent neighborhood" GraphCanvas card
+ *     right — "Tips" card with TipRows (dismiss, Apply)
+ *   Heatstrip → <app-treemap> height 116 + legend
+ *   Bottom row 1.4fr 1fr gap12:
+ *     left  — Recent prompts · by cost (PromptRow: text, Bar 70%, $cost, tokens·cache%)
+ *     right — CacheCard (38px rate, divider, 2×2 kv grid)
+ *   Footer (range window total + live/mock dot)
  */
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  inject,
+  signal,
+} from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { DecimalPipe } from '@angular/common';
 import { ApiService } from '../../api/api';
 import { apiResource } from '../../api/resource';
+import { shortLabel } from '../../util/paths';
 import { ProjectsService } from '../../api/projects';
 import { Icon } from '../../shell/icon/icon';
+import { PageHead } from '../../ui/page-head';
+import { Segmented, type SegmentedOption } from '../../ui/segmented';
+import { Delta } from '../../ui/delta';
+import { Bar } from '../../ui/bar';
+import { Sparkline } from '../../charts/sparkline/sparkline';
+import { Treemap, type TreemapItem } from '../../charts/treemap/treemap';
 import { GraphCanvas, type CanvasNode, type CanvasEdge } from '../../charts/graph-canvas/graph-canvas';
 import type {
   StatusResponse,
@@ -28,13 +43,26 @@ import type {
   TipsResponse,
   SessionsResponse,
   GraphSearchResponse,
+  StatsResponse,
+  StatMetric,
 } from '../../api/types';
 
 type Range = 'today' | 'week' | 'month' | 'all';
 
 @Component({
   selector: 'app-dashboard',
-  imports: [RouterLink, DecimalPipe, Icon, GraphCanvas],
+  imports: [
+    RouterLink,
+    DecimalPipe,
+    Icon,
+    PageHead,
+    Segmented,
+    Delta,
+    Bar,
+    Sparkline,
+    Treemap,
+    GraphCanvas,
+  ],
   templateUrl: './dashboard.html',
   styleUrl: './dashboard.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -45,35 +73,71 @@ export class Dashboard {
   private readonly projects = inject(ProjectsService);
 
   protected readonly range = signal<Range>('week');
-  protected readonly ranges: Range[] = ['today', 'week', 'month', 'all'];
 
-  protected readonly status = apiResource<StatusResponse>(this.api, () => `/api/status${this.projects.projectQuery()}`);
-  // For the mini-graph: pull a generic recent-symbol search; if anything
-  // comes back, lay those out as the "recent neighborhood". The endpoint
-  // accepts any 2+ char query; we use a short hint biased toward identifiers
-  // commonly present in modern codebases. Falls back to seed nodes when
-  // the API returns no rows (typical in fresh dev environments).
+  protected readonly rangeOptions: SegmentedOption[] = [
+    { value: 'today', label: 'Today' },
+    { value: 'week', label: 'This week' },
+    { value: 'month', label: 'This month' },
+    { value: 'all', label: 'All time' },
+  ];
+
+  // Resources ----------------------------------------------------------------
+
+  protected readonly status = apiResource<StatusResponse>(
+    this.api,
+    () => `/api/status${this.projects.projectQuery()}`,
+  );
+
   protected readonly miniGraphSearch = apiResource<GraphSearchResponse>(
     this.api,
     () => `/api/graph/search?q=on&limit=18${this.projects.projectQuery('&')}`,
   );
+
   protected readonly tips = apiResource<TipsResponse>(this.api, () => '/api/claude/tips');
-  protected readonly heatmap = apiResource<HeatmapResponse>(this.api, () => `/api/claude/heatmap?range=${this.range()}`);
-  protected readonly costs = apiResource<CostsResponse>(this.api, () => `/api/claude/costs?range=${this.range()}`);
-  protected readonly cache = apiResource<CacheResponse>(this.api, () => `/api/claude/cache?range=${this.range()}`);
-  protected readonly sessions = apiResource<SessionsResponse>(
+
+  protected readonly heatmap = apiResource<HeatmapResponse>(
     this.api,
-    () => `/api/claude/sessions?range=${this.range()}&limit=10`
+    () => `/api/claude/heatmap?range=${this.range()}`,
   );
 
-  // Derived metrics ---------------------------------------------------------
+  protected readonly costs = apiResource<CostsResponse>(
+    this.api,
+    () => `/api/claude/costs?range=${this.range()}`,
+  );
+
+  protected readonly cache = apiResource<CacheResponse>(
+    this.api,
+    () => `/api/claude/cache?range=${this.range()}`,
+  );
+
+  protected readonly sessions = apiResource<SessionsResponse>(
+    this.api,
+    () => `/api/claude/sessions?range=${this.range()}&limit=10`,
+  );
+
+  protected readonly stats = apiResource<StatsResponse>(
+    this.api,
+    () => `/api/claude/stats?range=${this.range()}`,
+  );
+
+  // Per-tile metric accessors — always return a StatMetric so the template
+  // never touches an undefined nested field (value 0 / delta 0 / empty spark).
+  private readonly EMPTY_METRIC: StatMetric = { value: 0, delta: 0, series: [] };
+  protected readonly lastSessionCostStat = computed(() => this.stats.state().data?.lastSessionCost ?? this.EMPTY_METRIC);
+  protected readonly toolCallsStat = computed(() => this.stats.state().data?.toolCalls ?? this.EMPTY_METRIC);
+  protected readonly subagentPctStat = computed(() => this.stats.state().data?.subagentPct ?? this.EMPTY_METRIC);
+  protected readonly driftStat = computed(() => this.stats.state().data?.drift ?? this.EMPTY_METRIC);
+
+  // Derived metrics ----------------------------------------------------------
 
   protected readonly lastSession = computed(() => {
     const arr = this.sessions.state().data?.sessions ?? [];
     return arr[0] ?? null;
   });
 
-  protected readonly lastSessionCost = computed(() => this.lastSession()?.total_cost_usd ?? 0);
+  protected readonly lastSessionCost = computed(
+    () => this.lastSession()?.total_cost_usd ?? 0,
+  );
 
   protected readonly toolCallCount = computed(() => {
     const tools = this.heatmap.state().data?.tools ?? [];
@@ -93,77 +157,77 @@ export class Dashboard {
   protected readonly driftCount = computed(() => this.status.state().data?.drift ?? 0);
   protected readonly nodeCountLabel = computed(() => this.status.state().data?.nodeCount ?? 0);
 
-  protected readonly topFiles = computed(() => (this.heatmap.state().data?.files ?? []).slice(0, 30));
-  protected readonly maxFileCalls = computed(() => {
-    const max = Math.max(0, ...this.topFiles().map((f) => f.calls ?? 0));
-    return max > 0 ? max : 1;
+  // Tip counts ---------------------------------------------------------------
+  protected readonly urgentTipCount = computed(() => {
+    const tps = this.tips.state().data?.tips ?? [];
+    return tps.filter((t) => t.severity === 'error').length;
   });
 
-  protected readonly topPrompts = computed(() => (this.costs.state().data?.topPrompts ?? []).slice(0, 8));
-  protected readonly maxPromptCost = computed(() => {
-    const max = Math.max(0.01, ...this.topPrompts().map((p) => p.cost_usd ?? 0));
-    return max;
+  // Tip dismiss state — keyed by tip id
+  protected readonly dismissedTips = signal<Set<string>>(new Set());
+
+  protected dismissTip(id: string): void {
+    this.dismissedTips.update((s) => {
+      const next = new Set(s);
+      next.add(id);
+      return next;
+    });
+  }
+
+  protected isTipDismissed(id: string): boolean {
+    return this.dismissedTips().has(id);
+  }
+
+  // Visible (non-dismissed) tips, max 4
+  protected readonly visibleTips = computed(() => {
+    const dismissed = this.dismissedTips();
+    return (this.tips.state().data?.tips ?? [])
+      .filter((t) => !dismissed.has(t.id))
+      .slice(0, 4);
   });
 
+  // Heatmap treemap items ----------------------------------------------------
+  protected readonly treemapItems = computed<TreemapItem[]>(() => {
+    const files = (this.heatmap.state().data?.files ?? []).slice(0, 30);
+    if (!files.length) return [];
+    const maxTpc = Math.max(
+      1,
+      ...files.map((f) => (f.resultBytes && f.calls ? f.resultBytes / f.calls : 0)),
+    );
+    return files.map((f) => {
+      const tpc = f.calls > 0 ? f.resultBytes / f.calls : 0;
+      const intensity = Math.min(1, tpc / maxTpc);
+      return {
+        key: f.path,
+        label: shortLabel(f.path),
+        value: f.calls,
+        intensity,
+        sub: f.calls + ' calls',
+        title: `${f.path}\n${f.calls} calls · ${this.fmtK(Math.round(tpc))}/call`,
+      };
+    });
+  });
+
+  // Recent prompts -----------------------------------------------------------
+  protected readonly topPrompts = computed(() =>
+    (this.costs.state().data?.topPrompts ?? []).slice(0, 8),
+  );
+
+  protected readonly maxPromptCost = computed(() =>
+    Math.max(0.01, ...this.topPrompts().map((p) => p.cost_usd ?? 0)),
+  );
+
+  // Footer -------------------------------------------------------------------
   protected readonly rangeTotal = computed(() => {
     const series = this.costs.state().data?.series ?? [];
     return series.reduce((sum, d) => sum + (d.cost ?? 0), 0);
   });
 
   protected readonly liveSource = computed(() =>
-    this.status.state().source === 'api' && this.status.state().data ? 'live' : 'mock'
+    this.status.state().source === 'api' && this.status.state().data ? 'live' : 'mock',
   );
 
-  // Actions -----------------------------------------------------------------
-
-  protected setRange(r: Range): void { this.range.set(r); }
-
-  protected go(route: string): void {
-    this.router.navigate(['/' + route]);
-  }
-
-  protected fmt$(n: number): string {
-    return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  }
-
-  protected fmtK(n: number): string {
-    if (n >= 1000) return (n / 1000).toFixed(n >= 10000 ? 0 : 1) + 'k';
-    return String(n);
-  }
-
-  protected promptCacheRate(p: { cache_read_tokens?: number; input_tokens?: number; cache_creation_tokens?: number }): number {
-    const tokens = (p.input_tokens ?? 0) + (p.cache_creation_tokens ?? 0) + (p.cache_read_tokens ?? 0);
-    return tokens > 0 ? (p.cache_read_tokens ?? 0) / tokens : 0;
-  }
-
-  protected promptTotalTokens(p: { input_tokens?: number; output_tokens?: number; cache_creation_tokens?: number; cache_read_tokens?: number }): number {
-    return (p.input_tokens ?? 0) + (p.output_tokens ?? 0) + (p.cache_creation_tokens ?? 0) + (p.cache_read_tokens ?? 0);
-  }
-
-  protected fileBg(calls: number): string {
-    const t = calls / this.maxFileCalls();
-    const pct = Math.round(18 + t * 70);
-    return `color-mix(in srgb, var(--warn) ${pct}%, var(--bg-elevated))`;
-  }
-
-  protected fileColor(calls: number): string {
-    return calls / this.maxFileCalls() > 0.5 ? '#fff' : 'var(--text-secondary)';
-  }
-
-  protected promptBarColor(cost: number): string {
-    return cost / this.maxPromptCost() > 0.7 ? 'var(--error)' : 'var(--accent)';
-  }
-
-  protected promptFrac(cost: number): number {
-    return Math.max(0, Math.min(1, cost / this.maxPromptCost()));
-  }
-
-  protected sessionIdShort(id: string | undefined): string {
-    return (id ?? '').slice(0, 8);
-  }
-
-  // --- Mini graph (dashboard "recent neighborhood" card) --------------------
-
+  // Mini graph ---------------------------------------------------------------
   protected readonly miniGraphSource = computed<'api' | 'seed'>(() =>
     (this.miniGraphSearch.state().data?.results?.length ?? 0) > 0 ? 'api' : 'seed',
   );
@@ -185,9 +249,6 @@ export class Dashboard {
 
   protected readonly miniGraphEdges = computed<CanvasEdge[]>(() => {
     if (this.miniGraphSource() === 'api') {
-      // Synthesize light edges between successive nodes — the search endpoint
-      // doesn't return edges, so we draw a sparse spanning tree to keep the
-      // canvas visually grounded.
       const nodes = this.miniGraphNodes();
       const edges: CanvasEdge[] = [];
       for (let i = 1; i < nodes.length; i++) {
@@ -203,13 +264,79 @@ export class Dashboard {
   protected onMiniGraphPick(id: string): void {
     this.router.navigate(['/graph'], { queryParams: { focus: id } });
   }
+
+  // Actions ------------------------------------------------------------------
+
+  protected setRange(r: string): void {
+    this.range.set(r as Range);
+  }
+
+  protected go(route: string): void {
+    this.router.navigate(['/' + route]);
+  }
+
+  // Formatting helpers -------------------------------------------------------
+
+  protected fmt$(n: number): string {
+    return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  protected fmtK(n: number): string {
+    if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
+    if (n >= 1000) return (n / 1000).toFixed(n >= 10000 ? 0 : 1) + 'k';
+    return String(n);
+  }
+
+  protected promptCacheRate(p: {
+    cache_read_tokens?: number;
+    input_tokens?: number;
+    cache_creation_tokens?: number;
+  }): number {
+    const tokens =
+      (p.input_tokens ?? 0) +
+      (p.cache_creation_tokens ?? 0) +
+      (p.cache_read_tokens ?? 0);
+    return tokens > 0 ? (p.cache_read_tokens ?? 0) / tokens : 0;
+  }
+
+  protected promptTotalTokens(p: {
+    input_tokens?: number;
+    output_tokens?: number;
+    cache_creation_tokens?: number;
+    cache_read_tokens?: number;
+  }): number {
+    return (
+      (p.input_tokens ?? 0) +
+      (p.output_tokens ?? 0) +
+      (p.cache_creation_tokens ?? 0) +
+      (p.cache_read_tokens ?? 0)
+    );
+  }
+
+  protected promptBarColor(cost: number): string {
+    return cost / this.maxPromptCost() > 0.7 ? 'var(--error)' : 'var(--accent)';
+  }
+
+  protected promptFrac(cost: number): number {
+    return Math.max(0, Math.min(1, cost / this.maxPromptCost()));
+  }
+
+  protected tipSevColor(sev: string): string {
+    if (sev === 'error') return 'var(--error)';
+    if (sev === 'warn') return 'var(--warn)';
+    return 'var(--info)';
+  }
+
+  protected tipIcon(tip: { severity: string; icon?: string }): string {
+    if (tip.icon) return tip.icon;
+    if (tip.severity === 'error') return 'cancel';
+    if (tip.severity === 'warn') return 'warn';
+    return 'info';
+  }
 }
 
 // ---------------------------------------------------------------------------
-// Seed mini-graph used when the API returns nothing. Mirrors the design's
-// prototype (~12-15 nodes laid out around a central area, all four node
-// kinds represented). Coordinates are tuned for the dashboard's 340px-tall
-// card.
+// Seed mini-graph used when the API returns nothing.
 // ---------------------------------------------------------------------------
 
 const SEED_NEIGHBORHOOD_NODES: CanvasNode[] = [
@@ -248,8 +375,9 @@ const SEED_NEIGHBORHOOD_EDGES: CanvasEdge[] = [
   { from: 's-14', to: 's-15', kind: 'calls' },
 ];
 
-function layoutCluster(items: Array<{ id: string; label: string; sub?: string; kind: string }>): CanvasNode[] {
-  // Simple deterministic radial layout — ring of (N-1) nodes around a center.
+function layoutCluster(
+  items: Array<{ id: string; label: string; sub?: string; kind: string }>,
+): CanvasNode[] {
   if (items.length === 0) return [];
   const head = items[0]!;
   const ring = items.slice(1);

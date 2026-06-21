@@ -1,71 +1,62 @@
 :host { display: contents; }
-.page { flex: 1; display: flex; flex-direction: column; min-height: 0; padding: 16px 18px 0; }
-.page-head { margin-bottom: 12px; }
-.title { font-size: var(--fs-title); font-weight: 600; letter-spacing: -0.01em; }
-.sub { color: var(--text-secondary); margin-top: 2px; }
 
-.filter-bar { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
-.filter-chip {
-  height: 26px; padding: 0 10px;
-  border-radius: 999px;
-  display: inline-flex; align-items: center; gap: 6px;
-  font-size: 11.5px; font-weight: 500;
-  cursor: pointer; text-transform: capitalize;
-  border: 1px solid var(--border-subtle);
-  background: var(--bg-panel); color: var(--text-muted);
-  font-family: inherit;
+.page {
+  flex: 1;
+  min-height: 0;
 }
-.filter-chip.active[data-state="drifted"] { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
-.filter-chip.active[data-state="broken"]  { background: var(--error-soft); color: var(--error); border-color: transparent; }
-.filter-chip.active[data-state="orphaned"]{ background: var(--error-soft); color: var(--error); border-color: transparent; }
-.count { opacity: 0.7; font-variant-numeric: tabular-nums; }
 
-.list-frame {
-  flex: 1; border-top: 1px solid var(--border-subtle);
-  margin: 0 -18px;
-}
-.link-row {
-  display: grid;
-  grid-template-columns: 130px 220px 1fr 110px 60px;
-  gap: 12px;
-  padding: 11px 18px;
-  border-bottom: 1px solid var(--border-subtle);
+/* Filter bar */
+.filter-bar {
+  padding: 0 18px 12px;
+  flex-wrap: wrap;
   align-items: center;
-  font-size: 12.5px;
 }
-.link-row:hover { background: var(--bg-hover); }
 
-.state-pill {
-  display: inline-flex; align-items: center;
-  font-size: 11px; font-weight: 600;
-  padding: 2px 8px; border-radius: var(--r-pill);
+.filter-chip {
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border-subtle);
+  font-size: 11.5px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+  align-items: center;
+  transition: background 120ms, color 120ms;
 }
-.link-row[data-state="drifted"] .state-pill { color: var(--warn); background: var(--warn-soft); }
-.link-row[data-state="broken"] .state-pill,
-.link-row[data-state="orphaned"] .state-pill { color: var(--error); background: var(--error-soft); }
 
-.spec-id { font-size: 12px; color: var(--accent); }
-.spec-title { font-size: 11.5px; color: var(--text-secondary); margin-top: 2px; }
-.target { min-width: 0; display: flex; align-items: center; gap: 8px; }
-.target-arrow { color: var(--text-muted); font-size: 14px; }
-.target-path { font-size: 11.5px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.muted { color: var(--text-muted); }
-.provenance { font-size: 11px; color: var(--text-muted); }
-.age { font-size: 11px; text-align: right; }
-
-.empty {
-  display: flex; flex-direction: column; align-items: center;
-  padding: 60px 20px; text-align: center; color: var(--text-secondary);
+/* List frame */
+.list-frame {
+  flex: 1;
+  border-top: 1px solid var(--border-subtle);
+  margin: 0 -0px; /* full width already via .page */
 }
-.empty-icon {
-  width: 52px; height: 52px;
-  background: var(--bg-panel); border: 1px solid var(--border-subtle);
-  border-radius: 14px;
-  display: grid; place-items: center;
-  color: var(--success); font-size: 24px;
-  margin-bottom: 16px;
-}
-.empty-title { font-size: 15px; font-weight: 600; margin-bottom: 6px; color: var(--text-primary); }
-.empty-sub { font-size: 12.5px; line-height: 1.55; max-width: 360px; }
 
-.mono { font-family: var(--font-mono); }
+/* Each top-level row wrapper */
+.drift-row-wrap { }
+
+/* The clickable main row */
+.drift-row {
+  padding: 10px 14px;
+  cursor: default;
+  align-items: center;
+  transition: background 80ms;
+  background: transparent;
+}
+.drift-row:not(.selected):hover { background: var(--bg-hover); }
+.drift-row.selected { background: var(--accent-soft); }
+
+/* Checkbox */
+.drift-checkbox {
+  accent-color: var(--accent);
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+/* Expanded detail panel */
+.drift-detail {
+  padding: 0 14px 14px 50px;
+  background: var(--bg-canvas);
+}

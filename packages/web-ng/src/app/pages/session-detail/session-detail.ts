@@ -16,6 +16,9 @@ import { ApiService } from '../../api/api';
 import { apiResource } from '../../api/resource';
 import { RefreshService } from '../../api/refresh';
 import { Icon } from '../../shell/icon/icon';
+import { Pill } from '../../ui/pill';
+import { Bar } from '../../ui/bar';
+import { HBars, type HBarItem } from '../../charts/h-bars/h-bars';
 import { renderMd } from '../../util/render-md';
 import type {
   ClaudePrompt,
@@ -61,7 +64,7 @@ const FILE_TOOLS = new Set(['Read', 'Edit', 'Write', 'NotebookEdit', 'MultiEdit'
 
 @Component({
   selector: 'app-session-detail',
-  imports: [DecimalPipe, RouterLink, Icon],
+  imports: [DecimalPipe, RouterLink, Icon, Pill, Bar, HBars],
   templateUrl: './session-detail.html',
   styleUrl: './session-detail.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -180,6 +183,32 @@ export class SessionDetail {
   });
 
   protected readonly totalToolCalls = computed(() => this.toolCalls().length);
+
+  /** Total tokens across all token types — used for rail percentage bars. */
+  private readonly totalTokens = computed<number>(() => {
+    const s = this.session();
+    if (!s) return 1;
+    return (s.total_input_tokens || 0) + (s.total_output_tokens || 0)
+      + (s.total_cache_creation_tokens || 0) + (s.total_cache_read_tokens || 0) || 1;
+  });
+
+  /** Max prompt cost — for the cost-per-prompt mini bars. */
+  protected readonly maxPromptCost = computed<number>(() => {
+    const gs = this.groups();
+    return Math.max(0.0001, ...gs.map((g) => g.prompt.cost_usd || 0));
+  });
+
+  /** Tool bar color function for HBars in the rail. */
+  protected readonly toolBarColor = (it: HBarItem): string => {
+    const n = it.name as string;
+    if (n === 'Read') return 'var(--node-spec)';
+    if (n === 'Edit' || n === 'Write' || n === 'MultiEdit') return 'var(--accent)';
+    if (n === 'Bash') return 'var(--warn)';
+    if (n === 'Grep' || n === 'Glob') return 'var(--node-test)';
+    if (n === 'Task') return 'var(--node-route)';
+    if (n.startsWith('mcp__')) return 'var(--success)';
+    return 'var(--node-code)';
+  };
 
   protected readonly cacheReadRate = computed<number>(() => {
     const s = this.session();
@@ -371,6 +400,9 @@ export class SessionDetail {
     return `${(n / 1_000_000).toFixed(2)}M`;
   }
 
+  /** Arrow-function version for passing as [fmt] input to chart components. */
+  protected readonly fmtTokensFn = (n: number): string => this.fmtTokens(n);
+
   protected fmtClock(ms: number | null | undefined): string {
     if (!ms) return '';
     try {
@@ -433,5 +465,17 @@ export class SessionDetail {
 
   protected cacheColor(v: number): string {
     return v >= 0.7 ? 'var(--success)' : v >= 0.5 ? 'var(--warn)' : 'var(--error)';
+  }
+
+  /** Percentage of total tokens for a token type — used in the token-mix bar. */
+  protected tokPct(kind: 'input' | 'output' | 'cacheWrite' | 'cacheRead'): number {
+    const s = this.session();
+    if (!s) return 0;
+    const total = this.totalTokens();
+    const v = kind === 'input' ? (s.total_input_tokens || 0)
+      : kind === 'output' ? (s.total_output_tokens || 0)
+      : kind === 'cacheWrite' ? (s.total_cache_creation_tokens || 0)
+      : (s.total_cache_read_tokens || 0);
+    return (v / total) * 100;
   }
 }

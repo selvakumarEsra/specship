@@ -1,65 +1,50 @@
 import { ChangeDetectionStrategy, Component } from '@angular/core';
 import { Icon } from '../../shell/icon/icon';
-import { LogoMark } from '../../shell/logo-mark/logo-mark';
+import { PageHead } from '../../ui/page-head';
+import { StatePill } from '../../ui/state-pill';
+import { Pill } from '../../ui/pill';
+import { CopyBtn } from '../../ui/copy-btn';
 
-interface Token { name: string; value: string; sample: 'bg' | 'fg' | 'border'; }
-interface NodeColor { name: string; varName: string; }
-interface StatePill { kind: string; cls: string; }
+interface Swatch { name: string; varName: string; hex: string; }
+interface NodeSample { label: string; kind: 'code' | 'spec' | 'test' | 'route'; state?: string; }
 
 @Component({
   selector: 'app-design',
-  imports: [Icon, LogoMark],
+  imports: [Icon, PageHead, StatePill, Pill, CopyBtn],
   templateUrl: './design.html',
   styleUrl: './design.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class Design {
-  protected readonly surfaces: Token[] = [
-    { name: '--bg-canvas', value: 'canvas', sample: 'bg' },
-    { name: '--bg-canvas-2', value: 'graph void', sample: 'bg' },
-    { name: '--bg-panel', value: 'panel', sample: 'bg' },
-    { name: '--bg-panel-2', value: 'panel-2', sample: 'bg' },
-    { name: '--bg-elevated', value: 'elevated', sample: 'bg' },
+  protected readonly surfaceSwatches: Swatch[] = [
+    { name: 'bg/canvas',     varName: '--bg-canvas',     hex: '#0E1014' },
+    { name: 'bg/panel',      varName: '--bg-panel',      hex: '#161A21' },
+    { name: 'bg/elevated',   varName: '--bg-elevated',   hex: '#20262F' },
+    { name: 'text/primary',  varName: '--text-primary',  hex: '#E8EBF0' },
+    { name: 'text/secondary',varName: '--text-secondary',hex: '#9AA3B2' },
+    { name: 'accent/primary',varName: '--accent',        hex: '#3B82F6' },
   ];
 
-  protected readonly text: Token[] = [
-    { name: '--text-primary', value: 'primary', sample: 'fg' },
-    { name: '--text-secondary', value: 'secondary', sample: 'fg' },
-    { name: '--text-muted', value: 'muted', sample: 'fg' },
-    { name: '--text-faint', value: 'faint', sample: 'fg' },
+  protected readonly nodeSwatches: Swatch[] = [
+    { name: 'accent/code',  varName: '--node-code',  hex: 'purple' },
+    { name: 'accent/spec',  varName: '--node-spec',  hex: 'blue'   },
+    { name: 'accent/test',  varName: '--node-test',  hex: 'green'  },
+    { name: 'accent/route', varName: '--node-route', hex: 'teal'   },
   ];
 
-  protected readonly nodeColors: NodeColor[] = [
-    { name: 'code', varName: '--node-code' },
-    { name: 'spec', varName: '--node-spec' },
-    { name: 'test', varName: '--node-test' },
-    { name: 'route', varName: '--node-route' },
-  ];
+  protected readonly nodeColorVars = ['--node-code', '--node-spec', '--node-test', '--node-route'];
 
-  protected readonly semantic: NodeColor[] = [
-    { name: 'success', varName: '--success' },
-    { name: 'warn', varName: '--warn' },
-    { name: 'error', varName: '--error' },
-    { name: 'info', varName: '--info' },
-  ];
+  protected readonly specLinkStates = ['verified', 'implemented', 'implementing', 'drifted', 'broken', 'orphaned'];
+  protected readonly runStates = ['pending', 'running', 'paused', 'completed', 'failed', 'cancelled'];
+  protected readonly semanticStates = ['success', 'warn', 'error', 'info'];
 
-  protected readonly statePills: StatePill[] = [
-    { kind: 'pending', cls: 'pending' },
-    { kind: 'running', cls: 'running' },
-    { kind: 'paused', cls: 'paused' },
-    { kind: 'completed', cls: 'completed' },
-    { kind: 'failed', cls: 'failed' },
-    { kind: 'cancelled', cls: 'cancelled' },
+  protected readonly nodeSamples: NodeSample[] = [
+    { label: 'exploreGraph',     kind: 'code' },
+    { label: 'REQ-AUTH-005',     kind: 'spec',  state: 'drifted' },
+    { label: 'auth.test',        kind: 'test' },
+    { label: '/explore',         kind: 'route' },
+    { label: 'REQ-GRAPH-009',    kind: 'spec',  state: 'orphaned' },
   ];
-
-  protected readonly specStates: StatePill[] = [
-    { kind: 'verified', cls: 'completed' },
-    { kind: 'drifted', cls: 'paused' },
-    { kind: 'broken', cls: 'failed' },
-    { kind: 'orphaned', cls: 'cancelled' },
-  ];
-
-  protected readonly fineSizes: number[] = [4, 6, 8, 10, 14];
 
   protected readonly iconSample: string[] = [
     'dashboard', 'graph', 'book', 'drift', 'workflow', 'play', 'chat', 'sessions',
@@ -67,4 +52,27 @@ export class Design {
     'search', 'command', 'refresh', 'filter', 'reveal', 'copy', 'recenter',
     'plus', 'minus', 'check', 'x', 'arrowRight', 'sparkles', 'sun', 'moon',
   ];
+
+  protected nodeColor(kind: string, state?: string): string {
+    if (state === 'drifted')  return 'var(--warn)';
+    if (state === 'orphaned') return 'var(--error)';
+    const MAP: Record<string, string> = {
+      code:  'var(--node-code)',
+      spec:  'var(--node-spec)',
+      test:  'var(--node-test)',
+      route: 'var(--node-route)',
+    };
+    return MAP[kind] ?? 'var(--accent)';
+  }
+
+  protected nodeBg(kind: string, state?: string): string {
+    const c = this.nodeColor(kind, state);
+    return `color-mix(in srgb, ${c} 16%, var(--bg-panel))`;
+  }
+
+  protected nodeBorder(kind: string, state?: string): string {
+    const c = this.nodeColor(kind, state);
+    if (state) return `1.5px solid ${c}`;
+    return `1.5px solid color-mix(in srgb, ${c} 45%, transparent)`;
+  }
 }

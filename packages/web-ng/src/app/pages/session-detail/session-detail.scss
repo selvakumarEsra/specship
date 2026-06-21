@@ -1,8 +1,7 @@
 :host { display: contents; }
 
-.page {
-  flex: 1; display: flex; flex-direction: column;
-  min-height: 0; padding: 16px 18px 18px;
+.sd-root {
+  flex: 1; display: flex; flex-direction: column; min-height: 0; padding: 16px 18px 0;
 }
 
 // ---- header ---------------------------------------------------------------
@@ -13,26 +12,12 @@
 }
 .back-link {
   display: inline-flex; align-items: center; gap: 4px;
-  padding: 4px 8px; border-radius: 6px;
-  color: var(--text-muted); font-size: 12px;
-  text-decoration: none;
-  transition: background 120ms, color 120ms;
-
-  &:hover { background: var(--bg-hover); color: var(--text-primary); }
-  &:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  color: var(--text-muted); text-decoration: none;
 }
-
 .title-block { flex: 1; min-width: 250px; }
 .title { font-size: var(--fs-title); font-weight: 600; letter-spacing: -0.01em; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .session-id { color: var(--accent); font-size: 14px; }
-.model-pill {
-  font-size: 10.5px; font-weight: 600;
-  padding: 2px 8px; border-radius: 999px;
-  background: var(--accent-soft); color: var(--accent);
-}
 
-// Live-update indicator. Pulses while SSE is connected so the user
-// can tell at a glance whether they're getting push or polling.
 .live-pill {
   display: inline-flex; align-items: center; gap: 6px;
   font-size: 10.5px; font-weight: 600;
@@ -50,378 +35,164 @@
   0%, 100% { opacity: 0.4; transform: scale(0.85); }
   50%      { opacity: 1.0; transform: scale(1.05); }
 }
-.sub {
-  color: var(--text-secondary); font-size: 12px;
-  margin-top: 2px;
-  overflow: hidden; text-overflow: ellipsis;
-}
-
+.sub { color: var(--text-secondary); font-size: 12px; margin-top: 2px; }
 .page-actions { display: flex; align-items: center; gap: 8px; }
 .refresh-btn { display: inline-flex; align-items: center; gap: 6px; }
-.refresh-btn.spinning app-icon {
-  animation: spin 0.9s linear infinite;
-  color: var(--accent);
-}
+.refresh-btn.spinning app-icon { animation: spin 0.9s linear infinite; color: var(--accent); }
 .refresh-btn:disabled { cursor: progress; opacity: 0.8; }
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+// ---- body = main + rail ---------------------------------------------------
+
+.sd-body {
+  flex: 1; display: flex; min-height: 0; gap: 0;
+}
+
+.sd-main {
+  flex: 1; min-width: 0; padding: 0 0 18px;
+}
+
+.sd-rail {
+  width: 290px; flex-shrink: 0;
+  border-left: 1px solid var(--border-subtle);
+  background: var(--bg-panel);
+  padding: 16px;
 }
 
 // ---- stat strip -----------------------------------------------------------
 
 .stat-strip {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
-  gap: 10px;
-  margin-bottom: 14px;
-  padding: 12px 14px;
-  background: var(--bg-panel);
-  border: 1px solid var(--border-subtle);
-  border-radius: 10px;
+  display: flex; gap: 24px;
+  padding: 12px 0;
+  border-top: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--border-subtle);
+  margin-bottom: 16px;
 }
-.stat .stat-lbl {
-  font-size: 10px; font-weight: 600;
-  text-transform: uppercase; letter-spacing: 0.05em;
-  color: var(--text-muted);
-}
+.stat .stat-lbl { font-size: 10.5px; color: var(--text-muted); }
 .stat .stat-val {
-  font-size: 14px; font-weight: 600;
-  margin-top: 2px;
-  color: var(--text-primary);
+  font-size: 16px; font-weight: 600;
+  margin-top: 2px; color: var(--text-primary);
   font-variant-numeric: tabular-nums;
 }
 .stat-val.cost { color: var(--accent); }
 
-// ---- filter bar -----------------------------------------------------------
+// ---- token mix bar in rail ------------------------------------------------
 
-.filter-bar {
-  display: flex; align-items: center; gap: 10px;
-  margin-bottom: 12px;
+.tok-bar {
+  display: flex; height: 10px; border-radius: 999px; overflow: hidden;
 }
-.muted { color: var(--text-muted); }
-.xs { font-size: 11px; }
-.grow { flex: 1; }
+.tok-seg { height: 100%; }
+
+// ---- cache card in rail ---------------------------------------------------
+
+.cache-card {
+  background: var(--success-soft);
+  border: 1px solid rgba(70,194,107,0.25);
+  border-radius: 8px; padding: 10px 12px;
+}
 
 // ---- prompt list ----------------------------------------------------------
-
-// flex: 1 + min-height: 0 is load-bearing: the page is a flex column inside
-// a height-constrained shell, with .page-head / .stat-strip / .session-summary /
-// .filter-bar above this list. Without `flex: 1` the list takes its natural
-// content height; before the summary panel landed, that was small enough to
-// fit alongside everything else, but the summary cards push total content
-// past the viewport and the list collapses to zero height (or scrolls off-
-// screen). Claim the remaining space and scroll internally so the prompts
-// stay visible regardless of how much the panels above grow.
-.prompts {
-  flex: 1 1 0;
-  display: flex; flex-direction: column; gap: 8px;
-  min-height: 0; overflow-y: auto;
-  padding-bottom: 12px;
-}
 
 .prompt.card {
   background: var(--bg-panel);
   border: 1px solid var(--border-subtle);
-  border-radius: 9px;
-  overflow: hidden;
+  border-radius: 9px; overflow: hidden;
   transition: border-color 120ms;
 }
 .prompt.card:hover { border-color: var(--border-strong); }
 
 .prompt-head {
-  display: flex; align-items: center; gap: 10px;
-  width: 100%; padding: 10px 14px;
+  width: 100%; padding: 11px 12px;
   background: transparent; border: 0;
   text-align: left; cursor: pointer;
-  color: inherit;
-  font-family: inherit;
+  color: inherit; font-family: inherit;
 }
 .prompt-head:hover { background: var(--bg-hover); }
 .prompt-head:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-
-.chevron {
-  width: 12px; color: var(--text-muted);
-  transition: transform 120ms;
-  font-size: 13px; flex-shrink: 0;
-  display: inline-block;
-}
-.chevron.open { transform: rotate(90deg); color: var(--accent); }
-
-.prompt-time {
-  font-size: 11px;
-  width: 90px;
-  flex-shrink: 0;
-}
-
-.pill.subagent {
-  font-size: 10px; font-weight: 600;
-  padding: 2px 7px; border-radius: 999px;
-  background: var(--node-route-soft); color: var(--node-route);
-  text-transform: lowercase;
-  flex-shrink: 0;
-}
-
-.prompt-text {
-  font-size: 12.5px;
-  color: var(--text-primary);
-  overflow: hidden; text-overflow: ellipsis;
-  white-space: nowrap;
-  flex: 1; min-width: 0;
-}
-
-.prompt-meta {
-  font-size: 11px;
-  flex-shrink: 0;
-  white-space: nowrap;
-}
 
 // ---- expanded body --------------------------------------------------------
 
 .prompt-body {
   border-top: 1px solid var(--border-subtle);
-  padding: 14px 16px;
-  background: var(--bg-canvas);
+  padding: 14px 16px; background: var(--bg-canvas);
 }
-
 .prompt-section { margin-bottom: 14px; }
 .prompt-section:last-child { margin-bottom: 0; }
-
 .section-lbl {
   font-size: 10px; font-weight: 700;
   text-transform: uppercase; letter-spacing: 0.05em;
-  color: var(--text-muted);
-  margin-bottom: 6px;
+  color: var(--text-muted); margin-bottom: 6px;
 }
-
 .prompt-pre {
-  margin: 0;
-  padding: 10px 12px;
-  background: var(--bg-panel);
-  border: 1px solid var(--border-subtle);
-  border-radius: 7px;
-  font-family: var(--font-mono);
-  font-size: 11.5px;
-  line-height: 1.55;
-  color: var(--text-primary);
-  white-space: pre-wrap;
-  word-break: break-word;
-  max-height: 280px;
-  overflow-y: auto;
+  margin: 0; padding: 10px 12px;
+  background: var(--bg-panel); border: 1px solid var(--border-subtle);
+  border-radius: 7px; font-family: var(--font-mono); font-size: 11.5px;
+  line-height: 1.55; color: var(--text-primary);
+  white-space: pre-wrap; word-break: break-word;
+  max-height: 280px; overflow-y: auto;
 }
-
-.kv-row {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
-  gap: 10px 18px;
-}
+.kv-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 10px 18px; }
 .kv .kv-lbl { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; }
 .kv .kv-val { font-size: 12.5px; font-weight: 600; margin-top: 2px; color: var(--text-primary); font-variant-numeric: tabular-nums; }
 .kv-val.cost { color: var(--accent); }
 
 .tools { display: flex; flex-direction: column; gap: 3px; }
-.tool-block { display: flex; flex-direction: column; gap: 0; }
-
-// Tool row is now a real <button> so the expand chevron is keyboard-focusable
-// and screen-reader-announced. `:disabled` covers the case where the row has
-// no input_json (older row, pre-v7 ingest) — the chevron is hidden and the
-// click is a no-op, but the row still hovers for visual consistency.
+.tool-block { display: flex; flex-direction: column; }
 .tool-row {
   appearance: none; background: var(--bg-panel); border: 1px solid var(--border-subtle);
   color: inherit; font-family: inherit; text-align: left;
   display: flex; align-items: center; gap: 8px;
-  width: 100%; padding: 5px 10px;
-  border-radius: 6px;
-  font-size: 11.5px;
-  cursor: pointer;
+  width: 100%; padding: 5px 10px; border-radius: 6px; font-size: 11.5px; cursor: pointer;
 }
 .tool-row:hover:not(:disabled) { background: var(--bg-hover); }
 .tool-row:disabled { cursor: default; }
 .tool-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .tool-row.expanded { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
-.tool-chevron {
-  width: 10px; color: var(--text-muted);
-  transition: transform 120ms;
-  font-size: 12px; flex-shrink: 0;
-  display: inline-block;
-}
+.tool-chevron { width: 10px; color: var(--text-muted); transition: transform 120ms; font-size: 12px; flex-shrink: 0; display: inline-block; }
 .tool-chevron.open { transform: rotate(90deg); color: var(--accent); }
 .tool-name { font-weight: 600; flex-shrink: 0; }
-.tool-input {
-  color: var(--text-secondary);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  flex: 1; min-width: 0;
-  font-size: 11px;
-}
+.tool-input { color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; font-size: 11px; }
 .tool-bytes { font-size: 10.5px; flex-shrink: 0; }
-
-// The verbatim JSON input revealed by expanding a tool row. Sits flush
-// against the tool-row above so they read as one block.
 .tool-input-json {
-  margin: 0;
-  padding: 10px 14px;
-  background: var(--bg-canvas);
-  border: 1px solid var(--border-subtle);
-  border-top: 0;
-  border-radius: 0 0 6px 6px;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  line-height: 1.5;
-  color: var(--text-primary);
-  white-space: pre-wrap;
-  word-break: break-word;
-  max-height: 320px;
-  overflow-y: auto;
+  margin: 0; padding: 10px 14px;
+  background: var(--bg-canvas); border: 1px solid var(--border-subtle); border-top: 0;
+  border-radius: 0 0 6px 6px; font-family: var(--font-mono); font-size: 11px; line-height: 1.5;
+  color: var(--text-primary); white-space: pre-wrap; word-break: break-word;
+  max-height: 320px; overflow-y: auto;
 }
-
-// Assistant response renders the markdown subset via the shared renderer.
-// Container styling mirrors .prompt-pre (same surface tone) but lets the
-// markdown's own typography (h1/h2/p/code/etc) do the layout work.
 .assistant-body {
-  padding: 10px 14px;
-  background: var(--bg-panel);
-  border: 1px solid var(--border-subtle);
-  border-radius: 7px;
-  font-size: 12.5px; line-height: 1.55;
-  color: var(--text-primary);
-  max-height: 480px; // tall responses scroll within the section instead of pushing the page
-  overflow-y: auto;
-  overflow-wrap: anywhere;
+  padding: 10px 14px; background: var(--bg-panel); border: 1px solid var(--border-subtle);
+  border-radius: 7px; font-size: 12.5px; line-height: 1.55; color: var(--text-primary);
+  max-height: 480px; overflow-y: auto; overflow-wrap: anywhere;
 }
-
 .thinking-details {
-  background: var(--bg-panel);
-  border: 1px solid var(--border-subtle);
-  border-radius: 7px;
-  padding: 8px 12px;
+  background: var(--bg-panel); border: 1px solid var(--border-subtle); border-radius: 7px; padding: 8px 12px;
 }
 .thinking-summary {
-  cursor: pointer;
-  list-style: none;
-  display: flex; align-items: center; gap: 6px;
-  font-size: 10px; font-weight: 700;
-  text-transform: uppercase; letter-spacing: 0.05em;
-  color: var(--text-muted);
+  cursor: pointer; list-style: none; display: flex; align-items: center; gap: 6px;
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted);
 }
 .thinking-summary::-webkit-details-marker { display: none; }
-.thinking-summary::before {
-  content: '›';
-  display: inline-block;
-  transition: transform 120ms;
-  font-size: 14px;
-  color: var(--text-muted);
-}
+.thinking-summary::before { content: '›'; display: inline-block; transition: transform 120ms; font-size: 14px; color: var(--text-muted); }
 .thinking-details[open] .thinking-summary::before { transform: rotate(90deg); color: var(--accent); }
 .thinking-body {
-  margin-top: 10px;
-  padding: 8px 0 0;
-  border-top: 1px dashed var(--border-subtle);
-  font-size: 12px; line-height: 1.55;
-  color: var(--text-secondary);
-  max-height: 320px;
-  overflow-y: auto;
-  overflow-wrap: anywhere;
+  margin-top: 10px; padding: 8px 0 0; border-top: 1px dashed var(--border-subtle);
+  font-size: 12px; line-height: 1.55; color: var(--text-secondary);
+  max-height: 320px; overflow-y: auto; overflow-wrap: anywhere;
 }
-
-// ---- shared markdown body styling ---------------------------------------
-// Same .md-content rules the spec-editor preview pane uses, scoped here so
-// assistant_text + thinking_text + tool-input-json render with the same
-// typography as the rest of the dashboard's markdown surfaces.
-.md-content {
-  .md-h1 { font-size: 14px; font-weight: 650; color: var(--text-primary);
-    letter-spacing: -0.01em; margin: 0 0 8px; }
-  .md-h2 { font-size: 12.5px; font-weight: 650; color: var(--text-primary);
-    margin: 14px 0 4px; padding-bottom: 3px; border-bottom: 1px solid var(--border-subtle); }
-  .md-h3 { font-size: 12px; font-weight: 650; color: var(--text-primary);
-    margin: 12px 0 4px; }
-  .md-h4 { font-size: 10.5px; font-weight: 700;
-    text-transform: uppercase; letter-spacing: 0.06em;
-    color: var(--text-muted); margin: 10px 0 4px; }
-  .md-p { font-size: 12.5px; line-height: 1.6; color: var(--text-primary); margin: 0 0 4px;
-    overflow-wrap: anywhere;
-    strong { color: var(--text-primary); font-weight: 650; } }
-  .md-list, .md-ol {
-    padding: 0; margin: 4px 0 6px;
-    li {
-      position: relative; padding: 2px 0 2px 20px;
-      font-size: 12.5px; line-height: 1.55; color: var(--text-primary);
-      overflow-wrap: anywhere;
-    }
-  }
-  .md-list { list-style: none;
-    li::before { content: '•'; position: absolute; left: 4px; top: 1px; color: var(--text-faint); } }
-  .md-ol { list-style: none; counter-reset: md-ol;
-    li { counter-increment: md-ol;
-      &::before {
-        content: counter(md-ol) '.';
-        position: absolute; left: 0; top: 1px;
-        color: var(--text-faint); font-family: var(--font-mono);
-        font-size: 11px; min-width: 16px; text-align: right;
-      } } }
-  .md-spacer { height: 5px; }
-  .md-import { display: inline-block; font-size: 11px;
-    color: var(--node-route); background: var(--node-route-soft);
-    padding: 1px 6px; border-radius: 4px; margin: 3px 0; }
-  .md-inline-code { font-size: 11px; background: var(--bg-canvas);
-    padding: 1px 5px; border-radius: 3px;
-    border: 1px solid var(--border-subtle); color: var(--node-spec); }
-  .md-blockquote {
-    margin: 5px 0; padding: 6px 10px;
-    border-left: 3px solid var(--accent);
-    background: var(--accent-soft);
-    color: var(--text-secondary);
-    font-size: 12px; line-height: 1.5;
-    border-radius: 0 5px 5px 0;
-  }
-  .md-pre {
-    position: relative;
-    margin: 6px 0 8px;
-    padding: 10px 12px;
-    background: var(--bg-canvas);
-    border: 1px solid var(--border-subtle);
-    border-radius: 6px;
-    overflow-x: auto;
-    code {
-      display: block;
-      font-size: 11px; line-height: 1.5;
-      color: var(--text-primary);
-      white-space: pre;
-    }
-  }
-  .md-pre-lang {
-    position: absolute; top: 4px; right: 8px;
-    font-size: 9.5px; font-weight: 600;
-    color: var(--text-muted);
-    text-transform: lowercase;
-    background: var(--bg-panel);
-    padding: 1px 5px; border-radius: 3px;
-    border: 1px solid var(--border-subtle);
-  }
-  .md-table-scroll {
-    overflow-x: auto;
-    margin: 8px 0;
-    border: 1px solid var(--border-subtle);
-    border-radius: 6px;
-  }
-  .md-table {
-    width: 100%; border-collapse: collapse; font-size: 11px;
-    th, td { padding: 6px 10px; text-align: left; vertical-align: top;
-      border-bottom: 1px solid var(--border-subtle); }
-    thead th { background: var(--bg-panel); font-weight: 650; color: var(--text-primary);
-      font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em;
-      border-bottom: 1px solid var(--border-strong); white-space: nowrap; }
-    tbody td { color: var(--text-primary); }
-    tbody tr:last-child td { border-bottom: 0; }
-  }
-  > :first-child { margin-top: 0; }
+.files-touched {
+  display: flex; flex-direction: column; gap: 3px; font-size: 11.5px;
+  max-height: 180px; overflow-y: auto; padding: 6px 10px;
+  background: var(--bg-canvas); border: 1px solid var(--border-subtle); border-radius: 6px;
 }
+.files-touched .file-row { display: flex; align-items: center; min-width: 0; }
+.files-touched .file-path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-secondary); }
 
-// ---- loading / error / empty ---------------------------------------------
+// ---- loading / error / empty -----------------------------------------------
 
 .loading { padding: 40px 18px; text-align: center; color: var(--text-muted); font-size: 13px; }
 .error {
-  padding: 16px 18px; margin: 12px 0;
-  border-radius: 8px;
+  padding: 16px; margin: 12px 0; border-radius: 8px;
   border: 1px solid rgba(255, 90, 90, 0.35);
   background: var(--error-soft); color: var(--error);
   display: flex; flex-direction: column; gap: 8px; align-items: flex-start;
@@ -430,166 +201,18 @@
 .error-detail { font-size: 12px; color: var(--text-secondary); }
 .empty { padding: 30px 18px; color: var(--text-muted); font-size: 12.5px; text-align: center; }
 
-// ---- session summary panel (between stat-strip and filter-bar) ------------
+// ---- shared markdown body -----------------------------------------------
 
-.session-summary {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 12px;
-  margin: 0 0 16px 0;
-  // Stay at natural height; if any card grows tall (e.g. Files touched
-  // with 10 rows), the card itself scrolls internally rather than
-  // pushing the whole panel.
-  flex-shrink: 0;
-}
-
-.summary-card {
-  background: var(--surface-elevated);
-  border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-  padding: 10px 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  min-width: 0;
-}
-
-.summary-head {
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--text-secondary);
-}
-
-.summary-body { display: flex; flex-direction: column; gap: 6px; }
-
-.chip-grid {
-  display: flex;
-  flex-direction: row;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-// Shared chip shell — used in summary panel + collapsed prompt strip
-.tool-chip,
-.tool-chip-mini,
-.slash-pill,
-.skill-pill,
-.model-mini {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 11px;
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: var(--surface-base);
-  border: 1px solid var(--border-subtle);
-  white-space: nowrap;
-  flex-shrink: 0;
-  line-height: 1.4;
-}
-
-.tool-chip .dot,
-.tool-chip-mini .dot {
-  width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
-}
-
-.slash-pill {
-  background: var(--accent-soft, rgba(96, 165, 250, 0.12));
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-.skill-pill {
-  background: var(--success-soft, rgba(34, 197, 94, 0.12));
-  border-color: var(--success);
-  color: var(--success);
-}
-
-.model-mini { color: var(--text-secondary); font-size: 10.5px; }
-
-// Slash pill in the collapsed prompt row — slightly tighter
-.prompt-slash {
-  font-size: 10px;
-  padding: 1px 6px;
-}
-
-// Collapsed-row tool chip strip — sits just before the meta column
-.tool-chip-strip {
-  display: inline-flex;
-  flex-wrap: nowrap;
-  gap: 4px;
-  margin-right: 8px;
-  flex-shrink: 0;
-  overflow: hidden;
-}
-
-.tool-chip-mini {
-  font-size: 10px;
-  padding: 1px 6px;
-}
-
-// Files-touched lists — used in both summary panel and expanded body
-.files-card .summary-body { gap: 4px; }
-
-.files-list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  max-height: 220px;
-  overflow-y: auto;
-}
-
-.files-list .file-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 11.5px;
-  padding: 2px 0;
-  min-width: 0;
-}
-
-.files-list .file-op {
-  font-size: 10px;
-  font-weight: 600;
-  flex-shrink: 0;
-  width: 50px;
-  text-align: right;
-}
-
-.files-list .file-path {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--text-primary);
-}
-
-// In the expanded body, files-touched is a simpler vertical list
-.files-touched {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  font-size: 11.5px;
-  max-height: 180px;
-  overflow-y: auto;
-  padding: 6px 10px;
-  background: var(--surface-base);
-  border: 1px solid var(--border-subtle);
-  border-radius: 6px;
-}
-
-.files-touched .file-row {
-  display: flex;
-  align-items: center;
-  min-width: 0;
-}
-
-.files-touched .file-path {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--text-secondary);
+.md-content {
+  .md-h1 { font-size: 14px; font-weight: 650; color: var(--text-primary); letter-spacing: -0.01em; margin: 0 0 8px; }
+  .md-h2 { font-size: 12.5px; font-weight: 650; color: var(--text-primary); margin: 14px 0 4px; padding-bottom: 3px; border-bottom: 1px solid var(--border-subtle); }
+  .md-h3 { font-size: 12px; font-weight: 650; color: var(--text-primary); margin: 12px 0 4px; }
+  .md-p { font-size: 12.5px; line-height: 1.6; color: var(--text-primary); margin: 0 0 4px; overflow-wrap: anywhere; strong { color: var(--text-primary); font-weight: 650; } }
+  .md-list, .md-ol { padding: 0; margin: 4px 0 6px; li { position: relative; padding: 2px 0 2px 20px; font-size: 12.5px; line-height: 1.55; color: var(--text-primary); overflow-wrap: anywhere; } }
+  .md-list { list-style: none; li::before { content: '•'; position: absolute; left: 4px; top: 1px; color: var(--text-faint); } }
+  .md-spacer { height: 5px; }
+  .md-inline-code { font-size: 11px; background: var(--bg-canvas); padding: 1px 5px; border-radius: 3px; border: 1px solid var(--border-subtle); color: var(--node-spec); }
+  .md-blockquote { margin: 5px 0; padding: 6px 10px; border-left: 3px solid var(--accent); background: var(--accent-soft); color: var(--text-secondary); font-size: 12px; line-height: 1.5; border-radius: 0 5px 5px 0; }
+  .md-pre { position: relative; margin: 6px 0 8px; padding: 10px 12px; background: var(--bg-canvas); border: 1px solid var(--border-subtle); border-radius: 6px; overflow-x: auto; code { display: block; font-size: 11px; line-height: 1.5; color: var(--text-primary); white-space: pre; } }
+  > :first-child { margin-top: 0; }
 }

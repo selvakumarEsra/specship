@@ -48,6 +48,16 @@ async function resolveCg(app: FastifyInstance, req: FastifyRequest, reply: Fasti
   return cg;
 }
 
+type DbHandle = { prepare: (s: string) => { all: (...a: unknown[]) => unknown[]; get: (...a: unknown[]) => unknown } };
+
+/** Dig the raw SQLite handle off a SpecShip instance (same shape as routes/claude.ts). */
+function getDb(cg: SpecShipInstance): DbHandle {
+  const anyCg = cg as unknown as { db?: { getDb?: () => unknown }; queries?: { db?: unknown } };
+  if (anyCg.db?.getDb) return anyCg.db.getDb() as DbHandle;
+  if (anyCg.queries?.db) return anyCg.queries.db as DbHandle;
+  throw new Error('specship DB handle not accessible from server context');
+}
+
 export async function registerGraphRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/graph/stats', async (req: FastifyRequest<{ Querystring: ProjectQuery }>, reply) => {
     const cg = await resolveCg(app, req, reply); if (!cg) return;
@@ -160,5 +170,64 @@ export async function registerGraphRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/graph/files', async (req: FastifyRequest<{ Querystring: ProjectQuery }>, reply) => {
     const cg = await resolveCg(app, req, reply); if (!cg) return;
     return { files: cg.getFiles() };
+  });
+
+  /**
+   * GET /api/graph/health — feeds the Graph overview panel:
+   *   - linkHealth: spec-link counts per state (verified/drifted/broken/orphaned/…)
+   *   - edgeKinds:  edge counts grouped into calls / implements-documents / tests
+   *   - hubs:       the most-connected nodes (by total degree), for the "Most connected" list
+   */
+  app.get('/api/graph/health', async (req: FastifyRequest<{ Querystring: ProjectQuery }>, reply) => {
+    const cg = await resolveCg(app, req, reply); if (!cg) return;
+
+    // Spec-link health — count by state off the spec_links table.
+    const linkHealth: Record<string, number> = {};
+    for (const l of cg.getSpecQueries().getAllLinks()) {
+      linkHealth[l.state] = (linkHealth[l.state] ?? 0) + 1;
+    }
+
+    const db = getDb(cg);
+
+    // Edge kinds — bucket by the node kinds the edge connects, mirroring the
+    // design's "calls / implements / tests" legend. spec endpoints → implements,
+    // test endpoints → tests, everything else → calls.
+    const edgeKinds = db.prepare(`
+      SELECT
+        CASE
+          WHEN ns.kind = 'spec' OR nt.kind = 'spec' THEN 'implements'
+          WHEN ns.kind = 'test' OR nt.kind = 'test' THEN 'tests'
+          ELSE 'calls'
+        END as bucket,
+        COUNT(*) as count
+      FROM edges e
+      JOIN nodes ns ON ns.id = e.source
+      JOIN nodes nt ON nt.id = e.target
+      GROUP BY bucket
+    `).all() as Array<{ bucket: string; count: number }>;
+    const edgeKindMap: Record<string, number> = { calls: 0, implements: 0, tests: 0 };
+    for (const r of edgeKinds) edgeKindMap[r.bucket] = r.count;
+
+    // Synthesized (heuristic) edge count — dashed in the legend.
+    const synth = db.prepare(
+      `SELECT COUNT(*) as c FROM edges WHERE provenance = 'heuristic'`,
+    ).get() as { c: number };
+    edgeKindMap['synth'] = synth.c ?? 0;
+
+    // Most-connected hubs — total degree (in + out) per node, top 8.
+    const hubs = db.prepare(`
+      SELECT n.id, n.name, n.kind, n.file_path as filePath, deg.degree
+      FROM (
+        SELECT node, COUNT(*) as degree FROM (
+          SELECT source as node FROM edges
+          UNION ALL
+          SELECT target as node FROM edges
+        ) GROUP BY node ORDER BY degree DESC LIMIT 8
+      ) deg
+      JOIN nodes n ON n.id = deg.node
+      ORDER BY deg.degree DESC
+    `).all() as Array<{ id: string; name: string; kind: string; filePath: string; degree: number }>;
+
+    return { linkHealth, edgeKinds: edgeKindMap, hubs };
   });
 }

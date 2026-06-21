@@ -57,6 +57,8 @@ export interface ClaudePrompt {
   cache_read_tokens: number;
   cost_usd: number;
   is_sidechain: 0 | 1;
+  /** Wall-clock duration of this prompt turn (gap to the next prompt), ms. Session-detail only. */
+  durationMs?: number;
   /** Concatenated assistant text blocks (schema v7+). NULL on older rows. */
   assistant_text?: string | null;
   /** Concatenated extended-thinking blocks (schema v7+). NULL on older rows. */
@@ -103,7 +105,7 @@ export interface SessionSummaryResponse {
 }
 
 export interface HeatmapResponse {
-  files: Array<{ path: string; calls: number; resultBytes: number }>;
+  files: Array<{ path: string; calls: number; resultBytes: number; trend?: number[] }>;
   tools: Array<{ name: string; calls: number; resultBytes: number }>;
   subagents: Array<{ type: 'main' | 'subagent'; prompts: number; tokens: number; cost: number }>;
   subagentByName: Array<{ name: string; calls: number; firstSeen: number; lastSeen: number }>;
@@ -153,6 +155,8 @@ export interface CostsResponse {
   topPrompts: ClaudePrompt[];
   series: Array<{ day: number; cost: number; prompts: number }>;
   byModel: Array<{ model: string; prompts: number; cost: number }>;
+  /** Fractional week-over-week change in total spend vs the prior equal-length window. */
+  wowDelta: number;
 }
 
 export interface CacheResponse {
@@ -175,7 +179,34 @@ export interface CompareResponse {
     avgCost: number;
     prompts: number;
     cacheHit: number;
+    /** Per-model cost split for the stacked bars. */
+    byModel: Array<{ model: string; cost: number }>;
+    /** Top tools by call count (up to 4). */
+    topTools: string[];
   }>;
+}
+
+/** One dashboard stat tile: current value, fractional WoW delta, 7-point sparkline. */
+export interface StatMetric {
+  value: number;
+  delta: number;
+  series: number[];
+}
+
+export interface StatsResponse {
+  lastSessionCost: StatMetric;
+  toolCalls: StatMetric;
+  subagentPct: StatMetric;
+  drift: StatMetric;
+}
+
+export interface GraphHealthResponse {
+  /** Spec-link counts keyed by state (verified/drifted/broken/orphaned/…). */
+  linkHealth: Record<string, number>;
+  /** Edge counts bucketed into calls / implements / tests / synth. */
+  edgeKinds: Record<string, number>;
+  /** Most-connected nodes by total degree. */
+  hubs: Array<{ id: string; name: string; kind: string; filePath: string; degree: number }>;
 }
 
 export interface TipEvidence {

@@ -1,34 +1,28 @@
-<div class="page">
+<div class="sd-root">
   <header class="page-head">
-    <a class="back-link" [routerLink]="['/sessions']">
-      <app-icon name="x" [size]="14" />
-      <span>All sessions</span>
+    <a class="back-link btn btn-ghost btn-sm" [routerLink]="['/sessions']">
+      <app-icon name="chevronLeft" [size]="14" />
+      Sessions
     </a>
     <div class="title-block">
       <div class="title">
-        Session <span class="mono session-id">{{ id().slice(0, 12) }}</span>
+        <span class="mono session-id">{{ id().slice(0, 12) }}</span>
         @if (session()?.last_model) {
-          <span class="model-pill mono">{{ session()!.last_model }}</span>
+          <app-pill [color]="'var(--node-spec)'" [bg]="'var(--node-spec-soft)'">{{ session()!.last_model }}</app-pill>
         }
         <span class="live-pill"
               [class.live]="liveMode() === 'live'"
               [class.polling]="liveMode() === 'polling'"
               [class.idle]="liveMode() === 'idle'"
-              [title]="liveMode() === 'live'
-                ? 'Live — new prompts push to this page as Claude Code writes them (~0.5s).'
-                : liveMode() === 'polling'
-                  ? 'Polling — SSE unavailable, refetching every 5s while this tab is visible.'
-                  : 'Idle — live updates paused (tab hidden or session not loaded).'">
+              [title]="liveMode() === 'live' ? 'Live — new prompts push as Claude Code writes them' : liveMode() === 'polling' ? 'Polling — SSE unavailable, refetching every 5s' : 'Idle — live updates paused'">
           <span class="dot"></span>
           {{ liveMode() === 'live' ? 'Live' : liveMode() === 'polling' ? 'Polling' : 'Idle' }}
         </span>
       </div>
       @if (session(); as s) {
-        <div class="sub">
-          {{ s.project_path }}
+        <div class="sub">{{ s.project_path }}
           @if (s.started_at && s.ended_at) {
-            · {{ fmtClock(s.started_at) }} – {{ fmtClock(s.ended_at) }}
-            ({{ fmtDurationSec(s.started_at, s.ended_at) }})
+            · {{ fmtClock(s.started_at) }} – {{ fmtClock(s.ended_at) }} ({{ fmtDurationSec(s.started_at, s.ended_at) }})
           }
         </div>
       }
@@ -40,7 +34,6 @@
         [class.spinning]="localRefreshing() || refresh.loading()"
         [disabled]="refresh.loading()"
         (click)="forceRefresh()"
-        title="Force refresh: sync the index + re-ingest Claude Code transcripts"
         aria-label="Refresh session detail"
       >
         <app-icon name="refresh" [size]="13" />
@@ -58,263 +51,307 @@
       <button class="btn btn-secondary btn-sm" (click)="forceRefresh()">Retry</button>
     </div>
   } @else if (session(); as s) {
-    <!-- Stat strip — at-a-glance totals -->
-    <div class="stat-strip">
-      <div class="stat">
-        <div class="stat-lbl">Cost</div>
-        <div class="stat-val cost">${{ s.total_cost_usd.toFixed(4) }}</div>
-      </div>
-      <div class="stat">
-        <div class="stat-lbl">Prompts</div>
-        <div class="stat-val mono">{{ s.prompt_count }}</div>
-      </div>
-      <div class="stat">
-        <div class="stat-lbl">Tool calls</div>
-        <div class="stat-val mono">{{ totalToolCalls() }}</div>
-      </div>
-      <div class="stat">
-        <div class="stat-lbl">Input</div>
-        <div class="stat-val mono">{{ fmtTokens(s.total_input_tokens) }}</div>
-      </div>
-      <div class="stat">
-        <div class="stat-lbl">Output</div>
-        <div class="stat-val mono">{{ fmtTokens(s.total_output_tokens) }}</div>
-      </div>
-      <div class="stat">
-        <div class="stat-lbl">Cache write</div>
-        <div class="stat-val mono">{{ fmtTokens(s.total_cache_creation_tokens) }}</div>
-      </div>
-      <div class="stat">
-        <div class="stat-lbl">Cache read</div>
-        <div class="stat-val mono">{{ fmtTokens(s.total_cache_read_tokens) }}</div>
-      </div>
-      <div class="stat">
-        <div class="stat-lbl">Cache rate</div>
-        <div class="stat-val mono" [style.color]="cacheColor(cacheReadRate())">
-          {{ (cacheReadRate() * 100) | number:'1.0-0' }}%
+
+    <!-- Main + rail layout -->
+    <div class="sd-body">
+
+      <!-- Main scroll column -->
+      <div class="scroll-y sd-main">
+
+        <!-- Stat strip -->
+        <div class="stat-strip">
+          <div class="stat">
+            <div class="stat-lbl">Cost</div>
+            <div class="stat-val cost">${{ s.total_cost_usd.toFixed(2) }}</div>
+          </div>
+          <div class="stat">
+            <div class="stat-lbl">Prompts</div>
+            <div class="stat-val mono">{{ s.prompt_count }}</div>
+          </div>
+          <div class="stat">
+            <div class="stat-lbl">Window</div>
+            <div class="stat-val mono" style="font-size: 12px;">
+              {{ fmtClock(s.started_at) }} – {{ fmtClock(s.ended_at).split(' ').pop() }}
+            </div>
+          </div>
+          <div class="stat">
+            <div class="stat-lbl">Cache hit</div>
+            <div class="stat-val mono" [style.color]="cacheColor(cacheReadRate())">
+              {{ (cacheReadRate() * 100) | number:'1.0-0' }}%
+            </div>
+          </div>
+          <div class="stat">
+            <div class="stat-lbl">Tool calls</div>
+            <div class="stat-val mono">{{ totalToolCalls() }}</div>
+          </div>
         </div>
-      </div>
-    </div>
 
-    <!-- Session summary — top tools, slash commands, skills, files touched. -->
-    @if (summaryData(); as sum) {
-      @if (sum.byTool.length || sum.slashCommands.length || sum.skills.length || sum.filesTouched.length) {
-        <div class="session-summary">
-          @if (sum.byTool.length) {
-            <section class="summary-card">
-              <div class="summary-head">Top tools</div>
-              <div class="summary-body chip-grid">
-                @for (t of sum.byTool.slice(0, 8); track t.name) {
-                  <span class="tool-chip">
-                    <span class="dot" [style.background]="toolColor(t.name)"></span>
-                    <span class="mono">{{ t.name }}</span>
-                    <span class="muted mono">×{{ t.calls }}</span>
-                  </span>
-                }
-              </div>
-            </section>
-          }
-          @if (sum.slashCommands.length || sum.skills.length) {
-            <section class="summary-card">
-              <div class="summary-head">Commands & skills</div>
-              <div class="summary-body chip-grid">
-                @for (c of sum.slashCommands; track c.name) {
-                  <span class="slash-pill" title="Slash command invoked {{ c.count }}×">
-                    <span class="mono">{{ c.name }}</span>
-                    @if (c.count > 1) { <span class="muted mono">×{{ c.count }}</span> }
-                  </span>
-                }
-                @for (s of sum.skills; track s.name) {
-                  <span class="skill-pill" title="Skill invoked {{ s.count }}×">
-                    <span class="mono">⚡ {{ s.name }}</span>
-                    @if (s.count > 1) { <span class="muted mono">×{{ s.count }}</span> }
-                  </span>
-                }
-              </div>
-            </section>
-          }
-          @if (sum.byModel.length > 1) {
-            <section class="summary-card">
-              <div class="summary-head">Models</div>
-              <div class="summary-body chip-grid">
-                @for (m of sum.byModel; track m.model) {
-                  <span class="model-mini mono">{{ m.model }} · {{ m.prompts }}p · ${{ m.cost.toFixed(2) }}</span>
-                }
-              </div>
-            </section>
-          }
-          @if (sum.filesTouched.length) {
-            <section class="summary-card files-card">
-              <div class="summary-head">Files touched · {{ sum.filesTouched.length }}</div>
-              <div class="summary-body files-list">
-                @for (f of sum.filesTouched.slice(0, 10); track f.path) {
-                  <div class="file-row" [title]="f.path">
-                    <span class="file-op mono" [style.color]="toolColor(f.lastOp)">{{ f.lastOp }}</span>
-                    <span class="file-path mono">{{ basename(f.path) }}</span>
-                    <span class="muted mono">×{{ f.ops }}</span>
-                  </div>
-                }
-                @if (sum.filesTouched.length > 10) {
-                  <div class="muted xs">+{{ sum.filesTouched.length - 10 }} more</div>
-                }
-              </div>
-            </section>
-          }
+        <!-- Prompt list header -->
+        <div class="row gap-8" style="justify-content: space-between; margin-bottom: 8px;">
+          <span class="eyebrow">Prompt timeline · {{ groups().length }}</span>
+          <span class="muted" style="font-size: 11px;">click a prompt for full detail</span>
+          <div class="grow"></div>
+          <button class="btn btn-ghost btn-sm" type="button" (click)="expandAll()">Expand all</button>
+          <button class="btn btn-ghost btn-sm" type="button" (click)="collapseAll()">Collapse all</button>
         </div>
-      }
-    }
 
-    <!-- Prompt list controls -->
-    <div class="filter-bar">
-      <span class="muted xs">prompts · {{ groups().length }}</span>
-      <span class="grow"></span>
-      <button class="btn btn-ghost btn-sm" type="button" (click)="expandAll()">Expand all</button>
-      <button class="btn btn-ghost btn-sm" type="button" (click)="collapseAll()">Collapse all</button>
-    </div>
-
-    <!-- Prompts: one row each, click to expand into per-prompt detail -->
-    <div class="prompts">
-      @for (g of groups(); track g.prompt.id) {
-        <div class="prompt card">
-          <button
-            type="button"
-            class="prompt-head"
-            [class.expanded]="isExpanded(g.prompt.id)"
-            [attr.aria-expanded]="isExpanded(g.prompt.id)"
-            (click)="toggleExpand(g.prompt.id)"
-          >
-            <span class="chevron mono" [class.open]="isExpanded(g.prompt.id)">›</span>
-            <span class="prompt-time mono muted">{{ fmtClock(g.prompt.ts) }}</span>
-            @if (g.prompt.is_sidechain === 1) {
-              <span class="pill subagent">subagent</span>
-            }
-            @if (g.slashCommand) {
-              <span class="slash-pill prompt-slash" title="Slash command">
-                <span class="mono">{{ g.slashCommand }}</span>
-              </span>
-            }
-            <span class="prompt-text">
-              @if (g.prompt.text) { {{ g.prompt.text.length > 140 ? g.prompt.text.slice(0, 140) + '…' : g.prompt.text }} }
-              @else { <span class="muted">(no user text — assistant-only turn)</span> }
-            </span>
-            <span class="grow"></span>
-            @if (g.toolBreakdown.length > 0) {
-              <span class="tool-chip-strip">
-                @for (c of g.toolBreakdown.slice(0, 5); track c.name) {
-                  <span class="tool-chip-mini" [title]="c.name + ' × ' + c.count">
-                    <span class="dot" [style.background]="c.color"></span>
-                    <span class="mono">{{ c.name }}</span>
-                    <span class="mono muted">×{{ c.count }}</span>
-                  </span>
+        <!-- Prompt rows (design PromptRow style) -->
+        <div class="col gap-6" style="padding-bottom: 16px;">
+          @for (g of groups(); track g.prompt.id) {
+            <div class="prompt card">
+              <button
+                type="button"
+                class="prompt-head row gap-10"
+                [class.expanded]="isExpanded(g.prompt.id)"
+                [attr.aria-expanded]="isExpanded(g.prompt.id)"
+                (click)="toggleExpand(g.prompt.id)"
+              >
+                <!-- time -->
+                <span class="mono muted" style="font-size: 10.5px; width: 52px; flex-shrink: 0;">{{ fmtClock(g.prompt.ts) }}</span>
+                <!-- quality dot placeholder — color by cache as proxy -->
+                <span
+                  style="width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;"
+                  [style.background]="cacheColor(g.prompt.cache_read_tokens > 0 ? (g.prompt.cache_read_tokens / (g.prompt.input_tokens + g.prompt.cache_creation_tokens + g.prompt.cache_read_tokens || 1)) : 0)"
+                  [title]="'Cache: ' + (g.prompt.cache_read_tokens | number)"></span>
+                <!-- subagent pill -->
+                @if (g.prompt.is_sidechain === 1) {
+                  <app-pill [color]="'var(--node-route)'" [bg]="'var(--node-route-soft)'" style="flex-shrink: 0;">
+                    <app-icon name="bot" [size]="10" />subagent
+                  </app-pill>
                 }
-                @if (g.toolBreakdown.length > 5) {
-                  <span class="tool-chip-mini muted mono" [title]="(g.toolBreakdown.length - 5) + ' more tool types'">+{{ g.toolBreakdown.length - 5 }}</span>
+                <!-- slash command icon -->
+                @if (g.slashCommand) {
+                  <app-icon name="command" [size]="12" style="color: var(--node-code); flex-shrink: 0;" [title]="g.slashCommand" />
                 }
-              </span>
-            }
-            <span class="prompt-meta mono muted">
-              @if (g.durationMs > 0) { {{ fmtDurationMs(g.durationMs) }} · }
-              {{ fmtTokens(g.totalTokens) }}t
-              · ${{ g.prompt.cost_usd.toFixed(4) }}
-            </span>
-          </button>
+                <!-- prompt text -->
+                <span class="grow" style="font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;">
+                  @if (g.prompt.text) { {{ g.prompt.text.length > 140 ? g.prompt.text.slice(0, 140) + '…' : g.prompt.text }} }
+                  @else { <span class="muted">(assistant-only turn)</span> }
+                </span>
+                <!-- tool count -->
+                <span class="row gap-4" style="flex-shrink: 0;">
+                  <app-icon name="wrench" [size]="11" style="color: var(--text-muted);" />
+                  <span class="mono tabular muted" style="font-size: 11px;">{{ g.tools.length }}</span>
+                </span>
+                <!-- per-prompt duration (wall-clock from API) -->
+                @if (g.prompt.durationMs) {
+                  <span class="mono tabular muted" style="font-size: 11px; width: 44px; text-align: right; flex-shrink: 0;" title="Wall-clock duration for this prompt">{{ fmtDurationMs(g.prompt.durationMs) }}</span>
+                }
+                <!-- tokens -->
+                <span class="mono tabular muted" style="font-size: 11px; width: 50px; text-align: right; flex-shrink: 0;">{{ fmtTokens(g.totalTokens) }}</span>
+                <!-- cache% -->
+                <span class="mono tabular" style="font-size: 11px; width: 38px; text-align: right; flex-shrink: 0;"
+                  [style.color]="cacheColor(g.totalTokens > 0 ? (g.prompt.cache_read_tokens || 0) / g.totalTokens : 0)">
+                  {{ g.totalTokens > 0 ? ((g.prompt.cache_read_tokens || 0) / g.totalTokens * 100 | number:'1.0-0') : 0 }}%
+                </span>
+                <!-- cost -->
+                <span class="mono tabular" style="font-size: 13px; font-weight: 600; width: 54px; text-align: right; flex-shrink: 0;"
+                  [style.color]="g.prompt.cost_usd > 2.5 ? 'var(--error)' : 'var(--text-primary)'">${{ g.prompt.cost_usd.toFixed(2) }}</span>
+                <app-icon name="chevronRight" [size]="14" style="color: var(--text-muted); flex-shrink: 0;" />
+              </button>
 
-          @if (isExpanded(g.prompt.id)) {
-            <div class="prompt-body">
-              @if (g.prompt.text) {
-                <section class="prompt-section">
-                  <div class="section-lbl">User prompt</div>
-                  <pre class="prompt-pre">{{ g.prompt.text }}</pre>
-                </section>
-              }
-
-              @if (g.prompt.assistant_text) {
-                <section class="prompt-section">
-                  <div class="section-lbl">Assistant response</div>
-                  <div class="assistant-body md-content" [innerHTML]="renderAssistant(g.prompt.assistant_text)"></div>
-                </section>
-              }
-
-              @if (g.prompt.thinking_text) {
-                <section class="prompt-section">
-                  <details class="thinking-details">
-                    <summary class="section-lbl thinking-summary">
-                      Extended thinking <span class="muted xs">(click to expand)</span>
-                    </summary>
-                    <div class="thinking-body md-content" [innerHTML]="renderAssistant(g.prompt.thinking_text)"></div>
-                  </details>
-                </section>
-              }
-
-              <section class="prompt-section">
-                <div class="section-lbl">Token breakdown</div>
-                <div class="kv-row">
-                  <div class="kv"><div class="kv-lbl">Input</div><div class="kv-val mono">{{ fmtTokens(g.prompt.input_tokens) }}</div></div>
-                  <div class="kv"><div class="kv-lbl">Output</div><div class="kv-val mono">{{ fmtTokens(g.prompt.output_tokens) }}</div></div>
-                  <div class="kv"><div class="kv-lbl">Cache write</div><div class="kv-val mono">{{ fmtTokens(g.prompt.cache_creation_tokens) }}</div></div>
-                  <div class="kv"><div class="kv-lbl">Cache read</div><div class="kv-val mono">{{ fmtTokens(g.prompt.cache_read_tokens) }}</div></div>
-                  <div class="kv"><div class="kv-lbl">Cost</div><div class="kv-val mono cost">${{ g.prompt.cost_usd.toFixed(4) }}</div></div>
-                  @if (g.prompt.model) {
-                    <div class="kv"><div class="kv-lbl">Model</div><div class="kv-val mono">{{ g.prompt.model }}</div></div>
+              @if (isExpanded(g.prompt.id)) {
+                <div class="prompt-body">
+                  @if (g.prompt.text) {
+                    <section class="prompt-section">
+                      <div class="section-lbl">User prompt</div>
+                      <pre class="prompt-pre">{{ g.prompt.text }}</pre>
+                    </section>
                   }
-                </div>
-              </section>
-
-              @if (g.filesTouched.length > 0) {
-                <section class="prompt-section">
-                  <div class="section-lbl">Files touched · {{ g.filesTouched.length }}</div>
-                  <div class="files-touched">
-                    @for (f of g.filesTouched; track f) {
-                      <div class="file-row" [title]="f">
-                        <span class="file-path mono">{{ f }}</span>
-                      </div>
-                    }
-                  </div>
-                </section>
-              }
-
-              @if (g.tools.length > 0) {
-                <section class="prompt-section">
-                  <div class="section-lbl">Tool calls · {{ g.tools.length }} · returned {{ fmtBytes(g.toolBytes) }}</div>
-                  <div class="tools">
-                    @for (t of g.tools; track t.id) {
-                      <div class="tool-block">
-                        <button
-                          type="button"
-                          class="tool-row"
-                          [class.has-input]="!!t.input_json"
-                          [class.expanded]="isToolInputExpanded(t.id)"
-                          [attr.aria-expanded]="isToolInputExpanded(t.id)"
-                          [disabled]="!t.input_json"
-                          (click)="toggleToolInput(t.id)"
-                        >
-                          <span class="tool-chevron mono" [class.open]="isToolInputExpanded(t.id)" aria-hidden="true">
-                            @if (t.input_json) { › }
-                          </span>
-                          <span class="tool-name mono" [style.color]="toolColor(t.tool_name)">{{ t.tool_name }}</span>
-                          @if (t.input_summary) {
-                            <span class="tool-input mono">{{ t.input_summary }}</span>
-                          }
-                          <span class="grow"></span>
-                          @if (t.result_length) {
-                            <span class="tool-bytes mono muted">{{ fmtBytes(t.result_length) }}</span>
-                          }
-                        </button>
-                        @if (t.input_json && isToolInputExpanded(t.id)) {
-                          <pre class="tool-input-json mono">{{ formatToolInput(t.input_json) }}</pre>
+                  @if (g.prompt.assistant_text) {
+                    <section class="prompt-section">
+                      <div class="section-lbl">Assistant response</div>
+                      <div class="assistant-body md-content" [innerHTML]="renderAssistant(g.prompt.assistant_text)"></div>
+                    </section>
+                  }
+                  @if (g.prompt.thinking_text) {
+                    <section class="prompt-section">
+                      <details class="thinking-details">
+                        <summary class="section-lbl thinking-summary">
+                          Extended thinking <span class="muted xs">(click to expand)</span>
+                        </summary>
+                        <div class="thinking-body md-content" [innerHTML]="renderAssistant(g.prompt.thinking_text)"></div>
+                      </details>
+                    </section>
+                  }
+                  <section class="prompt-section">
+                    <div class="section-lbl">Token breakdown</div>
+                    <div class="kv-row">
+                      <div class="kv"><div class="kv-lbl">Input</div><div class="kv-val mono">{{ fmtTokens(g.prompt.input_tokens) }}</div></div>
+                      <div class="kv"><div class="kv-lbl">Output</div><div class="kv-val mono">{{ fmtTokens(g.prompt.output_tokens) }}</div></div>
+                      <div class="kv"><div class="kv-lbl">Cache write</div><div class="kv-val mono">{{ fmtTokens(g.prompt.cache_creation_tokens) }}</div></div>
+                      <div class="kv"><div class="kv-lbl">Cache read</div><div class="kv-val mono">{{ fmtTokens(g.prompt.cache_read_tokens) }}</div></div>
+                      <div class="kv"><div class="kv-lbl">Cost</div><div class="kv-val mono cost">${{ g.prompt.cost_usd.toFixed(4) }}</div></div>
+                      @if (g.prompt.durationMs) {
+                        <div class="kv"><div class="kv-lbl">Duration</div><div class="kv-val mono">{{ fmtDurationMs(g.prompt.durationMs) }}</div></div>
+                      }
+                      @if (g.prompt.model) {
+                        <div class="kv"><div class="kv-lbl">Model</div><div class="kv-val mono">{{ g.prompt.model }}</div></div>
+                      }
+                    </div>
+                  </section>
+                  @if (g.filesTouched.length > 0) {
+                    <section class="prompt-section">
+                      <div class="section-lbl">Files touched · {{ g.filesTouched.length }}</div>
+                      <div class="files-touched">
+                        @for (f of g.filesTouched; track f) {
+                          <div class="file-row" [title]="f">
+                            <span class="file-path mono">{{ f }}</span>
+                          </div>
                         }
                       </div>
-                    }
-                  </div>
-                </section>
+                    </section>
+                  }
+                  @if (g.tools.length > 0) {
+                    <section class="prompt-section">
+                      <div class="section-lbl">Tool calls · {{ g.tools.length }} · returned {{ fmtBytes(g.toolBytes) }}</div>
+                      <div class="tools">
+                        @for (t of g.tools; track t.id) {
+                          <div class="tool-block">
+                            <button
+                              type="button"
+                              class="tool-row"
+                              [class.has-input]="!!t.input_json"
+                              [class.expanded]="isToolInputExpanded(t.id)"
+                              [attr.aria-expanded]="isToolInputExpanded(t.id)"
+                              [disabled]="!t.input_json"
+                              (click)="toggleToolInput(t.id)"
+                            >
+                              <span class="tool-chevron mono" [class.open]="isToolInputExpanded(t.id)" aria-hidden="true">
+                                @if (t.input_json) { › }
+                              </span>
+                              <span class="tool-name mono" [style.color]="toolColor(t.tool_name)">{{ t.tool_name }}</span>
+                              @if (t.input_summary) {
+                                <span class="tool-input mono">{{ t.input_summary }}</span>
+                              }
+                              <span class="grow"></span>
+                              @if (t.result_length) {
+                                <span class="tool-bytes mono muted">{{ fmtBytes(t.result_length) }}</span>
+                              }
+                            </button>
+                            @if (t.input_json && isToolInputExpanded(t.id)) {
+                              <pre class="tool-input-json mono">{{ formatToolInput(t.input_json) }}</pre>
+                            }
+                          </div>
+                        }
+                      </div>
+                    </section>
+                  }
+                </div>
               }
             </div>
+          } @empty {
+            <div class="empty">No prompts logged for this session yet.</div>
           }
         </div>
-      } @empty {
-        <div class="empty">No prompts logged for this session yet.</div>
-      }
+      </div>
+
+      <!-- Summary rail (290px) — design's right-side panel -->
+      <div class="scroll-y sd-rail">
+
+        <!-- Token mix segmented bar -->
+        <div class="eyebrow" style="margin-bottom: 10px;">Token mix</div>
+        <div class="tok-bar" style="margin-bottom: 10px;">
+          <div class="tok-seg" [style.width.%]="tokPct('input')"    style="background: var(--node-spec);" [title]="'Input: ' + fmtTokens(s.total_input_tokens)"></div>
+          <div class="tok-seg" [style.width.%]="tokPct('output')"   style="background: var(--node-code);" [title]="'Output: ' + fmtTokens(s.total_output_tokens)"></div>
+          <div class="tok-seg" [style.width.%]="tokPct('cacheWrite')" style="background: var(--warn);" [title]="'Cache write: ' + fmtTokens(s.total_cache_creation_tokens)"></div>
+          <div class="tok-seg" [style.width.%]="tokPct('cacheRead')" style="background: var(--node-route);" [title]="'Cache read: ' + fmtTokens(s.total_cache_read_tokens)"></div>
+        </div>
+        <div class="col gap-6" style="margin-bottom: 20px;">
+          <div class="row gap-8">
+            <span style="width: 9px; height: 9px; border-radius: 2px; background: var(--node-spec); flex-shrink: 0;"></span>
+            <span class="muted grow" style="font-size: 11.5px;">Input</span>
+            <span class="mono tabular" style="font-size: 11.5px;">{{ fmtTokens(s.total_input_tokens) }}</span>
+            <span class="mono tabular muted" style="font-size: 10px; width: 32px; text-align: right;">{{ tokPct('input') | number:'1.0-0' }}%</span>
+          </div>
+          <div class="row gap-8">
+            <span style="width: 9px; height: 9px; border-radius: 2px; background: var(--node-code); flex-shrink: 0;"></span>
+            <span class="muted grow" style="font-size: 11.5px;">Output</span>
+            <span class="mono tabular" style="font-size: 11.5px;">{{ fmtTokens(s.total_output_tokens) }}</span>
+            <span class="mono tabular muted" style="font-size: 10px; width: 32px; text-align: right;">{{ tokPct('output') | number:'1.0-0' }}%</span>
+          </div>
+          <div class="row gap-8">
+            <span style="width: 9px; height: 9px; border-radius: 2px; background: var(--warn); flex-shrink: 0;"></span>
+            <span class="muted grow" style="font-size: 11.5px;">Cache write</span>
+            <span class="mono tabular" style="font-size: 11.5px;">{{ fmtTokens(s.total_cache_creation_tokens) }}</span>
+            <span class="mono tabular muted" style="font-size: 10px; width: 32px; text-align: right;">{{ tokPct('cacheWrite') | number:'1.0-0' }}%</span>
+          </div>
+          <div class="row gap-8">
+            <span style="width: 9px; height: 9px; border-radius: 2px; background: var(--node-route); flex-shrink: 0;"></span>
+            <span class="muted grow" style="font-size: 11.5px;">Cache read</span>
+            <span class="mono tabular" style="font-size: 11.5px;">{{ fmtTokens(s.total_cache_read_tokens) }}</span>
+            <span class="mono tabular muted" style="font-size: 10px; width: 32px; text-align: right;">{{ tokPct('cacheRead') | number:'1.0-0' }}%</span>
+          </div>
+        </div>
+
+        <!-- Cache effectiveness card -->
+        <div class="cache-card" style="margin-bottom: 20px;">
+          <div class="row gap-8">
+            <app-icon name="database" [size]="13" style="color: var(--success);" />
+            <span class="muted" style="font-size: 10.5px;">Cache effectiveness</span>
+          </div>
+          <div class="row" style="align-items: baseline; gap: 8px; margin-top: 4px;">
+            <span class="tabular" style="font-size: 24px; font-weight: 700; color: var(--success);">{{ (cacheReadRate() * 100) | number:'1.0-0' }}%</span>
+            <span class="muted" style="font-size: 10.5px;">of input served from cache</span>
+          </div>
+        </div>
+
+        <!-- Commands & skills from summary -->
+        @if (summaryData(); as sum) {
+          @if (sum.slashCommands.length || sum.skills.length) {
+            <div style="margin-bottom: 20px;">
+              <div class="eyebrow" style="margin-bottom: 10px;">Commands & skills</div>
+              <div class="row gap-6" style="flex-wrap: wrap;">
+                @for (c of sum.slashCommands; track c.name) {
+                  <span class="pill" style="color: var(--node-code); background: var(--node-code-soft); font-family: var(--font-mono); font-weight: 500;">
+                    <app-icon name="command" [size]="10" />{{ c.name }}
+                    @if (c.count > 1) { <span style="opacity: 0.7;">×{{ c.count }}</span> }
+                  </span>
+                }
+                @for (sk of sum.skills; track sk.name) {
+                  <span class="pill" style="color: var(--node-test); background: var(--node-test-soft); font-family: var(--font-mono); font-weight: 500;">
+                    <app-icon name="sparkles" [size]="10" />{{ sk.name }}
+                    @if (sk.count > 1) { <span style="opacity: 0.7;">×{{ sk.count }}</span> }
+                  </span>
+                }
+              </div>
+            </div>
+          }
+
+          <!-- Tools used (HBars) -->
+          @if (sum.byTool.length) {
+            <div class="eyebrow" style="margin-bottom: 10px;">Tools used · {{ sum.byTool.length }}</div>
+            <app-h-bars
+              [items]="sum.byTool"
+              valueKey="calls"
+              [fmt]="fmtTokensFn"
+              [color]="toolBarColor"
+            />
+            <div class="muted" style="font-size: 10px; margin-top: 8px;">bar = call count</div>
+          }
+        }
+
+        <!-- Cost per prompt mini bars -->
+        @if (groups().length > 0) {
+          <div class="eyebrow" style="margin: 20px 0 10px;">Cost per prompt</div>
+          <div class="col gap-5">
+            @for (g of groups(); track g.prompt.id) {
+              <div class="row gap-8">
+                <span class="mono muted" style="font-size: 10px; width: 44px; flex-shrink: 0;">{{ fmtClock(g.prompt.ts) }}</span>
+                <div class="grow">
+                  <app-bar
+                    [frac]="g.prompt.cost_usd / maxPromptCost()"
+                    [color]="g.prompt.cost_usd > 2.5 ? 'var(--error)' : 'var(--accent)'"
+                  />
+                </div>
+                <span class="mono tabular" style="font-size: 10.5px; width: 40px; text-align: right;">${{ g.prompt.cost_usd.toFixed(2) }}</span>
+              </div>
+            }
+          </div>
+        }
+      </div>
     </div>
+
   } @else {
     <div class="empty">Session not found.</div>
   }

@@ -27,11 +27,11 @@
 
   <div class="stat-strip row gap-10">
     <div class="stat">
-      <app-icon name="memory" [size]="14" />
+      <app-icon name="memory" [size]="14" style="color:var(--accent);" />
       <div><div class="lbl">Loaded</div><div class="val mono">{{ fmtK(totalTokens()) }} tokens</div></div>
     </div>
     <div class="stat">
-      <app-icon name="memory" [size]="14" />
+      <app-icon name="memory" [size]="14" style="color:var(--node-spec);" />
       <div><div class="lbl">Instructions</div><div class="val mono">{{ instructionCount() }}</div></div>
     </div>
     <div class="stat icon-tips">
@@ -189,6 +189,7 @@
 
             <div class="path-row">
               <span class="path" [title]="f.path">{{ f.path }}</span>
+              <app-copy-btn [text]="f.path" />
             </div>
 
             <div class="kv-strip">

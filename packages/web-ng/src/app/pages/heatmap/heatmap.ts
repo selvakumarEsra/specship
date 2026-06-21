@@ -1,14 +1,18 @@
 /**
- * Heatmap — files grid + tools/subagents bars + click-to-drill side drawer.
- *
- * The aggregate heatmap is one fetch; each cell/row is clickable and opens
- * a side drawer that hits the matching /api/claude/heatmap/{file,tool,subagent}
- * endpoint for the underlying invocations.
+ * Heatmap — treemap + tool efficiency table + subagents + click-to-drill side drawer.
  */
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { DecimalPipe } from '@angular/common';
 import { ApiService } from '../../api/api';
 import { apiResource } from '../../api/resource';
+import { shortLabel } from '../../util/paths';
+import { PageHead } from '../../ui/page-head';
+import { Segmented } from '../../ui/segmented';
+import { Bar } from '../../ui/bar';
 import { HBars, type HBarItem } from '../../charts/h-bars/h-bars';
+import { Treemap, type TreemapItem } from '../../charts/treemap/treemap';
+import { Sparkline } from '../../charts/sparkline/sparkline';
+import { Icon } from '../../shell/icon/icon';
 import type {
   HeatmapResponse,
   HeatmapFileDrillResponse,
@@ -17,6 +21,7 @@ import type {
 } from '../../api/types';
 
 type Range = 'today' | 'week' | 'month' | 'all';
+type Metric = 'calls' | 'tokens';
 
 type DrillTarget =
   | { kind: 'file'; key: string }
@@ -25,15 +30,17 @@ type DrillTarget =
 
 @Component({
   selector: 'app-heatmap',
-  imports: [HBars],
+  imports: [PageHead, Segmented, Bar, HBars, Treemap, Sparkline, Icon, DecimalPipe],
   templateUrl: './heatmap.html',
   styleUrl: './heatmap.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class Heatmap {
+  protected readonly Math = Math;
+
   private readonly api = inject(ApiService);
   protected readonly range = signal<Range>('week');
-  protected readonly ranges: Range[] = ['today', 'week', 'month', 'all'];
+  protected readonly metric = signal<Metric>('calls');
 
   protected readonly resource = apiResource<HeatmapResponse>(
     this.api,
@@ -44,11 +51,45 @@ export class Heatmap {
   protected readonly tools = computed(() => this.resource.state().data?.tools ?? []);
   protected readonly subagents = computed(() => this.resource.state().data?.subagents ?? []);
   protected readonly subagentByName = computed(() => this.resource.state().data?.subagentByName ?? []);
-  protected readonly maxFile = computed(() => Math.max(1, ...this.files().map((f) => f.calls)));
-  protected readonly maxSubagentCalls = computed(() => Math.max(1, ...this.subagentByName().map((s) => s.calls)));
 
-  // Drill drawer ------------------------------------------------------------
+  // Summary stats
+  protected readonly totalCalls = computed(() => this.tools().reduce((a, b) => a + b.calls, 0));
+  protected readonly totalResultTokens = computed(() => this.tools().reduce((a, b) => a + (b.resultBytes || 0), 0));
+  protected readonly busiestFile = computed<HeatmapResponse['files'][number] | null>(
+    () => [...this.files()].sort((a, b) => b.calls - a.calls)[0] ?? null,
+  );
+  protected readonly heaviestTool = computed<HeatmapResponse['tools'][number] | null>(
+    () => [...this.tools()].sort((a, b) => (b.resultBytes || 0) - (a.resultBytes || 0))[0] ?? null,
+  );
 
+  // Tool table sorted by result tokens
+  protected readonly toolsByTokens = computed(() => [...this.tools()].sort((a, b) => (b.resultBytes || 0) - (a.resultBytes || 0)));
+  protected readonly maxToolTokens = computed(() => Math.max(1, ...this.toolsByTokens().map((t) => t.resultBytes || 0)));
+
+  // Treemap items — area = metric value, intensity = tokens/call.
+  // Cap to the top files by the selected metric so cells stay tile-sized and
+  // readable (a long tail of 1-call files otherwise renders as slivers).
+  protected readonly treemapItems = computed<TreemapItem[]>(() => {
+    const m = this.metric();
+    const valueOf = (f: { calls: number; resultBytes: number }) =>
+      m === 'tokens' ? (f.resultBytes || 0) : f.calls;
+    const files = [...this.files()].sort((a, b) => valueOf(b) - valueOf(a)).slice(0, 48);
+    if (!files.length) return [];
+    const maxTpc = Math.max(1, ...files.map((f) => (f.resultBytes || 0) / Math.max(1, f.calls)));
+    return files.map((f) => {
+      const tpc = (f.resultBytes || 0) / Math.max(1, f.calls);
+      return {
+        key: f.path,
+        label: shortLabel(f.path),
+        value: valueOf(f),
+        intensity: tpc / maxTpc,
+        sub: m === 'tokens' ? this.fmtTokens(f.resultBytes || 0) : f.calls + ' calls',
+        title: `${f.path}\n${f.calls} calls · ${this.fmtTokens(f.resultBytes || 0)} result tokens · ${this.fmtTokens(Math.round(tpc))}/call`,
+      };
+    });
+  });
+
+  // Drill drawer
   protected readonly drill = signal<DrillTarget | null>(null);
 
   protected readonly fileDrill = apiResource<HeatmapFileDrillResponse>(this.api, () => {
@@ -67,9 +108,7 @@ export class Heatmap {
   protected readonly drillTitle = computed(() => {
     const d = this.drill();
     if (!d) return '';
-    if (d.kind === 'file') return d.key;
-    if (d.kind === 'tool') return d.key + ' calls';
-    return d.key + ' subagent';
+    return d.key;
   });
 
   protected readonly drillLoading = computed(() => {
@@ -80,27 +119,27 @@ export class Heatmap {
     return this.subagentDrill.state().loading;
   });
 
-  // Actions -----------------------------------------------------------------
-
+  // Actions
   protected setRange(r: Range): void { this.range.set(r); }
-
+  protected setMetric(m: Metric): void { this.metric.set(m); }
   protected openFile(path: string): void { this.drill.set({ kind: 'file', key: path }); }
-  protected openTool(it: HBarItem): void { this.drill.set({ kind: 'tool', key: it.name }); }
+  protected openToolByName(name: string): void { this.drill.set({ kind: 'tool', key: name }); }
   protected openSubagent(name: string): void { this.drill.set({ kind: 'subagent', key: name }); }
   protected closeDrill(): void { this.drill.set(null); }
 
-  // Formatters --------------------------------------------------------------
-
-  protected fileBg(calls: number): string {
-    const t = calls / this.maxFile();
-    return `color-mix(in srgb, var(--warn) ${Math.round(15 + t * 72)}%, var(--bg-elevated))`;
-  }
-  protected fileColor(calls: number): string {
-    return calls / this.maxFile() > 0.5 ? '#fff' : 'var(--text-secondary)';
+  // Returns the real 7-day call trend for a file path, or [] if not available.
+  protected fileTrendFor(path: string): number[] {
+    return this.files().find((f) => f.path === path)?.trend ?? [];
   }
 
-  protected subagentBarFrac(calls: number): number {
-    return Math.max(0, Math.min(1, calls / this.maxSubagentCalls()));
+  // Helper to sum calls across file sessions
+  protected fileTotalCalls(sessions: Array<{ calls: number }>): number {
+    return sessions.reduce((a, s) => a + s.calls, 0);
+  }
+
+  // Efficiency color: red if >20k/call, warn >8k, success lean
+  protected effColor(tpc: number): string {
+    return tpc > 20000 ? 'var(--error)' : tpc > 8000 ? 'var(--warn)' : 'var(--success)';
   }
 
   protected fmtTokens = (n: number): string => {
@@ -124,8 +163,11 @@ export class Heatmap {
   }
 
   protected shortId(id: string): string { return id.slice(0, 8); }
-
-  protected truncate(s: string, n = 120): string {
-    return s.length > n ? s.slice(0, n) + '…' : s;
+  /** Last two path segments — readable file label for the summary card. */
+  protected shortFile(p: string | undefined | null): string {
+    if (!p) return '—';
+    const segs = p.split('/').filter(Boolean);
+    return segs.slice(-2).join('/') || p;
   }
+  protected truncate(s: string, n = 120): string { return s.length > n ? s.slice(0, n) + '…' : s; }
 }

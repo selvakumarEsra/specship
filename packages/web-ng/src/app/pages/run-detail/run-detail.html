@@ -1,93 +1,202 @@
-<div class="rd-root">
-  <header class="rd-head">
-    <a class="rd-back" [routerLink]="['/runs']" aria-label="Back to runs">←</a>
-    <div class="rd-head-main">
-      @if (run(); as r) {
-        <div class="rd-title-row">
-          <span class="status-pill" [attr.data-status]="r.status">{{ r.status }}</span>
-          <h2 class="mono">{{ r.workflowName }}</h2>
-          <span class="rd-stream" [attr.data-stream]="streamStatus()" [title]="streamStatus()">
-            <span class="rd-dot"></span>{{ streamStatus() === 'live' ? 'live' : streamStatus() }}
-          </span>
-        </div>
-        <div class="rd-sub mono muted">
-          {{ r.id }}<span> · started {{ fmtTime(r.startedAt) }} · {{ fmtDuration(r.startedAt, r.completedAt) }}</span>
-        </div>
-      } @else if (loading()) {
-        <div class="muted">Loading run…</div>
-      } @else if (error()) {
-        <div class="rd-error">{{ error() }}</div>
-      }
-    </div>
-    <div class="rd-actions">
-      @if (run(); as r) {
-        @if (approvalPending()) {
-          <button type="button" class="btn btn-primary" (click)="approve()" [disabled]="actionPending() !== null">Approve</button>
-          <button type="button" class="btn btn-ghost-warn" (click)="reject()" [disabled]="actionPending() !== null">Reject</button>
-        }
-        @if (r.status === 'paused') {
-          <button type="button" class="btn btn-primary" (click)="resume()" [disabled]="actionPending() !== null">Resume</button>
-        }
-        @if (r.status === 'running' || r.status === 'paused') {
-          <button type="button" class="btn btn-ghost-danger" (click)="cancel()" [disabled]="actionPending() !== null">Cancel</button>
-        }
-      }
-    </div>
-  </header>
+<div class="col rd-root">
 
+  <!-- ── Header bar ─────────────────────────────────────────────── -->
+  <div class="row gap-10 rd-head">
+    <button type="button" class="btn btn-ghost btn-sm" (click)="back()">
+      <app-icon name="chevronLeft" [size]="14" />
+      Runs
+    </button>
+
+    @if (run(); as r) {
+      <span class="mono rd-wf-name">{{ r.workflowName }}</span>
+      <span class="mono muted" style="font-size:11.5px">{{ r.id.slice(0, 8) }}</span>
+      <app-state-pill [state]="r.status" [pulse]="r.status === 'running'" />
+      <span class="grow"></span>
+
+      <span class="mono muted row gap-4" style="font-size:11.5px">
+        <app-icon name="clock" [size]="11" />
+        {{ fmtDuration(r.startedAt, r.completedAt) }}
+      </span>
+
+      @if (r.status === 'running' || r.status === 'paused') {
+        <button
+          type="button"
+          class="btn btn-destructive btn-sm"
+          [disabled]="actionPending() !== null"
+          (click)="cancel()"
+        >
+          <app-icon name="cancel" [size]="12" />
+          Cancel
+        </button>
+      }
+    } @else if (loading()) {
+      <span class="muted" style="font-size:12px">Loading…</span>
+      <span class="grow"></span>
+    } @else if (error()) {
+      <span class="rd-error">{{ error() }}</span>
+      <span class="grow"></span>
+    }
+  </div>
+
+  <!-- ── Action / API error banners ─────────────────────────────── -->
   @if (actionError()) {
-    <div class="rd-banner-error">Action failed: {{ actionError() }}</div>
+    <div class="rd-banner rd-banner-error">Action failed: {{ actionError() }}</div>
   }
   @if (run()?.errorMessage; as msg) {
-    <div class="rd-banner-error">{{ msg }}</div>
+    <div class="rd-banner rd-banner-error">{{ msg }}</div>
   }
 
-  <div class="rd-body">
-    <section class="rd-section">
-      <h3 class="rd-h3">Steps <span class="muted">({{ steps().length }})</span></h3>
-      @if (steps().length === 0) {
-        <div class="muted rd-empty">Waiting for the first step to start…</div>
-      } @else {
-        @for (s of steps(); track s.id) {
-          <article class="rd-step" [attr.data-step-status]="s.status">
-            <header class="rd-step-head">
-              <span class="rd-step-status" [attr.data-step-status]="s.status">{{ s.status }}</span>
-              <span class="mono rd-step-id">{{ s.id }}</span>
-              @if (s.kind) { <span class="rd-step-kind">{{ s.kind }}</span> }
-              <span class="rd-spacer"></span>
-              <span class="muted mono rd-step-dur">{{ fmtDuration(s.startedAt, s.endedAt) }}</span>
-            </header>
-            @if (s.error) {
-              <pre class="rd-step-error mono">{{ s.error }}</pre>
-            }
-            @if (s.output !== undefined) {
-              <pre class="rd-step-output mono">{{ s.output | json }}</pre>
-            }
-          </article>
+  <!-- ── Approval banner ────────────────────────────────────────── -->
+  @if (approvalPending()) {
+    <div class="row gap-12 rd-approval">
+      <span style="color:var(--warn);flex-shrink:0">
+        <app-icon name="pause" [size]="18" />
+      </span>
+      <div class="grow">
+        <div style="font-weight:600;font-size:13px">Approval required — review diff before merge</div>
+        <div class="secondary" style="font-size:12px;margin-top:1px">
+          Review the artifacts carefully before approving.
+        </div>
+      </div>
+      <button type="button" class="btn btn-secondary btn-sm" (click)="activeTab.set('artifacts')">
+        Inspect artifacts
+      </button>
+      <button
+        type="button"
+        class="btn btn-destructive btn-sm"
+        [disabled]="actionPending() !== null"
+        (click)="reject()"
+      >
+        Reject
+      </button>
+      <button
+        type="button"
+        class="btn btn-primary btn-sm"
+        [disabled]="actionPending() !== null"
+        (click)="approve()"
+      >
+        <app-icon name="check" [size]="13" />
+        Approve
+      </button>
+    </div>
+  }
+
+  <!-- ── RunDAG canvas ──────────────────────────────────────────── -->
+  <div class="rd-dag">
+    <svg class="rd-dag-svg" width="100%" [attr.height]="DAG_H" [attr.viewBox]="'0 0 ' + DAG_W + ' ' + DAG_H">
+      <defs>
+        <marker id="rarrow" viewBox="0 0 10 10" refX="8" refY="5"
+          markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M0 0 L10 5 L0 10 z" fill="rgba(160,170,190,0.6)" />
+        </marker>
+      </defs>
+      @for (edge of dagEdges(); track edge.from + edge.to) {
+        @if (nodeMap()[edge.from]; as a) {
+          @if (nodeMap()[edge.to]; as b) {
+            <path
+              [attr.d]="edgePath(a, b)"
+              fill="none"
+              [attr.stroke]="a.status === 'completed' ? 'var(--success)' : 'rgba(150,160,180,0.4)'"
+              stroke-width="1.6"
+              [attr.opacity]="a.status === 'completed' ? '0.7' : '0.5'"
+              marker-end="url(#rarrow)"
+            />
+          }
         }
       }
-    </section>
+    </svg>
 
-    <section class="rd-section">
-      <h3 class="rd-h3">Event timeline <span class="muted">({{ events().length }})</span></h3>
-      @if (events().length === 0) {
-        <div class="muted rd-empty">No events yet.</div>
-      } @else {
-        <ol class="rd-timeline">
-          @for (e of events(); track e.id) {
-            <li class="rd-event" [attr.data-event-type]="e.eventType">
-              <span class="rd-event-time mono muted">{{ fmtTime(e.createdAt) }}</span>
-              <span class="rd-event-dot"></span>
-              <div class="rd-event-body">
-                <div class="rd-event-label">{{ eventLabel(e) }}</div>
-                @if (eventDetail(e); as d) {
-                  <div class="rd-event-detail mono muted">{{ d }}</div>
-                }
-              </div>
-            </li>
+    @for (node of dagNodes(); track node.id) {
+      <div
+        class="rd-node"
+        [class.rd-node-running]="node.status === 'running'"
+        [class.rd-node-selected]="selectedNode() === node.id"
+        [class.rd-node-pending]="node.status === 'pending'"
+        [class.rd-node-skipped]="node.status === 'skipped'"
+        [style.left.%]="node.x / DAG_W * 100"
+        [style.top.px]="node.y"
+        [style.border-color]="nodeBorderColor(node)"
+        [style.box-shadow]="nodeBoxShadow(node)"
+        (click)="selectedNode.set(node.id)"
+        role="button"
+        [attr.aria-label]="node.id"
+      >
+        <span
+          class="rd-node-dot"
+          [class.rd-dot-spin]="node.status === 'running'"
+          [style.background]="nodeDotBg(node)"
+          [style.border]="nodeDotBorder(node)"
+        >
+          @if (node.status === 'completed') {
+            <app-icon name="check" [size]="11" style="color:#fff" />
+          } @else if (node.status === 'failed') {
+            <app-icon name="x" [size]="11" style="color:#fff" />
+          } @else if (node.status === 'paused') {
+            <app-icon name="pause" [size]="10" style="color:#fff" />
           }
-        </ol>
-      }
-    </section>
+        </span>
+        <div class="grow" style="min-width:0">
+          <div class="rd-node-label">{{ node.label }}</div>
+          <div class="mono muted rd-node-type">{{ node.kind }}</div>
+        </div>
+      </div>
+    }
   </div>
+
+  <!-- ── Tabbed panel ───────────────────────────────────────────── -->
+  <div class="col rd-panel">
+    <!-- Tab bar -->
+    <div class="row gap-2 rd-tabs">
+      @for (tab of TABS; track tab.id) {
+        <button
+          type="button"
+          class="rd-tab"
+          [class.rd-tab-active]="activeTab() === tab.id"
+          (click)="activeTab.set(tab.id)"
+        >
+          {{ tab.label }}
+          @if (tab.id === 'events' && streamStatus() === 'live') {
+            <span class="pill rd-live-pill">live</span>
+          }
+        </button>
+      }
+    </div>
+
+    <!-- Events tab -->
+    @if (activeTab() === 'events') {
+      <div class="scroll-y rd-events" aria-live="polite">
+        @for (e of events(); track e.id) {
+          <div class="row gap-10 rd-event-row" [attr.data-event-type]="e.eventType">
+            <span class="muted tabular rd-event-time">{{ fmtTime(e.createdAt) }}</span>
+            <span class="rd-event-kind" [style.color]="evColor(e.eventType)">{{ e.eventType }}</span>
+            <span class="muted rd-event-node">{{ stepIdOf(e) }}</span>
+            <span class="secondary rd-event-text">{{ eventDetail(e) }}</span>
+          </div>
+        }
+        @if (streamStatus() === 'live' || streamStatus() === 'connecting') {
+          <div class="row gap-6 muted" style="padding:6px 0">
+            <span class="rd-stream-dot"></span>
+            streaming…
+          </div>
+        }
+      </div>
+    }
+
+    <!-- Artifacts tab (no backend data — show empty state) -->
+    @if (activeTab() === 'artifacts') {
+      <div class="rd-artifacts row">
+        <div class="muted rd-no-artifacts" style="margin:auto;font-size:12.5px">
+          No artifacts available from the API.
+        </div>
+      </div>
+    }
+
+    <!-- Cost tab (no cost data in API — show empty state) -->
+    @if (activeTab() === 'cost') {
+      <div class="rd-cost-wrap" style="padding:16px">
+        <div class="muted" style="font-size:12.5px">Cost data is not available from the API.</div>
+      </div>
+    }
+  </div>
+
 </div>

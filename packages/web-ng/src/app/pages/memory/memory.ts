@@ -11,6 +11,7 @@ import type {
   MemoryFile as MemFileApi,
 } from '../../api/types';
 import { renderMd } from '../../util/render-md';
+import { CopyBtn } from '../../ui/copy-btn';
 
 type MemoryType = MemoryTypeKey;
 type MemoryLevel = MemoryLevelKey;
@@ -74,7 +75,7 @@ interface RailGroup { key: MemoryLevel; items: MemFile[]; }
 
 @Component({
   selector: 'app-memory',
-  imports: [Icon],
+  imports: [Icon, CopyBtn],
   templateUrl: './memory.html',
   styleUrl: './memory.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

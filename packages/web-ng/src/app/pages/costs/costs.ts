@@ -5,6 +5,10 @@ import { ApiService } from '../../api/api';
 import { apiResource } from '../../api/resource';
 import { LineChart, type LinePoint } from '../../charts/line-chart/line-chart';
 import { Donut, type DonutSlice } from '../../charts/donut/donut';
+import { PageHead } from '../../ui/page-head';
+import { Segmented } from '../../ui/segmented';
+import { Delta } from '../../ui/delta';
+import { Icon } from '../../shell/icon/icon';
 import type { CostsResponse } from '../../api/types';
 
 type Range = 'today' | 'week' | 'month' | 'all';
@@ -22,7 +26,7 @@ const SHORT_BY_MODEL: Record<string, string> = {
 
 @Component({
   selector: 'app-costs',
-  imports: [DecimalPipe, LineChart, Donut],
+  imports: [DecimalPipe, LineChart, Donut, PageHead, Segmented, Delta, Icon],
   templateUrl: './costs.html',
   styleUrl: './costs.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -56,6 +60,8 @@ export class Costs {
   });
 
   protected readonly total = computed(() => this.resource.state().data?.total ?? 0);
+  /** Week-over-week spend change (fractional). Hidden for the 'all' range. */
+  protected readonly wowDelta = computed(() => this.resource.state().data?.wowDelta ?? 0);
 
   protected setRange(r: Range): void { this.range.set(r); }
   protected onHover(p: LinePoint | null): void { this.hovered.set(p); }

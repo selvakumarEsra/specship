@@ -60,6 +60,18 @@ function rangeStart(key: RangeKey): number {
 }
 
 /**
+ * Bounds of the period immediately BEFORE the current range window — used for
+ * week-over-week (wowDelta) comparisons. For 'all' there's no prior period, so
+ * both bounds collapse to 0 and callers should treat the delta as 0.
+ */
+function priorWindow(key: RangeKey): { start: number; end: number } {
+  if (key === 'all') return { start: 0, end: 0 };
+  const w = RANGE_WINDOW_MS[key];
+  const end = Date.now() - w;
+  return { start: end - w, end };
+}
+
+/**
  * Get the internal SQLite handle off the DatabaseConnection so we can run
  * Claude-specific aggregate queries directly. SpecShip exposes this via
  * `getDb()`-style accessors. Falls back to digging via the queries property.
@@ -135,10 +147,19 @@ export async function registerClaudeRoutes(app: FastifyInstance): Promise<void> 
     if (!session) return reply.code(404).send({ error: 'session not found' });
     const prompts = db.prepare(`
       SELECT * FROM claude_prompts WHERE session_id = ? ORDER BY ts ASC
-    `).all(req.params.id);
+    `).all(req.params.id) as Array<{ ts: number } & Record<string, unknown>>;
     const toolCalls = db.prepare(`
       SELECT * FROM claude_tool_calls WHERE session_id = ? ORDER BY ts ASC
     `).all(req.params.id);
+    // Per-prompt wall-clock duration: the gap from this prompt to the next one
+    // (last prompt runs to the session's end). Lets the UI show "how long did
+    // this turn take" without a separate per-event timeline.
+    const endedAt = (session as { ended_at?: number }).ended_at ?? null;
+    prompts.forEach((p, i) => {
+      const next = prompts[i + 1];
+      const end = next ? next.ts : (endedAt ?? p.ts);
+      p.durationMs = Math.max(0, end - p.ts);
+    });
     return { session, prompts, toolCalls };
   });
 
@@ -364,6 +385,28 @@ export async function registerClaudeRoutes(app: FastifyInstance): Promise<void> 
       LIMIT 100
     `).all(since) as Array<Record<string, number | string>>;
 
+    // Per-file 7-day call trend — one sparkline (oldest→newest) per file cell.
+    // Always a fixed 7-day window, independent of `range`, so the trend reads
+    // consistently regardless of the heatmap's selected window.
+    const dayMs = 24 * 60 * 60 * 1000;
+    const trend7Start = Math.floor(Date.now() / dayMs) * dayMs - 6 * dayMs;
+    const trendRows = db.prepare(`
+      SELECT input_summary as path, CAST((ts - ?) / ? AS INTEGER) as bucket, COUNT(*) as calls
+      FROM claude_tool_calls
+      WHERE ts >= ? AND tool_name IN ('Read','Edit','Write','NotebookEdit') AND input_summary != ''
+      GROUP BY input_summary, bucket
+    `).all(trend7Start, dayMs, trend7Start) as Array<{ path: string; bucket: number; calls: number }>;
+    const trendByPath = new Map<string, number[]>();
+    for (const r of trendRows) {
+      if (r.bucket < 0 || r.bucket > 6) continue;
+      const arr = trendByPath.get(r.path) ?? [0, 0, 0, 0, 0, 0, 0];
+      arr[r.bucket] = r.calls;
+      trendByPath.set(r.path, arr);
+    }
+    for (const f of files) {
+      (f as Record<string, unknown>).trend = trendByPath.get(f.path as string) ?? [0, 0, 0, 0, 0, 0, 0];
+    }
+
     // Tools heatmap.
     const tools = db.prepare(`
       SELECT tool_name as name, COUNT(*) as calls, SUM(result_length) as resultBytes
@@ -531,6 +574,24 @@ export async function registerClaudeRoutes(app: FastifyInstance): Promise<void> 
     // this as an approximation.
     const dollarsSaved = ((agg.cr ?? 0) / 1_000_000) * 15 * 0.9;
 
+    // Week-over-week reuse delta: current read-rate minus the prior equal-length
+    // window's read-rate. Fractional (e.g. 0.06 → "+6%" in the UI). Zero for
+    // 'all' (no prior period) or when there's no prior-window data to compare.
+    const prior = priorWindow(rangeKey(req.query.range));
+    let wowDelta = 0;
+    if (prior.end > prior.start) {
+      const pAgg = db.prepare(`
+        SELECT
+          COALESCE(SUM(total_input_tokens), 0) as inp,
+          COALESCE(SUM(total_cache_creation_tokens), 0) as cw,
+          COALESCE(SUM(total_cache_read_tokens), 0) as cr
+        FROM claude_sessions
+        WHERE started_at >= ? AND started_at < ?
+      `).get(prior.start, prior.end) as { inp: number; cw: number; cr: number };
+      const pTotal = (pAgg.inp ?? 0) + (pAgg.cw ?? 0) + (pAgg.cr ?? 0);
+      if (pTotal > 0) wowDelta = readRate - pAgg.cr / pTotal;
+    }
+
     return {
       readRate,
       creationTokens: agg.cw ?? 0,
@@ -539,9 +600,7 @@ export async function registerClaudeRoutes(app: FastifyInstance): Promise<void> 
       outputTokens: agg.out ?? 0,
       totalCost: agg.cost ?? 0,
       dollarsSaved,
-      // wowDelta would need historical snapshotting; placeholder until we
-      // add a rolling-window aggregate table. UI shows 0% with no arrow.
-      wowDelta: 0,
+      wowDelta,
     };
   });
 
@@ -551,6 +610,18 @@ export async function registerClaudeRoutes(app: FastifyInstance): Promise<void> 
     const since = rangeStart(rangeKey(req.query.range));
 
     const total = db.prepare(`SELECT SUM(total_cost_usd) as t FROM claude_sessions WHERE started_at >= ?`).get(since) as { t: number };
+
+    // Week-over-week spend delta: fractional change in total cost vs the prior
+    // equal-length window (e.g. -0.08 → "-8%"). Zero for 'all' or no prior data.
+    const prior = priorWindow(rangeKey(req.query.range));
+    let wowDelta = 0;
+    if (prior.end > prior.start) {
+      const pTotal = db.prepare(
+        `SELECT SUM(total_cost_usd) as t FROM claude_sessions WHERE started_at >= ? AND started_at < ?`,
+      ).get(prior.start, prior.end) as { t: number };
+      const pt = pTotal.t ?? 0;
+      if (pt > 0) wowDelta = ((total.t ?? 0) - pt) / pt;
+    }
 
     // Top prompts by cost.
     const topPrompts = db.prepare(`
@@ -592,7 +663,81 @@ export async function registerClaudeRoutes(app: FastifyInstance): Promise<void> 
       ORDER BY cost DESC
     `).all(since);
 
-    return { total: total.t ?? 0, topPrompts, series: dense, byModel };
+    return { total: total.t ?? 0, topPrompts, series: dense, byModel, wowDelta };
+  });
+
+  /**
+   * GET /api/claude/stats?range= — the four dashboard stat tiles, each with a
+   * value, a fractional week-over-week delta (vs the prior equal-length window)
+   * and a 7-day sparkline series (oldest→newest). Drift is a live graph metric
+   * with no history, so it returns value-only.
+   */
+  app.get('/api/claude/stats', async (req: FastifyRequest<{ Querystring: { range?: string } }>, reply) => {
+    const cg = requirePrimary(reply); if (!cg) return;
+    const db = getDb(cg);
+    const rkey = rangeKey(req.query.range);
+    const since = rangeStart(rkey);
+    const prior = priorWindow(rkey);
+    const dayMs = 24 * 60 * 60 * 1000;
+    const d7Start = Math.floor(Date.now() / dayMs) * dayMs - 6 * dayMs;
+    const dense7 = (rows: Array<{ bucket: number; v: number }>): number[] => {
+      const a = [0, 0, 0, 0, 0, 0, 0];
+      for (const r of rows) if (r.bucket >= 0 && r.bucket <= 6) a[r.bucket] = r.v;
+      return a;
+    };
+    const countSince = (sql: string, ...p: unknown[]): number =>
+      (db.prepare(sql).get(...p) as { c: number }).c ?? 0;
+
+    // --- Tool calls ---
+    const tcTotal = countSince(`SELECT COUNT(*) c FROM claude_tool_calls WHERE ts >= ?`, since);
+    const tcPrior = prior.end > prior.start
+      ? countSince(`SELECT COUNT(*) c FROM claude_tool_calls WHERE ts >= ? AND ts < ?`, prior.start, prior.end)
+      : 0;
+    const tcSeries = db.prepare(
+      `SELECT CAST((ts - ?) / ? AS INTEGER) as bucket, COUNT(*) as v FROM claude_tool_calls WHERE ts >= ? GROUP BY bucket`,
+    ).all(d7Start, dayMs, d7Start) as Array<{ bucket: number; v: number }>;
+    const toolCalls = { value: tcTotal, delta: tcPrior > 0 ? (tcTotal - tcPrior) / tcPrior : 0, series: dense7(tcSeries) };
+
+    // --- Subagent spend share (by cost) ---
+    const subPctOf = (start: number, end: number | null): number => {
+      const where = end == null ? `ts >= ?` : `ts >= ? AND ts < ?`;
+      const args = end == null ? [start] : [start, end];
+      const rows = db.prepare(
+        `SELECT is_sidechain as side, COALESCE(SUM(cost_usd), 0) as cost FROM claude_prompts WHERE ${where} GROUP BY is_sidechain`,
+      ).all(...args) as Array<{ side: number; cost: number }>;
+      const sub = rows.find((r) => r.side === 1)?.cost ?? 0;
+      const tot = rows.reduce((a, r) => a + (r.cost ?? 0), 0);
+      return tot > 0 ? sub / tot : 0;
+    };
+    const subPct = subPctOf(since, null);
+    const subPctPrior = prior.end > prior.start ? subPctOf(prior.start, prior.end) : 0;
+    const saDaily = db.prepare(`
+      SELECT CAST((ts - ?) / ? AS INTEGER) as bucket,
+             SUM(CASE WHEN is_sidechain = 1 THEN cost_usd ELSE 0 END) as sub,
+             SUM(cost_usd) as tot
+      FROM claude_prompts WHERE ts >= ? GROUP BY bucket
+    `).all(d7Start, dayMs, d7Start) as Array<{ bucket: number; sub: number; tot: number }>;
+    const saSeries = [0, 0, 0, 0, 0, 0, 0];
+    for (const r of saDaily) if (r.bucket >= 0 && r.bucket <= 6) saSeries[r.bucket] = r.tot > 0 ? Math.round((r.sub / r.tot) * 100) : 0;
+    const subagentPct = { value: Math.round(subPct * 100), delta: subPct - subPctPrior, series: saSeries };
+
+    // --- Last session cost (delta vs previous session, spark of recent sessions) ---
+    const recent = db.prepare(
+      `SELECT total_cost_usd as cost FROM claude_sessions ORDER BY started_at DESC LIMIT 10`,
+    ).all() as Array<{ cost: number }>;
+    const lastCost = recent[0]?.cost ?? 0;
+    const prevCost = recent[1]?.cost ?? 0;
+    const lastSessionCost = {
+      value: lastCost,
+      delta: prevCost > 0 ? (lastCost - prevCost) / prevCost : 0,
+      series: recent.map((r) => r.cost ?? 0).reverse(),
+    };
+
+    // --- Drift (live graph count, no time series) ---
+    const driftCount = cg.getSpecQueries().getLinksByState(['drifted', 'broken', 'orphaned']).length;
+    const drift = { value: driftCount, delta: 0, series: [] as number[] };
+
+    return { lastSessionCost, toolCalls, subagentPct, drift };
   });
 
   app.get('/api/claude/compare', async (_req, reply) => {
@@ -612,8 +757,46 @@ export async function registerClaudeRoutes(app: FastifyInstance): Promise<void> 
       LEFT JOIN claude_sessions s ON s.project_path = p.path
       GROUP BY p.path
       ORDER BY cost DESC
-    `).all();
-    return { projects: rows };
+    `).all() as Array<Record<string, unknown> & { path: string }>;
+
+    // Per-model cost split per project (drives the stacked bars).
+    const modelRows = db.prepare(`
+      SELECT s.project_path as path, p.model as model, COALESCE(SUM(p.cost_usd), 0) as cost
+      FROM claude_prompts p
+      JOIN claude_sessions s ON s.id = p.session_id
+      WHERE p.model IS NOT NULL
+      GROUP BY s.project_path, p.model
+    `).all() as Array<{ path: string; model: string; cost: number }>;
+    const byModelByPath = new Map<string, Array<{ model: string; cost: number }>>();
+    for (const r of modelRows) {
+      const arr = byModelByPath.get(r.path) ?? [];
+      arr.push({ model: r.model, cost: r.cost });
+      byModelByPath.set(r.path, arr);
+    }
+
+    // Top tools per project (top 4 by call count).
+    const toolRows = db.prepare(`
+      SELECT s.project_path as path, t.tool_name as name, COUNT(*) as calls
+      FROM claude_tool_calls t
+      JOIN claude_sessions s ON s.id = t.session_id
+      GROUP BY s.project_path, t.tool_name
+    `).all() as Array<{ path: string; name: string; calls: number }>;
+    const toolsByPath = new Map<string, Array<{ name: string; calls: number }>>();
+    for (const r of toolRows) {
+      const arr = toolsByPath.get(r.path) ?? [];
+      arr.push({ name: r.name, calls: r.calls });
+      toolsByPath.set(r.path, arr);
+    }
+
+    const projects = rows.map((p) => ({
+      ...p,
+      byModel: (byModelByPath.get(p.path) ?? []).sort((a, b) => b.cost - a.cost),
+      topTools: (toolsByPath.get(p.path) ?? [])
+        .sort((a, b) => b.calls - a.calls)
+        .slice(0, 4)
+        .map((t) => t.name),
+    }));
+    return { projects };
   });
 
   /**

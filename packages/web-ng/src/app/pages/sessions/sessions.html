@@ -1,78 +1,96 @@
 <div class="page">
-  <header class="page-head">
-    <div class="title-block">
-      <div class="title">Sessions</div>
-      <div class="sub">
-        {{ resource.state().loading ? 'loading…' : (sorted().length + ' sessions') }}
-        <span class="muted live-hint" title="Auto-refreshes every 10s while this tab is visible">· live</span>
-      </div>
-    </div>
-    <div class="page-actions">
-      <button
-        type="button"
-        class="btn btn-secondary btn-sm refresh-btn"
-        [class.spinning]="localRefreshing() || refresh.loading()"
-        [disabled]="refresh.loading()"
-        (click)="forceRefresh()"
-        title="Force refresh: sync the index + re-ingest Claude Code transcripts"
-        aria-label="Refresh sessions"
-      >
-        <app-icon name="refresh" [size]="13" />
-        {{ (localRefreshing() || refresh.loading()) ? 'Refreshing…' : 'Refresh' }}
-      </button>
-    </div>
-    <div class="range-selector">
-      @for (r of ranges; track r) {
-        <button type="button" class="range-opt" [class.active]="range() === r" (click)="setRange(r)">
-          {{ r === 'today' ? 'Today' : r === 'week' ? 'Week' : r === 'month' ? 'Month' : 'All' }}
+  <!-- Page header -->
+  <div style="padding: 16px 18px 12px;">
+    <app-page-head
+      icon="sessions"
+      title="Sessions"
+      [sub]="resource.state().loading ? 'loading…' : (sorted().length + ' sessions · across all projects')"
+    >
+      <ng-container actions>
+        <button
+          type="button"
+          class="btn btn-secondary btn-sm refresh-btn"
+          [class.spinning]="localRefreshing() || refresh.loading()"
+          [disabled]="refresh.loading()"
+          (click)="forceRefresh()"
+          title="Force refresh: sync the index + re-ingest Claude Code transcripts"
+          aria-label="Refresh sessions"
+        >
+          <app-icon name="refresh" [size]="13" />
+          {{ (localRefreshing() || refresh.loading()) ? 'Refreshing…' : 'Refresh' }}
         </button>
-      }
-    </div>
-  </header>
-
-  <div class="filter-bar">
-    <span class="muted">sort</span>
-    <div class="seg">
-      <button type="button" [class.active]="sort() === 'cost'" (click)="setSort('cost')">Cost</button>
-      <button type="button" [class.active]="sort() === 'prompts'" (click)="setSort('prompts')">Prompts</button>
-    </div>
-    @if (refresh.error(); as err) {
-      <span class="grow"></span>
-      <span class="refresh-error" [title]="err">⚠ refresh had a partial failure</span>
-    }
+      </ng-container>
+    </app-page-head>
   </div>
 
-  <div class="scroll-y card list">
-    <div class="header-row">
-      <span class="col-id">Session</span>
-      <span class="col-project">Project</span>
-      <span class="col-window grow">Window</span>
-      <span class="col-num">Prompts</span>
-      <span class="col-num">Cache</span>
-      <span class="col-num">Cost</span>
-      <span class="col-chevron"></span>
-    </div>
-    @if (resource.state().loading && sorted().length === 0) {
-      @for (i of [0,1,2,3,4]; track i) {
-        <div class="row skeleton-row"><div class="skel"></div></div>
-      }
-    } @else if (sorted().length === 0) {
-      <div class="empty">
-        No sessions in this range. Either nothing's been logged yet,
-        or the JSONL ingest watcher hasn't caught up — click Refresh.
-      </div>
-    } @else {
-      @for (s of sorted(); track s.fullId) {
-        <a class="row link" [routerLink]="['/sessions', s.fullId]" [attr.aria-label]="'Open session ' + s.id">
-          <span class="mono col-id">{{ s.id }}</span>
-          <span class="col-project pill">{{ s.project }}</span>
-          <span class="mono muted col-window grow">{{ s.started }} – {{ s.ended }} · {{ s.model }}</span>
-          <span class="mono col-num">{{ s.prompts }}</span>
-          <span class="mono col-num" [style.color]="cacheColor(s.cache)">{{ (s.cache * 100) | number:'1.0-0' }}%</span>
-          <span class="mono col-num cost">${{ s.cost.toFixed(2) }}</span>
-          <span class="col-chevron mono" aria-hidden="true">›</span>
-        </a>
-      }
+  <!-- Filter bar -->
+  <div class="filter-bar" style="padding: 0 18px 12px;">
+    <app-icon name="filter" [size]="13" style="color: var(--text-muted);" />
+    <select class="input" style="font-size: 12px; padding: 4px 8px;">
+      <option>All models</option>
+    </select>
+    <div class="grow"></div>
+    @if (refresh.error(); as err) {
+      <span style="color: var(--warn); font-size: 11.5px; cursor: help;" [title]="err">⚠ refresh failed</span>
     }
+    <span class="muted" style="font-size: 11.5px;">sort</span>
+    <app-segmented
+      size="sm"
+      [value]="sort()"
+      [options]="[{value:'time',label:'Latest'},{value:'cost',label:'Cost'},{value:'prompts',label:'Prompts'}]"
+      (change)="setSort($any($event))"
+    />
+  </div>
+
+  <!-- Table -->
+  <div class="scroll-y" style="flex: 1; padding: 0 18px 18px;">
+    <div class="card" style="overflow: hidden;">
+      <!-- Header -->
+      <div class="row" style="padding: 8px 14px; font-size: 10.5px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; border-bottom: 1px solid var(--border-subtle);">
+        <span style="width: 90px;">Session</span>
+        <span style="width: 110px;">Project</span>
+        <span class="grow">Window</span>
+        <span style="width: 70px; text-align: right;">Prompts</span>
+        <span style="width: 70px; text-align: right;">Cache</span>
+        <span style="width: 70px; text-align: right;">Cost</span>
+      </div>
+
+      @if (resource.state().loading && sorted().length === 0) {
+        @for (i of [0,1,2,3,4]; track i) {
+          <div class="row" style="padding: 10px 14px; border-top: 1px solid var(--border-subtle);">
+            <div class="skel" style="flex: 1; height: 18px;"></div>
+          </div>
+        }
+      } @else if (sorted().length === 0) {
+        <div style="padding: 28px 18px; text-align: center; color: var(--text-secondary); font-size: 12.5px; line-height: 1.5;">
+          No sessions in this range. Either nothing's been logged yet,
+          or the JSONL ingest watcher hasn't caught up — click Refresh.
+        </div>
+      } @else {
+        @for (s of sorted(); track s.fullId) {
+          <a
+            class="row session-row"
+            [routerLink]="['/sessions', s.fullId]"
+            [attr.aria-label]="'Open session ' + s.id"
+            style="padding: 11px 14px; border-top: 1px solid var(--border-subtle); display: flex; align-items: center; gap: 0; text-decoration: none; color: inherit; cursor: pointer;"
+          >
+            <span class="mono" style="width: 90px; font-size: 12px;">{{ s.id }}</span>
+            <span style="width: 110px;">
+              <app-pill>{{ s.project }}</app-pill>
+            </span>
+            <span class="mono muted grow" style="font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+              {{ s.started }} – {{ s.ended }} · {{ s.model }}
+            </span>
+            <span class="mono tabular" style="width: 70px; text-align: right; font-size: 12px;">{{ s.prompts }}</span>
+            <span class="mono tabular" style="width: 70px; text-align: right; font-size: 12px;" [style.color]="cacheColor(s.cache)">
+              {{ (s.cache * 100) | number:'1.0-0' }}%
+            </span>
+            <span class="mono tabular" style="width: 70px; text-align: right; font-size: 12.5px; font-weight: 600;">
+              ${{ s.cost.toFixed(2) }}
+            </span>
+          </a>
+        }
+      }
+    </div>
   </div>
 </div>

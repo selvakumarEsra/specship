@@ -1,25 +1,199 @@
-<div class="page">
-  <header class="page-head">
-    <div class="title-block">
-      <div class="title">Chat</div>
-      <div class="sub">specship-aware companion (wiring to Claude SSE next pass)</div>
-    </div>
-  </header>
-  <div class="thread scroll-y">
-    @for (m of messages(); track $index) {
-      <div class="msg" [attr.data-role]="m.role">
-        <div class="bubble">{{ m.text }}</div>
+<div class="chat-page">
+  <!-- Main column: thread + composer -->
+  <div class="chat-col">
+    <!-- Thread -->
+    <div class="thread scroll-y" #listEl>
+      <div class="thread-inner">
+        @for (m of messages(); track $index) {
+          @if (m.role === 'user') {
+            <div class="msg-user">
+              <div class="bubble-user" [innerHTML]="renderMd(m.text)"></div>
+            </div>
+          } @else {
+            <div class="msg-assistant">
+              <div class="row gap-8 asst-meta">
+                <span class="asst-logo" aria-hidden="true">S</span>
+                <span style="font-size:12px;font-weight:600;">specship</span>
+                @if (m.model) {
+                  <span class="mono muted" style="font-size:10.5px;">{{ m.model }}</span>
+                }
+              </div>
+              <div class="asst-body">
+                <div class="bubble-asst" [innerHTML]="renderMd(m.text)"></div>
+                @if (m.tools?.length) {
+                  @for (tc of m.tools!; track tc.name) {
+                    <div class="tool-call">
+                      <button
+                        class="tool-header row gap-8"
+                        type="button"
+                        [attr.aria-expanded]="tc.open"
+                        (click)="toggleToolCall(m, tc)"
+                      >
+                        <app-icon [name]="tc.open ? 'chevronDown' : 'chevronRight'" [size]="12" style="color:var(--text-muted);" />
+                        <app-icon name="wrench" [size]="12" style="color:var(--node-code);" />
+                        <span class="mono grow" style="font-size:11.5px;">
+                          {{ tc.name }}<span class="muted">({{ tc.input }})</span>
+                        </span>
+                        <span class="pill" style="font-size:9.5px;color:var(--success);background:var(--success-soft);">
+                          <app-icon name="check" [size]="9" /> {{ tc.status }}
+                        </span>
+                      </button>
+                      @if (tc.open) {
+                        <div class="tool-output">
+                          <div class="mono muted" style="font-size:10.5px;margin-bottom:3px;">output</div>
+                          <div class="mono" style="font-size:11.5px;color:var(--text-secondary);">{{ tc.output }}</div>
+                        </div>
+                      }
+                    </div>
+                  }
+                }
+                @if (m.cost != null) {
+                  <div class="row gap-8 muted" style="margin-top:10px;font-size:10.5px;font-family:var(--font-mono);">
+                    <app-icon name="coins" [size]="11" />
+                    ${{ m.cost!.toFixed(2) }}
+                    <span>·</span>
+                    {{ fmtK(m.tokens!) }} tokens
+                  </div>
+                }
+              </div>
+            </div>
+          }
+        }
+        @if (thinking()) {
+          <div class="row gap-8 muted thinking">
+            <span class="thinking-dot"></span>
+            thinking with specship context…
+          </div>
+        }
       </div>
-    }
+    </div>
+
+    <!-- Composer -->
+    <div class="composer">
+      <div class="composer-inner">
+        <!-- Slash menu -->
+        @if (showSlash() && filteredSlash().length > 0) {
+          <div class="slash-menu" role="listbox" aria-label="Slash commands">
+            @for (s of filteredSlash(); track s.cmd) {
+              <button
+                class="slash-item row gap-8"
+                type="button"
+                role="option"
+                (click)="pickSlash(s.cmd)"
+              >
+                <span class="mono" style="font-size:12px;color:var(--accent);">{{ s.cmd }}</span>
+                @if (s.arg) {
+                  <span class="mono muted" style="font-size:11px;">{{ s.arg }}</span>
+                }
+                <span class="muted grow" style="font-size:11px;text-align:right;">{{ s.desc }}</span>
+              </button>
+            }
+          </div>
+        }
+
+        <div class="composer-box row">
+          <button type="button" class="btn btn-ghost btn-sm attach-btn" title="Attach files or spec IDs">
+            <app-icon name="paperclip" [size]="15" />
+          </button>
+          <textarea
+            class="composer-ta"
+            placeholder="Ask with specship context…  / for commands, Tab to complete spec IDs"
+            rows="1"
+            [value]="draft()"
+            (input)="setDraft($any($event.target).value)"
+            (keydown)="onKey($event)"
+          ></textarea>
+          <button
+            type="button"
+            class="btn btn-primary btn-sm send-btn"
+            (click)="send()"
+            [disabled]="!draft().trim()"
+            aria-label="Send message"
+          >
+            <app-icon name="send" [size]="14" />
+          </button>
+        </div>
+
+        <div class="composer-footer row gap-8">
+          <div class="row gap-6">
+            <app-pill>
+              <app-icon name="bot" [size]="10" /> Opus 4
+            </app-pill>
+            <span class="muted" style="font-size:10.5px;">single thread · this project</span>
+          </div>
+          <span class="grow"></span>
+          <span class="muted" style="font-size:10.5px;">Enter to send · Shift+Enter for newline</span>
+        </div>
+      </div>
+    </div>
   </div>
-  <div class="composer">
-    <textarea
-      class="input"
-      placeholder="Ask about specs, code, or recent sessions…"
-      [value]="draft()"
-      (input)="setDraft($any($event.target).value)"
-      (keydown)="onKey($event)"
-    ></textarea>
-    <button type="button" class="send" (click)="send()">Send</button>
-  </div>
+
+  <!-- Context panel -->
+  @if (contextCollapsed()) {
+    <div class="ctx-collapsed">
+      <button class="btn btn-ghost btn-xs" type="button" (click)="toggleContext()" title="Show context">
+        <app-icon name="chevronLeft" [size]="14" />
+      </button>
+    </div>
+  } @else {
+    <aside class="ctx-panel col" aria-label="Context panel">
+      <div class="ctx-header row">
+        <span class="eyebrow grow">Context</span>
+        <button class="btn btn-ghost btn-xs" type="button" (click)="toggleContext()">
+          <app-icon name="chevronRight" [size]="13" />
+        </button>
+      </div>
+      <div class="ctx-body scroll-y">
+        <div class="ctx-row row gap-8">
+          <app-icon name="folder" [size]="13" style="color:var(--text-muted);flex-shrink:0;" />
+          <div style="min-width:0;">
+            <div class="muted" style="font-size:10px;">Project</div>
+            <div class="mono" style="font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">~/dev/specship</div>
+          </div>
+        </div>
+        <div class="ctx-row row gap-8">
+          <app-icon name="box" [size]="13" style="color:var(--text-muted);flex-shrink:0;" />
+          <div style="min-width:0;">
+            <div class="muted" style="font-size:10px;">Indexed files</div>
+            <div class="mono" style="font-size:11.5px;">{{ api.isConfigured ? '–' : 'offline' }}</div>
+          </div>
+        </div>
+        <div class="ctx-row row gap-8">
+          <app-icon name="drift" [size]="13" style="color:var(--warn);flex-shrink:0;" />
+          <div style="min-width:0;">
+            <div class="muted" style="font-size:10px;">Drift queue</div>
+            <div class="mono" style="font-size:11.5px;">– links</div>
+          </div>
+        </div>
+
+        <div class="eyebrow" style="margin:16px 0 8px;">MCP tools</div>
+        @for (t of mcpTools; track t) {
+          <div class="row gap-8" style="padding:5px 0;">
+            <button
+              type="button"
+              class="toggle-btn"
+              [class.on]="enabledTools().has(t)"
+              [attr.aria-pressed]="enabledTools().has(t)"
+              [attr.aria-label]="t + (enabledTools().has(t) ? ' enabled' : ' disabled')"
+              (click)="toggleTool(t)"
+            >
+              <span class="toggle-thumb"></span>
+            </button>
+            <span class="mono" style="font-size:11px;"
+              [style.color]="enabledTools().has(t) ? 'var(--text-primary)' : 'var(--text-muted)'"
+            >{{ t }}</span>
+          </div>
+        }
+      </div>
+      <div class="ctx-footer">
+        <div class="eyebrow" style="margin-bottom:6px;">Tool access</div>
+        <app-segmented
+          size="sm"
+          [value]="toolAccess()"
+          [options]="toolAccessOptions"
+          (change)="setToolAccess($event)"
+        />
+      </div>
+    </aside>
+  }
 </div>

@@ -1,29 +1,33 @@
 <div class="page scroll-y">
-  <header class="page-head">
-    <div class="title-block">
-      <div class="title">Costs</div>
-      <div class="sub">Where the money goes</div>
-    </div>
-    <div class="range-selector">
-      @for (r of ranges; track r) {
-        <button type="button" class="range-opt" [class.active]="range() === r" (click)="setRange(r)">
-          {{ r === 'today' ? 'Today' : r === 'week' ? 'Week' : r === 'month' ? 'Month' : 'All' }}
-        </button>
-      }
-    </div>
-  </header>
+  <!-- Page head -->
+  <app-page-head icon="dollar" title="Costs" sub="Where the money goes">
+    <ng-container actions>
+      <app-segmented
+        size="sm"
+        [value]="range()"
+        [options]="[{value:'today',label:'Today'},{value:'week',label:'This week'},{value:'month',label:'This month'},{value:'all',label:'All time'}]"
+        (change)="setRange($any($event))"
+      />
+    </ng-container>
+  </app-page-head>
 
+  <!-- Top grid: line chart + donut -->
   <div class="top-grid">
     <div class="card card-pad chart-card">
       <div class="chart-header">
         <div>
           <div class="big-number mono">{{ fmt$(total()) }}</div>
-          <div class="muted">total · {{ range() }}</div>
+          <div class="row gap-8" style="margin-top: 2px;">
+            <span class="muted" style="font-size: 11.5px;">total · {{ range() }}</span>
+            @if (range() !== 'all' && wowDelta() !== 0) {
+              <app-delta [value]="wowDelta()" [invert]="true" />
+            }
+          </div>
         </div>
-        @if (hovered()) {
-          <div class="hovered mono">
-            <div class="hov-cost">{{ fmt$(hovered()!.cost) }}</div>
-            <div class="muted">{{ hovered()!.prompts }} prompts · day {{ hovered()!.day }}</div>
+        @if (hovered(); as h) {
+          <div style="text-align: right;">
+            <div class="mono" style="font-size: 13px; font-weight: 600;">{{ fmt$(h.cost) }}</div>
+            <div class="muted" style="font-size: 10.5px;">{{ h.prompts }} prompts · day {{ h.day }}</div>
           </div>
         }
       </div>
@@ -32,43 +36,49 @@
         color="var(--accent)"
         [height]="200"
         (hover)="onHover($event)"
-      ></app-line-chart>
+      />
     </div>
 
     <div class="card card-pad donut-card">
-      <div class="card-title">By model</div>
+      <div class="row gap-8" style="align-self: flex-start; margin-bottom: 8px;">
+        <app-icon name="layers" [size]="14" style="color: var(--node-code);" />
+        <span style="font-weight: 600; font-size: 12.5px;">By model</span>
+      </div>
       <app-donut
         [data]="byModel()"
         [size]="150"
         [centerLabel]="'$' + total().toFixed(0)"
         [centerSub]="range() + ' window'"
-      ></app-donut>
+      />
       <div class="model-legend">
         @for (m of byModel(); track m.model) {
           <div class="legend-row">
             <span class="swatch" [style.background]="m.color"></span>
-            <span class="mono grow">{{ m.short }}</span>
-            <span class="mono">{{ fmt$(m.cost) }}</span>
-            <span class="mono muted">{{ percentOf(m.cost, total()) }}%</span>
+            <span class="mono grow" style="font-size: 11.5px;">{{ m.short }}</span>
+            <span class="mono" style="font-size: 11.5px;">{{ fmt$(m.cost) }}</span>
+            <span class="mono muted" style="font-size: 10.5px; width: 38px; text-align: right;">{{ percentOf(m.cost, total()) }}%</span>
           </div>
         }
       </div>
     </div>
   </div>
 
+  <!-- Top prompts table -->
   <div class="card card-pad">
-    <div class="card-title row-title">
-      Most expensive prompts <span class="muted">· top {{ topPrompts().length }}</span>
+    <div class="row gap-8" style="margin-bottom: 12px;">
+      <app-icon name="sortAsc" [size]="14" style="color: var(--accent);" />
+      <span style="font-weight: 600; font-size: 12.5px;">Most expensive prompts</span>
+      <span class="muted" style="font-size: 11px;">· top {{ topPrompts().length }}</span>
     </div>
     @if (resource.state().loading) {
       @for (i of [0,1,2,3]; track i) { <div class="skel row-skel"></div> }
     } @else {
       @for (p of topPrompts(); let i = $index; track p.id) {
         <div class="prompt-row" [class.first]="i === 0">
-          <span class="mono muted rank">{{ i + 1 }}</span>
+          <span class="mono muted tabular rank">{{ i + 1 }}</span>
           <div class="prompt-grow">
             <div class="prompt-text">{{ p.text }}</div>
-            <div class="bar-track">
+            <div class="bar-track" style="margin-top: 4px; max-width: 280px;">
               <span
                 class="bar-fill"
                 [style.width.%]="(p.cost_usd / maxPrompt()) * 100"
@@ -77,9 +87,9 @@
             </div>
           </div>
           <span class="mono muted prompt-model">{{ modelShort(p.model) }}</span>
-          <span class="mono muted prompt-toks">{{ fmtK(promptTokens(p)) }}</span>
-          <span class="mono cache-cell" [style.color]="cacheColor(cacheRate(p))">{{ (cacheRate(p) * 100) | number:'1.0-0' }}%</span>
-          <span class="mono cost-cell">{{ fmt$(p.cost_usd) }}</span>
+          <span class="mono muted tabular prompt-toks">{{ fmtK(promptTokens(p)) }}</span>
+          <span class="mono tabular cache-cell" [style.color]="cacheColor(cacheRate(p))">{{ (cacheRate(p) * 100) | number:'1.0-0' }}%</span>
+          <span class="mono tabular cost-cell">{{ fmt$(p.cost_usd) }}</span>
         </div>
       }
     }

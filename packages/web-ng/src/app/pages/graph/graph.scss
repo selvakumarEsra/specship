@@ -24,47 +24,105 @@
   border-bottom: 1px solid var(--border-subtle);
   background: var(--bg-panel-2, var(--bg-panel));
   flex-wrap: wrap;
+  flex-shrink: 0;
 }
+
+.gp-divider {
+  width: 1px;
+  height: 20px;
+  background: var(--border-subtle);
+  flex-shrink: 0;
+}
+
+// Kind filter chips ---------------------------------------------------------
+
+.gp-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-panel);
+  color: var(--text-secondary);
+  transition: all 100ms;
+
+  &.is-active {
+    border-color: transparent;
+    background: color-mix(in srgb, var(--chip-color, var(--accent)) 22%, var(--bg-panel));
+    color: var(--chip-color, var(--accent));
+  }
+}
+
+.gp-chip-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+
+  &[data-kind="code"]  { background: var(--node-code); }
+  &[data-kind="spec"]  { background: var(--node-spec); border-radius: 2px; }
+  &[data-kind="route"] { background: var(--node-route); }
+  &[data-kind="test"]  { background: var(--node-test); }
+}
+
+.gp-chip-count {
+  font-size: 10.5px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.gp-spacer { flex: 1; }
+
+// Search box ----------------------------------------------------------------
 
 .gp-search {
   position: relative;
-  width: 280px;
   flex-shrink: 0;
+}
+
+.gp-search-inner {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  background: var(--bg-canvas);
+  border: 1px solid var(--border-subtle);
+  border-radius: 7px;
+  width: 220px;
 
   input {
-    width: 100%;
-    height: 30px;
-    padding: 0 28px 0 10px;
-    background: var(--bg-canvas);
-    border: 1px solid var(--border-subtle);
-    border-radius: 7px;
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
     color: var(--text-primary);
     font-size: 12px;
     font-family: var(--font-mono);
-    outline: none;
-    transition: border-color 100ms;
   }
-  input:focus { border-color: var(--accent); }
 }
 
+.gp-search-icon { color: var(--text-muted); flex-shrink: 0; }
+
 .gp-spinner {
-  position: absolute;
-  right: 8px;
-  top: 50%;
   width: 12px;
   height: 12px;
-  margin-top: -6px;
   border: 2px solid var(--border-subtle);
   border-top-color: var(--accent);
   border-radius: 50%;
   animation: gp-spin 0.7s linear infinite;
+  flex-shrink: 0;
 }
 
 @keyframes gp-spin { to { transform: rotate(360deg); } }
 
 .gp-results {
   position: absolute;
-  top: 34px;
+  top: 32px;
   left: 0;
   right: 0;
   background: var(--bg-elevated);
@@ -100,8 +158,10 @@
   border-radius: 50%;
   background: var(--node-code);
   flex-shrink: 0;
-  &.is-spec { background: var(--node-spec); border-radius: 2px; }
+
+  &.is-spec  { background: var(--node-spec); border-radius: 2px; }
   &.is-route { background: var(--node-route); }
+  &.is-test  { background: var(--node-test); }
 }
 
 .gp-result-name { font-size: 12px; flex-shrink: 0; }
@@ -121,71 +181,7 @@
   white-space: nowrap;
 }
 
-// Filter chips --------------------------------------------------------------
-
-.gp-filters { display: flex; gap: 6px; }
-
-.gp-chip {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  height: 26px;
-  padding: 0 10px;
-  border-radius: 999px;
-  font-size: 11.5px;
-  font-weight: 500;
-  cursor: pointer;
-  border: 1px solid var(--border-subtle);
-  background: var(--bg-panel);
-  color: var(--text-secondary);
-  transition: all 100ms;
-
-  &.is-active {
-    border-color: transparent;
-    background: var(--accent-soft);
-    color: var(--accent);
-  }
-}
-
-.gp-chip-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-
-  &[data-kind="code"]  { background: var(--node-code); }
-  &[data-kind="spec"]  { background: var(--node-spec); border-radius: 2px; }
-  &[data-kind="route"] { background: var(--node-route); }
-  &[data-kind="test"]  { background: var(--node-test); }
-}
-
-.gp-chip-count {
-  font-size: 10.5px;
-  color: var(--text-muted);
-  font-variant-numeric: tabular-nums;
-}
-
-.gp-spacer { flex: 1; }
-
-.gp-action {
-  height: 26px;
-  padding: 0 12px;
-  border-radius: 7px;
-  border: 1px solid var(--border-subtle);
-  background: var(--bg-panel);
-  color: var(--text-primary);
-  font-size: 12px;
-  cursor: pointer;
-
-  &:hover { background: var(--bg-hover); }
-}
-
-.gp-action-ghost {
-  background: transparent;
-  border-color: transparent;
-  color: var(--text-secondary);
-}
-
-// Canvas --------------------------------------------------------------------
+// Canvas area ---------------------------------------------------------------
 
 .gp-canvas-wrap {
   flex: 1;
@@ -215,6 +211,57 @@
   color: var(--text-muted) !important;
 }
 
+// Floating legend overlay ---------------------------------------------------
+
+.gp-legend {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  max-width: 70%;
+  background: color-mix(in srgb, var(--bg-panel) 86%, transparent);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 6px 10px;
+  backdrop-filter: blur(6px);
+  font-size: 11px;
+  pointer-events: none;
+  z-index: 3;
+}
+
+.gp-legend-kinds { display: flex; align-items: center; gap: 12px; }
+
+.gp-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.gp-legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+
+  &[data-kind="code"]  { background: var(--node-code); }
+  &[data-kind="spec"]  { background: var(--node-spec); border-radius: 2px; }
+  &[data-kind="route"] { background: var(--node-route); }
+  &[data-kind="test"]  { background: var(--node-test); }
+}
+
+.gp-legend-sep {
+  width: 1px;
+  height: 16px;
+  background: var(--border-subtle);
+  flex-shrink: 0;
+}
+
+.gp-legend-edges { display: flex; align-items: center; gap: 10px; }
+.gp-legend-edge-row { display: flex; align-items: center; gap: 4px; }
+
 // Right panel ---------------------------------------------------------------
 
 .gp-panel {
@@ -222,48 +269,90 @@
   flex-shrink: 0;
   border-left: 1px solid var(--border-subtle);
   background: var(--bg-panel);
-  overflow-y: auto;
-  padding: 0 0 16px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
-.gp-panel-head {
-  padding: 14px;
+// Panel header
+.gp-panel-header {
+  padding: 12px 14px;
   border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
 }
 
-.gp-panel-title {
+.gp-panel-header-inner {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.gp-overview-head {
   display: flex;
   align-items: center;
   gap: 8px;
-
-  h3 { font-size: 14px; font-weight: 600; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 }
 
-.gp-kind-pill {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  padding: 2px 7px;
-  border-radius: 4px;
-  background: var(--accent-soft);
-  color: var(--accent);
+.gp-node-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 5px;
+
+  &.is-rect { border-radius: 2px; }
+}
+
+.gp-panel-name {
+  font-size: 14px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .gp-panel-path {
-  margin-top: 6px;
-  font-size: 11px;
+  margin-top: 8px;
+  font-size: 11.5px;
   color: var(--text-secondary);
-  overflow-wrap: anywhere;
 }
 
-.gp-panel section { padding: 14px; border-bottom: 1px solid var(--border-subtle); }
+.gp-path-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
 
-.gp-panel-eyebrow {
+// Panel body
+.gp-panel-body {
+  flex: 1;
+  padding: 14px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+// Sections inside panel body
+.gp-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.gp-section-plain {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.gp-eyebrow {
   font-size: 10.5px;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--text-muted);
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
 .gp-code {
@@ -280,50 +369,151 @@
   word-break: break-word;
 }
 
-.gp-row {
+// Spec link rows
+.gp-link-row {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 6px 8px;
-  border-radius: 5px;
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle);
+  margin-bottom: 5px;
   font-size: 11.5px;
-  margin-bottom: 4px;
-  border: 1px solid transparent;
 }
 
-.gp-row-button {
+.gp-link-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+}
+
+// Callers / callees node links
+.gp-node-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   width: 100%;
+  padding: 5px 8px;
+  border-radius: 6px;
+  border: none;
   background: transparent;
   cursor: pointer;
-  text-align: left;
-  color: inherit;
   font: inherit;
-
-  &:hover { background: var(--bg-hover); border-color: var(--border-subtle); }
-}
-
-.gp-row-text { flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.gp-row-meta { flex: 1; text-align: right; font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-.gp-state-pill {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  padding: 1px 6px;
-  border-radius: 999px;
-  background: var(--bg-canvas);
-  color: var(--text-muted);
-  border: 1px solid var(--border-subtle);
-
-  &[data-state="verified"], &[data-state="implemented"] { color: var(--ok, #4caf50); border-color: color-mix(in srgb, var(--ok, #4caf50) 40%, transparent); }
-  &[data-state="drifted"] { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, transparent); }
-  &[data-state="broken"], &[data-state="orphaned"] { color: var(--error); border-color: color-mix(in srgb, var(--error) 40%, transparent); }
-}
-
-.gp-empty-line {
+  color: inherit;
+  text-align: left;
   font-size: 12px;
-  padding: 4px 8px;
+
+  &:hover { background: var(--bg-hover); }
 }
 
+.gp-link-file {
+  font-size: 10px;
+  flex-shrink: 0;
+}
+
+// Edge legend rows in overview
+.gp-edge-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+// Kind rows in overview
+.gp-kind-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 0;
+}
+
+.gp-kind-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+
+  &[data-kind="code"]  { background: var(--node-code); box-shadow: 0 0 6px var(--node-code); }
+  &[data-kind="spec"]  { background: var(--node-spec); border-radius: 2px; box-shadow: 0 0 6px var(--node-spec); }
+  &[data-kind="route"] { background: var(--node-route); box-shadow: 0 0 6px var(--node-route); }
+  &[data-kind="test"]  { background: var(--node-test); box-shadow: 0 0 6px var(--node-test); }
+}
+
+// Actions footer
+.gp-panel-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  border-top: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+
+// Hub rows in overview (most connected)
+.gp-hub-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 8px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+
+  &:hover { background: var(--bg-hover); }
+}
+
+.gp-hub-dot {
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+}
+
+.gp-hub-name {
+  font-size: 11.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gp-hub-degree {
+  font-size: 10.5px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+// Loading skeletons for health / hubs
+@keyframes gp-skel-pulse {
+  0%, 100% { opacity: 0.35; }
+  50%       { opacity: 0.7; }
+}
+
+.gp-skel {
+  display: inline-block;
+  background: var(--border-subtle);
+  border-radius: 4px;
+  animation: gp-skel-pulse 1.4s ease-in-out infinite;
+}
+
+.gp-skel-sm  { width: 24px;  height: 12px; }
+.gp-skel-lg  { width: 80px;  height: 12px; flex: 1; }
+.gp-skel-hub { width: 120px; height: 12px; flex: 1; }
+
+.gp-skel-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--border-subtle);
+  animation: gp-skel-pulse 1.4s ease-in-out infinite;
+}
+
+.grow { flex: 1; }
 .muted { color: var(--text-muted); }
 .mono { font-family: var(--font-mono); }

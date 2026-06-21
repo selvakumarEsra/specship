@@ -15,15 +15,20 @@ import { apiResource } from '../../api/resource';
 import { ProjectsService } from '../../api/projects';
 import { RefreshService } from '../../api/refresh';
 import { Icon } from '../../shell/icon/icon';
+import { PageHead } from '../../ui/page-head';
+import { Segmented } from '../../ui/segmented';
+import { Pill } from '../../ui/pill';
 import type { ClaudeSession, SessionsResponse } from '../../api/types';
 
 type Range = 'today' | 'week' | 'month' | 'all';
-type Sort = 'cost' | 'prompts';
+type Sort = 'time' | 'cost' | 'prompts';
 
 interface Row {
   id: string;
   fullId: string;
   project: string;
+  /** Raw start timestamp (ms) — sort key for the default "latest first" order. */
+  startedAt: number;
   started: string;
   ended: string;
   prompts: number;
@@ -44,7 +49,7 @@ const AUTO_REFRESH_MS = 10_000;
 
 @Component({
   selector: 'app-sessions',
-  imports: [DecimalPipe, RouterLink, Icon],
+  imports: [DecimalPipe, RouterLink, Icon, PageHead, Segmented, Pill],
   templateUrl: './sessions.html',
   styleUrl: './sessions.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -56,7 +61,7 @@ export class Sessions {
   private readonly destroyRef = inject(DestroyRef);
 
   protected readonly range = signal<Range>('all');
-  protected readonly sort = signal<Sort>('cost');
+  protected readonly sort = signal<Sort>('time');
   protected readonly ranges: Range[] = ['today', 'week', 'month', 'all'];
   protected readonly localRefreshing = signal(false);
 
@@ -79,7 +84,11 @@ export class Sessions {
 
   protected readonly sorted = computed<Row[]>(() => {
     const s = this.sort();
-    return [...this.rows()].sort((a, b) => (s === 'cost' ? b.cost - a.cost : b.prompts - a.prompts));
+    return [...this.rows()].sort((a, b) => {
+      if (s === 'cost') return b.cost - a.cost;
+      if (s === 'prompts') return b.prompts - a.prompts;
+      return b.startedAt - a.startedAt; // 'time' — latest first
+    });
   });
 
   constructor() {
@@ -150,6 +159,7 @@ export class Sessions {
       id: (s.id || '').slice(0, 8),
       fullId: s.id,
       project: (s.project_path || '').split('/').filter(Boolean).pop() || '?',
+      startedAt: s.started_at || 0,
       started: this.fmtTime(s.started_at),
       ended: this.fmtTime(s.ended_at).split(' ').pop() || '',
       prompts: s.prompt_count || 0,

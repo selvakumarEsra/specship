@@ -3,23 +3,58 @@
 } @else {
 <div class="gp-root">
   <div class="gp-main">
+
+    <!-- Toolbar -->
     <div class="gp-toolbar">
+      <app-segmented
+        size="sm"
+        [options]="layoutOptions"
+        [value]="layoutMode()"
+        (change)="onLayoutChange($event)"
+      />
+      <div class="gp-divider"></div>
+
+      @for (k of kindKeys; track k) {
+        <button
+          type="button"
+          class="gp-chip"
+          [class.is-active]="isFilterActive(k)"
+          [style.--chip-color]="chipColor(k)"
+          (click)="toggleFilter(k)"
+        >
+          <span class="gp-chip-dot" [attr.data-kind]="k"></span>
+          {{ kindLabel(k) }}
+          <span class="gp-chip-count">{{ countFor(k) }}</span>
+        </button>
+      }
+
+      <div class="gp-spacer"></div>
+
+      <!-- Fuzzy search box -->
       <div class="gp-search">
-        <input
-          type="text"
-          placeholder="Search symbol… (function, class, route)"
-          [value]="searchInput()"
-          (input)="onSearchInput($any($event.target).value)"
-          aria-label="Symbol search"
-        />
-        @if (searchResults.state().loading) {
-          <span class="gp-spinner" aria-hidden="true"></span>
-        }
+        <div class="gp-search-inner">
+          <app-icon name="search" [size]="13" class="gp-search-icon" />
+          <input
+            type="text"
+            placeholder="Fuzzy symbol search…"
+            [value]="searchInput()"
+            (input)="onSearchInput($any($event.target).value)"
+            aria-label="Symbol search"
+          />
+          @if (searchResults.state().loading) {
+            <span class="gp-spinner" aria-hidden="true"></span>
+          }
+        </div>
         @if (searchResults.state().data && (searchResults.state().data!.results.length > 0)) {
           <div class="gp-results" role="listbox">
             @for (r of searchResults.state().data!.results; track r.node.id) {
               <button type="button" class="gp-result" (click)="pickResult(r.node)">
-                <span class="gp-result-dot" [class.is-spec]="r.node.kind === 'spec'" [class.is-route]="r.node.kind === 'route'"></span>
+                <span
+                  class="gp-result-dot"
+                  [class.is-spec]="r.node.kind === 'spec'"
+                  [class.is-route]="r.node.kind === 'route'"
+                  [class.is-test]="r.node.kind === 'test'"
+                ></span>
                 <span class="gp-result-name mono">{{ r.node.name }}</span>
                 <span class="gp-result-kind">{{ r.node.kind }}</span>
                 <span class="gp-result-path mono">{{ shortPath(r.node.filePath) }}</span>
@@ -29,29 +64,13 @@
         }
       </div>
 
-      <div class="gp-filters">
-        @for (k of kindKeys; track k) {
-          <button
-            type="button"
-            class="gp-chip"
-            [class.is-active]="isFilterActive(k)"
-            (click)="toggleFilter(k)"
-          >
-            <span class="gp-chip-dot" [attr.data-kind]="k"></span>
-            {{ kindLabel(k) }}
-            <span class="gp-chip-count">{{ countFor(k) }}</span>
-          </button>
-        }
-      </div>
-
-      <div class="gp-spacer"></div>
-
-      @if (selectedDetail()) {
-        <button type="button" class="gp-action" (click)="recenter()">Recenter</button>
-        <button type="button" class="gp-action gp-action-ghost" (click)="clearSelection()">Clear</button>
-      }
+      <button type="button" class="btn btn-secondary btn-sm" (click)="recenter()">
+        <app-icon name="recenter" [size]="13" />
+        Recenter
+      </button>
     </div>
 
+    <!-- Canvas area -->
     <div class="gp-canvas-wrap">
       @if (!selectedSymbol()) {
         <div class="gp-empty">
@@ -76,71 +95,294 @@
           [edges]="visibleEdges()"
           [selectedId]="selectedDetail()!.id"
           [fitKey]="fitKey()"
+          [hiddenIds]="hiddenIds()"
           (nodeClick)="pickFromCanvas($event)"
         />
+
+        <!-- Floating legend overlay (top-left) -->
+        <div class="gp-legend">
+          <div class="gp-legend-kinds">
+            @for (k of kindKeys; track k) {
+              <div class="gp-legend-item">
+                <span class="gp-legend-dot" [attr.data-kind]="k"></span>
+                <span class="secondary" style="text-transform: capitalize">{{ k }}</span>
+              </div>
+            }
+          </div>
+          <div class="gp-legend-sep"></div>
+          <div class="gp-legend-edges">
+            <div class="gp-legend-edge-row">
+              <svg width="16" height="8"><line x1="0" y1="4" x2="16" y2="4" stroke="var(--node-spec)" stroke-width="1.6" /></svg>
+              <span class="secondary">implements</span>
+            </div>
+            <div class="gp-legend-edge-row">
+              <svg width="16" height="8"><line x1="0" y1="4" x2="16" y2="4" stroke="var(--node-test)" stroke-width="1.6" /></svg>
+              <span class="secondary">tests</span>
+            </div>
+            <div class="gp-legend-edge-row">
+              <svg width="16" height="8"><line x1="0" y1="4" x2="16" y2="4" stroke="var(--text-muted)" stroke-width="1.6" /></svg>
+              <span class="secondary">calls</span>
+            </div>
+            <div class="gp-legend-edge-row">
+              <svg width="16" height="8"><line x1="0" y1="4" x2="16" y2="4" stroke="var(--text-muted)" stroke-width="1.6" stroke-dasharray="4 3" /></svg>
+              <span class="secondary">synth</span>
+            </div>
+          </div>
+        </div>
       }
     </div>
   </div>
 
-  @if (selectedDetail(); as d) {
-    <aside class="gp-panel">
-      <header class="gp-panel-head">
-        <div class="gp-panel-title">
-          <span class="gp-kind-pill">{{ d.kind }}</span>
-          <h3 class="mono">{{ d.name }}</h3>
+  <!-- Right panel: OverviewPanel (nothing selected) or DetailPanel (node selected) -->
+  <aside class="gp-panel">
+    @if (selectedDetail(); as d) {
+      <!-- DETAIL PANEL -->
+      @let isSpec = d.kind === 'spec';
+      @let col = detailColor(d);
+
+      <div class="gp-panel-header">
+        <div class="gp-panel-header-inner">
+          <span
+            class="gp-node-dot"
+            [class.is-rect]="isSpec"
+            [style.background]="col"
+            [style.box-shadow]="'0 0 8px ' + col"
+          ></span>
+          <div class="grow" style="min-width: 0">
+            <div class="mono gp-panel-name">{{ d.name }}</div>
+            <div class="row gap-6" style="margin-top: 3px">
+              <span
+                class="pill"
+                [style.color]="col"
+                [style.background]="'color-mix(in srgb, ' + col + ' 14%, transparent)'"
+              >{{ d.kind }}</span>
+              @if (d.signature) {
+                <span class="pill">{{ d.startLine ? 'L' + d.startLine : '' }}</span>
+              }
+            </div>
+          </div>
+          <button type="button" class="btn btn-ghost btn-xs" (click)="clearSelection()" aria-label="Close panel">
+            <app-icon name="x" [size]="14" />
+          </button>
         </div>
-        <div class="gp-panel-path mono">{{ d.filePath }}<span class="muted"> · L{{ d.startLine }}</span></div>
-      </header>
+        <div class="gp-panel-path row gap-6">
+          <app-icon name="folder" [size]="12" style="color: var(--text-muted); flex-shrink: 0" />
+          <span class="mono secondary gp-path-text">{{ d.filePath }}</span>
+          <app-copy-btn [text]="d.filePath" />
+        </div>
+      </div>
 
-      @if (d.signature) {
-        <section>
-          <div class="gp-panel-eyebrow">Signature</div>
-          <pre class="gp-code mono">{{ d.signature }}</pre>
-        </section>
-      }
+      <div class="gp-panel-body scroll-y">
 
-      @if (d.linkedSpecs.length) {
-        <section>
-          <div class="gp-panel-eyebrow">Linked specs ({{ d.linkedSpecs.length }})</div>
-          @for (link of d.linkedSpecs; track link.id) {
-            <div class="gp-row">
-              <span class="gp-state-pill" [attr.data-state]="link.state">{{ link.state }}</span>
-              <span class="mono gp-row-text">{{ link.specId }}</span>
-              <span class="muted gp-row-meta">{{ link.specTitle || '' }}</span>
+        @if (d.signature) {
+          <div class="gp-section">
+            <div class="eyebrow gp-eyebrow">Signature</div>
+            <pre class="gp-code mono">{{ d.signature }}</pre>
+          </div>
+        }
+
+        @if (d.docstring) {
+          <div class="gp-section">
+            <div class="eyebrow gp-eyebrow">Docstring</div>
+            <p class="secondary" style="font-size: 12px; line-height: 1.6; margin: 0">{{ d.docstring }}</p>
+          </div>
+        }
+
+        @if (d.linkedSpecs && d.linkedSpecs.length) {
+          <div class="gp-section">
+            <div class="eyebrow gp-eyebrow">Linked specs <span class="muted" style="font-weight: 400; margin-left: 5px">{{ d.linkedSpecs.length }}</span></div>
+            @for (link of d.linkedSpecs; track link.id) {
+              <div class="gp-link-row">
+                <app-state-pill [state]="link.state" />
+                <span class="mono grow gp-link-text">{{ link.specId }}</span>
+                @if (link.specTitle) {
+                  <span class="muted" style="font-size: 10px; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 120px">{{ link.specTitle }}</span>
+                }
+              </div>
+            }
+          </div>
+        }
+
+        @if (!isSpec) {
+          <div class="gp-section">
+            <div class="eyebrow gp-eyebrow">Callers <span class="muted" style="font-weight: 400; margin-left: 5px">{{ d.callers.length }}</span></div>
+            @if (d.callers.length) {
+              @for (n of d.callers; track n.id) {
+                <button type="button" class="gp-node-link" (click)="pickResult(n)">
+                  <app-icon name="box" [size]="12" style="color: var(--node-code); flex-shrink: 0" />
+                  <span class="mono grow gp-link-text">{{ n.name }}</span>
+                  <span class="mono muted gp-link-file">{{ fileName(n.filePath) }}</span>
+                </button>
+              }
+            } @else {
+              <div class="muted" style="font-size: 12px; padding: 4px 8px">No callers</div>
+            }
+          </div>
+
+          <div class="gp-section">
+            <div class="eyebrow gp-eyebrow">Callees <span class="muted" style="font-weight: 400; margin-left: 5px">{{ d.callees.length }}</span></div>
+            @if (d.callees.length) {
+              @for (n of d.callees; track n.id) {
+                <button type="button" class="gp-node-link" (click)="pickResult(n)">
+                  <app-icon name="box" [size]="12" style="color: var(--node-code); flex-shrink: 0" />
+                  <span class="mono grow gp-link-text">{{ n.name }}</span>
+                  <span class="mono muted gp-link-file">{{ fileName(n.filePath) }}</span>
+                </button>
+              }
+            } @else {
+              <div class="muted" style="font-size: 12px; padding: 4px 8px">No callees</div>
+            }
+          </div>
+        }
+
+      </div>
+
+      <!-- Actions footer -->
+      <div class="gp-panel-footer">
+        @if (isSpec) {
+          <button type="button" class="btn btn-primary btn-sm grow" style="justify-content: center">
+            <app-icon name="play" [size]="13" />
+            Implement
+          </button>
+          <button type="button" class="btn btn-secondary btn-sm" (click)="navigateToDrift()">Fix</button>
+          <button type="button" class="btn btn-secondary btn-sm">Relink</button>
+        } @else {
+          <button type="button" class="btn btn-primary btn-sm grow" style="justify-content: center">
+            <app-icon name="reveal" [size]="13" />
+            Reveal in editor
+          </button>
+          <button type="button" class="btn btn-secondary btn-sm" (click)="navigateToSpecs()">Open Specs</button>
+        }
+      </div>
+
+    } @else {
+      <!-- OVERVIEW PANEL -->
+      <div class="gp-panel-header gp-overview-head">
+        <app-icon name="graph" [size]="15" style="color: var(--accent)" />
+        <span style="font-weight: 600; font-size: 13.5px">Graph overview</span>
+        <div class="grow"></div>
+        @if (status.state().data; as s) {
+          <span class="mono muted" style="font-size: 11px">{{ s.nodeCount.toLocaleString() }} shown</span>
+        }
+      </div>
+
+      <div class="gp-panel-body scroll-y">
+
+        <p class="secondary" style="font-size: 12px; line-height: 1.55; margin: 0 0 18px">
+          Click any node to inspect its signature, links, callers and callees — without leaving this view.
+        </p>
+
+        <!-- Nodes by kind -->
+        <div class="gp-section-plain">
+          <div class="eyebrow gp-eyebrow">Nodes by kind</div>
+          @for (k of kindKeys; track k) {
+            <div class="gp-kind-row">
+              <span class="gp-kind-dot" [attr.data-kind]="k"></span>
+              <span class="grow" style="font-size: 12.5px; text-transform: capitalize">{{ k }}</span>
+              <span class="mono tabular" style="font-size: 12.5px; font-weight: 600">{{ overviewKindCounts()[k] }}</span>
             </div>
           }
-        </section>
-      }
+        </div>
 
-      <section>
-        <div class="gp-panel-eyebrow">Callers <span class="muted">({{ d.callers.length }})</span></div>
-        @if (d.callers.length) {
-          @for (n of d.callers; track n.id) {
-            <button type="button" class="gp-row gp-row-button" (click)="pickResult(n)">
-              <span class="mono gp-row-text">{{ n.name }}</span>
-              <span class="muted gp-row-meta">{{ shortPath(n.filePath) }}</span>
-            </button>
+        <!-- Spec link health -->
+        <div class="gp-section-plain">
+          <div class="eyebrow gp-eyebrow">Spec link health</div>
+          @if (health.state().loading) {
+            <div class="row gap-6" style="flex-wrap: wrap; align-items: center">
+              <app-state-pill state="verified" />
+              <span class="gp-skel gp-skel-sm" aria-hidden="true"></span>
+              <app-state-pill state="drifted" />
+              <span class="gp-skel gp-skel-sm" aria-hidden="true"></span>
+              <app-state-pill state="broken" />
+              <span class="gp-skel gp-skel-sm" aria-hidden="true"></span>
+            </div>
+          } @else {
+            <div class="row gap-6" style="flex-wrap: wrap; align-items: center">
+              <app-state-pill state="verified" />
+              <span class="mono tabular muted" style="font-size: 11px; align-self: center">{{ health.state().data?.linkHealth?.['verified'] ?? 0 }}</span>
+              <app-state-pill state="drifted" />
+              <span class="mono tabular muted" style="font-size: 11px; align-self: center">{{ health.state().data?.linkHealth?.['drifted'] ?? 0 }}</span>
+              <app-state-pill state="broken" />
+              <span class="mono tabular muted" style="font-size: 11px; align-self: center">{{ (health.state().data?.linkHealth?.['broken'] ?? 0) + (health.state().data?.linkHealth?.['orphaned'] ?? 0) }}</span>
+            </div>
           }
-        } @else {
-          <div class="muted gp-empty-line">No callers</div>
-        }
-      </section>
+        </div>
 
-      <section>
-        <div class="gp-panel-eyebrow">Callees <span class="muted">({{ d.callees.length }})</span></div>
-        @if (d.callees.length) {
-          @for (n of d.callees; track n.id) {
-            <button type="button" class="gp-row gp-row-button" (click)="pickResult(n)">
-              <span class="mono gp-row-text">{{ n.name }}</span>
-              <span class="muted gp-row-meta">{{ shortPath(n.filePath) }}</span>
-            </button>
+        <!-- Edge types -->
+        <div class="gp-section-plain">
+          <div class="eyebrow gp-eyebrow">Edge types</div>
+          @if (health.state().loading) {
+            <div class="gp-edge-row">
+              <svg width="20" height="8"><line x1="0" y1="4" x2="20" y2="4" stroke="var(--text-muted)" stroke-width="1.8" /></svg>
+              <span class="gp-skel gp-skel-lg" aria-hidden="true"></span>
+            </div>
+            <div class="gp-edge-row">
+              <svg width="20" height="8"><line x1="0" y1="4" x2="20" y2="4" stroke="var(--node-spec)" stroke-width="1.8" /></svg>
+              <span class="gp-skel gp-skel-lg" aria-hidden="true"></span>
+            </div>
+            <div class="gp-edge-row">
+              <svg width="20" height="8"><line x1="0" y1="4" x2="20" y2="4" stroke="var(--node-test)" stroke-width="1.8" /></svg>
+              <span class="gp-skel gp-skel-lg" aria-hidden="true"></span>
+            </div>
+            <div class="gp-edge-row">
+              <svg width="20" height="8"><line x1="0" y1="4" x2="20" y2="4" stroke="var(--text-muted)" stroke-width="1.8" stroke-dasharray="4 3" /></svg>
+              <span class="gp-skel gp-skel-lg" aria-hidden="true"></span>
+            </div>
+          } @else if (health.state().data?.edgeKinds) {
+            <div class="gp-edge-row">
+              <svg width="20" height="8"><line x1="0" y1="4" x2="20" y2="4" stroke="var(--text-muted)" stroke-width="1.8" /></svg>
+              <span class="grow secondary" style="font-size: 12px">calls</span>
+              <span class="mono tabular muted" style="font-size: 11px">{{ health.state().data?.edgeKinds?.['calls'] ?? 0 }}</span>
+            </div>
+            <div class="gp-edge-row">
+              <svg width="20" height="8"><line x1="0" y1="4" x2="20" y2="4" stroke="var(--node-spec)" stroke-width="1.8" /></svg>
+              <span class="grow secondary" style="font-size: 12px">implements / documents</span>
+              <span class="mono tabular muted" style="font-size: 11px">{{ health.state().data?.edgeKinds?.['implements'] ?? 0 }}</span>
+            </div>
+            <div class="gp-edge-row">
+              <svg width="20" height="8"><line x1="0" y1="4" x2="20" y2="4" stroke="var(--node-test)" stroke-width="1.8" /></svg>
+              <span class="grow secondary" style="font-size: 12px">tests</span>
+              <span class="mono tabular muted" style="font-size: 11px">{{ health.state().data?.edgeKinds?.['tests'] ?? 0 }}</span>
+            </div>
+            <div class="gp-edge-row">
+              <svg width="20" height="8"><line x1="0" y1="4" x2="20" y2="4" stroke="var(--text-muted)" stroke-width="1.8" stroke-dasharray="4 3" /></svg>
+              <span class="grow secondary" style="font-size: 12px">synthesized (heuristic)</span>
+              <span class="mono tabular muted" style="font-size: 11px">{{ health.state().data?.edgeKinds?.['synth'] ?? 0 }}</span>
+            </div>
           }
-        } @else {
-          <div class="muted gp-empty-line">No callees</div>
+        </div>
+
+        <!-- Most connected hubs -->
+        @if (health.state().loading) {
+          <div class="gp-section-plain">
+            <div class="eyebrow gp-eyebrow">Most connected</div>
+            @for (i of [1, 2, 3, 4]; track i) {
+              <div class="gp-hub-row" aria-hidden="true">
+                <span class="gp-hub-dot gp-skel-dot"></span>
+                <span class="gp-skel gp-skel-hub" aria-hidden="true"></span>
+              </div>
+            }
+          </div>
+        } @else if (health.state().data?.hubs?.length) {
+          <div class="gp-section-plain">
+            <div class="eyebrow gp-eyebrow">Most connected</div>
+            @for (hub of health.state().data!.hubs.slice(0, 8); track hub.id) {
+              <button type="button" class="gp-hub-row" (click)="pickHub(hub)" [attr.aria-label]="hub.name + ', ' + hub.degree + ' edges'">
+                <span
+                  class="gp-hub-dot"
+                  [style.background]="nodeColor(hub.kind)"
+                  [style.border-radius]="hub.kind === 'spec' ? '2px' : '50%'"
+                ></span>
+                <span class="mono grow gp-hub-name">{{ hub.name }}</span>
+                <span class="muted gp-hub-degree">{{ hub.degree }} edges</span>
+                <app-icon name="chevron-right" [size]="11" style="color: var(--text-muted); flex-shrink: 0" />
+              </button>
+            }
+          </div>
         }
-      </section>
-    </aside>
-  }
+
+      </div>
+    }
+  </aside>
 </div>
-
 }
