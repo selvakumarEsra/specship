@@ -1,6 +1,7 @@
 import { Injectable, Signal, computed, inject, signal } from '@angular/core';
 import { ApiService } from './api';
 import { ProjectsService } from './projects';
+import { ConnectionService } from './connection';
 
 /**
  * Global refresh broadcast for the dashboard.
@@ -21,6 +22,7 @@ import { ProjectsService } from './projects';
 export class RefreshService {
   private readonly api = inject(ApiService);
   private readonly projects = inject(ProjectsService);
+  private readonly connection = inject(ConnectionService);
 
   private readonly tickSig = signal(0);
   private readonly loadingSig = signal(false);
@@ -57,6 +59,12 @@ export class RefreshService {
    */
   async triggerGlobalRefresh(): Promise<void> {
     if (this.loadingSig()) return;
+    // Server-dependent action — no-op while offline with a clear notice
+    // instead of firing a request that will reject (REQ-OFFLINE-004).
+    if (!this.connection.online()) {
+      this.errorSig.set('Offline — reconnect to refresh');
+      return;
+    }
     this.loadingSig.set(true);
     this.errorSig.set(null);
     try {

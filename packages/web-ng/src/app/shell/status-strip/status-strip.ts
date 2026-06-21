@@ -3,6 +3,7 @@ import { ApiService } from '../../api/api';
 import { apiResource } from '../../api/resource';
 import { ProjectsService } from '../../api/projects';
 import { RefreshService } from '../../api/refresh';
+import { ConnectionService } from '../../api/connection';
 import type { StatusResponse } from '../../api/types';
 
 @Component({
@@ -16,7 +17,25 @@ export class StatusStrip {
   private readonly api = inject(ApiService);
   private readonly projects = inject(ProjectsService);
   protected readonly refreshSvc = inject(RefreshService);
+  protected readonly conn = inject(ConnectionService);
   protected readonly status = apiResource<StatusResponse>(this.api, () => `/api/status${this.projects.projectQuery()}`);
+
+  /**
+   * Age of the cached data shown while offline (REQ-OFFLINE-003.A3). Sourced
+   * from the status resource's own `cachedAt` (persisted to localStorage, so it
+   * survives a cold offline reload), falling back to the in-session
+   * last-online time. Null when there's nothing cached.
+   */
+  protected readonly offlineAge = computed<string | null>(() => {
+    const ts = this.status.state().cachedAt ?? this.conn.lastOnlineAt();
+    if (ts === null) return null;
+    const diff = Date.now() - ts;
+    if (diff < 10_000) return 'just now';
+    if (diff < 60_000) return `${Math.round(diff / 1_000)}s ago`;
+    if (diff < 3_600_000) return `${Math.round(diff / 60_000)}m ago`;
+    if (diff < 86_400_000) return `${Math.round(diff / 3_600_000)}h ago`;
+    return `${Math.round(diff / 86_400_000)}d ago`;
+  });
 
   protected readonly indexedLabel = computed(() => {
     const ts = this.status.state().data?.lastIndexed;

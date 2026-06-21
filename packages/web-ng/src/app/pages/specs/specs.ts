@@ -9,6 +9,7 @@ import { Router } from '@angular/router';
 import { ApiService } from '../../api/api';
 import { apiResource } from '../../api/resource';
 import { ProjectsService } from '../../api/projects';
+import { ConnectionService } from '../../api/connection';
 import { PickProjectEmpty } from '../../shell/pick-project-empty/pick-project-empty';
 import { Icon } from '../../shell/icon/icon';
 import { SpecEditor } from '../../components/spec-editor/spec-editor';
@@ -44,6 +45,7 @@ export class Specs {
   private readonly api = inject(ApiService);
   private readonly projects = inject(ProjectsService);
   private readonly router = inject(Router);
+  protected readonly conn = inject(ConnectionService);
 
   protected readonly resource = apiResource<SpecsResponse>(
     this.api,
@@ -175,6 +177,12 @@ export class Specs {
     const spec = this.selectedSpec();
     const content = this.editingSource();
     if (!spec || content === null) return;
+    // Server-dependent action — block with a notice while offline rather than
+    // firing a PUT that will reject and lose the edit (REQ-OFFLINE-004).
+    if (!this.conn.online()) {
+      this.saveError.set('Offline — reconnect to save your changes');
+      return;
+    }
     this.saving.set(true);
     this.saveError.set(null);
     try {

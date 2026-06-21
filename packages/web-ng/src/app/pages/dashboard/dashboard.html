@@ -317,8 +317,8 @@
   <footer class="dash-footer mono muted">
     {{ range() }} window total: {{ fmt$(rangeTotal()) }}
     ·
-    <span [class.dot-live]="liveSource() === 'live'" [class.dot-mock]="liveSource() === 'mock'">●</span>
-    {{ liveSource() }}
+    <span [class.dot-live]="liveSource() === 'live'" [class.dot-mock]="liveSource() === 'offline'">●</span>
+    {{ liveSource() === 'live' ? 'Live' : 'Offline' }}
   </footer>
 
 </div>

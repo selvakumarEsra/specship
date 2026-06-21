@@ -14,19 +14,35 @@
     </span>
     <span class="grow"></span>
     <span class="seg"><span class="lbl">indexed</span> <span class="mono val">{{ indexedLabel() }}</span></span>
-    @if (refreshSvc.error(); as err) {
-      <span class="refresh-error mono" [title]="err">⚠</span>
-    }
-    <button class="refresh"
-            (click)="refresh()"
-            [disabled]="refreshSvc.loading()"
-            [class.spinning]="refreshSvc.loading()"
-            [attr.aria-label]="refreshSvc.loading() ? 'Refreshing…' : 'Refresh everything — sync index + ingest Claude Code transcripts'"
-            [title]="refreshSvc.loading() ? 'Refreshing…' : 'Refresh: sync index + re-ingest Claude Code transcripts. Updates Sessions, Heatmap, Costs, Memory, Drift, Graph.'"
-    >↻</button>
   } @else if (status.state().loading) {
     <span class="mono muted">loading status…</span>
+    <span class="grow"></span>
   } @else {
-    <span class="mono muted">no backend</span>
+    <span class="mono muted">{{ conn.online() ? 'no backend' : 'offline — no cached data' }}</span>
+    <span class="grow"></span>
   }
+
+  <!-- Connection indicator — always visible (REQ-OFFLINE-002). Reads
+       ● Live when the server is reachable, ● Offline when not, with the
+       age of the last good fetch so cached data reads honestly. -->
+  <span class="divider"></span>
+  <span class="seg conn"
+        [title]="conn.online() ? 'Connected to the SpecShip server' : 'Server unreachable — showing the last cached data'">
+    <span class="conn-dot" [class.live]="conn.online()" [class.off]="!conn.online()"></span>
+    <span class="mono val">{{ conn.online() ? 'Live' : 'Offline' }}</span>
+    @if (!conn.online() && offlineAge(); as ago) {
+      <span class="muted conn-age">· {{ ago }}</span>
+    }
+  </span>
+
+  @if (refreshSvc.error(); as err) {
+    <span class="refresh-error mono" [title]="err">⚠</span>
+  }
+  <button class="refresh"
+          (click)="refresh()"
+          [disabled]="refreshSvc.loading() || !conn.online()"
+          [class.spinning]="refreshSvc.loading()"
+          [attr.aria-label]="!conn.online() ? 'Offline — reconnect to refresh' : (refreshSvc.loading() ? 'Refreshing…' : 'Refresh everything — sync index + ingest Claude Code transcripts')"
+          [title]="!conn.online() ? 'Offline — reconnect to refresh' : (refreshSvc.loading() ? 'Refreshing…' : 'Refresh: sync index + re-ingest Claude Code transcripts. Updates Sessions, Heatmap, Costs, Memory, Drift, Graph.')"
+  >↻</button>
 </div>

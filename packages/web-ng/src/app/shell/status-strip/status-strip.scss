@@ -51,3 +51,15 @@
   padding: 0 2px;
   cursor: help;
 }
+
+// Connection indicator dot — green when Live, amber when Offline.
+.conn { gap: 5px; }
+.conn-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.conn-dot.live { background: var(--success); box-shadow: 0 0 6px var(--success); }
+.conn-dot.off  { background: var(--warn);    box-shadow: 0 0 6px var(--warn); }
+.conn-age { font-size: 11px; }

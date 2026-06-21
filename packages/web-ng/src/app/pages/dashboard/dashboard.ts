@@ -27,6 +27,7 @@ import { ApiService } from '../../api/api';
 import { apiResource } from '../../api/resource';
 import { shortLabel } from '../../util/paths';
 import { ProjectsService } from '../../api/projects';
+import { ConnectionService } from '../../api/connection';
 import { Icon } from '../../shell/icon/icon';
 import { PageHead } from '../../ui/page-head';
 import { Segmented, type SegmentedOption } from '../../ui/segmented';
@@ -71,6 +72,7 @@ export class Dashboard {
   private readonly api = inject(ApiService);
   private readonly router = inject(Router);
   private readonly projects = inject(ProjectsService);
+  private readonly conn = inject(ConnectionService);
 
   protected readonly range = signal<Range>('week');
 
@@ -223,8 +225,8 @@ export class Dashboard {
     return series.reduce((sum, d) => sum + (d.cost ?? 0), 0);
   });
 
-  protected readonly liveSource = computed(() =>
-    this.status.state().source === 'api' && this.status.state().data ? 'live' : 'mock',
+  protected readonly liveSource = computed<'live' | 'offline'>(() =>
+    this.conn.online() ? 'live' : 'offline',
   );
 
   // Mini graph ---------------------------------------------------------------
