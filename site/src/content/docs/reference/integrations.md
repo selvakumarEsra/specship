@@ -10,11 +10,9 @@ SpecShip is a Claude Code-first tool. The `specship install` command does the wi
 
 ## What `specship install` writes
 
-Three things, none of them surprising:
-
 ### 1. The MCP server entry
 
-Into `~/.claude.json` (global, the default) or `./.mcp.json` (project, when you pass `--project`):
+A no-flag install is **project-local** by default — it writes to `./.mcp.json`. Pass `--location global` to write to `~/.claude.json` instead, so the server runs for every project:
 
 ```json
 {
@@ -27,38 +25,48 @@ Into `~/.claude.json` (global, the default) or `./.mcp.json` (project, when you 
 }
 ```
 
-This tells Claude Code: "when you start, spawn `specship serve --mcp` as a stdio MCP server". The server exposes the `specship_*` tools (search, explore, node, callers, callees, impact, status, files, spec, link-assert, link-verify, drifted).
+This tells Claude Code: "when you start, spawn `specship serve --mcp` as a stdio MCP server". The server exposes the code-graph tools (`specship_search`, `specship_explore`, `specship_node`, `specship_callers`, `specship_callees`, `specship_impact`, `specship_status`, `specship_files`), the spec tools (`specship_spec`, `specship_link_assert`, `specship_link_verify`, `specship_drifted`), and the design tools (`designer_session`, `designer_prompt`, `designer_ask`, `designer_list`, `designer_snapshot`, `designer_handoff`). See the [MCP server reference](/specship/reference/mcp-server/) for what each does.
 
 ### 2. The auto-allow permissions list
 
-Into `~/.claude/settings.json` (global) or `./.claude/settings.json` (project):
+Into `./.claude/settings.json` (project-local) or `~/.claude/settings.json` (global):
 
 ```json
 {
-  "tools": {
-    "permissions": {
-      "auto-allow": [
-        "mcp__specship__specship_search",
-        "mcp__specship__specship_explore",
-        "mcp__specship__specship_callers",
-        "mcp__specship__specship_callees",
-        "mcp__specship__specship_impact",
-        "mcp__specship__specship_node",
-        "mcp__specship__specship_status",
-        "mcp__specship__specship_files",
-        "mcp__specship__specship_spec",
-        "mcp__specship__specship_drifted"
-      ]
-    }
+  "permissions": {
+    "allow": [
+      "mcp__specship__specship_explore",
+      "mcp__specship__specship_search",
+      "mcp__specship__specship_node",
+      "mcp__specship__specship_callers",
+      "mcp__specship__specship_callees",
+      "mcp__specship__specship_impact",
+      "mcp__specship__specship_files",
+      "mcp__specship__specship_status",
+      "mcp__specship__designer_session",
+      "mcp__specship__designer_prompt",
+      "mcp__specship__designer_ask",
+      "mcp__specship__designer_list",
+      "mcp__specship__designer_snapshot",
+      "mcp__specship__designer_handoff"
+    ]
   }
 }
 ```
 
-This means Claude Code won't prompt you for permission on every SpecShip query — the read-only tools (search, explore, etc.) are auto-allowed. Mutating tools like `specship_link_assert` are intentionally NOT in this list, so the user gets a permission prompt before SpecShip writes anything.
+This means Claude Code won't prompt you on every query — the read-only code-graph tools and the human-driven design tools are auto-allowed. The mutating spec tools (`specship_link_assert`, `specship_link_verify`) and `specship_spec` / `specship_drifted` are intentionally **not** in this list, so you get a permission prompt before SpecShip writes a link. Skip the whole list with `--no-permissions`.
 
-### 3. The slash commands
+### 3. The auto-sync hooks
 
-Slash commands and a subagent ship as a Claude Code plugin under `~/.claude/plugins/specship/`:
+A `PostToolUse` hook (on `Edit|Write|MultiEdit`) and a `SessionStart` hook (on `startup|resume`) run `specship sync --quiet` so the index keeps up with the agent's own edits without waiting on the background watcher.
+
+### 4. The spec-driven-development steering
+
+On by default (skip with `--no-sdd`): a short SDD rule is added to the project's `CLAUDE.md`, and a `UserPromptSubmit` hook nudges the agent to author the spec under `specs/` (via the `spec-author` skill) before reaching for a brainstorming or planning skill when you describe feature or bug work. `specship uninstall` removes both.
+
+### 5. The slash commands and subagent
+
+Slash commands and the `specship-explorer` subagent ship as a Claude Code plugin:
 
 | Command | What it runs |
 |---|---|
@@ -69,6 +77,10 @@ Slash commands and a subagent ship as a Claude Code plugin under `~/.claude/plug
 | `/ss-drifted` | Lists everything in the drift queue. |
 | `/ss-spec-author <description>` | Drafts a new spec using the `spec-author` skill. |
 | `/ss-spec-review <ID-or-path>` | Reviews an existing spec against the quality rubric. |
+| `/ss-design-implement <url>` | Snapshots a Claude Design URL and drafts + implements a spec from it. |
+| `/ss-design-loop` | Runs the full human-tasted design→spec→code loop. |
+
+See [Design-to-code](/specship/workflows/design-to-code/) for the design commands.
 
 ## Manual wiring
 
@@ -78,19 +90,17 @@ If you don't want to run `specship install`:
 npm i -g @selvakumaresra/specship
 ```
 
-Then add the `mcpServers.specship` entry and the `auto-allow` block above to your Claude Code config files by hand.
+Then add the `mcpServers.specship` entry and the `permissions.allow` block above to your Claude Code config files by hand.
 
 If you do want the slash commands, the easiest path is still `specship install` — it'll detect the existing MCP entry and only add the missing pieces.
 
 ## Per-project vs global
 
-`specship install` writes to your global Claude Code config by default. Pass `--project` to write to the current project's `./.mcp.json` and `./.claude/settings.json` instead:
+`specship install` writes to the current project's `./.mcp.json` and `./.claude/settings.json` **by default**, so the MCP server only runs for that project. This keeps SpecShip's tool surface out of Claude Code sessions on projects that haven't opted in. Pass `--location global` to write to your global Claude Code config (`~/.claude.json` + `~/.claude/settings.json`) instead:
 
 ```bash
-specship install --project
+specship install --location global
 ```
-
-The MCP server then only runs for that project. Useful when you have multiple SpecShip projects with different graph data and don't want them visible to every Claude Code session.
 
 ## Uninstall
 
@@ -98,7 +108,7 @@ The MCP server then only runs for that project. Useful when you have multiple Sp
 specship uninstall
 ```
 
-Strips SpecShip's MCP server entry, the auto-allow permissions, and the slash commands. Your project's `.specship/` directories are left untouched — they contain your local graph data and run history.
+Strips SpecShip's MCP server entry, the auto-allow permissions, the auto-sync hooks, the spec-driven-development steering, and the slash commands. It defaults to the same location as install (project-local); pass `--location global` to remove a global install. Your project's `.specship/` directories are left untouched — they contain your local graph data and run history.
 
 ## Other agents
 

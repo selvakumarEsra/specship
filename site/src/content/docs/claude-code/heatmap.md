@@ -71,18 +71,7 @@ Selecting a cell or bar **reflows the main grid** to make room for the detail ra
 
 The range selector at the top filters all three. The desktop UI also exposes a project picker — pick a project and the heatmap scopes to its sessions only. Pick nothing and you see all projects merged.
 
-## CLI
-
-```bash
-specship claude heatmap files --range week
-specship claude heatmap tools --range week
-specship claude heatmap subagents --range week
-specship claude heatmap file --path src/auth.ts --range week
-specship claude heatmap tool --name Read --range week
-specship claude heatmap subagent --type general-purpose --range week
-```
-
-Each command outputs the same data the rail would show, in JSON.
+The heatmap lives in the desktop UI — start it with `specship serve --ui` and open the **Heatmap** page.
 
 ## What you'll do next
 

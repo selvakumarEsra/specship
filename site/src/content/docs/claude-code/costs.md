@@ -78,24 +78,7 @@ The cache read rate is the **single most controllable knob** for keeping Claude 
 
 A team running Claude Code 20+ hours a week typically sees the cache read rate move from ~40% to ~75% after adopting these — about a **2.5× reduction in real input-token cost**.
 
-## CLI
-
-```bash
-specship claude costs --range week
-specship claude costs --range week --top 20
-specship claude costs --by-model --range month
-specship claude cache --range week
-specship claude cache --json
-```
-
-Pipe to `jq` for arbitrary slicing:
-
-```bash
-specship claude costs --range month --json | \
-  jq -r '.topPrompts[] | select(.cache_hit_rate < 0.1) | .text'
-```
-
-— lists every prompt with cache hit < 10%. Useful for spotting "prompts the cache never helps with".
+The Costs page lives in the desktop UI — start it with `specship serve --ui` and open **Costs**. It shows the per-day spend, the week-over-week change, a by-model breakdown, and the top prompts by cost. The **Compare** page breaks each project's cost down per model and lists its top tools.
 
 ## Compare projects
 

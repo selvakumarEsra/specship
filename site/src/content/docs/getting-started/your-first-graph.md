@@ -34,7 +34,7 @@ specship query UserService          # find symbols by name
 specship callers handleRequest      # what calls a function
 specship callees handleRequest      # what a function calls
 specship impact AuthMiddleware      # what a change would affect
-specship context "fix the login flow"   # build task-focused context
+specship files --filter src/auth    # scoped file structure from the index
 ```
 
 Each accepts `--json` for machine-readable output. See the full [CLI reference](/specship/reference/cli/).

@@ -1822,8 +1822,8 @@ program
 program
   .command('install')
   .description('Install specship MCP server into Claude Code')
-  .option('-l, --location <where>', 'Install location: "global" or "local". Default: prompt')
-  .option('-y, --yes', 'Non-interactive: defaults to --location=global, auto-allow on')
+  .option('-l, --location <where>', 'Install location: "global" or "local". Default: prompt (local)')
+  .option('-y, --yes', 'Non-interactive: defaults to --location=local, auto-allow on')
   .option('--no-permissions', 'Skip writing the auto-allow permissions list')
   .option('--no-sdd', 'Skip the spec-driven-development steering (CLAUDE.md rule + spec-author nudge hook)')
   .option('--print-config', 'Print MCP config snippet for Claude Code and exit (no file writes)')
@@ -1942,8 +1942,8 @@ program
 program
   .command('uninstall')
   .description('Remove specship from Claude Code')
-  .option('-l, --location <where>', 'Uninstall location: "global" or "local". Default: prompt')
-  .option('-y, --yes', 'Non-interactive: defaults to --location=global')
+  .option('-l, --location <where>', 'Uninstall location: "global" or "local". Default: prompt (local)')
+  .option('-y, --yes', 'Non-interactive: defaults to --location=local')
   // vestigial — kept so existing `--target claude` invocations keep working.
   .option('-t, --target <ids>', '(vestigial) accepted: "claude" | "auto" | "all" | "none"')
   .action(async (opts: {

@@ -9,25 +9,24 @@ SpecShip ingests them into the `claude_sessions` table and surfaces them in the 
 
 ## The list view
 
-The list shows every session matching the filter bar — project (multi-select), date range, model. Each row carries:
+The list is scoped to the **active project** (the project picker already scopes it, so there's no separate project filter), and it sorts **newest-first** by default — Cost and Prompts are alternate sorts. It refetches every 10 s while the tab is visible (paused when you switch tabs, refetched the moment you tab back), and its own Refresh button triggers a global sync + transcript re-ingest. Each row carries:
 
 | Column | Meaning |
 |---|---|
 | Session ID prefix | First 8 chars of the JSONL filename. |
-| Project | The decoded project path (`~/.claude/projects/-Users-…` → real path). |
 | Started / ended | Wall-clock bracket. |
-| Prompts | Count of user turns. |
-| Cost | Sum of every prompt's `total_cost_usd`. |
+| Prompts | Count of user turns (not tool-result follow-ups). |
+| Cost | Sum of every prompt's cost. |
 | Cache hit % | `cache_read_tokens / (input + cache_creation + cache_read)`. |
 | Model | The last model used in the session. |
 
-Click a row → the session deep-dive.
+Click a row → the **Session Detail** page (`/sessions/:id`).
 
-## The deep dive
+## The Session Detail page
 
-For one session, the page shows:
+For one session the page shows the stat strip, a session-summary panel, and the prompt timeline.
 
-### Header summary
+### Stat strip
 
 - Total cost
 - Prompt count
@@ -35,35 +34,32 @@ For one session, the page shows:
 - Subagent spend $ (cost attributable to Task-spawned subagents)
 - Window: start → end with elapsed time
 
-### Expandable prompt timeline
+### Session summary
 
-Each prompt is a row with:
+A panel between the stat strip and the prompt list that rolls up what the session actually *did*, not just what it cost:
 
-| Column | Meaning |
-|---|---|
-| Order | Position in the session (1, 2, 3, …). |
-| Text | The prompt's user message, truncated to ~80 chars. |
-| Cost | This prompt's `cost_usd`. |
-| Cache % | Cache read rate for this prompt alone. |
-| Tokens | A micro-bar split: input / output / cache-write / cache-read. |
+- **Top tools used**, with call counts color-coded by kind (Read / Edit / Bash / MCP).
+- **Every slash command and skill** the agent invoked across the session (e.g. `/ss-spec`, `spec-author`).
+- **The models that ran** — multi-model sessions are visible, so a sidechain to Haiku no longer hides behind the session-level last-model column.
+- **Top files touched**, each with its last operation.
+
+### Prompt timeline
+
+Each prompt is a row with the user text, a token micro-bar (input / output / cache-write / cache-read), per-prompt cost, an end-to-end **duration** (millisecond-aware, so a 400 ms tool round-trip doesn't collapse to "0s"), a **slash-command pill** when one was used (e.g. `/ss-spec`), and an inline **tool-mix chip strip** for that turn (`Bash×3 Read×2 Edit×1`) so you can scan hundreds of prompts and tell heavy code work from heavy thinking.
 
 Click a row → it expands inline:
 
 - **Full prompt text** (no truncation).
-- **Per-tool-call list** for this prompt:
-  - tool name
-  - input summary (e.g. file path for Read, query for Grep)
-  - `result_length` in tokens, **color-flagged red** when a single call returned ≥ 50k tokens
-  - timestamp
-- **Token breakdown table**: input | output | cache_creation_1h | cache_creation_5m | cache_read.
-- **Cost breakdown**: by model, by token type.
+- **The assistant's reply**, rendered as full markdown (code blocks, tables, lists).
+- **Extended thinking**, inside a collapsed-by-default `<details>`.
+- **Per-tool-call list** — tool name color-coded by kind, a one-line input summary, the result size (flagged when a single call returned a large token count), and a click-to-expand chevron that reveals the prettified raw tool-input JSON.
+- **Every unique file** the prompt touched.
 
-### Right rail summary
+Prompts have Expand-all / Collapse-all controls, and subagent (sidechain) prompts are tagged so you can see which work the main agent delegated.
 
-- **Session token-mix bar** — visualises input vs output vs cache-creation vs cache-read for the whole session.
-- **Cache effectiveness callout** — "$ saved this session vs no cache".
-- **Tools used by result-token weight** — ranked. Tells you which tools dominated the token budget.
-- **Per-prompt cost bars** — sparkline-style; the spike tells you where the budget went.
+### Live capture
+
+The page streams new prompts and tool calls over SSE, so a prompt you just sent in Claude Code shows up within about a second without clicking. A pill shows the connection state: **● Live** (SSE connected), amber **● Polling** (stream dropped, falling back to a visibility-gated poll), or grey **● Idle** (tab hidden).
 
 ## What you'll learn from it
 
@@ -75,29 +71,6 @@ Common findings teams have on first opening this page:
 | _Read returned 396k tokens for `App.tsx`._ | The file is a god-file. A structural query (`specship_explore`) returns the same answer in 1/100 the tokens. |
 | _Cache hit rate dropped from 75% to 15% mid-session._ | Something in the system prompt changed (a tool-call result, a new turn). Pinpoint via the per-prompt cache % column. |
 | _Subagent spend is 70% of total._ | The agent is over-delegating — possibly to inappropriate subagents. Worth a workflow refactor. |
-
-## Cross-linking
-
-Every session row in the heatmap, costs, and tips pages links here. The session detail surfaces a "Show in heatmap" link that filters the heatmap to just this session's tool calls — useful for understanding _why_ a particular file is hot in your global heatmap.
-
-## CLI
-
-The same data is queryable from the CLI:
-
-```bash
-specship claude sessions --range week
-specship claude session <id> --json
-specship claude session <id> --prompts
-specship claude session <id> --tools
-```
-
-For programmatic access (CSV export, dashboarding, custom analysis):
-
-```bash
-specship claude sessions --range month --json > sessions.json
-```
-
-The JSON schema mirrors the `claude_sessions` table 1:1.
 
 ## How "subagent spend" is computed
 

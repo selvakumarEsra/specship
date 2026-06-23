@@ -46,9 +46,13 @@ When `specship serve --ui` starts, three things happen in parallel:
 2. The codegraph engine opens the project's SQLite (or the picker's selected project, if you boot projectless).
 3. The **ingest watcher** does a one-shot reconciliation pass against `~/.claude/projects/`, then registers an `fs.watch` on that directory.
 
-The reconciliation parses any new `.jsonl` files (and any new lines on existing files) and writes them into SpecShip's SQLite. The watcher then triggers incremental ingests on every file-mtime change with a 300ms debounce — so live sessions stream into the desktop UI within roughly a second of Claude Code writing them.
+The reconciliation parses any new `.jsonl` files (and any new lines on existing files) and writes them into SpecShip's SQLite. The watcher then triggers incremental ingests on every file-mtime change with a debounce — so live sessions stream into the desktop UI within roughly a second of Claude Code writing them. (The Session Detail page also pushes new prompts and tool calls live over SSE — see [Sessions](/specship/claude-code/sessions/).)
 
-Disable with `--no-ingest` if you want to run the UI headless or against an external ingest worker.
+The watcher runs in-process; pass `--ingest` to be explicit, or `--no-web` to run the API headless (no SPA). The UI hits `127.0.0.1:4242` by default — change it with `--port` / `--host`.
+
+## Offline mode
+
+If the SpecShip server is down or unreachable, the desktop UI doesn't fall back to the browser's "this site can't be reached" page — it loads from a local cache and keeps showing the last data it loaded, each surface marked with how old it is (e.g. "Offline · 4m ago"). The connection indicator switches from **● Live** to **● Offline**, and actions that need the server (Refresh, saving a spec) are disabled with an offline notice. Data reloads automatically and the indicator returns to **● Live** once the server is back.
 
 ## Privacy
 

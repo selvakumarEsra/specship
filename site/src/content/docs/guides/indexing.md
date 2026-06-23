@@ -24,7 +24,7 @@ specship sync            # incremental — only changed files
 
 ## Stay fresh automatically
 
-**You don't need to run `specship sync` by hand during an agent session.** When your agent (Claude Code, Cursor, Codex, opencode, Hermes, Gemini, Antigravity, Kiro) launches `specship serve --mcp`, three layers cooperate to keep the index in step with your code — and to never give the agent a quiet wrong answer in the small window between an edit and the next sync.
+**You don't need to run `specship sync` by hand during an agent session.** When Claude Code launches `specship serve --mcp`, three layers cooperate to keep the index in step with your code — and to never give the agent a quiet wrong answer in the small window between an edit and the next sync.
 
 ### 1. File watcher with debounced auto-sync (always on)
 
@@ -86,7 +86,7 @@ Almost never. The edge cases:
 
 Otherwise: just use it. The watcher + banner + connect-sync covers the AI-assisted workflow end-to-end. If you're seeing files genuinely missed after the debounce window has passed, that's a bug — please file an issue with a reproduction.
 
-> See the v0.9.5 release notes for the [staleness banner (#403)](https://github.com/selvakumarEsra/specship/releases/tag/v0.9.5) and the connect-time catch-up (#414); both shipped together.
+> The staleness banner and the connect-time catch-up sync ship together — the index never gives the agent a quiet wrong answer in the window between an edit and the next sync.
 
 ## Check status
 

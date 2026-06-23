@@ -66,6 +66,7 @@ export default defineConfig({
 						{ label: 'Overview', slug: 'workflows/overview' },
 						{ label: 'YAML schema', slug: 'workflows/yaml-schema' },
 						{ label: 'Bundled workflows', slug: 'workflows/bundled' },
+						{ label: 'Design-to-code', slug: 'workflows/design-to-code' },
 						{ label: 'Writing custom workflows', slug: 'workflows/custom' },
 						{ label: 'Isolation & worktrees', slug: 'workflows/isolation' },
 						{ label: 'Channels (CLI / UI / Actions)', slug: 'workflows/channels' },

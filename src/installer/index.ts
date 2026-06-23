@@ -69,7 +69,7 @@ export interface RunInstallerOptions {
    */
   sdd?: boolean;
   /**
-   * Skip every confirm and use defaults: location=global,
+   * Skip every confirm and use defaults: location=local,
    * autoAllow=true. For scripting / CI.
    */
   yes?: boolean;
@@ -209,7 +209,7 @@ export interface RunUninstallerOptions {
   target?: string;
   /** Skip the location prompt; use this value directly. */
   location?: Location;
-  /** Non-interactive: location=global, no prompts. */
+  /** Non-interactive: location=local, no prompts. */
   yes?: boolean;
 }
 

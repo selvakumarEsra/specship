@@ -3,18 +3,19 @@ title: Bundled workflows
 description: spec-implement, spec-fix, spec-verify, spec-relink — what each one does, step by step.
 ---
 
-SpecShip ships four workflows out of the box. They're stored in the npm package and discovered automatically — no config required.
+SpecShip ships these workflows out of the box. They're stored in the npm package and discovered automatically — no config required.
 
 ```bash
 specship workflow list
-# NAME             TIER     DESC
-# spec-implement   bundled  Plan → implement → test → review → merge
-# spec-fix         bundled  Diagnose a drifted/broken link → fix → re-verify
-# spec-verify      bundled  Re-run tests, promote implemented → verified
-# spec-relink      bundled  Re-attach an orphan after a refactor
+# NAME                     TIER     DESC
+# spec-implement           bundled  Plan → implement → test → review → merge
+# spec-fix                 bundled  Diagnose a drifted/broken link → fix → re-verify
+# spec-verify              bundled  Re-run tests, promote implemented → verified
+# spec-relink              bundled  Re-attach an orphan after a refactor
+# claude-design-implement  bundled  Snapshot a design → draft a spec → hand off to implement
 ```
 
-All four take a `SPEC_ID` and run inside a worktree by default. Override any of them by dropping your own `<name>.yaml` under `.specship/workflows/` — project tier always wins.
+The four spec workflows take a `SPEC_ID` and run inside a worktree by default; `claude-design-implement` takes a design URL or handoff bundle and is covered in [Design-to-code](/specship/workflows/design-to-code/). Override any of them by dropping your own `<name>.yaml` under `.specship/workflows/` — project tier always wins.
 
 ## `spec-implement`
 

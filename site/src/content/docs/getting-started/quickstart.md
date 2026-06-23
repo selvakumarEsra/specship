@@ -22,15 +22,15 @@ npx @selvakumaresra/specship        # zero-install, or:
 npm i -g @selvakumaresra/specship
 ```
 
-SpecShip bundles its own runtime — nothing to compile, no native build, works the same everywhere. The interactive installer auto-configures your agent(s) — Claude Code, Cursor, Codex CLI, opencode, Hermes Agent, Gemini CLI, Antigravity IDE, Kiro.
+SpecShip bundles its own runtime — nothing to compile, no native build, works the same everywhere. SpecShip is **Claude Code only**; run `specship install` to wire it in (project-local by default).
 
 ## Initialize Projects
 
 ```bash
 cd your-project
-specship init -i
+specship init
 ```
 
-That's it — your agent will use SpecShip tools automatically when a `.specship/` directory exists.
+That's it — Claude Code will use SpecShip tools automatically when a `.specship/` directory exists.
 
 Next: build [Your First Graph](/specship/getting-started/your-first-graph/), or see the full [Installation](/specship/getting-started/installation/) options.

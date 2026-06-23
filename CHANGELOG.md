@@ -9,6 +9,10 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixes
+
+- **`specship install --yes` help text now matches its behavior.** The `--yes` flag's help (and the matching `uninstall` help) said it defaulted to a global install; the non-interactive default has been project-local since 0.4.0. The text now reads `--location=local`, so `specship install --help` no longer implies the wrong scope. Pass `--location global` for the old behavior.
+
 ## [0.4.0] - 2026-06-23
 
 ### Breaking Changes
