@@ -1,0 +1,18 @@
+{
+  "//": "Vendored designer subtree (from @pro-vi/designer, MIT, Provi Zhang). Compiled SEPARATELY from SpecShip's strict root build so its foreign code isn't held to SpecShip's lint-grade flags. Emits CommonJS to dist/designer/; SpecShip's MCP loads DesignerController from there via a runtime require boundary (see src/mcp/designer-tools.ts). Re-sync from upstream by re-copying the files + re-stripping .ts import extensions; only repo-root.ts diverges (import.meta → __dirname).",
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "../../dist/designer",
+    "module": "commonjs",
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "noUncheckedIndexedAccess": false,
+    "noImplicitReturns": false
+  },
+  "include": ["./**/*.ts"],
+  "exclude": ["node_modules"]
+}

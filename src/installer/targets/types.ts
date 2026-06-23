@@ -50,6 +50,14 @@ export interface InstallOptions {
    * (`settings.json`). When false, only the MCP server entry is written.
    */
   autoAllow: boolean;
+  /**
+   * Whether to write the spec-driven-development steering — a marker-delimited
+   * "invoke spec-author first" rule in the project CLAUDE.md plus a
+   * UserPromptSubmit nudge hook (SDD-INSTALL-DOC). On by default; only an
+   * explicit `false` (the `--no-sdd` flag) skips it. Optional so existing
+   * callers default to on.
+   */
+  sdd?: boolean;
 }
 
 export interface AgentTarget {

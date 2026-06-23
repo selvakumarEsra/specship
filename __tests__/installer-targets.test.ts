@@ -195,25 +195,92 @@ describe('Claude target — specifics', () => {
     expect(cfg.mcpServers.specship).toBeDefined();
   });
 
-  it('install does NOT create a CLAUDE.md instructions file (#529)', () => {
-    const result = claudeTarget.install('local', { autoAllow: false });
-    const claudeMd = path.join(tmpCwd, '.claude', 'CLAUDE.md');
-    expect(fs.existsSync(claudeMd)).toBe(false);
-    expect(result.files.some((f) => f.path.endsWith('CLAUDE.md'))).toBe(false);
+  it('install does NOT write the legacy #529 MCP-playbook block into .claude/CLAUDE.md', () => {
+    claudeTarget.install('local', { autoAllow: false });
+    // The legacy instructions path is never created…
+    expect(fs.existsSync(path.join(tmpCwd, '.claude', 'CLAUDE.md'))).toBe(false);
+    // …and the SDD rule that IS written (project-root CLAUDE.md) is the
+    // ordering rule, NOT the MCP tool playbook #529 removed.
+    const body = fs.readFileSync(path.join(tmpCwd, 'CLAUDE.md'), 'utf-8');
+    expect(body).not.toContain('specship_search');
   });
 
   it('install strips a legacy CLAUDE.md specship block, keeping user content (#529)', () => {
-    const claudeMd = path.join(tmpCwd, '.claude', 'CLAUDE.md');
-    fs.mkdirSync(path.dirname(claudeMd), { recursive: true });
-    fs.writeFileSync(claudeMd, `# My project rules\n\nUse tabs.\n\n${LEGACY_BLOCK}\n`);
+    const legacy = path.join(tmpCwd, '.claude', 'CLAUDE.md');
+    fs.mkdirSync(path.dirname(legacy), { recursive: true });
+    fs.writeFileSync(legacy, `# My project rules\n\nUse tabs.\n\n${LEGACY_BLOCK}\n`);
 
     const result = claudeTarget.install('local', { autoAllow: false });
 
-    const body = fs.readFileSync(claudeMd, 'utf-8');
+    const body = fs.readFileSync(legacy, 'utf-8');
     expect(body).toContain('# My project rules');
     expect(body).toContain('Use tabs.');
     expect(body).not.toContain('SPECSHIP_START');
-    expect(result.files.find((f) => f.path.endsWith('CLAUDE.md'))?.action).toBe('removed');
+    // Path-specific: there are now two CLAUDE.md entries in the report (the
+    // stripped legacy one and the new project-root SDD rule). Match by suffix
+    // since the recorded path is process.cwd()-resolved (/private/var on macOS).
+    expect(result.files.find((f) => f.path.replace(/\\/g, '/').endsWith('/.claude/CLAUDE.md'))?.action).toBe('removed');
+  });
+
+  it('default install writes the SDD rule into the project CLAUDE.md + a UserPromptSubmit nudge hook (REQ-SDD-001/002)', () => {
+    const result = claudeTarget.install('local', { autoAllow: false });
+
+    const claudeMd = path.join(tmpCwd, 'CLAUDE.md');
+    expect(fs.existsSync(claudeMd)).toBe(true);
+    const body = fs.readFileSync(claudeMd, 'utf-8');
+    expect(body).toContain('SPECSHIP_SDD_START');
+    expect(body).toContain('spec-author');
+    expect(result.files.some((f) => /\/CLAUDE\.md$/.test(f.path.replace(/\\/g, '/')) && !f.path.includes('.claude') && f.action === 'created')).toBe(true);
+
+    const settings = JSON.parse(fs.readFileSync(path.join(tmpCwd, '.claude', 'settings.json'), 'utf-8'));
+    const cmds = (settings.hooks?.UserPromptSubmit ?? []).flatMap((g: any) => (g.hooks ?? []).map((h: any) => h.command));
+    expect(cmds).toContain('specship spec-nudge');
+  });
+
+  it('install with sdd:false writes neither the CLAUDE.md rule nor the nudge hook (REQ-SDD-003)', () => {
+    claudeTarget.install('local', { autoAllow: false, sdd: false });
+    expect(fs.existsSync(path.join(tmpCwd, 'CLAUDE.md'))).toBe(false);
+    const settingsPath = path.join(tmpCwd, '.claude', 'settings.json');
+    if (fs.existsSync(settingsPath)) {
+      const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
+      const cmds = (settings.hooks?.UserPromptSubmit ?? []).flatMap((g: any) => (g.hooks ?? []).map((h: any) => h.command));
+      expect(cmds).not.toContain('specship spec-nudge');
+    }
+  });
+
+  it('SDD install is idempotent — CLAUDE.md rule unchanged on re-run (REQ-SDD-001.A3)', () => {
+    claudeTarget.install('local', { autoAllow: true });
+    const second = claudeTarget.install('local', { autoAllow: true });
+    expect(second.files.find((f) => /\/CLAUDE\.md$/.test(f.path.replace(/\\/g, '/')) && !f.path.includes('.claude'))?.action).toBe('unchanged');
+  });
+
+  it('uninstall removes the SDD rule block and the nudge hook (REQ-SDD-003.A3)', () => {
+    claudeTarget.install('local', { autoAllow: true });
+    const claudeMd = path.join(tmpCwd, 'CLAUDE.md');
+    expect(fs.existsSync(claudeMd)).toBe(true);
+
+    claudeTarget.uninstall('local');
+
+    if (fs.existsSync(claudeMd)) {
+      expect(fs.readFileSync(claudeMd, 'utf-8')).not.toContain('SPECSHIP_SDD_START');
+    }
+    const settingsPath = path.join(tmpCwd, '.claude', 'settings.json');
+    if (fs.existsSync(settingsPath)) {
+      const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
+      const cmds = (settings.hooks?.UserPromptSubmit ?? []).flatMap((g: any) => (g.hooks ?? []).map((h: any) => h.command));
+      expect(cmds).not.toContain('specship spec-nudge');
+    }
+  });
+
+  it('uninstall preserves the user CLAUDE.md content outside the SDD markers', () => {
+    const claudeMd = path.join(tmpCwd, 'CLAUDE.md');
+    fs.writeFileSync(claudeMd, '# My rules\n\nUse 4 spaces.\n');
+    claudeTarget.install('local', { autoAllow: true });
+    claudeTarget.uninstall('local');
+    const body = fs.readFileSync(claudeMd, 'utf-8');
+    expect(body).toContain('# My rules');
+    expect(body).toContain('Use 4 spaces.');
+    expect(body).not.toContain('SPECSHIP_SDD_START');
   });
 
   it('global install targets ~/.claude.json (user scope)', () => {
@@ -423,7 +490,13 @@ describe('Claude target — specifics', () => {
 
     if (fs.existsSync(settingsPath)) {
       const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
-      expect(settings.hooks).toBeUndefined();
+      // autoAllow off ⇒ no auto-sync hooks. The SDD nudge hook is gated on
+      // `sdd` (on by default), not autoAllow, so it MAY be present — assert
+      // only that the auto-sync command is absent.
+      const allCommands = Object.values(settings.hooks ?? {}).flatMap((groups: any) =>
+        (groups as any[]).flatMap((g) => (g.hooks ?? []).map((h: any) => h.command)),
+      );
+      expect(allCommands).not.toContain('specship sync --quiet');
     }
   });
 

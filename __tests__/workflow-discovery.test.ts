@@ -30,7 +30,7 @@ describe('Workflow discovery', () => {
     const result = discoverWorkflows(dir);
     expect(result.errors).toEqual([]);
     const names = result.workflows.map((w) => w.workflow.name).sort();
-    expect(names).toEqual(['spec-fix', 'spec-implement', 'spec-relink', 'spec-verify']);
+    expect(names).toEqual(['claude-design-implement', 'spec-author', 'spec-fix', 'spec-implement', 'spec-relink', 'spec-verify']);
     for (const w of result.workflows) {
       expect(w.scope).toBe('bundled');
     }

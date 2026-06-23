@@ -33,11 +33,15 @@ import {
   jsonDeepEqual,
   readJsonFile,
   removeMarkedSection,
+  upsertMarkedSection,
   writeJsonFile,
 } from './shared';
 import {
   SPECSHIP_SECTION_END,
   SPECSHIP_SECTION_START,
+  SPECSHIP_SDD_SECTION_END,
+  SPECSHIP_SDD_SECTION_START,
+  getSddRuleBlock,
 } from '../instructions-template';
 
 function configDir(loc: Location): string {
@@ -68,6 +72,18 @@ function settingsJsonPath(loc: Location): string {
 }
 function instructionsPath(loc: Location): string {
   return path.join(configDir(loc), 'CLAUDE.md');
+}
+/**
+ * The CLAUDE.md Claude Code actually LOADS as memory — distinct from
+ * `instructionsPath` (the legacy `.claude/CLAUDE.md`, which the #529 block
+ * used). Project memory is the repo-root `./CLAUDE.md`; user memory is
+ * `~/.claude/CLAUDE.md`. The spec-driven-development steering rule goes here so
+ * the agent actually reads it.
+ */
+function claudeMdPath(loc: Location): string {
+  return loc === 'global'
+    ? path.join(os.homedir(), '.claude', 'CLAUDE.md')
+    : path.join(process.cwd(), 'CLAUDE.md');
 }
 function commandsDir(loc: Location): string {
   return path.join(configDir(loc), 'commands');
@@ -103,6 +119,8 @@ const SHIPPED_COMMANDS = [
   'ss-spec-review.md',
   // Design-import workflow (v0.2):
   'ss-design-implement.md',
+  // Full design→code loop (taste via merged designer tools → spec → implement):
+  'ss-design-loop.md',
 ] as const;
 
 /**
@@ -143,6 +161,22 @@ const SPECSHIP_HOOKS = [
     event: 'SessionStart',
     matcher: 'startup|resume',
     hook: { type: 'command', command: 'specship sync --quiet' },
+  },
+] as const;
+
+/**
+ * The spec-driven-development steering hook (SDD-INSTALL-DOC, REQ-SDD-002).
+ * A `UserPromptSubmit` hook executed by the harness; `specship spec-nudge`
+ * reads the prompt and, on feature/bug-shaped intent, injects a non-blocking
+ * reminder to author the spec via spec-author first. UserPromptSubmit has no
+ * tool matcher, so the matcher is empty (runs on every prompt; the nudge
+ * command does the conservative intent filtering itself).
+ */
+const SPECSHIP_SDD_HOOKS = [
+  {
+    event: 'UserPromptSubmit',
+    matcher: '',
+    hook: { type: 'command', command: 'specship spec-nudge' },
   },
 ] as const;
 
@@ -227,6 +261,18 @@ class ClaudeCodeTarget implements AgentTarget {
     for (const f of writeCommandsEntries(loc)) files.push(f);
     for (const f of writeAgentsEntries(loc)) files.push(f);
 
+    // 5. Spec-driven-development steering (SDD-INSTALL-DOC). On by default;
+    // `--no-sdd` sets opts.sdd=false to skip. Writes a marker-delimited
+    // "invoke spec-author first" rule into the project CLAUDE.md and a
+    // UserPromptSubmit nudge hook, so feature/bug work is steered to
+    // spec-author before any brainstorming/planning skill. NOT gated on
+    // autoAllow — it's its own opt-out, and the CLAUDE.md rule executes
+    // nothing; the nudge hook only prints guidance.
+    if (opts.sdd !== false) {
+      files.push(writeSddInstructionsEntry(loc));
+      files.push(writeSddHookEntry(loc));
+    }
+
     return { files };
   }
 
@@ -299,6 +345,13 @@ class ClaudeCodeTarget implements AgentTarget {
     for (const f of cleanupLegacyCommandsEntries(loc)) files.push(f);
     for (const f of removeCommandsEntries(loc)) files.push(f);
     for (const f of removeAgentsEntries(loc)) files.push(f);
+
+    // 5. Spec-driven-development steering — strip the CLAUDE.md rule block
+    // and the nudge hook (no-op when absent). Always runs so uninstall fully
+    // reverses install regardless of whether --no-sdd was used.
+    files.push(removeSddInstructionsEntry(loc));
+    const sddHookCleanup = cleanupSddHooks(loc);
+    if (sddHookCleanup.action === 'removed') files.push(sddHookCleanup);
 
     return { files };
   }
@@ -530,6 +583,32 @@ export function removeInstructionsEntry(loc: Location): WriteResult['files'][num
  * and the legacy `specship mark-dirty`/`sync-if-dirty` forms).
  */
 export function writeHooksEntry(loc: Location): WriteResult['files'][number] {
+  return writeHooksFor(loc, SPECSHIP_HOOKS);
+}
+
+/**
+ * Write the spec-driven-development UserPromptSubmit nudge hook into
+ * `settings.json` (SDD-INSTALL-DOC, REQ-SDD-002). Same idempotent merge as
+ * the auto-sync hooks; gated by `install()` on `opts.sdd` rather than
+ * `autoAllow`, since it's part of the SDD steering feature.
+ */
+export function writeSddHookEntry(loc: Location): WriteResult['files'][number] {
+  return writeHooksFor(loc, SPECSHIP_SDD_HOOKS);
+}
+
+type HookSpec = ReadonlyArray<{
+  event: string;
+  matcher: string;
+  hook: { type: string; command: string; async?: boolean };
+}>;
+
+/**
+ * Idempotently merge a set of hooks into Claude `settings.json`. A matcher
+ * group sharing our exact matcher string is reused; sibling matchers / events
+ * are untouched; a command already present byte-for-byte is skipped. Returns
+ * `unchanged` when nothing was added.
+ */
+function writeHooksFor(loc: Location, hooks: HookSpec): WriteResult['files'][number] {
   const file = settingsJsonPath(loc);
   const created = !fs.existsSync(file);
   const settings = readJsonFile(file);
@@ -538,7 +617,7 @@ export function writeHooksEntry(loc: Location): WriteResult['files'][number] {
   if (!settings.hooks || typeof settings.hooks !== 'object' || Array.isArray(settings.hooks)) {
     settings.hooks = {};
   }
-  for (const { event, matcher, hook } of SPECSHIP_HOOKS) {
+  for (const { event, matcher, hook } of hooks) {
     if (!Array.isArray(settings.hooks[event])) settings.hooks[event] = [];
     let group = settings.hooks[event].find(
       (g: any) => g && g.matcher === matcher,
@@ -560,6 +639,37 @@ export function writeHooksEntry(loc: Location): WriteResult['files'][number] {
   }
   writeJsonFile(file, settings);
   return { path: file, action: created ? 'created' : 'updated' };
+}
+
+/** True when a hook command is the SDD nudge (`specship spec-nudge`). Uninstall-only. */
+function isSddHookCommand(command: unknown): boolean {
+  if (typeof command !== 'string') return false;
+  return SPECSHIP_SDD_HOOKS.some(({ hook }) => command === hook.command);
+}
+
+/** Remove the SDD nudge hook written by `writeSddHookEntry`. Uninstall-only. */
+export function cleanupSddHooks(loc: Location): WriteResult['files'][number] {
+  return stripHooksMatching(loc, isSddHookCommand);
+}
+
+/**
+ * Write the spec-driven-development steering rule into the project CLAUDE.md
+ * (SDD-INSTALL-DOC, REQ-SDD-001). Idempotent + marker-delimited so the user's
+ * surrounding content is untouched and a re-run reports `unchanged`. Distinct
+ * markers from the legacy #529 block — this is the ordering rule, not the MCP
+ * playbook.
+ */
+export function writeSddInstructionsEntry(loc: Location): WriteResult['files'][number] {
+  const file = claudeMdPath(loc);
+  const action = upsertMarkedSection(file, SPECSHIP_SDD_SECTION_START, SPECSHIP_SDD_SECTION_END, getSddRuleBlock());
+  return { path: file, action };
+}
+
+/** Inverse of `writeSddInstructionsEntry`: strip the SDD rule block. */
+export function removeSddInstructionsEntry(loc: Location): WriteResult['files'][number] {
+  const file = claudeMdPath(loc);
+  const action = removeMarkedSection(file, SPECSHIP_SDD_SECTION_START, SPECSHIP_SDD_SECTION_END);
+  return { path: file, action };
 }
 
 /**

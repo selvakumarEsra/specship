@@ -1,5 +1,5 @@
 name: claude-design-implement
-description: Import a Claude Design file (snapshot + tokens + source record), draft the spec, gate at review, write the spec — ready to hand off to /ss-implement.
+description: Import a Claude Design (live URL or a designer handoff bundle) — snapshot + tokens + source record — draft the spec, gate at review, write the spec — ready to hand off to /ss-implement.
 tags: [spec, ui, claude-design, default]
 requires: [specship, git]
 
@@ -10,10 +10,29 @@ requires: [specship, git]
 worktree:
   enabled: true
 
+# Two entry shapes (provide exactly one source):
+#   - CONNECTOR_URL  — a live claude.ai/design URL (the `/ss-design-implement`
+#     command). The snapshot node fetches it, preferring the `designer` MCP.
+#   - HANDOFF_DIR    — a designer handoff bundle already on disk (the
+#     `/ss-design-loop` command, after the human-tasted loop + designer_handoff).
+#     The snapshot node reads files straight from the bundle — no fetch, no CDP.
+# Optional inputs default to "" (see the CLI's declared-default handling), so a
+# `$INPUT.X` reference to an omitted optional input resolves to "" rather than
+# throwing — that is what lets a single snapshot node branch on whichever
+# source was supplied.
 inputs:
   - name: CONNECTOR_URL
-    description: The full Claude Design URL (https://claude.ai/design/p/<id>/?file=<name>.html)
-    required: true
+    description: A live Claude Design URL (https://claude.ai/design/p/<id>/?file=<name>.html). Provide this OR HANDOFF_DIR.
+    required: false
+    default: ""
+  - name: HANDOFF_DIR
+    description: Path to a designer handoff bundle (artifacts/<key>/handoff-<ts>/) containing project/ + decision-record.md. Provide this OR CONNECTOR_URL.
+    required: false
+    default: ""
+  - name: CHOSEN_FILE
+    description: When importing from HANDOFF_DIR, the variant filename inside project/ to spec (e.g. "dashboard.html"). Omit if the bundle has a single obvious file.
+    required: false
+    default: ""
   - name: FILE_LABEL
     description: Human label for the imported file (e.g. "Data Flow")
     required: true
@@ -23,9 +42,11 @@ inputs:
   - name: OWNER
     description: Spec owner — used in frontmatter when set
     required: false
+    default: ""
   - name: PRIORITY
     description: high / medium / low — used in frontmatter when set
     required: false
+    default: ""
 
 systemPromptAppend: |
   You are implementing a Claude Design import for SpecShip.
@@ -35,9 +56,14 @@ systemPromptAppend: |
   zero-loss reference layer; the spec captures contract only (behaviour,
   accessibility, responsive, interaction states, data shape).
 
-  Use whichever Claude Design tooling is available (an MCP connector,
-  the figma-implement-design skill, or a direct fetch) to pull the
-  source file. Save it byte-for-byte to specs/$INPUT.SLUG/snapshot.html.
+  There are two import shapes — exactly one source input is non-empty:
+    - HANDOFF_DIR set → read the design files straight off disk from the
+      designer handoff bundle. No network, no CDP, no MCP fetch.
+    - CONNECTOR_URL set → pull the live design. Prefer the `designer`
+      MCP (it reads the real rendered HTML over CDP); a plain fetch of a
+      claude.ai/design URL returns only a ~1 KB loader shell.
+
+  Either way: save the source byte-for-byte to specs/$INPUT.SLUG/snapshot.html.
   Never edit the snapshot during this workflow.
 
 nodes:
@@ -50,49 +76,89 @@ nodes:
       - Bash
       - mcp__specship__specship_explore
       - mcp__specship__specship_search
+      - mcp__specship__designer_snapshot
+      - mcp__specship__designer_handoff
     prompt: |
-      Source URL:  $INPUT.CONNECTOR_URL
-      File label:  $INPUT.FILE_LABEL
-      Slug:        $INPUT.SLUG
+      File label:   $INPUT.FILE_LABEL
+      Slug:         $INPUT.SLUG
+      Handoff dir:  $INPUT.HANDOFF_DIR
+      Chosen file:  $INPUT.CHOSEN_FILE
+      Source URL:   $INPUT.CONNECTOR_URL
 
       Goal: snapshot the Claude Design source into specs/$INPUT.SLUG/
       so the rest of the workflow has a zero-loss reference layer.
 
+      Exactly one of "Handoff dir" or "Source URL" above is non-empty.
+      If BOTH are empty, stop and report the error — there is nothing to
+      import. Pick the branch by which one is set.
+
       1. Create the directory `specs/$INPUT.SLUG/` if it doesn't exist.
 
-      2. Fetch the design content from $INPUT.CONNECTOR_URL. Try in
-         this order:
-           a. Any Claude Design MCP connector tool available in this
-              session (look for `mcp__*design*` or similar).
-           b. The `figma-implement-design` or `figma-use` skill if
-              loaded — Claude Design and Figma share a similar handoff
-              shape.
-           c. A direct `curl` of the URL, as a last resort.
+      ── BRANCH A — Handoff dir is set (preferred; reads disk, no fetch) ──
 
-         Save the FULL rendered HTML byte-for-byte to
-         `specs/$INPUT.SLUG/snapshot.html`. Do NOT filter, summarise, or
-         re-format. If the design has linked CSS / asset files, save
-         them alongside.
+      A1. Locate the chosen design file inside the bundle:
+          - If "Chosen file" is set, use `$INPUT.HANDOFF_DIR/project/$INPUT.CHOSEN_FILE`.
+          - Else list `$INPUT.HANDOFF_DIR/project/`: if there is exactly one
+            top-level `.html`, use it; if several, STOP and report the
+            candidate filenames, asking the caller to re-run with CHOSEN_FILE.
+      A2. Copy that file BYTE-FOR-BYTE to `specs/$INPUT.SLUG/snapshot.html`
+          (use `cp`, do not re-render). Copy any CSS / JS / asset files it
+          references from `project/` alongside it.
+      A3. Write `specs/$INPUT.SLUG/source.md` as the import audit record,
+          then APPEND the bundle's decision record verbatim — it is the
+          richest provenance you have (every prompt + reply + the human's
+          final reaction):
 
-      3. Write `specs/$INPUT.SLUG/source.md` with the import audit
-         record:
+          ```markdown
+          # $INPUT.FILE_LABEL — Claude Design import (handoff bundle)
 
-         ```markdown
-         # $INPUT.FILE_LABEL — Claude Design import
+          **Imported:** <today's date in YYYY-MM-DD>
+          **Handoff bundle:** $INPUT.HANDOFF_DIR
+          **Chosen file:** <the file you copied>
 
-         **Imported:** <today's date in YYYY-MM-DD>
-         **Connector URL:** $INPUT.CONNECTOR_URL
-         **Project ID:** <extracted from the URL — the segment after /p/>
-         **File:** $INPUT.FILE_LABEL
+          **Snapshot:** snapshot.html (byte-for-byte capture)
+          **Tokens:** tokens.css (extracted CSS custom properties)
 
-         **Snapshot:** snapshot.html (byte-for-byte capture)
-         **Tokens:** tokens.css (extracted CSS custom properties)
+          ## Design decision record (verbatim)
 
-         **Original prompt:**
-         > Import this Claude Design project using the Claude Design connector:
-         > $INPUT.CONNECTOR_URL
-         > Implement: $INPUT.FILE_LABEL
-         ```
+          <full contents of $INPUT.HANDOFF_DIR/decision-record.md, copied in
+          unchanged — if that file is missing, say so here>
+          ```
+
+      ── BRANCH B — Source URL is set (live fetch) ──
+
+      B1. Fetch the design content from $INPUT.CONNECTOR_URL. Try in order:
+            a. The `designer` MCP — `mcp__specship__designer_snapshot`
+               (reads the real rendered HTML over CDP from inside the
+               cross-origin preview iframe). This is the only path that
+               reliably returns the real design for a claude.ai/design URL.
+            b. Any other Claude Design MCP connector tool in this session
+               (look for `mcp__*design*`), or the `figma-implement-design`
+               / `figma-use` skill if loaded.
+            c. A direct `curl` of the URL, as a last resort (warning: for
+               claude.ai/design this usually returns only a loader shell).
+          Save the FULL rendered HTML byte-for-byte to
+          `specs/$INPUT.SLUG/snapshot.html`. Do NOT filter, summarise, or
+          re-format. Save any linked CSS / asset files alongside.
+      B2. Write `specs/$INPUT.SLUG/source.md` with the import audit record:
+
+          ```markdown
+          # $INPUT.FILE_LABEL — Claude Design import
+
+          **Imported:** <today's date in YYYY-MM-DD>
+          **Connector URL:** $INPUT.CONNECTOR_URL
+          **Project ID:** <extracted from the URL — the segment after /p/>
+          **File:** $INPUT.FILE_LABEL
+
+          **Snapshot:** snapshot.html (byte-for-byte capture)
+          **Tokens:** tokens.css (extracted CSS custom properties)
+
+          **Original prompt:**
+          > Import this Claude Design project: $INPUT.CONNECTOR_URL
+          > Implement: $INPUT.FILE_LABEL
+          ```
+
+      ── BOTH BRANCHES ──
 
       4. Extract CSS custom properties + literal token-like values
          (colors, spacing, font sizes, radii, transitions) from the
@@ -102,12 +168,15 @@ nodes:
          project token, map it by name instead of duplicating.
 
       Output: a ≤250-word summary covering:
+        - Which branch ran and the file captured.
         - Snapshot structure (top-level layout, key components).
         - Token mapping (which match existing project tokens, which are
           new and added to tokens.css).
         - Any visible interaction or state cues in the CSS (`:hover`,
           `:focus`, `:disabled`, `[aria-*]` selectors) the spec
           author should be aware of.
+        - For Branch A: note that source.md carries the verbatim decision
+          record — the draft step should mine it for stated behaviour.
 
   - id: draft_spec
     kind: prompt
@@ -130,6 +199,14 @@ nodes:
 
       Spec scope: $INPUT.FILE_LABEL component(s).
       Optional inputs: owner=$INPUT.OWNER  priority=$INPUT.PRIORITY
+      (an empty value means "not provided" — use "[needs review]").
+
+      If `source.md` contains a "Design decision record (verbatim)"
+      section (a handoff-bundle import), READ IT FIRST and mine it for
+      contract: interaction states, failure modes, data shapes, and the
+      human's stated intent are often spelled out in that transcript.
+      Prefer what the record states over guessing; reserve [needs review]
+      for items genuinely absent from both the snapshot and the record.
 
       Cover, as separate REQs:
         - Behavioural contract (what the component renders, given what data).
@@ -203,16 +280,28 @@ nodes:
       - Read
       - Bash
     prompt: |
-      Write the approved spec to `specs/$INPUT.SLUG.md` using the
-      Write tool.
+      Write the approved spec to `specs/$INPUT.SLUG.md` using the Write
+      tool. The spec content is the DRAFT below; the reviewer's gate
+      response carries the gap-fill answers / edits to fold in.
 
-      If `specs/$INPUT.SLUG.md` already exists (re-importing an
-      iteration), APPEND the new requirements to it instead of
-      overwriting; preserve all existing REQ IDs. Tell the user
-      explicitly what you did.
+      APPROVED DRAFT (this is the spec to write):
+      $draft_spec.output
 
-      Approved draft:
+      REVIEWER GATE RESPONSE (gap-fill answers / edits — apply these,
+      resolving any `[needs review]` markers the reviewer answered; if it
+      is just "approved" with no substantive content, write the draft as
+      is):
       $gap_review.output
+
+      Rules:
+        - Write the full spec Markdown (frontmatter + REQ bodies +
+          acceptance bullets), NOT the reviewer's comment verbatim.
+        - Resolve `[needs review]` markers the reviewer answered; leave
+          any they didn't as `[needs review]`.
+        - Keep ALL existing REQ IDs stable.
+        - If `specs/$INPUT.SLUG.md` already exists (re-importing an
+          iteration), APPEND new requirements instead of overwriting and
+          preserve existing REQ IDs. Tell the user explicitly what you did.
 
       Then run:
         specship sync

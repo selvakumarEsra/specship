@@ -383,6 +383,15 @@ import {
   handleSpecshipDrifted,
   renderLinkedSpecsForNode,
 } from './spec-tools';
+import {
+  designerToolDefinitions,
+  handleDesignerSession,
+  handleDesignerPrompt,
+  handleDesignerAsk,
+  handleDesignerList,
+  handleDesignerSnapshot,
+  handleDesignerHandoff,
+} from './designer-tools';
 
 export const tools: ToolDefinition[] = [
   {
@@ -563,6 +572,9 @@ export const tools: ToolDefinition[] = [
   },
   // Spec-layer tools (v5): see ./spec-tools.ts for handlers.
   ...specToolDefinitions,
+  // Designer tools: claude.ai/design driving, vendored from @pro-vi/designer.
+  // See ./designer-tools.ts for handlers. Drives a debug Chrome over CDP.
+  ...designerToolDefinitions,
 ];
 
 /**
@@ -708,7 +720,11 @@ export class ToolHandler {
         'specship_node',
       ]);
       if (stats.fileCount < TINY_REPO_FILE_THRESHOLD) {
-        visible = visible.filter(t => TINY_REPO_CORE_TOOLS.has(t.name));
+        // Designer tools are not code-graph tools — the tiny-repo flow-question
+        // economics that justify trimming don't apply, so they always survive.
+        visible = visible.filter(
+          t => TINY_REPO_CORE_TOOLS.has(t.name) || t.name.startsWith('designer_')
+        );
       }
 
       return visible.map(tool => {
@@ -1057,6 +1073,21 @@ export class ToolHandler {
           result = await handleSpecshipLinkVerify(this.getSpecShip(args.projectPath as string | undefined), args); break;
         case 'specship_drifted':
           result = await handleSpecshipDrifted(this.getSpecShip(args.projectPath as string | undefined), args); break;
+        // Designer tools are independent of the code graph — return directly,
+        // bypassing the worktree/staleness notice wrappers (which assume a
+        // code-graph query).
+        case 'designer_session':
+          return await handleDesignerSession(args);
+        case 'designer_prompt':
+          return await handleDesignerPrompt(args);
+        case 'designer_ask':
+          return await handleDesignerAsk(args);
+        case 'designer_list':
+          return await handleDesignerList(args);
+        case 'designer_snapshot':
+          return await handleDesignerSnapshot(args);
+        case 'designer_handoff':
+          return await handleDesignerHandoff(args);
         default:
           return this.errorResult(`Unknown tool: ${toolName}`);
       }

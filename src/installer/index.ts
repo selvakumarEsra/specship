@@ -64,6 +64,11 @@ export interface RunInstallerOptions {
   /** Skip the auto-allow prompt; use this value directly. */
   autoAllow?: boolean;
   /**
+   * Spec-driven-development steering (CLAUDE.md rule + nudge hook). On by
+   * default; pass `false` (the `--no-sdd` flag) to skip. Undefined ⇒ on.
+   */
+  sdd?: boolean;
+  /**
    * Skip every confirm and use defaults: location=global,
    * autoAllow=true. For scripting / CI.
    */
@@ -169,8 +174,9 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
     autoAllow = ans;
   }
 
-  // Step 4: write Claude config.
-  const result = claudeTarget.install(location, { autoAllow });
+  // Step 4: write Claude config. Spec-driven steering is on by default;
+  // only an explicit `sdd: false` (from `--no-sdd`) skips it.
+  const result = claudeTarget.install(location, { autoAllow, sdd: opts.sdd });
   for (const file of result.files) {
     const verb = file.action === 'unchanged'
       ? 'Unchanged'

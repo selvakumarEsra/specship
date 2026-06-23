@@ -36,6 +36,14 @@ export function getSpecShipPermissions(): string[] {
     'mcp__specship__specship_impact',
     'mcp__specship__specship_files',
     'mcp__specship__specship_status',
+    // Designer tools (vendored from @pro-vi/designer) — the design loop is
+    // human-driven, so auto-allow to avoid a prompt on every taste iteration.
+    'mcp__specship__designer_session',
+    'mcp__specship__designer_prompt',
+    'mcp__specship__designer_ask',
+    'mcp__specship__designer_list',
+    'mcp__specship__designer_snapshot',
+    'mcp__specship__designer_handoff',
   ];
 }
 
@@ -116,6 +124,49 @@ export function jsonDeepEqual(a: unknown, b: unknown): boolean {
   if (ak.length !== bk.length) return false;
   if (!ak.every((k, i) => k === bk[i])) return false;
   return ak.every((k) => jsonDeepEqual(ao[k], bo[k]));
+}
+
+/**
+ * Insert or update a marker-delimited block in a markdown-ish file,
+ * idempotently. `block` is the full text including its start/end markers.
+ *
+ * - File missing → create it with the block. Returns `created`.
+ * - Markers present → replace the region between them (inclusive) with `block`.
+ *   Returns `unchanged` if the result is byte-identical, else `updated`.
+ * - Markers absent → append the block after existing content (blank-line
+ *   separated). Returns `updated`.
+ *
+ * Used to write the spec-driven-development steering rule into CLAUDE.md
+ * without disturbing the user's surrounding content (SDD-INSTALL-DOC).
+ */
+export function upsertMarkedSection(
+  filePath: string,
+  startMarker: string,
+  endMarker: string,
+  block: string,
+): 'created' | 'updated' | 'unchanged' {
+  const exists = fs.existsSync(filePath);
+  let content = '';
+  if (exists) {
+    try { content = fs.readFileSync(filePath, 'utf-8'); } catch { content = ''; }
+  }
+
+  const startIdx = content.indexOf(startMarker);
+  const endIdx = content.indexOf(endMarker);
+  if (startIdx !== -1 && endIdx > startIdx) {
+    const replaced =
+      content.substring(0, startIdx) + block + content.substring(endIdx + endMarker.length);
+    if (replaced === content) return 'unchanged';
+    atomicWriteFileSync(filePath, replaced);
+    return 'updated';
+  }
+
+  if (!exists || content.trim() === '') {
+    atomicWriteFileSync(filePath, block + '\n');
+    return exists ? 'updated' : 'created';
+  }
+  atomicWriteFileSync(filePath, content.replace(/\s*$/, '') + '\n\n' + block + '\n');
+  return 'updated';
 }
 
 /**

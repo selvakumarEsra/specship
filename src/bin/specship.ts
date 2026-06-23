@@ -1825,6 +1825,7 @@ program
   .option('-l, --location <where>', 'Install location: "global" or "local". Default: prompt')
   .option('-y, --yes', 'Non-interactive: defaults to --location=global, auto-allow on')
   .option('--no-permissions', 'Skip writing the auto-allow permissions list')
+  .option('--no-sdd', 'Skip the spec-driven-development steering (CLAUDE.md rule + spec-author nudge hook)')
   .option('--print-config', 'Print MCP config snippet for Claude Code and exit (no file writes)')
   // -t/--target is vestigial — kept so existing `--target claude` / `--target auto`
   // invocations (including our own offline-install scripts) keep working.
@@ -1834,6 +1835,7 @@ program
     location?: string;
     yes?: boolean;
     permissions?: boolean;
+    sdd?: boolean;
     printConfig?: boolean;
   }) => {
     if (opts.printConfig) {
@@ -1862,16 +1864,71 @@ program
           ? true
           : undefined;
 
+      // Commander's `--no-sdd` makes `opts.sdd === false`; omitting it leaves
+      // it `true`. Spec-driven steering is on by default — forward `false`
+      // only when the user explicitly opted out.
       await runInstallerWithOptions({
         target: opts.target,
         location: opts.location as 'global' | 'local' | undefined,
         autoAllow,
+        sdd: opts.sdd === false ? false : undefined,
         yes: opts.yes,
       });
     } catch (err) {
       error(err instanceof Error ? err.message : String(err));
       process.exit(1);
     }
+  });
+
+/**
+ * specship spec-nudge  (internal — installed as a UserPromptSubmit hook)
+ *
+ * Reads the UserPromptSubmit JSON payload from stdin and, when the prompt
+ * looks like feature/bug work, prints a non-blocking reminder (as
+ * `hookSpecificOutput.additionalContext`) to author the spec via spec-author
+ * first. Always exits 0 so the prompt proceeds. Conservative: skips clear
+ * questions / read-only asks so it doesn't nag (SDD-INSTALL-DOC, REQ-SDD-002).
+ */
+program
+  .command('spec-nudge')
+  .description('Internal hook: nudge toward spec-author on feature/bug intent (UserPromptSubmit)')
+  .action(async () => {
+    const shouldNudge = (prompt: string): boolean => {
+      const text = (prompt || '').trim();
+      if (text.length < 12) return false;
+      if (/[?]\s*$/.test(text)) return false; // a question
+      const lower = text.toLowerCase();
+      // Read-only / interrogative openers — never spec-shaped.
+      if (/^(what|why|how|where|who|when|is|are|does|do|can|could|should|explain|show|list|describe|tell|summar|read|find|search|look|run|why)\b/.test(lower)) return false;
+      // Feature / bug-shaped intent verbs.
+      return /\b(add|implement|build|create|introduce|support|enhance|fix|bug|broken|refactor|rewrite|migrate|change|modify|update|wire|integrate|feature|spec out)\b/.test(lower);
+    };
+
+    const chunks: Buffer[] = [];
+    try {
+      for await (const c of process.stdin) chunks.push(c as Buffer);
+    } catch { /* no stdin — nothing to nudge */ }
+    const raw = Buffer.concat(chunks).toString('utf-8').trim();
+    let prompt = '';
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw);
+        prompt = typeof parsed?.prompt === 'string' ? parsed.prompt : raw;
+      } catch {
+        prompt = raw; // not JSON — treat as the raw prompt text
+      }
+    }
+
+    if (shouldNudge(prompt)) {
+      const additionalContext =
+        'This repo uses spec-driven development (SpecShip). Before any brainstorming or ' +
+        'planning skill, FIRST invoke spec-author to author the spec under specs/ for this ' +
+        'work — the spec is the contract; implement from it with /ss-implement.';
+      process.stdout.write(
+        JSON.stringify({ hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext } }) + '\n',
+      );
+    }
+    process.exit(0);
   });
 
 /**
@@ -2059,6 +2116,16 @@ program
             if (inp.required && !(inp.name in inputs)) {
               error(`Required input missing: --input ${inp.name}=...`);
               process.exit(1);
+            }
+          }
+          // Apply declared defaults for any optional input not passed. This
+          // makes the schema's `default` field actually take effect and means
+          // a `$INPUT.X` reference to a declared-but-omitted optional input
+          // resolves to its default (or "") instead of throwing OutputRefError
+          // mid-run. Required inputs are already enforced above.
+          for (const inp of loaded.workflow.inputs ?? []) {
+            if (!(inp.name in inputs)) {
+              inputs[inp.name] = inp.default ?? '';
             }
           }
           const result = await executor.start(loaded.workflow, {

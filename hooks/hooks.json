@@ -22,6 +22,17 @@
           }
         ]
       }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "specship spec-nudge"
+          }
+        ]
+      }
     ]
   }
 }
