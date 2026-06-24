@@ -40,6 +40,7 @@ import {
   summarizeToolInput,
   toolResultLength,
 } from './parser.js';
+import { classifyToolCall, GraphLike } from '@selvakumaresra/specship';
 
 /** SQLite handle shape we depend on. Matches specship's SqliteDatabase. */
 export interface IngestDb {
@@ -59,6 +60,12 @@ export interface IngestOptions {
   sinceMs?: number;
   /** Verbose logging. */
   verbose?: boolean;
+  /**
+   * Optional factory that returns a GraphLike for a given project path.
+   * Used by classifyToolCall to resolve displaced-file estimates.
+   * When omitted (or returns null), specship calls classify as 'unresolved'.
+   */
+  resolveGraph?: (projectPath: string) => GraphLike | null;
 }
 
 /**
@@ -271,9 +278,13 @@ function ingestFile(
     ON CONFLICT(path) DO UPDATE SET last_seen = excluded.last_seen
   `).run(projectPath, projectName, now, now);
 
+  // Resolve the graph once per file (per project path) — avoids reopening the DB
+  // on every tool call. Returns null when no resolver is configured.
+  const graph = options.resolveGraph ? options.resolveGraph(projectPath) : null;
+
   // Per-file ingest in a transaction.
   const txn = db.transaction(() => {
-    return processLines(db, filePath, projectPath, completeLines, pricing);
+    return processLines(db, filePath, projectPath, completeLines, pricing, graph);
   }) as () => ProcessResult;
   const result = txn();
 
@@ -319,7 +330,8 @@ function processLines(
   filePath: string,
   projectPath: string,
   completeLines: string[],
-  pricing: PricingRow[]
+  pricing: PricingRow[],
+  graph: GraphLike | null
 ): ProcessResult {
   const insSession = db.prepare(`
     INSERT INTO claude_sessions (id, project_path, source_file, started_at, ended_at, prompt_count, last_model)
@@ -351,8 +363,8 @@ function processLines(
       cost_usd = excluded.cost_usd
   `);
   const insToolCall = db.prepare(`
-    INSERT INTO claude_tool_calls (prompt_id, session_id, assistant_uuid, tool_use_id, tool_name, input_summary, input_json, result_length, ts)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO claude_tool_calls (prompt_id, session_id, assistant_uuid, tool_use_id, tool_name, input_summary, input_json, result_length, ts, is_specship, displaced_files, resolution)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   /**
    * Append the assistant's text + thinking blocks from one assistant turn
@@ -486,6 +498,10 @@ function processLines(
             const len = toolResultLength(block);
             const pending = pendingTools.get(block.tool_use_id);
             if (pending) {
+              const cls = classifyToolCall(
+                { toolName: pending.toolName, inputJson: pending.inputJson, resultLength: len },
+                graph,
+              );
               insToolCall.run(
                 pending.promptId,
                 pending.sessionId,
@@ -495,7 +511,10 @@ function processLines(
                 pending.summary,
                 pending.inputJson,
                 len,
-                pending.ts
+                pending.ts,
+                cls.isSpecship,
+                cls.displacedFiles,
+                cls.resolution,
               );
               toolCallsInserted++;
               pendingTools.delete(block.tool_use_id);
@@ -600,6 +619,11 @@ function processLines(
   // result_length=0 so the tool call still shows up in analytics (better to
   // show "0 tokens returned" than to omit the call).
   for (const [toolUseId, pending] of pendingTools) {
+    // result_length=0 for pending/unmatched tools → classifyToolCall returns 'n/a' for specship.
+    const cls = classifyToolCall(
+      { toolName: pending.toolName, inputJson: pending.inputJson, resultLength: 0 },
+      graph,
+    );
     insToolCall.run(
       pending.promptId,
       pending.sessionId,
@@ -609,7 +633,10 @@ function processLines(
       pending.summary,
       pending.inputJson,
       0,
-      pending.ts
+      pending.ts,
+      cls.isSpecship,
+      cls.displacedFiles,
+      cls.resolution,
     );
     toolCallsInserted++;
   }

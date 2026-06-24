@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isSpecshipTool, isSourceReturningTool, extractRequestedSymbols } from '../src/analytics/specship-impact';
+import { isSpecshipTool, isSourceReturningTool, extractRequestedSymbols, classifyToolCall, GraphLike } from '../src/analytics/specship-impact';
 
 describe('specship-impact classifiers', () => {
   it('isSpecshipTool matches all mcp__specship__* tools', () => {
@@ -74,5 +74,96 @@ describe('specship-impact classifiers', () => {
   it('extractRequestedSymbols handles null/undefined inputJson gracefully', () => {
     expect(extractRequestedSymbols('mcp__specship__specship_node', null)).toEqual([]);
     expect(extractRequestedSymbols('mcp__specship__specship_node', undefined)).toEqual([]);
+  });
+});
+
+describe('classifyToolCall', () => {
+  // Stub graph that always resolves to a known file list.
+  const stubGraph: GraphLike = {
+    estimateReadEquivalent(_symbols: string[]) {
+      return {
+        files: [{ path: '/project/src/alpha.ts', size: 1234 }],
+        resolved: true,
+      };
+    },
+  };
+
+  // Stub graph that always says "not resolved".
+  const unresolvedGraph: GraphLike = {
+    estimateReadEquivalent(_symbols: string[]) {
+      return { files: [], resolved: false };
+    },
+  };
+
+  it('non-specship tool → isSpecship:0, resolution:null, displacedFiles:null', () => {
+    const result = classifyToolCall(
+      { toolName: 'Read', inputJson: JSON.stringify({ file_path: '/foo.ts' }), resultLength: 500 },
+      stubGraph,
+    );
+    expect(result).toEqual({ isSpecship: 0, resolution: null, displacedFiles: null });
+  });
+
+  it('resolved specship_node call returns resolved + files JSON', () => {
+    const result = classifyToolCall(
+      { toolName: 'mcp__specship__specship_node', inputJson: JSON.stringify({ symbol: 'alpha' }), resultLength: 1000 },
+      stubGraph,
+    );
+    expect(result.isSpecship).toBe(1);
+    expect(result.resolution).toBe('resolved');
+    expect(result.displacedFiles).not.toBeNull();
+    const parsed = JSON.parse(result.displacedFiles!);
+    expect(parsed).toEqual([['/project/src/alpha.ts', 1234]]);
+  });
+
+  it('specship_explore with NL query → unresolved (no extractable symbols)', () => {
+    const result = classifyToolCall(
+      {
+        toolName: 'mcp__specship__specship_explore',
+        inputJson: JSON.stringify({ query: 'how does updating an element rerender the canvas' }),
+        resultLength: 500,
+      },
+      stubGraph,
+    );
+    expect(result).toEqual({ isSpecship: 1, resolution: 'unresolved', displacedFiles: null });
+  });
+
+  it('specship_node with null graph → unresolved', () => {
+    const result = classifyToolCall(
+      { toolName: 'mcp__specship__specship_node', inputJson: JSON.stringify({ symbol: 'alpha' }), resultLength: 800 },
+      null,
+    );
+    expect(result).toEqual({ isSpecship: 1, resolution: 'unresolved', displacedFiles: null });
+  });
+
+  it('specship_node when graph returns resolved:false → unresolved', () => {
+    const result = classifyToolCall(
+      { toolName: 'mcp__specship__specship_node', inputJson: JSON.stringify({ symbol: 'ghostSymbol' }), resultLength: 800 },
+      unresolvedGraph,
+    );
+    expect(result).toEqual({ isSpecship: 1, resolution: 'unresolved', displacedFiles: null });
+  });
+
+  it('designer tool → n/a (specship but not source-returning)', () => {
+    const result = classifyToolCall(
+      { toolName: 'mcp__specship__designer_session', inputJson: JSON.stringify({}), resultLength: 200 },
+      stubGraph,
+    );
+    expect(result).toEqual({ isSpecship: 1, resolution: 'n/a', displacedFiles: null });
+  });
+
+  it('specship_node with zero resultLength → n/a (no content to displace)', () => {
+    const result = classifyToolCall(
+      { toolName: 'mcp__specship__specship_node', inputJson: JSON.stringify({ symbol: 'alpha' }), resultLength: 0 },
+      stubGraph,
+    );
+    expect(result).toEqual({ isSpecship: 1, resolution: 'n/a', displacedFiles: null });
+  });
+
+  it('specship_status → n/a (not source-returning)', () => {
+    const result = classifyToolCall(
+      { toolName: 'mcp__specship__specship_status', inputJson: JSON.stringify({}), resultLength: 100 },
+      stubGraph,
+    );
+    expect(result).toEqual({ isSpecship: 1, resolution: 'n/a', displacedFiles: null });
   });
 });

@@ -88,6 +88,8 @@ export {
 export { Mutex, FileLock, processInBatches, debounce, throttle, MemoryMonitor } from './utils';
 export { FileWatcher, WatchOptions, PendingFile, LockUnavailableError } from './sync';
 export { MCPServer } from './mcp';
+export { isSpecshipTool, isSourceReturningTool, extractRequestedSymbols, classifyToolCall } from './analytics/specship-impact';
+export type { GraphLike } from './analytics/specship-impact';
 
 /**
  * Options for initializing a new SpecShip project

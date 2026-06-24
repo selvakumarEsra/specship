@@ -145,6 +145,74 @@ export function extractRequestedSymbols(
 }
 
 // ---------------------------------------------------------------------------
+// Classifier
+// ---------------------------------------------------------------------------
+
+/**
+ * Minimal interface for the graph-backed read-equivalent estimator.
+ * Keeps the ingestor and tests decoupled from the full SpecShip class.
+ */
+export interface GraphLike {
+  estimateReadEquivalent(symbols: string[]): {
+    files: { path: string; size: number }[];
+    resolved: boolean;
+  };
+}
+
+/**
+ * Classify one tool call and compute the three ingest columns:
+ *   - `isSpecship`     — 1 if this is any `mcp__specship__*` call, else 0.
+ *   - `resolution`     — 'resolved' | 'unresolved' | 'n/a' | null.
+ *   - `displacedFiles` — JSON string `[[path,size],…]` or null.
+ *
+ * Logic:
+ *   1. Not a specship tool → { isSpecship:0, resolution:null, displacedFiles:null }.
+ *   2. Specship + source-returning + result has content:
+ *      a. No symbols extractable → unresolved / null.
+ *      b. No graph available    → unresolved / null.
+ *      c. graph.estimateReadEquivalent returns resolved=true → resolved + files JSON.
+ *      d. resolved=false        → unresolved / null.
+ *   3. Specship but not a source-returning call, or zero-length result → n/a / null.
+ */
+export function classifyToolCall(
+  call: { toolName: string; inputJson: string | null | undefined; resultLength: number },
+  graph: GraphLike | null,
+): { isSpecship: 0 | 1; resolution: 'resolved' | 'unresolved' | 'n/a' | null; displacedFiles: string | null } {
+  const { toolName, inputJson, resultLength } = call;
+
+  if (!isSpecshipTool(toolName)) {
+    return { isSpecship: 0, resolution: null, displacedFiles: null };
+  }
+
+  // It's a specship tool. Check if it returns source AND returned something.
+  if (isSourceReturningTool(toolName) && resultLength > 0) {
+    const symbols = extractRequestedSymbols(toolName, inputJson);
+
+    if (symbols.length === 0) {
+      return { isSpecship: 1, resolution: 'unresolved', displacedFiles: null };
+    }
+
+    if (graph === null) {
+      return { isSpecship: 1, resolution: 'unresolved', displacedFiles: null };
+    }
+
+    const { files, resolved } = graph.estimateReadEquivalent(symbols);
+    if (resolved) {
+      return {
+        isSpecship: 1,
+        resolution: 'resolved',
+        displacedFiles: JSON.stringify(files.map((f) => [f.path, f.size])),
+      };
+    } else {
+      return { isSpecship: 1, resolution: 'unresolved', displacedFiles: null };
+    }
+  }
+
+  // Specship tool but not source-returning, or returned nothing (designer/spec/mutating tools).
+  return { isSpecship: 1, resolution: 'n/a', displacedFiles: null };
+}
+
+// ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
 
