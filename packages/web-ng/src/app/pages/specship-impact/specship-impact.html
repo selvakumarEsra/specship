@@ -50,12 +50,9 @@
           <span class="muted">Net</span>
         </div>
         <div class="row gap-8" style="align-items: baseline;">
-          <div class="big-number mono">{{ fmtK(netTokens()) }}</div>
-          @if (netDelta() !== 0) {
-            <app-delta [value]="netDelta()" />
-          }
+          <div class="big-number mono" [style.color]="netTokens() >= 0 ? 'var(--success)' : 'var(--warn)'">{{ netTokens() > 0 ? '+' : '' }}{{ fmtK(netTokens()) }}</div>
         </div>
-        <div class="muted tile-sub">tokens · {{ fmt$(netCostUsd()) }}</div>
+        <div class="muted tile-sub">tokens · {{ fmt$(netCostUsd()) }} · saved − spend − overhead</div>
       </div>
 
       <!-- Coverage tile -->
@@ -185,7 +182,8 @@
       <p class="muted methodology-body">
         Estimates. Tokens ≈ chars ÷ 4. "Saved" = the size of files a SpecShip query made unnecessary to Read,
         deduplicated per prompt; unresolved/natural-language queries count as 0.
-        Cost priced at the model input rate.
+        Cost priced at the model input rate. Net = saved − spend − overhead (a fixed per-session tool-definition cost).
+        Per-project rows show saved − spend only — the per-session overhead isn't attributed to individual projects, so they won't sum to the headline net.
         Savings currently estimated for the primary project only.
       </p>
     </details>

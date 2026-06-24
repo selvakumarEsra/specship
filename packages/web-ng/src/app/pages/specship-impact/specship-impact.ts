@@ -7,7 +7,6 @@ import { ProjectsService } from '../../api/projects';
 import { LineChart, type LinePoint } from '../../charts/line-chart/line-chart';
 import { PageHead } from '../../ui/page-head';
 import { Segmented } from '../../ui/segmented';
-import { Delta } from '../../ui/delta';
 import { Icon } from '../../shell/icon/icon';
 import type { SpecshipImpactResponse } from '../../api/types';
 
@@ -15,7 +14,7 @@ type Range = 'today' | 'week' | 'month' | 'all';
 
 @Component({
   selector: 'app-specship-impact',
-  imports: [DecimalPipe, LineChart, PageHead, Segmented, Delta, Icon],
+  imports: [DecimalPipe, LineChart, PageHead, Segmented, Icon],
   templateUrl: './specship-impact.html',
   styleUrl: './specship-impact.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -61,14 +60,6 @@ export class SpecshipImpact {
   protected readonly savedSeries = computed<LinePoint[]>(() =>
     (this.data()?.trend ?? []).map((t, i) => ({ day: i + 1, cost: t.savedTokens / 1000, prompts: 0 })),
   );
-
-  /** Net delta as a fraction (saved / spend). Positive = net positive. */
-  protected readonly netDelta = computed(() => {
-    const spend = this.spendTokens();
-    const saved = this.savedTokens();
-    if (spend === 0) return 0;
-    return (saved - spend) / spend;
-  });
 
   protected readonly isEmpty = computed(() => this.totalCalls() === 0 && !this.resource.state().loading);
 

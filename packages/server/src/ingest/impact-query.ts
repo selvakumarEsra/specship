@@ -415,6 +415,11 @@ export function computeSpecshipImpact(
   // ---------------------------------------------------------------------------
   // 6. byProject (only when no project filter).
   // ---------------------------------------------------------------------------
+  // NOTE: per-project netTokens = saved − spend and intentionally does NOT
+  // subtract the tool-definition overhead. Overhead is a per-session constant
+  // and isn't attributed to individual projects, so the byProject rows will
+  // not sum to the headline netTokens (which does include overhead). The page
+  // methodology note discloses this.
   const byProject = project
     ? []
     : Array.from(projectSpendChars.keys()).map((proj) => {
@@ -424,7 +429,7 @@ export function computeSpecshipImpact(
           project: proj,
           spendTokens: spend,
           savedTokens: saved,
-          netTokens: saved - spend,
+          netTokens: saved - spend, // overhead not allocated per-project — see note above
         };
       }).sort((a, b) => b.spendTokens - a.spendTokens);
 
