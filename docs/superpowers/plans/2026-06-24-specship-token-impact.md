@@ -4,7 +4,7 @@
 
 **Goal:** Surface, in the desktop dashboard, the tokens SpecShip *consumed* (measured) and an *estimated* tokens-saved figure, per prompt → session → project → all-projects, on a new "SpecShip Impact" page.
 
-**Architecture:** All pure, testable logic (tool classification, symbol extraction, graph-grounded read-equivalent estimation) lives in the `src/` library where the root vitest suite imports it directly. The `packages/server` ingestor computes three new `claude_tool_calls` columns (`is_specship`, `displaced_chars`, `resolution`) at ingest using that logic. A new Fastify endpoint aggregates them in SQL; a new Angular page renders them. Estimation fails safe toward under-claiming (unresolvable → 0, disclosed).
+**Architecture:** All pure, testable logic (tool classification, symbol extraction, graph-grounded read-equivalent estimation) lives in the `src/` library where the root vitest suite imports it directly. The `packages/server` ingestor stores three new `claude_tool_calls` columns at ingest: `is_specship` (flag), `resolution` (`resolved`/`unresolved`/`n/a`), and **`displaced_files`** — a JSON array `[[path, size], …]` of the distinct files a source-returning call's symbols resolved to. **Dedup is done at read time, per prompt** (union the files across a prompt's calls), which is correct across the ingestor's batch boundaries and matches the spec's query-time lean. A new Fastify endpoint aggregates via a small JS pass over those rows; a new Angular page renders them. Estimation fails safe toward under-claiming (unresolvable → no files, disclosed).
 
 **Tech Stack:** TypeScript, better-sqlite3 / node-sqlite3-wasm, Fastify (`packages/server`), Angular signals (`packages/web-ng`), vitest.
 
@@ -13,6 +13,8 @@
 ---
 
 ## File Structure
+
+> **Data-model note:** the per-call savings basis is stored as `displaced_files` (JSON `[[path,size],…]`), **not** a pre-summed scalar — so the aggregate can dedup files per prompt at read time. There is intentionally no `displaced_chars` column; any per-call or per-prompt char total is derived by summing distinct file sizes in JS.
 
 **Create:**
 - `src/analytics/specship-impact.ts` — pure helpers: `isSpecshipTool`, `isSourceReturningTool`, `extractRequestedSymbols`. No I/O.
@@ -59,9 +61,9 @@ describe('v9 specship-impact migration', () => {
              CREATE TABLE claude_tool_calls (id INTEGER PRIMARY KEY, prompt_id TEXT, tool_name TEXT, result_length INTEGER DEFAULT 0);`);
     db.exec(`INSERT INTO claude_tool_calls (tool_name) VALUES
              ('mcp__specship__specship_explore'), ('Read'), ('mcp__specship__designer_session');`);
-    runMigrations(db as any); // applies up to CURRENT_SCHEMA_VERSION
+    runMigrations(db as any, 0); // fromVersion=0 → applies ALL migrations up to CURRENT_SCHEMA_VERSION
     const cols = db.prepare(`PRAGMA table_info(claude_tool_calls)`).all().map((c: any) => c.name);
-    expect(cols).toEqual(expect.arrayContaining(['is_specship', 'displaced_chars', 'resolution']));
+    expect(cols).toEqual(expect.arrayContaining(['is_specship', 'displaced_files', 'resolution']));
     const flags = db.prepare(`SELECT tool_name, is_specship FROM claude_tool_calls ORDER BY id`).all();
     expect(flags).toEqual([
       { tool_name: 'mcp__specship__specship_explore', is_specship: 1 },
@@ -73,7 +75,7 @@ describe('v9 specship-impact migration', () => {
 });
 ```
 
-> NOTE: confirm the exported migration runner name (`runMigrations` / `applyMigrations`) and signature in `src/db/migrations.ts` and match the test to it.
+> NOTE: the runner is `runMigrations(db, fromVersion)` in `src/db/migrations.ts` — `fromVersion` is **required** (pass `0` to apply all, or `getCurrentVersion(db)`). Calling it with one arg runs **zero** migrations and the test fails for the wrong reason. Confirm the export names before writing.
 
 - [ ] **Step 2: Run it, verify it fails** — `npx vitest run __tests__/specship-impact-migration.test.ts` → FAIL (columns missing / version < 9).
 
@@ -86,8 +88,8 @@ describe('v9 specship-impact migration', () => {
   up: (db) => {
     if (!hasColumn(db, 'claude_tool_calls', 'is_specship'))
       db.exec(`ALTER TABLE claude_tool_calls ADD COLUMN is_specship INTEGER NOT NULL DEFAULT 0;`);
-    if (!hasColumn(db, 'claude_tool_calls', 'displaced_chars'))
-      db.exec(`ALTER TABLE claude_tool_calls ADD COLUMN displaced_chars INTEGER;`);
+    if (!hasColumn(db, 'claude_tool_calls', 'displaced_files'))
+      db.exec(`ALTER TABLE claude_tool_calls ADD COLUMN displaced_files TEXT;`); -- JSON [[path,size],…] | NULL
     if (!hasColumn(db, 'claude_tool_calls', 'resolution'))
       db.exec(`ALTER TABLE claude_tool_calls ADD COLUMN resolution TEXT;`);
     db.exec(`UPDATE claude_tool_calls SET is_specship = 1 WHERE tool_name LIKE 'mcp__specship__%';`);
@@ -122,10 +124,11 @@ describe('specship-impact classifiers', () => {
     expect(isSpecshipTool('Read')).toBe(false);
   });
   it('isSourceReturningTool only the code-graph readers', () => {
-    expect(isSourceReturningTool('mcp__specship__specship_node')).toBe(true);
-    expect(isSourceReturningTool('mcp__specship__specship_explore')).toBe(true);
+    for (const t of ['specship_node','specship_explore','specship_callers','specship_callees','specship_impact','specship_search','specship_files'])
+      expect(isSourceReturningTool(`mcp__specship__${t}`)).toBe(true);
     expect(isSourceReturningTool('mcp__specship__designer_session')).toBe(false);
     expect(isSourceReturningTool('mcp__specship__specship_link_assert')).toBe(false);
+    expect(isSourceReturningTool('mcp__specship__specship_link_verify')).toBe(false);
   });
   it('extractRequestedSymbols pulls names from input_json by tool', () => {
     expect(extractRequestedSymbols('mcp__specship__specship_node',
@@ -139,7 +142,7 @@ describe('specship-impact classifiers', () => {
 });
 ```
 
-> NOTE: the NL-vs-symbol-bag rule in `extractRequestedSymbols` for `explore` is heuristic. v1 rule (document it in the file): tokenize the query on whitespace; treat it as a symbol bag ONLY if every token looks like an identifier or `Class.method` (regex `^[A-Za-z_$][\w$]*(\.[A-Za-z_$][\w$]*)?$`) and there are ≤ 6 tokens; otherwise return `[]` (unresolved). Mirror the input shapes actually used by the MCP tools in `src/mcp/tools.ts` — verify `node` uses `symbol`, `explore` uses `query`/`symbols`, `callers`/`callees`/`impact` use `symbol`.
+> NOTE: the NL-vs-symbol-bag rule in `extractRequestedSymbols` for `explore` is heuristic. v1 rule (document it in the file): tokenize the `query` on whitespace; treat it as a symbol bag ONLY if every token looks like an identifier or `Class.method` (regex `^[A-Za-z_$][\w$]*(\.[A-Za-z_$][\w$]*)?$`) and there are ≤ 6 tokens; otherwise return `[]` (unresolved). Verify the actual input shapes in `src/mcp/tools.ts`: `specship_explore` takes **only `query`** (no `symbols` field); `specship_node`/`callers`/`callees`/`impact` take `symbol`; `specship_search` takes a query string; `specship_files` takes a path filter (treat `files` as resolvable-by-path, contributing that dir's files' sizes, or n/a in v1 — pick one and document).
 
 - [ ] **Step 2: Run, verify FAIL** (module missing).
 - [ ] **Step 3: Implement `src/analytics/specship-impact.ts`** with the constants (`SOURCE_RETURNING = new Set([...])`), the two predicates, and `extractRequestedSymbols` per the documented rule. Pure functions only; no imports beyond types.
@@ -173,17 +176,18 @@ describe('estimateReadEquivalent', () => {
 
     const hit = ss.estimateReadEquivalent(['alpha']);
     expect(hit.resolved).toBe(true);
-    expect(hit.displacedChars).toBe(sizeA);
+    expect(hit.files).toEqual([{ path: 'a.ts', size: sizeA }]); // project-relative path
 
-    const dup = ss.estimateReadEquivalent(['alpha', 'alpha']); // dedup file
-    expect(dup.displacedChars).toBe(sizeA);
+    const dup = ss.estimateReadEquivalent(['alpha', 'alpha']); // distinct files only
+    expect(dup.files).toEqual([{ path: 'a.ts', size: sizeA }]);
 
     const miss = ss.estimateReadEquivalent(['doesNotExist']);
     expect(miss.resolved).toBe(false);
-    expect(miss.displacedChars).toBe(0);
+    expect(miss.files).toEqual([]);
 
     const empty = ss.estimateReadEquivalent([]);
     expect(empty.resolved).toBe(false);
+    expect(empty.files).toEqual([]);
     await ss.close();
   });
 });
@@ -192,11 +196,11 @@ describe('estimateReadEquivalent', () => {
 > NOTE: verify the exact public API (`getNodesByName`, `getFile(path).size`, and the SpecShip constructor/`init`/`indexAll`/`close` signatures) against `src/index.ts`. Adjust calls to match.
 
 - [ ] **Step 2: Run, verify FAIL.**
-- [ ] **Step 3: Implement** `estimateReadEquivalent(symbols: string[]): { displacedChars: number; resolved: boolean }`:
+- [ ] **Step 3: Implement** `estimateReadEquivalent(symbols: string[]): { files: { path: string; size: number }[]; resolved: boolean }`:
   - For each symbol: `getNodesByName(symbol)` → collect distinct `file_path`s. (If a name has many hits, take all distinct files — conservative upper bound; cap at e.g. 5 files/symbol to avoid a god-name blowup, documented.)
-  - Dedup files across all symbols into a `Set`.
-  - `displacedChars = Σ getFile(fp)?.size ?? 0` over the set.
-  - `resolved = (set.size > 0)`.
+  - Dedup file paths across all symbols (`Map<path, size>` via `getFile(fp)?.size ?? 0`).
+  - Return `{ files: [...{path,size}], resolved: files.length > 0 }`. (Returning the file *list*, not a sum, lets the aggregate dedup per prompt across calls.)
+  - `getNodesByName` verified present (`src/index.ts:979`); `getFile().size` is bytes (`FileRecord.size`, `src/types.ts:216`).
 - [ ] **Step 4: Run, verify PASS.**
 - [ ] **Step 5: Commit** — `feat(lib): estimateReadEquivalent — graph-grounded read displacement`
 
@@ -217,31 +221,30 @@ import { describe, it, expect } from 'vitest';
 it('cross-package import resolves', () => { expect(typeof ingestAll).toBe('function'); });
 ```
 
-Run `npx vitest run __tests__/specship-impact-ingest.test.ts`. **If it errors on resolving the import**, add `packages/**/__tests__` is NOT how this repo works — instead, fallback: temporarily re-export the ingest entry from a path vitest can reach, or extend `vitest.config.ts` `include`/`resolve.alias`. Resolve this before continuing (it gates Tasks 4–7).
+Run `npx vitest run __tests__/specship-impact-ingest.test.ts`. Root `vitest.config.ts` has `include: ['__tests__/**/*.test.ts']`, so the test IS collected, and `ingestAll` is a real export (`packages/server/src/ingest/ingestor.ts:166`) — this should pass. **If it instead errors resolving a transitive import** from `packages/server` (its own tsconfig), apply the single concrete fix: add `test: { server: { deps: { inline: [/packages\/server/] } } }` to `vitest.config.ts` (force-inline so vitest transpiles it) and re-run. Confirm green before continuing — this step gates Tasks 4–7.
 
 - [ ] **Step 2: Write the failing integration test** — index a tiny project, run the ingestor over a synthetic JSONL containing one `specship_node` tool_use whose `input` names a real symbol + its tool_result, then assert the stored row:
 
 ```ts
 // after indexing project `dir` and building a JSONL at ~/.claude-style path or via ingestAll's claudeRoot option:
-const row = db.prepare(`SELECT tool_name, is_specship, displaced_chars, resolution FROM claude_tool_calls WHERE tool_name LIKE 'mcp__specship__%'`).get();
+const row = db.prepare(`SELECT tool_name, is_specship, displaced_files, resolution FROM claude_tool_calls WHERE tool_name = 'mcp__specship__specship_node'`).get();
 expect(row.is_specship).toBe(1);
 expect(row.resolution).toBe('resolved');
-expect(row.displaced_chars).toBeGreaterThan(0);
-// and a Read row: is_specship 0, resolution null, displaced_chars null
+expect(JSON.parse(row.displaced_files).length).toBeGreaterThan(0); // [[path,size],…]
+// a Read row: is_specship 0, resolution null, displaced_files null
+// a designer_session row: is_specship 1, resolution 'n/a', displaced_files null
 ```
 
-Also add an **unresolved fixture**: a `specship_node` call whose symbol doesn't exist OR a session whose project index is absent ⇒ `resolution = 'unresolved'`, `displaced_chars = NULL`, but the row still exists with exact `result_length`.
+Also add an **unresolved fixture**: a `specship_node` call whose symbol doesn't exist OR a session whose project index is absent ⇒ `resolution = 'unresolved'`, `displaced_files = NULL`, but the row still exists with exact `result_length`.
 
 - [ ] **Step 3: Run, verify FAIL.**
-- [ ] **Step 4: Implement.** In `ingestor.ts`:
-  - Extend the prepared INSERT (`:353`) to add `is_specship, displaced_chars, resolution` (3 more `?`).
-  - Import `isSpecshipTool`, `isSourceReturningTool`, `extractRequestedSymbols` from the built lib, and obtain the session's graph via the project registry (`ProjectRegistry.get(session.project_path)` → `estimateReadEquivalent`). The ingestor must receive a way to resolve a project's SpecShip instance — thread a `resolveGraph?: (projectPath: string) => SpecShipLike | null` option into `IngestOptions` (default provided by the server using `ProjectRegistry`; tests pass a stub that returns the indexed `SpecShip`).
-  - Compute per tool call:
-    - `is_specship = isSpecshipTool(name) ? 1 : 0`
-    - if `is_specship` and `isSourceReturningTool(name)` and `result_length > 0`: `symbols = extractRequestedSymbols(name, input_json)`; if `symbols.length` and graph resolves → `{displacedChars, resolved}`; `resolution = resolved ? 'resolved' : 'unresolved'`, `displaced_chars = resolved ? displacedChars : null`.
-    - else if `is_specship` (designer/spec/mutating or zero-length): `resolution = 'n/a'`, `displaced_chars = null`.
-    - else (non-specship): `is_specship = 0`, `resolution = null`, `displaced_chars = null`.
-  - Apply at both insert sites (`:489`, `:603`); the `:603` pending site has `result_length = 0` → `n/a`.
+- [ ] **Step 4: Implement.** Add a **shared pure helper** `classifyToolCall({ toolName, inputJson, resultLength }, graph): { isSpecship: 0|1; resolution: 'resolved'|'unresolved'|'n/a'|null; displacedFiles: string|null }` (in `src/analytics/specship-impact.ts`, so Tasks 4 and 5 share it — DRY). Logic:
+    - `isSpecship = isSpecshipTool(name) ? 1 : 0`
+    - if `isSpecship` and `isSourceReturningTool(name)` and `resultLength > 0`: `symbols = extractRequestedSymbols(name, inputJson)`; if `symbols.length` and `graph` available → `{ files, resolved } = graph.estimateReadEquivalent(symbols)`; `resolution = resolved ? 'resolved' : 'unresolved'`; `displacedFiles = resolved ? JSON.stringify(files.map(f => [f.path, f.size])) : null`.
+    - else if `isSpecship` (designer/spec/mutating or zero-length): `resolution = 'n/a'`, `displacedFiles = null`.
+    - else (non-specship): `isSpecship = 0`, `resolution = null`, `displacedFiles = null`.
+  - **No per-prompt running set needed** — files are stored per call; the aggregate (Task 6) dedups per prompt at read time, which is correct even when a prompt's calls land across ingest batches.
+  - In `ingestor.ts`: extend the prepared INSERT (`:353`) to add `is_specship, displaced_files, resolution` (3 more `?`). Thread a `resolveGraph?: (projectPath: string) => SpecShipLike | null` option into `IngestOptions` (server default uses `ProjectRegistry.get`; tests pass a stub returning the indexed `SpecShip`). Call `classifyToolCall` at both insert sites (`:489`, `:603`); the `:603` pending site has `result_length = 0` → `n/a`.
 - [ ] **Step 5: Run, verify PASS.**
 - [ ] **Step 6: Commit** — `feat(ingest): compute is_specship/displaced_chars/resolution at ingest`
 
@@ -254,9 +257,9 @@ Also add an **unresolved fixture**: a `specship_node` call whose symbol doesn't 
 - Wire: call once from the watcher's initial pass (`packages/server/src/ingest/watcher.ts` initial `triggerSoon`, or server boot)
 - Test: extend `__tests__/specship-impact-ingest.test.ts`
 
-- [ ] **Step 1: Write failing test** — seed a row with `is_specship=1, resolution=NULL` (as the v9 migration leaves old rows), run `backfillDisplaced`, assert it becomes `resolved`/`n/a` with `displaced_chars` set/!set accordingly. Rows already resolved are untouched (idempotent).
+- [ ] **Step 1: Write failing test** — seed a row with `is_specship=1, resolution=NULL` (as the v9 migration leaves old rows), run `backfillDisplaced`, assert it becomes `resolved`/`n/a` with `displaced_files` set/NULL accordingly. Rows already non-NULL `resolution` are untouched (idempotent).
 - [ ] **Step 2: Run, verify FAIL.**
-- [ ] **Step 3: Implement** — select `WHERE is_specship = 1 AND resolution IS NULL`, recompute exactly as Task 4 (reusing the same helper — extract the per-row compute into a shared `classifyToolCall(...)` so Task 4 and Task 5 share it, DRY). Cap batch size; safe to re-run.
+- [ ] **Step 3: Implement** — select `WHERE is_specship = 1 AND resolution IS NULL`, recompute via the shared `classifyToolCall` from Task 4 (DRY), `UPDATE` `resolution` + `displaced_files`. Cap batch size; safe to re-run (idempotent).
 - [ ] **Step 4: Run, verify PASS.**
 - [ ] **Step 5: Commit** — `feat(ingest): backfill displaced_chars for existing specship calls`
 
@@ -269,20 +272,22 @@ Also add an **unresolved fixture**: a `specship_node` call whose symbol doesn't 
 - Modify: `packages/server/src/routes/claude.ts` (register route, ~with the other `/api/claude/*` routes)
 - Test: `__tests__/specship-impact-endpoint.test.ts`
 
-- [ ] **Step 1: Write failing test** for `computeSpecshipImpact`: seed `claude_sessions` (two projects) + `claude_tool_calls` with known `result_length` / `displaced_chars` / `resolution` / `is_specship`, then assert:
+- [ ] **Step 1: Write failing test** for `computeSpecshipImpact`: seed `claude_sessions` (two projects) + `claude_prompts` + `claude_tool_calls` with known `result_length` / `displaced_files` (JSON `[[path,size],…]`) / `resolution` / `is_specship` / `prompt_id`. Include a prompt with **two resolved calls that share a file** to prove per-prompt dedup. Assert:
   - `spendTokens = ceil(Σ result_length(is_specship) / 4)`
-  - `savedTokens = ceil(Σ max(0, displaced_chars − result_length) over resolution='resolved', deduped per (prompt_id,file)*) / 4`  *(v1 dedup: see note)*
-  - `unresolvedCalls = count(resolution='unresolved')`
+  - **Per-prompt savings (deduped):** for each prompt, `promptReadEquiv = Σ size over the UNION of `displaced_files` paths across that prompt's resolved calls`; `promptSpend = Σ result_length over that prompt's is_specship calls`; `promptSaved = max(0, promptReadEquiv − promptSpend)`. Then `savedTokens = ceil(Σ promptSaved / 4)`. The shared-file prompt must count that file's size **once**.
+  - `unresolvedCalls = count(resolution='unresolved')`; `totalSpecshipCalls = count(is_specship=1)`.
   - `byTool` rows; `byProject` only when `project` omitted; `project` filter scopes correctly (decoded slug).
   - `netTokens = savedTokens − spendTokens − overheadTokens`.
 
-> NOTE (dedup): `displaced_chars` is stored per call without the file identity, so per-`(prompt_id,file)` dedup can't be done purely in SQL from the stored scalar. v1 decision: dedup is applied **at compute time in Task 4** (a file counted once per prompt when computing that prompt's calls) — i.e., within a prompt, later calls hitting an already-counted file contribute 0 to `displaced_chars`. Document this in `classifyToolCall`. The endpoint then sums the already-deduped scalars. If cross-call dedup within a prompt proves too coupled at ingest, fall back to storing the resolved file list (json) — but that's a larger change; keep v1 simple with per-prompt running set passed through the prompt's tool-call loop.
+> NOTE (dedup): savings is computed **per prompt at read time** — `computeSpecshipImpact` reads the scoped rows, groups by `prompt_id` in JS, and unions each prompt's `displaced_files` paths before summing sizes. This is correct regardless of ingest batch boundaries (every call's resolved files are stored). There is **no** `GROUP BY prompt_id, file` SQL — file identity lives in the JSON, so the grouping is a JS pass, not SQL. SQL is used only to *fetch* the scoped rows + the flat spend/coverage/byTool counts.
 
 - [ ] **Step 2: Run, verify FAIL.**
-- [ ] **Step 3: Implement `computeSpecshipImpact`** (pure SQL + a small JS post-step for token/cost/overhead):
-  - Spend/coverage/byTool/byProject/trend via `SELECT ... FROM claude_tool_calls tc JOIN claude_sessions s ON s.id = tc.session_id WHERE tc.ts >= ? [AND s.project_path = ?]`.
+- [ ] **Step 3: Implement `computeSpecshipImpact`** (SQL fetch + JS reduction):
+  - Fetch scoped rows: `SELECT tc.prompt_id, tc.tool_name, tc.is_specship, tc.result_length, tc.displaced_files, s.project_path, s.last_model, tc.ts FROM claude_tool_calls tc JOIN claude_sessions s ON s.id = tc.session_id WHERE tc.ts >= ? [AND s.project_path = ?]`.
+  - **Spend**: `ceil(Σ result_length where is_specship=1 / 4)`. **Saved**: group rows by `prompt_id`, union `JSON.parse(displaced_files)` paths per prompt (dedup, sum sizes), subtract the prompt's specship spend chars, `max(0,…)`, sum, `/4`. **Coverage**: count `resolution='unresolved'` and `is_specship=1`.
+  - `byTool`: group by `tool_name` (calls, spend). `byProject` (only when `project` omitted): rerun the per-prompt reduction grouped by `project_path`. `trend`: bucket by day over the range.
   - `overheadTokens`: `ceil(SPECSHIP_TOOLDEF_CHARS / 4) × (count of distinct sessions that used specship in range)`. Define `SPECSHIP_TOOLDEF_CHARS` as a measured constant (Step 3a).
-  - Cost: price `spendTokens`/`savedTokens` at each session's model input rate via `resolvePricing`/`computeCost` (treat as input tokens). Unknown model → omit cost contribution.
+  - Cost: price spend/saved tokens at each row's model input rate via `resolvePricing`/`computeCost` (treat as input tokens). Unknown model → omit cost contribution.
 - [ ] **Step 3a:** measure the tool-def payload once: serialize the specship MCP tool list (from `src/mcp/tools.ts` definitions) to JSON, take `.length`, store as the constant with a comment citing how it was measured.
 - [ ] **Step 4:** add the route in `routes/claude.ts` calling `computeSpecshipImpact(getDb(cg), { since: rangeStart(rangeKey(req.query.range)), project: req.query.project ? normalizeProjectFilter(req.query.project) : undefined })`; return its object. Add a route-level test hitting the registered Fastify app if the suite has an app-builder helper; otherwise the function-level test in Step 1 is the coverage.
 - [ ] **Step 5: Run, verify PASS.**
@@ -293,7 +298,7 @@ Also add an **unresolved fixture**: a `specship_node` call whose symbol doesn't 
 ## Task 7: Expose specship fields on session detail (chip + summary line data)
 
 **Files:**
-- Modify: `packages/server/src/routes/claude.ts` — the session-detail tool-call query (add `is_specship, displaced_chars, resolution` to the SELECT) and `/session/:id/summary` (add `specship: { spendTokens, savedTokens, netTokens }`)
+- Modify: `packages/server/src/routes/claude.ts` — the session-detail tool-call query (add `is_specship, displaced_files, resolution` to the SELECT) and `/session/:id/summary` (add `specship: { spendTokens, savedTokens, netTokens }`, reusing `computeSpecshipImpact` scoped to the one session)
 - Modify: `packages/web-ng/src/app/api/types.ts` — extend `ClaudeToolCall` + `SessionSummaryResponse`
 - Test: extend `__tests__/specship-impact-endpoint.test.ts`
 
@@ -325,7 +330,7 @@ Also add an **unresolved fixture**: a `specship_node` call whose symbol doesn't 
 **Files:**
 - Modify: `packages/web-ng/src/app/pages/session-detail/session-detail.ts` (`PromptGroup` + `groups` computed), `session-detail.html`
 
-- [ ] **Step 1:** extend `PromptGroup` with `specshipSpendTokens` / `specshipSavedTokens`, computed in `groups` from the prompt's tool calls (`is_specship` rows: spend = ceil(Σ result_length/4); saved = ceil(Σ max(0, displaced_chars−result_length) for resolution='resolved'/4)). These fields now arrive on `ClaudeToolCall` from Task 7.
+- [ ] **Step 1:** extend `PromptGroup` with `specshipSpendTokens` / `specshipSavedTokens`, computed in `groups` from the prompt's tool calls (the `is_specship`/`resolution`/`displaced_files` fields now arrive on `ClaudeToolCall` from Task 7): `spend = ceil(Σ result_length over is_specship rows / 4)`; `saved = ceil(max(0, (Σ size over the UNION of displaced_files paths across this prompt's resolved calls) − spendChars) / 4)` — the same per-prompt dedup as the aggregate, applied to one prompt's rows.
 - [ ] **Step 2:** render a `SpecShip ~X tok` chip on each prompt row beside the tool-mix chips (only when `specshipSpendTokens > 0`), tooltip "spent ~X · est. saved ~Y".
 - [ ] **Step 3:** render the per-session line from `summaryData()?.specship` in the session-summary panel: `SpecShip: spent ~A · est. saved ~B · net C`, with an `est.` marker.
 - [ ] **Step 4: Manual verify** — open a session that used specship; confirm chips + the summary line; a session with no specship usage shows neither.
