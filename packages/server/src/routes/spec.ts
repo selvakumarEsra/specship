@@ -56,6 +56,44 @@ function safeProjectPath(projectRoot: string, relPath: string): string | null {
 }
 
 /**
+ * Extract the `brief:` value from the leading YAML frontmatter block of a
+ * spec source file (between the first pair of `---` fences). Returns null
+ * when there is no frontmatter, no `brief:` key, or the value is empty.
+ *
+ * Deliberately dependency-free: a simple line scan that mirrors the style
+ * used by `MarkdownSpecExtractor.parseFrontmatter`. Exported so tests can
+ * exercise the parsing logic in isolation.
+ */
+export function parseBriefField(source: string): string | null {
+  const lines = source.split(/\r?\n/);
+  if (lines.length === 0 || (lines[0] ?? '').trim() !== '---') return null;
+
+  // Find the closing `---` fence.
+  let closingIdx = -1;
+  for (let i = 1; i < lines.length; i++) {
+    if ((lines[i] ?? '').trim() === '---') { closingIdx = i; break; }
+  }
+  if (closingIdx === -1) return null;
+
+  // Scan frontmatter body for `brief: <value>`.
+  for (let i = 1; i < closingIdx; i++) {
+    const line = (lines[i] ?? '').trim();
+    if (!line.startsWith('brief:')) continue;
+    let value = line.slice('brief:'.length).trim();
+    if (!value) return null;
+    // Strip surrounding quotes.
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1).trim();
+    }
+    return value || null;
+  }
+  return null;
+}
+
+/**
  * Atomic file write: tmp + rename. Mirrors `atomicWriteFileSync` in
  * `src/installer/targets/shared.ts` — kept local here to avoid the
  * @selvakumaresra/specship deep-import dance for a 10-line helper.
@@ -109,6 +147,32 @@ export async function registerSpecRoutes(app: FastifyInstance): Promise<void> {
     }
 
     return { spec, parent, siblings, children, links, source };
+  });
+
+  /**
+   * GET /api/spec/:id/brief — return the brainstorm brief for a spec.
+   *
+   * Reads the spec's source file, parses the `brief:` frontmatter key, and
+   * returns the brief markdown from the path it names. The `brief:` value is
+   * resolved relative to the spec file's own directory (so a nested spec at
+   * `specs/area/foo.md` with `brief: foo/brief.md` resolves to
+   * `specs/area/foo/brief.md`). safeProjectPath guards against traversal.
+   */
+  app.get('/api/spec/:id/brief', async (req: FastifyRequest<{ Params: { id: string }; Querystring: ProjectQuery }>, reply) => {
+    const cg = await resolveCg(app, req, reply); if (!cg) return;
+    const spec = cg.getSpecQueries().getSpecById(req.params.id);
+    if (!spec) return reply.code(404).send({ error: 'spec not found' });
+    const projectRoot = cg.getProjectRoot();
+    const specAbs = safeProjectPath(projectRoot, spec.sourcePath);
+    if (!specAbs || !fs.existsSync(specAbs)) return reply.code(404).send({ error: 'no brief' });
+    const briefRel = parseBriefField(fs.readFileSync(specAbs, 'utf-8'));
+    if (!briefRel) return reply.code(404).send({ error: 'no brief' });
+    // CONVENTION: `brief:` is relative to the SPEC FILE's own directory (resolves
+    // whether the spec is flat at specs/<id>.md or nested at specs/<area>/<id>.md).
+    // safeProjectPath GUARDS against traversal outside the project root.
+    const briefAbs = safeProjectPath(projectRoot, path.join(path.dirname(spec.sourcePath), briefRel));
+    if (!briefAbs || !fs.existsSync(briefAbs)) return reply.code(404).send({ error: 'no brief' });
+    return { path: briefRel, markdown: fs.readFileSync(briefAbs, 'utf-8') };
   });
 
   app.get('/api/drift', async (req: FastifyRequest<{ Querystring: ProjectQuery & { state?: string; limit?: string } }>, reply) => {
