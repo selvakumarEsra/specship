@@ -527,4 +527,99 @@ describe('computeSpecshipImpact', () => {
     const singleSess = computeSpecshipImpact(db as any, { since: 0, project: '/proj/o1' });
     expect(result.overheadTokens).toBe(singleSess.overheadTokens * 2);
   });
+
+  // ---------------------------------------------------------------------------
+  // Task 7: sessionId filter
+  // ---------------------------------------------------------------------------
+
+  it('sessionId filter scopes spend/saved to a single session, ignoring other sessions', () => {
+    const db = new Database(':memory:');
+    buildSchema(db);
+
+    // Two sessions with different specship activity
+    const sess1 = insertSession(db, { id: 'task7-sess-1', project_path: '/proj/t7a' });
+    const sess2 = insertSession(db, { id: 'task7-sess-2', project_path: '/proj/t7a' });
+
+    // Session 1: one resolved call, displaced file 2000 bytes, spend 400 chars
+    insertToolCall(db, {
+      session_id: sess1,
+      prompt_id: 'p-t7-1',
+      result_length: 400,
+      is_specship: 1,
+      displaced_files: [['/proj/t7a/foo.ts', 2000]],
+      resolution: 'resolved',
+    });
+
+    // Session 2: one unresolved call, different size
+    insertToolCall(db, {
+      session_id: sess2,
+      prompt_id: 'p-t7-2',
+      result_length: 800,
+      is_specship: 1,
+      displaced_files: null,
+      resolution: 'unresolved',
+    });
+
+    // Filter to session 1 only
+    const s1Result = computeSpecshipImpact(db as any, { since: 0, sessionId: 'task7-sess-1' });
+    expect(s1Result.spendTokens).toBe(100);      // ceil(400/4)
+    expect(s1Result.totalSpecshipCalls).toBe(1);
+    expect(s1Result.unresolvedCalls).toBe(0);
+    // saved = max(0, 2000-400)/4 = 400 tokens
+    expect(s1Result.savedTokens).toBe(400);
+
+    // Filter to session 2 only
+    const s2Result = computeSpecshipImpact(db as any, { since: 0, sessionId: 'task7-sess-2' });
+    expect(s2Result.spendTokens).toBe(200);      // ceil(800/4)
+    expect(s2Result.totalSpecshipCalls).toBe(1);
+    expect(s2Result.unresolvedCalls).toBe(1);
+    expect(s2Result.savedTokens).toBe(0);        // unresolved, no displaced files
+
+    // Global (no filter) sees both
+    const allResult = computeSpecshipImpact(db as any, { since: 0 });
+    expect(allResult.totalSpecshipCalls).toBe(2);
+    expect(allResult.spendTokens).toBe(300);     // 100+200
+  });
+
+  it('sessionId filter: session with no specship calls returns zeros', () => {
+    const db = new Database(':memory:');
+    buildSchema(db);
+
+    const sess = insertSession(db, { id: 'task7-empty', project_path: '/proj/t7b' });
+    // Only a non-specship Read call
+    insertToolCall(db, {
+      session_id: sess,
+      tool_name: 'Read',
+      result_length: 5000,
+      is_specship: 0,
+      displaced_files: null,
+      resolution: null,
+    });
+
+    const result = computeSpecshipImpact(db as any, { since: 0, sessionId: 'task7-empty' });
+    expect(result.spendTokens).toBe(0);
+    expect(result.savedTokens).toBe(0);
+    expect(result.totalSpecshipCalls).toBe(0);
+    expect(result.netTokens).toBe(0);
+  });
+
+  it('sessionId filter does not leak rows from other sessions', () => {
+    const db = new Database(':memory:');
+    buildSchema(db);
+
+    // Three sessions; we query only the middle one
+    const sessA = insertSession(db, { id: 'task7-leak-A', project_path: '/proj/t7c' });
+    const sessB = insertSession(db, { id: 'task7-leak-B', project_path: '/proj/t7c' });
+    const sessC = insertSession(db, { id: 'task7-leak-C', project_path: '/proj/t7c' });
+
+    // Seeding same project so a project filter would include all three
+    insertToolCall(db, { session_id: sessA, result_length: 400, is_specship: 1, resolution: 'unresolved' });
+    insertToolCall(db, { session_id: sessB, result_length: 200, is_specship: 1, resolution: 'unresolved' });
+    insertToolCall(db, { session_id: sessC, result_length: 100, is_specship: 1, resolution: 'unresolved' });
+
+    // Querying sessB must return only sessB's 200-char spend (50 tokens)
+    const result = computeSpecshipImpact(db as any, { since: 0, sessionId: 'task7-leak-B' });
+    expect(result.spendTokens).toBe(50);
+    expect(result.totalSpecshipCalls).toBe(1);
+  });
 });

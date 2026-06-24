@@ -57,6 +57,12 @@ export interface SpecshipImpactOptions {
    * this is provided. Value should already be decoded (not a slug).
    */
   project?: string;
+  /**
+   * When set, scope to a single session_id. Useful for the per-session
+   * summary rollup. When provided, `since` is still applied but defaults
+   * to 0 (all time) at the call site.
+   */
+  sessionId?: string;
 }
 
 export interface SpecshipImpactResult {
@@ -191,7 +197,7 @@ export function computeSpecshipImpact(
   db: DbHandle,
   opts: SpecshipImpactOptions,
 ): SpecshipImpactResult {
-  const { since, project } = opts;
+  const { since, project, sessionId } = opts;
 
   // 1. Fetch scoped rows.
   const queryParts: string[] = [
@@ -206,6 +212,10 @@ export function computeSpecshipImpact(
   if (project) {
     queryParts.push('AND s.project_path = ?');
     params.push(project);
+  }
+  if (sessionId) {
+    queryParts.push('AND tc.session_id = ?');
+    params.push(sessionId);
   }
 
   const rows = db.prepare(queryParts.join(' ')).all(...params) as RawRow[];
@@ -311,6 +321,10 @@ export function computeSpecshipImpact(
   if (project) {
     sessionCountQParts.push('AND s.project_path = ?');
     sessionCountParams.push(project);
+  }
+  if (sessionId) {
+    sessionCountQParts.push('AND tc.session_id = ?');
+    sessionCountParams.push(sessionId);
   }
   const sessionCountRow = db
     .prepare(sessionCountQParts.join(' '))

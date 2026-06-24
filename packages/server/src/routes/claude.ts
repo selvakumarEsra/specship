@@ -361,6 +361,14 @@ export async function registerClaudeRoutes(app: FastifyInstance): Promise<void> 
       ? Math.max(0, session.ended_at - session.started_at)
       : 0;
 
+    // SpecShip token-impact rollup for this session.
+    const impact = computeSpecshipImpact(db, { since: 0, sessionId });
+    const specship = {
+      spendTokens: impact.spendTokens,
+      savedTokens: impact.savedTokens,
+      netTokens: impact.netTokens,
+    };
+
     return {
       sessionId,
       byTool,
@@ -369,6 +377,7 @@ export async function registerClaudeRoutes(app: FastifyInstance): Promise<void> 
       skills,
       filesTouched,
       durationMs,
+      specship,
     };
   });
 
