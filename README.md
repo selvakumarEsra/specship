@@ -121,7 +121,7 @@ When Claude Code explores a codebase, it spawns **Explore agents** that scan fil
 | **Always Fresh** | File watcher uses native OS events (FSEvents/inotify/ReadDirectoryChangesW) with debounced auto-sync — the graph stays current as you code, zero config |
 | **20+ Languages** | TypeScript, JavaScript, Python, Go, Rust, Java, C#, PHP, Ruby, C, C++, Objective-C, Swift, Kotlin, Dart, Lua, Luau, Svelte, Liquid, Pascal/Delphi |
 | **Framework-aware Routes** | Recognizes web-framework routing files and links URL patterns to their handlers across 14 frameworks |
-| **Desktop UI** | Live dashboard for cost, drift, tool-call heatmap, cache analytics, plus a project picker that auto-discovers every project you've used Claude Code in |
+| **Desktop UI** | Live dashboard for cost, drift, tool-call heatmap, cache analytics, SpecShip token impact, plus a project picker that auto-discovers every project you've used Claude Code in |
 | **100% Local** | No data leaves your machine. No API keys. No external services. SQLite database only |
 
 <details>
@@ -207,6 +207,15 @@ One big number — your **cache read rate** — plus a 2×2 breakdown: creation 
 
 > **Project & time scope.** Every numeric on this page respects the project picker's active selection and the range selector top-right. Switching projects re-fetches without a page reload.
 
+#### SpecShip Impact · is SpecShip earning its keep?
+
+A dedicated page that puts SpecShip's own token cost next to what it saved, per prompt → session → project → all-projects (the Session Detail page carries the same per-prompt chip and per-session line). Two numbers, deliberately kept apart:
+
+- **Spend — measured.** The exact tokens SpecShip's own tool calls put into the conversation.
+- **Saved — estimated.** For each code-graph query, the size of the files its symbols live in — what a `Read` of them would have cost — deduplicated per prompt.
+
+**"Saved" is a conservative lower bound.** It credits only a single direct read of the named files, *not* the multi-call grep + read exploration (re-reads, dead-ends, extra turns) SpecShip actually replaces — the end-to-end win that the [benchmarks](#why-specship) measure with a with-vs-without comparison. So treat spend as exact and saved as a floor; a fixed per-session tool-definition overhead is shown separately, and every estimate is marked `est.`.
+
 #### Beyond the dashboard
 
 Same shell, same shortcuts, more depth:
@@ -219,6 +228,7 @@ Same shell, same shortcuts, more depth:
 | **Workflows + Runs** | Run any bundled or project-tier workflow, watch its DAG advance live via SSE, approve / reject pause gates, inspect per-step artifacts (plan.md, diff.md, test_results.md). |
 | **Chat** | A codegraph-aware companion chat with slash commands, collapsible tool calls, and per-turn cost footers. |
 | **Sessions / Heatmap / Costs / Compare / Tips** | The Claude Code analytics suite — sessions deep-dive with per-prompt expand, file/tool/subagent heatmap drilldowns, per-day cost line + by-model donut, cross-project comparison. |
+| **SpecShip Impact** | Measured tokens SpecShip's tools spent vs. an estimated (conservative) count of tokens saved, per prompt / session / project / all-projects, with a spend-vs-saved trend and per-tool breakdown. |
 | **Memory** | The full `CLAUDE.md` hierarchy (managed / user / project / subdir) plus `@import` resolution plus `~/.claude/memory/*.md` agent-written notes. Sources view + Effective (merged-precedence) view. |
 | **Design system** | The visual reference for the entire app — every token, palette swatch, semantic state, button/pill family, and the 4 px node-color legibility test that the graph relies on. |
 

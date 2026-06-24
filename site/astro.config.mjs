@@ -100,6 +100,7 @@ export default defineConfig({
 						{ label: 'Memory', slug: 'claude-code/memory' },
 						{ label: 'Heatmap', slug: 'claude-code/heatmap' },
 						{ label: 'Costs & cache', slug: 'claude-code/costs' },
+						{ label: 'SpecShip Impact', slug: 'claude-code/specship-impact' },
 						{ label: 'Tips engine', slug: 'claude-code/tips' },
 					],
 				},
