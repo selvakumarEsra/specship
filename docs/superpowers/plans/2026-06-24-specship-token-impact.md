@@ -56,8 +56,9 @@ import { runMigrations, CURRENT_SCHEMA_VERSION } from '../src/db/migrations';
 describe('v9 specship-impact migration', () => {
   it('adds columns and backfills is_specship from tool_name', () => {
     const db = new Database(':memory:');
-    // minimal prerequisite tables
-    db.exec(`CREATE TABLE claude_prompts (id TEXT PRIMARY KEY);
+    // minimal prerequisite tables (schema_versions is required — runMigrations → recordMigration INSERTs into it)
+    db.exec(`CREATE TABLE schema_versions (version INTEGER PRIMARY KEY, applied_at INTEGER, description TEXT);
+             CREATE TABLE claude_prompts (id TEXT PRIMARY KEY);
              CREATE TABLE claude_tool_calls (id INTEGER PRIMARY KEY, prompt_id TEXT, tool_name TEXT, result_length INTEGER DEFAULT 0);`);
     db.exec(`INSERT INTO claude_tool_calls (tool_name) VALUES
              ('mcp__specship__specship_explore'), ('Read'), ('mcp__specship__designer_session');`);
@@ -89,7 +90,7 @@ describe('v9 specship-impact migration', () => {
     if (!hasColumn(db, 'claude_tool_calls', 'is_specship'))
       db.exec(`ALTER TABLE claude_tool_calls ADD COLUMN is_specship INTEGER NOT NULL DEFAULT 0;`);
     if (!hasColumn(db, 'claude_tool_calls', 'displaced_files'))
-      db.exec(`ALTER TABLE claude_tool_calls ADD COLUMN displaced_files TEXT;`); -- JSON [[path,size],…] | NULL
+      db.exec(`ALTER TABLE claude_tool_calls ADD COLUMN displaced_files TEXT;`); // JSON [[path,size],…] | NULL
     if (!hasColumn(db, 'claude_tool_calls', 'resolution'))
       db.exec(`ALTER TABLE claude_tool_calls ADD COLUMN resolution TEXT;`);
     db.exec(`UPDATE claude_tool_calls SET is_specship = 1 WHERE tool_name LIKE 'mcp__specship__%';`);
