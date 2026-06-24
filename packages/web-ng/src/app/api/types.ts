@@ -77,6 +77,12 @@ export interface ClaudeToolCall {
   input_json?: string | null;
   result_length: number;
   ts: number;
+  /** 1 if this call is a SpecShip MCP tool call, 0 otherwise. */
+  is_specship?: number;
+  /** JSON-encoded displaced file paths+sizes: `[[path, size], …]` or NULL. */
+  displaced_files?: string | null;
+  /** 'resolved' | 'unresolved' | 'n/a' | NULL — SpecShip query resolution status. */
+  resolution?: string | null;
 }
 
 export interface SessionsResponse {
@@ -102,6 +108,12 @@ export interface SessionSummaryResponse {
   skills: Array<{ name: string; count: number }>;
   filesTouched: Array<{ path: string; ops: number; lastOp: string }>;
   durationMs: number;
+  /** SpecShip token-impact rollup for this session. */
+  specship?: {
+    spendTokens: number;
+    savedTokens: number;
+    netTokens: number;
+  };
 }
 
 export interface HeatmapResponse {
@@ -412,4 +424,20 @@ export interface ProjectsChange {
 
 export interface ProjectsRefresh {
   list: ProjectEntry[];
+}
+
+export interface SpecshipImpactResponse {
+  spendTokens: number;
+  spendCostUsd: number;
+  savedTokens: number;
+  savedCostUsd: number;
+  overheadTokens: number;
+  netTokens: number;
+  netCostUsd: number;
+  unresolvedCalls: number;
+  totalSpecshipCalls: number;
+  byTool: { tool: string; calls: number; spendTokens: number; savedTokens: number }[];
+  /** Only present when no project filter is active (all-projects mode). */
+  byProject: { project: string; spendTokens: number; savedTokens: number; netTokens: number }[];
+  trend: { ts: number; spendTokens: number; savedTokens: number }[];
 }

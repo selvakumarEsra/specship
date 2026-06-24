@@ -18,6 +18,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import Fastify, { FastifyInstance, FastifyRequest } from 'fastify';
 import cors from '@fastify/cors';
 import { startWatcher, type WatcherHandle } from './ingest/index.js';
+import { backfillDisplaced } from './ingest/impact-backfill.js';
 import { ProjectRegistry, type SpecShipInstance } from './project-registry.js';
 import { makeStaticHandler } from './static-handler.js';
 import { registerGraphRoutes } from './routes/graph.js';
@@ -159,9 +160,28 @@ export async function createServer(options: ServerOptions): Promise<ServerHandle
     const cgAny = primaryCg as unknown as { db?: { getDb?: () => unknown }; queries?: { db?: unknown } };
     const dbHandle = cgAny.db?.getDb ? cgAny.db.getDb() : cgAny.queries?.db;
     if (dbHandle) {
-      watcher = startWatcher(dbHandle as Parameters<typeof startWatcher>[0], { verbose });
+      // Build a sync resolveGraph: for the primary project path return the
+      // already-open SpecShip instance (which satisfies GraphLike).
+      // Sessions from other project paths resolve to null — they'll be left
+      // as 'unresolved' and retried on the next boot when that project is primary.
+      const primaryPath = options.projectRoot ?? null;
+      const resolveGraph = (projectPath: string) =>
+        primaryPath && projectPath === primaryPath ? primaryCg : null;
+
+      watcher = startWatcher(dbHandle as Parameters<typeof startWatcher>[0], { verbose, resolveGraph });
       ownedWatcher = true;
       if (verbose) console.error('[specship-server] JSONL ingest watcher started');
+
+      // Backfill displaced_files / resolution for pre-upgrade rows (is_specship=1,
+      // resolution IS NULL). Idempotent — safe to run on every boot. Non-fatal:
+      // a failure here must never abort server startup.
+      try {
+        backfillDisplaced(dbHandle as Parameters<typeof startWatcher>[0], resolveGraph);
+        if (verbose) console.error('[specship-server] specship-impact backfill complete');
+      } catch (err) {
+        console.error('[specship-server] specship-impact backfill failed (non-fatal):',
+          err instanceof Error ? err.message : String(err));
+      }
     }
   } else if (!primaryCg && options.ingest !== false && verbose) {
     console.error('[specship-server] no primary project — analytics will be empty until one is set');

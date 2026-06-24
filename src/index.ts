@@ -1050,6 +1050,56 @@ export class SpecShip {
     return this.queries.getAllFiles();
   }
 
+  /**
+   * Estimate the set of files an agent would have needed to Read if it had
+   * NOT used the SpecShip graph to answer a query involving `symbols`.
+   *
+   * For each symbol name in `symbols`, `getNodesByName` is called (exact-match,
+   * no FTS) and the distinct project-relative file paths of the returned nodes
+   * are collected, capped at 5 files per symbol to avoid god-name blowup (a
+   * single overly-common name like `handle` should not pull in the whole repo).
+   * File paths are then deduped across all symbols and each path's byte size is
+   * looked up via `getFile(path)`.
+   *
+   * Returns:
+   *   - `files`: array of `{ path: string; size: number }` with project-relative
+   *     paths (matching `Node.filePath` / `FileRecord.path`). Callers can dedup
+   *     across multiple calls before summing.
+   *   - `resolved`: `true` when at least one file was found; `false` is the
+   *     safe "we couldn't estimate, claim nothing" sentinel.
+   *
+   * Synchronous — the graph is already open in memory like other query methods.
+   */
+  estimateReadEquivalent(symbols: string[]): { files: { path: string; size: number }[]; resolved: boolean } {
+    // Cap per-symbol file count to prevent a god-name (e.g. "handle") from
+    // pulling in hundreds of files and inflating the estimate.
+    const MAX_FILES_PER_SYMBOL = 5;
+
+    // Use a Map to dedup file paths across all symbols while preserving size.
+    const fileMap = new Map<string, number>();
+
+    for (const sym of symbols) {
+      const nodes = this.getNodesByName(sym);
+      let countForSymbol = 0;
+      for (const node of nodes) {
+        if (countForSymbol >= MAX_FILES_PER_SYMBOL) break;
+        const filePath = node.filePath;
+        if (fileMap.has(filePath)) {
+          // Already known — still counts toward the per-symbol cap.
+          countForSymbol++;
+          continue;
+        }
+        const fileRecord = this.getFile(filePath);
+        if (!fileRecord) continue; // node points to a file not tracked — skip
+        fileMap.set(filePath, fileRecord.size);
+        countForSymbol++;
+      }
+    }
+
+    const files = Array.from(fileMap.entries()).map(([p, size]) => ({ path: p, size }));
+    return { files, resolved: files.length > 0 };
+  }
+
   // ===========================================================================
   // Graph Query Methods
   // ===========================================================================

@@ -56,11 +56,34 @@ interface PromptGroup {
   toolBreakdown: ToolChip[];
   /** Unique file paths touched by Read/Edit/Write/NotebookEdit/MultiEdit. */
   filesTouched: string[];
+  /** Estimated tokens spent on SpecShip MCP calls (Σ result_length / 4). 0 when no specship calls. */
+  specshipSpendTokens: number;
+  /** Estimated tokens saved vs reading files directly. 0 when no resolved calls or no net saving. */
+  specshipSavedTokens: number;
 }
 
 /** Regex Claude Code wraps every slash command with in the user prompt. */
 const SLASH_COMMAND_TAG = /<command-name>([^<]+)<\/command-name>/;
 const FILE_TOOLS = new Set(['Read', 'Edit', 'Write', 'NotebookEdit', 'MultiEdit']);
+
+/**
+ * Safely parse the `displaced_files` JSON field from a SpecShip tool call.
+ * Expected shape: `[[path: string, size: number], …]`. Returns [] on any error.
+ */
+function parseDisplacedFiles(raw: string | null | undefined): Array<[string, number]> {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (entry): entry is [string, number] =>
+        Array.isArray(entry) && entry.length >= 2 &&
+        typeof entry[0] === 'string' && typeof entry[1] === 'number',
+    );
+  } catch {
+    return [];
+  }
+}
 
 @Component({
   selector: 'app-session-detail',
@@ -169,6 +192,30 @@ export class SessionDetail {
         if (FILE_TOOLS.has(t.tool_name) && t.input_summary) filesSet.add(t.input_summary);
       }
 
+      // SpecShip token impact — per-prompt estimate.
+      //
+      // spendChars = Σ result_length over SpecShip calls (is_specship === 1).
+      // specshipSpendTokens = ceil(spendChars / 4).
+      //
+      // savedTokens: union the displaced file paths across *resolved* calls so
+      // a file shared by two calls only counts once (mirrors backend dedup).
+      // readEquivChars = Σ size of each distinct path once.
+      // specshipSavedTokens = ceil(max(0, readEquivChars − spendChars) / 4).
+      const specshipTools = ts.filter((t) => t.is_specship === 1);
+      const spendChars = specshipTools.reduce((acc, t) => acc + (t.result_length || 0), 0);
+      const specshipSpendTokens = specshipTools.length > 0 ? Math.ceil(spendChars / 4) : 0;
+
+      // Dedup displaced files across all resolved calls in this prompt.
+      const seenPaths = new Map<string, number>();
+      for (const t of specshipTools) {
+        if (t.resolution !== 'resolved') continue;
+        for (const [path, size] of parseDisplacedFiles(t.displaced_files)) {
+          if (!seenPaths.has(path)) seenPaths.set(path, size);
+        }
+      }
+      const readEquivChars = Array.from(seenPaths.values()).reduce((acc, sz) => acc + sz, 0);
+      const specshipSavedTokens = Math.ceil(Math.max(0, readEquivChars - spendChars) / 4);
+
       return {
         prompt: p,
         tools: ts,
@@ -178,6 +225,8 @@ export class SessionDetail {
         durationMs,
         toolBreakdown,
         filesTouched: Array.from(filesSet),
+        specshipSpendTokens,
+        specshipSavedTokens,
       };
     });
   });

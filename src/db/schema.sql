@@ -392,6 +392,13 @@ CREATE TABLE IF NOT EXISTS claude_tool_calls (
     input_json          TEXT,
     result_length       INTEGER DEFAULT 0,
     ts                  INTEGER NOT NULL,
+    -- Added in schema v9 (specship-impact): classify specship tool calls and
+    -- store read-displacement data. is_specship=1 when tool_name matches
+    -- 'mcp__specship__*'. displaced_files is JSON [[path,size],…] | NULL.
+    -- resolution is 'resolved'|'unresolved'|'n/a'|NULL.
+    is_specship         INTEGER NOT NULL DEFAULT 0,
+    displaced_files     TEXT,
+    resolution          TEXT,
     FOREIGN KEY (prompt_id) REFERENCES claude_prompts(id) ON DELETE CASCADE,
     FOREIGN KEY (session_id) REFERENCES claude_sessions(id) ON DELETE CASCADE
 );
@@ -400,6 +407,7 @@ CREATE INDEX IF NOT EXISTS idx_claude_tool_calls_prompt ON claude_tool_calls(pro
 CREATE INDEX IF NOT EXISTS idx_claude_tool_calls_session ON claude_tool_calls(session_id);
 CREATE INDEX IF NOT EXISTS idx_claude_tool_calls_tool ON claude_tool_calls(tool_name);
 CREATE INDEX IF NOT EXISTS idx_claude_tool_calls_result_len ON claude_tool_calls(result_length);
+CREATE INDEX IF NOT EXISTS idx_claude_tool_calls_specship ON claude_tool_calls(is_specship);
 
 CREATE TABLE IF NOT EXISTS claude_ingest_state (
     file_path       TEXT PRIMARY KEY,

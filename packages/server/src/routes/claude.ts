@@ -13,12 +13,14 @@
  *   GET /api/claude/costs?range=             — cost rollup, timeseries, per-model
  *   GET /api/claude/compare                  — per-project cost comparison
  *   GET /api/claude/tips                     — rule-based tips engine output
+ *   GET /api/claude/specship-impact?range=&project= — SpecShip token-impact aggregation
  *   POST /api/claude/ingest                  — force a one-shot ingest pass
  */
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { SpecShipInstance } from '../project-registry.js';
 import { decodeProjectSlug } from '../ingest/index.js';
+import { computeSpecshipImpact } from '../ingest/impact-query.js';
 
 /**
  * Normalize a `?project=` filter value to the form stored in
@@ -359,6 +361,14 @@ export async function registerClaudeRoutes(app: FastifyInstance): Promise<void> 
       ? Math.max(0, session.ended_at - session.started_at)
       : 0;
 
+    // SpecShip token-impact rollup for this session.
+    const impact = computeSpecshipImpact(db, { since: 0, sessionId });
+    const specship = {
+      spendTokens: impact.spendTokens,
+      savedTokens: impact.savedTokens,
+      netTokens: impact.netTokens,
+    };
+
     return {
       sessionId,
       byTool,
@@ -367,6 +377,7 @@ export async function registerClaudeRoutes(app: FastifyInstance): Promise<void> 
       skills,
       filesTouched,
       durationMs,
+      specship,
     };
   });
 
@@ -884,6 +895,27 @@ export async function registerClaudeRoutes(app: FastifyInstance): Promise<void> 
     tips.sort((a, b) => (order[a.severity as string] ?? 9) - (order[b.severity as string] ?? 9));
 
     return { tips };
+  });
+
+  /**
+   * GET /api/claude/specship-impact?range=&project=
+   *
+   * Aggregate SpecShip token-impact metrics: how many tokens specship calls
+   * spent vs. how many tokens' worth of Read calls they displaced (saved),
+   * with per-prompt dedup so a file referenced by two specship calls in the
+   * same prompt counts only once. See packages/server/src/ingest/impact-query.ts
+   * for the full algorithm.
+   *
+   * Query params:
+   *   range   — 'today' | 'week' (default) | 'month' | 'all'
+   *   project — project slug (decoded to path) or raw path; omit for all projects
+   */
+  app.get('/api/claude/specship-impact', async (req: FastifyRequest<{ Querystring: { range?: string; project?: string } }>, reply) => {
+    const cg = requirePrimary(reply); if (!cg) return;
+    const db = getDb(cg);
+    const since = rangeStart(rangeKey(req.query.range));
+    const project = req.query.project ? normalizeProjectFilter(req.query.project) : undefined;
+    return computeSpecshipImpact(db, { since, project });
   });
 
   /**

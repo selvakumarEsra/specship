@@ -14,6 +14,7 @@ A background ingest watcher (started in-process by `specship serve --ui`) tails 
 | **Heatmap** | Which files do my sessions touch most? Which tools are token-heavy? Which subagents eat the budget? |
 | **Costs** | Where's the money going? Per-day line, by-model donut, top-prompt ranking. |
 | **Tips** | Rule-based suggestions: _"You read auth.ts 17× last session — same answer via `specship_explore` in 1 call."_ |
+| **SpecShip Impact** | How many tokens SpecShip's own tools spent, and an _estimate_ of how many they saved by answering from the graph instead of reading files — per prompt, session, project, and all-projects. |
 
 Each of these reads the same SQLite. No external services, no API keys, no telemetry — Claude Code's own JSONL is the source.
 
@@ -53,6 +54,17 @@ The watcher runs in-process; pass `--ingest` to be explicit, or `--no-web` to ru
 ## Offline mode
 
 If the SpecShip server is down or unreachable, the desktop UI doesn't fall back to the browser's "this site can't be reached" page — it loads from a local cache and keeps showing the last data it loaded, each surface marked with how old it is (e.g. "Offline · 4m ago"). The connection indicator switches from **● Live** to **● Offline**, and actions that need the server (Refresh, saving a spec) are disabled with an offline notice. Data reloads automatically and the indicator returns to **● Live** once the server is back.
+
+## SpecShip Impact
+
+The **SpecShip Impact** page answers "is SpecShip earning its keep?" It separates two numbers:
+
+- **Spend (measured):** the tokens SpecShip's own tool calls put into the conversation — exact, summed per prompt → session → project → all-projects.
+- **Saved (estimated):** for each code-graph query (`specship_explore`, `specship_node`, `callers`/`callees`/`impact`, …), the size of the files those symbols live in — what a `Read` of them would have cost — minus what SpecShip actually returned, deduplicated per prompt.
+
+**Saved is a deliberately conservative estimate.** A natural-language `explore` query, or any query whose symbols can't be resolved in the graph, contributes **zero** saved — so the number under-claims rather than over-claims. There's also a fixed per-session overhead line (the cost of SpecShip's tool definitions in the system prompt), and **net = saved − spend − overhead** (shown honestly, even when negative). Every estimated figure is marked `est.`; cost is priced at your model's input rate. Session Detail surfaces the same per-prompt and per-session numbers inline.
+
+> v1 estimates savings for the **primary project** only; other projects show their spend exactly but their savings as unresolved.
 
 ## Privacy
 

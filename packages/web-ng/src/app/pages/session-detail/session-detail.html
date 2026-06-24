@@ -128,6 +128,14 @@
                   @if (g.prompt.text) { {{ g.prompt.text.length > 140 ? g.prompt.text.slice(0, 140) + '…' : g.prompt.text }} }
                   @else { <span class="muted">(assistant-only turn)</span> }
                 </span>
+                <!-- SpecShip chip — only when this prompt had specship calls -->
+                @if (g.specshipSpendTokens > 0) {
+                  <span
+                    class="pill"
+                    style="color: var(--success); background: var(--success-soft); font-family: var(--font-mono); font-size: 10px; font-weight: 600; flex-shrink: 0; cursor: help;"
+                    [title]="'SpecShip · spent ~' + g.specshipSpendTokens + ' tok · est. saved ~' + g.specshipSavedTokens + ' tok'"
+                  >SS ~{{ g.specshipSpendTokens }} tok</span>
+                }
                 <!-- tool count -->
                 <span class="row gap-4" style="flex-shrink: 0;">
                   <app-icon name="wrench" [size]="11" style="color: var(--text-muted);" />
@@ -328,6 +336,32 @@
               [color]="toolBarColor"
             />
             <div class="muted" style="font-size: 10px; margin-top: 8px;">bar = call count</div>
+          }
+
+          <!-- SpecShip token impact — only when this session had specship calls -->
+          @if (sum.specship && sum.specship.spendTokens > 0) {
+            <div style="margin-top: 16px; padding: 10px 12px; background: var(--success-soft); border: 1px solid rgba(70,194,107,0.25); border-radius: 8px;">
+              <div class="row gap-8" style="margin-bottom: 4px;">
+                <span style="font-size: 10.5px; font-weight: 700; color: var(--success); text-transform: uppercase; letter-spacing: 0.04em;">SpecShip</span>
+                <span class="pill" style="color: var(--success); background: rgba(70,194,107,0.15); font-size: 9.5px; padding: 1px 5px;">est.</span>
+              </div>
+              <div class="col gap-4">
+                <div class="row gap-6">
+                  <span class="muted grow" style="font-size: 11px;">Spent</span>
+                  <span class="mono tabular" style="font-size: 11px; color: var(--text-primary);">~{{ fmtTokens(sum.specship.spendTokens) }} tok</span>
+                </div>
+                <div class="row gap-6">
+                  <span class="muted grow" style="font-size: 11px;">Est. saved</span>
+                  <span class="mono tabular" style="font-size: 11px; color: var(--success);">~{{ fmtTokens(sum.specship.savedTokens) }} tok</span>
+                </div>
+                <div class="row gap-6" style="border-top: 1px dashed rgba(70,194,107,0.3); padding-top: 4px; margin-top: 2px;">
+                  <span class="muted grow" style="font-size: 11px;">Net</span>
+                  <span class="mono tabular" style="font-size: 11px;"
+                    [style.color]="sum.specship.netTokens >= 0 ? 'var(--success)' : 'var(--warn)'"
+                  >{{ sum.specship.netTokens > 0 ? '+' : '' }}{{ fmtTokens(sum.specship.netTokens) }} tok</span>
+                </div>
+              </div>
+            </div>
           }
         }
 

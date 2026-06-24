@@ -70,6 +70,11 @@ export const routes: Routes = [
     data: { nav: 'costs', title: 'Costs' },
   },
   {
+    path: 'specship-impact',
+    loadComponent: () => import('./pages/specship-impact/specship-impact').then((m) => m.SpecshipImpact),
+    data: { nav: 'specship-impact', title: 'SpecShip Impact' },
+  },
+  {
     path: 'compare',
     loadComponent: () => import('./pages/compare/compare').then((m) => m.Compare),
     data: { nav: 'compare', title: 'Compare projects' },
