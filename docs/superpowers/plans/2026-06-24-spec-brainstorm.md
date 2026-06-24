@@ -66,7 +66,7 @@ The **divergent** front of spec-driven development. You explore the problem with
 1. Derive a kebab-case `<slug>` from the feature.
 2. Write the brief to **`specs/<slug>/brief.md`** using the format below. Leave the `spec:` field **unset** for now.
 3. Hand off: invoke **`/ss-spec-author`** with the brief — pass the brief's path so spec-author reads it and does NOT re-ground in code (the brief already has the grounding). spec-author assigns the real spec **ID** and writes `specs/<ID>.md`.
-4. Once spec-author has written the spec: set the brief's `spec:` field to the new ID, and ensure the spec's frontmatter has **`brief: <slug>/brief.md`** (relative to the specs root) so the two link both ways.
+4. Once spec-author has written the spec: set the brief's `spec:` field to the new ID, and ensure the spec's frontmatter has **`brief: <slug>/brief.md`** (relative to the spec file's own directory) so the two link both ways.
 5. If spec-author fails, STOP and tell the human: the brief exists with `spec:` unset; retry is re-running `/ss-spec-author` with the same brief path. Do not hand-write a spec.
 6. Point them at `/ss-spec-review <ID>` then `/ss-implement <ID>`.
 
@@ -114,7 +114,7 @@ created: <date>
 - [ ] **Step 3: Update the installer test.** Open `__tests__/installer-targets.test.ts`. If it asserts the exact set of shipped commands (count or list), add `ss-brainstorm.md`. Run `npx vitest run __tests__/installer-targets.test.ts`.
 - Run: expect FAIL first (if the test pins the list), then PASS after adding.
 
-- [ ] **Step 4: Verify install ships it.** Build and dry-run: `npm run build` then `node dist/bin/specship.js install --yes --location local` in a temp dir (or rely on the installer test). Confirm `./.claude/commands/ss-brainstorm.md` is written. (If using the test suite only, the contract suite covers install + uninstall.)
+- [ ] **Step 4: Verify install ships it.** First confirm the build copies the new command into `dist/`: check `scripts/copy-assets.*` (called from `npm run build`) copies `commands/*.md` into `dist/commands/` — the installer reads `packageAssetPath('commands', name)` which resolves under `dist/` in a real install. (Existing commands ship this way, so it's likely already covered — just confirm the glob isn't an explicit per-file list.) Then `npm run build` and rely on the installer contract suite (covers install + uninstall), or dry-run `node dist/bin/specship.js install --yes --location local` in a temp dir and confirm `./.claude/commands/ss-brainstorm.md`.
 
 - [ ] **Step 5: CHANGELOG.** Add an `[Unreleased] → ### New Features` bullet (user-facing, no internal paths): a new `/ss-brainstorm` command that brainstorms a requirement with you and only writes a design brief + spec once you confirm.
 
@@ -152,7 +152,9 @@ The existing `GET /api/spec/:id` already reads the spec's source file via `safeP
       if (!specAbs || !fs.existsSync(specAbs)) return reply.code(404).send({ error: 'no brief' });
       const briefRel = parseBriefField(fs.readFileSync(specAbs, 'utf-8'));
       if (!briefRel) return reply.code(404).send({ error: 'no brief' });
-      // Resolve relative to the spec file's directory's specs root; GUARD with safeProjectPath.
+      // CONVENTION: `brief:` is relative to the SPEC FILE's own directory (so it
+      // resolves correctly whether the spec is flat at specs/<id>.md or nested at
+      // specs/<area>/<id>.md). safeProjectPath GUARDS against traversal outside the project.
       const briefAbs = safeProjectPath(projectRoot, path.join(path.dirname(spec.sourcePath), briefRel));
       if (!briefAbs || !fs.existsSync(briefAbs)) return reply.code(404).send({ error: 'no brief' });
       return { path: briefRel, markdown: fs.readFileSync(briefAbs, 'utf-8') };
@@ -177,7 +179,12 @@ The existing `GET /api/spec/:id` already reads the spec's source file via `safeP
 
 - [ ] **Step 2: Read the Specs page first.** Open `specs.ts` / `specs.html` to learn how the selected spec is fetched (the `apiResource` for `/api/spec/:id`), how `renderMd`/the markdown renderer is used (the page already renders spec markdown), and the selected-spec signal name. Match those exact APIs.
 
-- [ ] **Step 3: Fetch the brief.** Add an `apiResource<SpecBriefResponse>(this.api, () => selectedId() ? \`/api/spec/${selectedId()}/brief${projectQS}\` : null)`. A 404 yields no data (the `apiResource` error/empty state) — treat "no data" as "no brief".
+- [ ] **Step 3: Fetch the brief.** Use the page's REAL signal + project-query API (verified): the selected-spec signal is `this.sel` and the project query is `this.projects.projectQuery()` (mirror the existing `detailResource`). Add:
+  ```ts
+  briefResource = apiResource<SpecBriefResponse>(this.api,
+    () => this.sel() ? `/api/spec/${this.sel()}/brief${this.projects.projectQuery()}` : null);
+  ```
+  A 404 yields no data (the `apiResource` empty/error state) — treat "no data" as "no brief".
 
 - [ ] **Step 4: Render a collapsible panel** in `specs.html`: a `@if (briefMarkdown())` block — a `<details class="…">` (or the page's existing collapsible pattern) titled **"Brainstorm"** that renders the brief markdown with the same renderer the page already uses for the spec body. Place it near the spec body/Rationale area. Absent brief ⇒ the block doesn't render.
 

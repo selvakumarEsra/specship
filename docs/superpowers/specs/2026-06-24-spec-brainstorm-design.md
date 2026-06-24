@@ -40,7 +40,7 @@ In order:
 1. **Write the brief** to **`specs/<slug>/brief.md`** (locked: subdirectory form, matching the design-import flow's `specs/<slug>/source.md`). The brief's `spec:` field is **omitted (or `(pending)`)** until step 2 succeeds, so a partial-write state is detectable.
 2. **Hand off to `spec-author`** by passing it the **brief file path** (no new spec-author "mode" — it reads the brief and, because grounding is already in the brief, **skips its own re-grounding**). `spec-author` writes `specs/<ID>.md` (frontmatter `id`/`title`/`owner`/`priority`, `<!-- id: REQ-… -->` markers, RFC-2119 MUST/SHOULD). **On spec-author failure:** the brief stays with `spec:` unset and the skill surfaces the error; retry = re-run `spec-author` with the same brief path. No half-linked spec is left.
 3. **Link both directions:**
-   - Spec frontmatter gains **`brief: <slug>/brief.md`** (relative to the specs root).
+   - Spec frontmatter gains **`brief: <slug>/brief.md`** (relative to the spec file's own directory, so it resolves whether the spec is flat or nested).
    - Brief header gains **`spec: <ID>`** (and the spec's path).
 4. Point the human to `/ss-spec-review <ID>` then `/ss-implement <ID>`.
 
