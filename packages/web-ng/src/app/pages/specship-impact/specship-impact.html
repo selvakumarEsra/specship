@@ -186,6 +186,13 @@
         Per-project rows show saved − spend only — the per-session overhead isn't attributed to individual projects, so they won't sum to the headline net.
         Savings currently estimated for the primary project only.
       </p>
+      <p class="muted methodology-body">
+        <strong>"Saved" is a conservative lower bound.</strong> It credits only a single direct read of the files a
+        query's symbols live in — not the multi-call grep + read exploration (re-reads, dead-ends, and extra turns)
+        SpecShip actually replaces. So net can read negative even when SpecShip reduced your real cost; the measured
+        end-to-end savings (fewer turns over a smaller context) come from a with-vs-without comparison, which this
+        per-session estimate can't see. Treat spend as exact and saved as a floor.
+      </p>
     </details>
 
   }
