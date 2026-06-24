@@ -357,7 +357,7 @@
                 <div class="row gap-6" style="border-top: 1px dashed rgba(70,194,107,0.3); padding-top: 4px; margin-top: 2px;">
                   <span class="muted grow" style="font-size: 11px;">Net</span>
                   <span class="mono tabular" style="font-size: 11px;"
-                    [style.color]="sum.specship.netTokens <= 0 ? 'var(--success)' : 'var(--warn)'"
+                    [style.color]="sum.specship.netTokens >= 0 ? 'var(--success)' : 'var(--warn)'"
                   >{{ sum.specship.netTokens > 0 ? '+' : '' }}{{ fmtTokens(sum.specship.netTokens) }} tok</span>
                 </div>
               </div>

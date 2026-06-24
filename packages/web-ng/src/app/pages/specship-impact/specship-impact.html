@@ -172,7 +172,7 @@
               <span class="mono col-proj">{{ p.project }}</span>
               <span class="mono tabular col-spend">{{ fmtK(p.spendTokens) }}</span>
               <span class="mono tabular col-saved est-val">{{ fmtK(p.savedTokens) }}</span>
-              <span class="mono tabular col-net" [style.color]="p.netTokens <= 0 ? 'var(--success)' : 'var(--text-primary)'">{{ fmtK(p.netTokens) }}</span>
+              <span class="mono tabular col-net" [style.color]="p.netTokens >= 0 ? 'var(--success)' : 'var(--warn)'">{{ fmtK(p.netTokens) }}</span>
             </div>
           }
         }
