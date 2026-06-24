@@ -9,7 +9,7 @@ import { SqliteDatabase } from './sqlite-adapter';
 /**
  * Current schema version
  */
-export const CURRENT_SCHEMA_VERSION = 8;
+export const CURRENT_SCHEMA_VERSION = 9;
 
 /**
  * Migration definition
@@ -399,6 +399,20 @@ const migrations: Migration[] = [
           SELECT COUNT(*) FROM claude_prompts p WHERE p.session_id = claude_sessions.id
         );
       `);
+    },
+  },
+  {
+    version: 9,
+    description: 'specship-impact: classify specship tool calls + store read-displacement',
+    up: (db) => {
+      if (!hasColumn(db, 'claude_tool_calls', 'is_specship'))
+        db.exec(`ALTER TABLE claude_tool_calls ADD COLUMN is_specship INTEGER NOT NULL DEFAULT 0;`);
+      if (!hasColumn(db, 'claude_tool_calls', 'displaced_files'))
+        db.exec(`ALTER TABLE claude_tool_calls ADD COLUMN displaced_files TEXT;`); // JSON [[path,size],…] | NULL
+      if (!hasColumn(db, 'claude_tool_calls', 'resolution'))
+        db.exec(`ALTER TABLE claude_tool_calls ADD COLUMN resolution TEXT;`);
+      db.exec(`UPDATE claude_tool_calls SET is_specship = 1 WHERE tool_name LIKE 'mcp__specship__%';`);
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_claude_tool_calls_specship ON claude_tool_calls(is_specship);`);
     },
   },
 ];
