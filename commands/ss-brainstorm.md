@@ -25,7 +25,7 @@ The **divergent** front of spec-driven development. You explore the problem with
 1. Derive a kebab-case `<slug>` from the feature.
 2. Write the brief to **`specs/<slug>/brief.md`** using the format below. Leave the `spec:` field **unset** for now.
 3. Hand off: invoke **`/ss-spec-author`** with the brief — pass the brief's path so spec-author reads it and does NOT re-ground in code (the brief already has the grounding). spec-author assigns the real spec **ID** and writes `specs/<ID>.md`.
-4. Once spec-author has written the spec: set the brief's `spec:` field to the new ID, and ensure the spec's frontmatter has **`brief: <slug>/brief.md`** (relative to the spec file's own directory) so the two link both ways.
+4. Once spec-author has written the spec: set the brief's `spec:` field to the new ID, and add a **`brief:`** field to the spec's frontmatter holding the path to the brief **relative to the spec file's own directory**. For the usual flat layout (`specs/<ID>.md`) that is exactly `brief: <slug>/brief.md`; if spec-author ever nests the spec (e.g. `specs/<area>/<ID>.md`), write the correct relative path instead (e.g. `../<slug>/brief.md`) so the dashboard can resolve it. This links the two both ways.
 5. If spec-author fails, STOP and tell the human: the brief exists with `spec:` unset; retry is re-running `/ss-spec-author` with the same brief path. Do not hand-write a spec.
 6. Point them at `/ss-spec-review <ID>` then `/ss-implement <ID>`.
 
