@@ -5,6 +5,8 @@ description: The Markdown format, ID conventions, document/requirement/acceptanc
 
 A spec is plain Markdown with `id:` frontmatter and `<!-- id: ... -->` comment markers inline. SpecShip parses every `.md` file under your `specs/` directory tree.
 
+> **Not sure what the spec should say yet?** Start with `/ss-brainstorm <requirement>` — it grounds your idea in the existing code, explores 2–3 approaches with you, and (only once you explicitly confirm) writes a design brief and hands off to `spec-author` to produce the spec below. The brief stays linked to the spec for traceability and shows up on the dashboard's Specs page.
+
 ## Minimal example
 
 ```markdown

@@ -11,6 +11,7 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### New Features
 
+- **New `/ss-brainstorm` command for confirmation-gated requirement exploration.** Grounds your idea in the existing codebase (using `specship_explore`), proposes 2–3 approaches with trade-offs, and iterates with you one question at a time — but writes nothing to disk until you explicitly confirm. On confirmation it writes a `specs/<slug>/brief.md` capturing the discussion and hands off to `/ss-spec-author` to produce the formal spec, then links the two documents both ways.
 - **See SpecShip's token impact in the dashboard.** A new **SpecShip Impact** page puts the tokens SpecShip's own tool calls consumed (measured, exact) next to an estimate of how many tokens it saved by answering structural questions from the graph instead of reading whole files — broken down per prompt, per session, per project, and across all projects, with a spend-vs-saved trend and a per-tool breakdown. Session Detail also gains a per-prompt SpecShip chip and a per-session spent/saved/net line. "Saved" is a deliberately conservative **lower bound**: it credits only a single direct read of the files a query's symbols live in — not the multi-call grep + read exploration and extra turns SpecShip actually replaces — so it under-claims rather than over-claims, and a query with no resolvable symbols counts as zero. Cost is priced at your model's input rate, and every estimate is marked `est.`. Run `specship serve --ui` and open **SpecShip Impact**.
 
 ### Fixes

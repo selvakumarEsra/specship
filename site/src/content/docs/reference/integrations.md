@@ -75,6 +75,7 @@ Slash commands and the `specship-explorer` subagent ship as a Claude Code plugin
 | `/ss-fix <ID>` | Kicks off `spec-fix`. |
 | `/ss-relink <ID>` | Kicks off `spec-relink`. |
 | `/ss-drifted` | Lists everything in the drift queue. |
+| `/ss-brainstorm <requirement>` | Brainstorms a requirement with you — grounds it in code, explores approaches, and only on your explicit confirmation writes a design brief and hands off to `spec-author`. |
 | `/ss-spec-author <description>` | Drafts a new spec using the `spec-author` skill. |
 | `/ss-spec-review <ID-or-path>` | Reviews an existing spec against the quality rubric. |
 | `/ss-design-implement <url>` | Snapshots a Claude Design URL and drafts + implements a spec from it. |
