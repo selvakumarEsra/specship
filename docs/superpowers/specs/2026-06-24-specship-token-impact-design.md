@@ -30,7 +30,7 @@ Rollup respects the existing project picker: a single project when one is select
 
 - **SpecShip tool call:** a `claude_tool_calls` row whose `tool_name LIKE 'mcp__specship__%'`. Covers code-graph, spec, and designer tools.
 - **Source-returning code-graph tools** (the only ones that contribute *savings*): `specship_explore`, `specship_node`, `specship_callers`, `specship_callees`, `specship_impact`, `specship_search`, `specship_files`. Spec-mutation tools (`link_assert`/`link_verify`) and `designer_*` count toward **spend** but never **savings** (they displace no Read).
-- **Spend (per call):** `result_length` (characters of the tool result) → tokens ≈ `ceil(result_length / 4)`.
+- **Spend (per call):** `result_length` (characters of the tool result) → tokens ≈ `ceil(result_length / 4)`. A call with `result_length` 0 or `NULL` (older/uncaptured rows) contributes **0 spend** and is treated as **`unresolved` for savings** — we can't know the slice it returned, so we don't credit displacement against an unknown size (avoids over-crediting `saved = displaced − 0`).
 - **Read-equivalent (per source-returning call):** the summed byte-size of the distinct files the call's requested symbols resolve to in the graph — what a `Read` of those files would have cost.
 - **Saved (per call):** `max(0, read_equivalent_chars − result_length)`.
 - **Fixed overhead (per session):** estimated size of SpecShip's MCP tool-definition schemas injected into the system prompt, counted once per session that used SpecShip.
@@ -114,6 +114,7 @@ Returns:
 
 - **Unit:** spend aggregation SQL; `input_json` → symbol extraction per tool; symbol → file → size resolution (mock graph); per-prompt file dedup; unresolved ⇒ 0; designer/spec-mutation excluded from savings; chars÷4; overhead constant.
 - **Integration:** ingest a synthetic JSONL containing SpecShip tool calls against a known fixture graph ⇒ assert `is_specship` / `displaced_chars` / `resolution` rows, then assert `/api/claude/specship-impact` totals (spend, saved, net, coverage) for single-project and all-projects.
+- **Unresolved fixture (explicit):** a session whose project index is **missing/unopenable** ⇒ every source-returning call lands `resolution='unresolved'`, `displaced_chars=NULL`, **spend still exact**, and the endpoint reports it in `unresolvedCalls` (savings not inflated).
 - **Migration:** v9 add-columns + backfill correctness; idempotent re-run is a no-op.
 
 ## 9. Out of scope (v1) / Phase 2
@@ -125,6 +126,6 @@ Returns:
 ## 10. Open assumptions to validate in plan
 
 - Exact `input_json` shapes per source-returning tool (drives the symbol extractor).
-- Whether file *byte size* is directly available from the graph/`files` table, or must be `stat`'d at ingest.
-- Dedup implementation site (ingest-time vs query-time `GROUP BY`).
+- ~~Whether file *byte size* is directly available~~ — **resolved:** the `files` table has a `size` (byte) column; read it directly, no `stat` at ingest.
+- Dedup implementation site (ingest-time vs query-time `GROUP BY prompt_id, file`). Trade-off: ingest-time bakes the per-prompt assumption into stored `displaced_chars` (harder to revisit); query-time keeps raw per-call data re-computable. **Lean query-time** unless aggregation cost demands otherwise — decide in the plan.
 - Overhead constant source (measure the serialized tool-definition payload once).
