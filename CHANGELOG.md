@@ -11,9 +11,7 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### New Features
 
-- **SpecShip Token Impact — data layer (v9 schema migration).** Each tool-call row in the analytics database now carries an `is_specship` flag (1 for any `mcp__specship__*` call, 0 for everything else), a `displaced_files` JSON column (files whose content a SpecShip call made unnecessary to Read), and a `resolution` column (`resolved`/`unresolved`/`n/a`). Existing rows are backfilled automatically on upgrade. This is the foundational data layer for the upcoming SpecShip Impact dashboard panel.
-
-- **SpecShip Token Impact — aggregation endpoint (`GET /api/claude/specship-impact`).** New endpoint and `computeSpecshipImpact()` function that rolls up how many tokens SpecShip calls spent vs. how many tokens' worth of file reads they displaced (saved). Uses per-prompt dedup so a file referenced by two SpecShip calls in the same turn counts only once. Returns spend/saved tokens and estimated USD cost broken out globally, per-tool, per-project, and as a daily trend series. Filterable by `?range=` window and `?project=` path.
+- **See SpecShip's token impact in the dashboard.** A new **SpecShip Impact** page shows how many tokens SpecShip's own tool calls consumed, and an estimate of how many tokens it saved by answering structural questions from the graph instead of reading whole files — broken down per prompt, per session, per project, and across all projects, with a spend-vs-saved trend and a per-tool breakdown. Session Detail also gains a per-prompt SpecShip chip and a per-session spent/saved/net line. Savings are a clearly-labelled estimate that under-claims rather than over-claims (a natural-language or otherwise unresolvable query counts as zero), and cost is priced at your model's input rate. Run `specship serve --ui` and open **SpecShip Impact**.
 
 ### Fixes
 
