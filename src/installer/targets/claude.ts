@@ -121,6 +121,8 @@ const SHIPPED_COMMANDS = [
   'ss-design-implement.md',
   // Full design→code loop (taste via merged designer tools → spec → implement):
   'ss-design-loop.md',
+  // Confirmation-gated brainstorm → brief → spec-author handoff:
+  'ss-brainstorm.md',
 ] as const;
 
 /**
