@@ -26,6 +26,26 @@ describe('specship-impact classifiers', () => {
     expect(extractRequestedSymbols('mcp__specship__specship_node', 'not json')).toEqual([]);
   });
 
+  // Regression: real explore queries are large MIXED bags (symbols + lowercase
+  // keywords, 10-14 tokens). The old all-or-nothing + ≤6-token rule rejected
+  // ~100% of real usage, zeroing the savings estimate. Now we FILTER the
+  // symbol-shaped tokens out of the query instead.
+  it('extractRequestedSymbols filters symbols from real mixed explore bags', () => {
+    const r1 = extractRequestedSymbols('mcp__specship__specship_explore',
+      JSON.stringify({ query: 'ApiService apiResource RefreshService isConfigured Live Polling Idle connection' }));
+    expect(r1).toEqual(expect.arrayContaining(['ApiService', 'apiResource', 'RefreshService', 'isConfigured']));
+    expect(r1).not.toContain('connection'); // lowercase prose word dropped
+
+    const r2 = extractRequestedSymbols('mcp__specship__specship_explore',
+      JSON.stringify({ query: 'claudeTarget install instructions-template SPECSHIP_START markers removeMarkedSection' }));
+    expect(r2).toEqual(expect.arrayContaining(['claudeTarget', 'SPECSHIP_START', 'removeMarkedSection']));
+    expect(r2).not.toContain('install'); // lowercase prose word dropped
+
+    // Pure natural-language prose still yields nothing.
+    expect(extractRequestedSymbols('mcp__specship__specship_explore',
+      JSON.stringify({ query: 'how does the user log in and get redirected to the dashboard' }))).toEqual([]);
+  });
+
   it('extractRequestedSymbols handles specship_callers with symbol key', () => {
     expect(extractRequestedSymbols('mcp__specship__specship_callers',
       JSON.stringify({ symbol: 'triggerUpdate' }))).toEqual(['triggerUpdate']);

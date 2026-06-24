@@ -59,8 +59,8 @@ const SYMBOL_TOKEN_RE = /^[A-Za-z_$][\w$]*(\.[A-Za-z_$][\w$]*)?$/;
  */
 const CODE_SIGNAL_RE = /[A-Z_$\d.]/;
 
-/** Maximum whitespace-separated tokens to treat as a symbol bag. */
-const MAX_SYMBOL_BAG_TOKENS = 6;
+/** Cap on how many symbol-shaped tokens we pull from one query. */
+const MAX_SYMBOLS_PER_QUERY = 16;
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -181,9 +181,13 @@ export function classifyToolCall(
 // Internal helpers
 // ---------------------------------------------------------------------------
 
+// Real explore/search queries are MIXED bags (symbol names + lowercase
+// keywords, often 10+ tokens). FILTER the symbol-shaped tokens out rather than
+// rejecting the whole query; pure prose yields []. Capped to bound graph work.
 function symbolBagFromQuery(query: string): string[] {
-  const tokens = query.trim().split(/\s+/);
-  if (tokens.length > MAX_SYMBOL_BAG_TOKENS) return [];
-  if (tokens.every((t) => SYMBOL_TOKEN_RE.test(t) && CODE_SIGNAL_RE.test(t))) return tokens;
-  return [];
+  const symbols = query
+    .trim()
+    .split(/\s+/)
+    .filter((t) => SYMBOL_TOKEN_RE.test(t) && CODE_SIGNAL_RE.test(t));
+  return symbols.slice(0, MAX_SYMBOLS_PER_QUERY);
 }

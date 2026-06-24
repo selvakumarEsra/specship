@@ -65,9 +65,9 @@ const SYMBOL_TOKEN_RE = /^[A-Za-z_$][\w$]*(\.[A-Za-z_$][\w$]*)?$/;
  */
 const CODE_SIGNAL_RE = /[A-Z_$\d.]/;
 
-/** Maximum number of whitespace-separated tokens to treat as a symbol bag.
- *  Queries with more tokens are almost certainly natural language. */
-const MAX_SYMBOL_BAG_TOKENS = 6;
+/** Cap on how many symbol-shaped tokens we pull from one query (bounds the
+ *  downstream graph lookups; queries naming more than this are rare). */
+const MAX_SYMBOLS_PER_QUERY = 16;
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -226,20 +226,23 @@ export function classifyToolCall(
 // ---------------------------------------------------------------------------
 
 /**
- * Given a query string, returns the token list if it looks like a symbol bag,
- * or [] if it looks like natural-language prose.
+ * Pull the symbol-shaped tokens out of a free-form `query`.
  *
- * A "symbol bag" means ALL of:
- *   1. At most MAX_SYMBOL_BAG_TOKENS whitespace-separated tokens.
- *   2. Every token matches SYMBOL_TOKEN_RE (valid identifier or Class.method).
- *   3. Every token matches CODE_SIGNAL_RE — it contains at least one uppercase
- *      letter, underscore, dollar sign, digit, or dot. This distinguishes
- *      `AuthService loginUser` (symbols) from `find all the auth handlers`
- *      (prose — all tokens are lowercase plain words).
+ * Real `explore`/`search` queries are MIXED bags — symbol names interleaved
+ * with lowercase keywords ("live", "save", "install", "the") and often 10+
+ * tokens long. So we FILTER (not all-or-nothing): keep each token that matches
+ * SYMBOL_TOKEN_RE (a valid identifier or `Class.method`) AND CODE_SIGNAL_RE
+ * (has an uppercase letter, underscore, dollar, digit, or dot — i.e. looks like
+ * code, not a plain lowercase word). Drop the rest.
+ *
+ * A pure natural-language question ("how does the user log in") has no code-ish
+ * tokens, so it yields [] — still correctly treated as "no symbols". Capped at
+ * MAX_SYMBOLS_PER_QUERY to bound the downstream graph lookups.
  */
 function symbolBagFromQuery(query: string): string[] {
-  const tokens = query.trim().split(/\s+/);
-  if (tokens.length > MAX_SYMBOL_BAG_TOKENS) return [];
-  if (tokens.every((t) => SYMBOL_TOKEN_RE.test(t) && CODE_SIGNAL_RE.test(t))) return tokens;
-  return [];
+  const symbols = query
+    .trim()
+    .split(/\s+/)
+    .filter((t) => SYMBOL_TOKEN_RE.test(t) && CODE_SIGNAL_RE.test(t));
+  return symbols.slice(0, MAX_SYMBOLS_PER_QUERY);
 }
