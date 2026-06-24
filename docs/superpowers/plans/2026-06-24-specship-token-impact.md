@@ -29,7 +29,7 @@
 - `src/db/migrations.ts` — bump `CURRENT_SCHEMA_VERSION` to 9; add v9 migration.
 - `src/index.ts` — add `estimateReadEquivalent(symbols: string[])` method.
 - `packages/server/src/ingest/ingestor.ts` — extend the `claude_tool_calls` INSERT + compute new columns.
-- `packages/server/src/ingest/backfill.ts` (or wherever startup runs) — lazy `displaced_chars` backfill for old rows. (If no such file exists, add the function to `impact-query.ts` and call it from the ingest watcher's initial pass.)
+- `packages/server/src/ingest/backfill.ts` (or wherever startup runs) — lazy `displaced_files` backfill for old rows. (If no such file exists, add the function to `impact-query.ts` and call it from the ingest watcher's initial pass.)
 - `packages/server/src/routes/claude.ts` — add `GET /api/claude/specship-impact`; extend session-detail tool-call rows + `/session/:id/summary` with specship fields.
 - `packages/web-ng/src/app/app.routes.ts` — add `specship-impact` route.
 - `packages/web-ng/src/app/shell/sidebar/sidebar.ts` — add nav item.
@@ -246,11 +246,11 @@ Also add an **unresolved fixture**: a `specship_node` call whose symbol doesn't 
   - **No per-prompt running set needed** — files are stored per call; the aggregate (Task 6) dedups per prompt at read time, which is correct even when a prompt's calls land across ingest batches.
   - In `ingestor.ts`: extend the prepared INSERT (`:353`) to add `is_specship, displaced_files, resolution` (3 more `?`). Thread a `resolveGraph?: (projectPath: string) => SpecShipLike | null` option into `IngestOptions` (server default uses `ProjectRegistry.get`; tests pass a stub returning the indexed `SpecShip`). Call `classifyToolCall` at both insert sites (`:489`, `:603`); the `:603` pending site has `result_length = 0` → `n/a`.
 - [ ] **Step 5: Run, verify PASS.**
-- [ ] **Step 6: Commit** — `feat(ingest): compute is_specship/displaced_chars/resolution at ingest`
+- [ ] **Step 6: Commit** — `feat(ingest): compute is_specship/displaced_files/resolution at ingest`
 
 ---
 
-## Task 5: Lazy backfill of `displaced_chars` for pre-existing rows
+## Task 5: Lazy backfill of `displaced_files` for pre-existing rows
 
 **Files:**
 - Create/Modify: `packages/server/src/ingest/impact-query.ts` (`backfillDisplaced(db, resolveGraph)`)
@@ -261,7 +261,7 @@ Also add an **unresolved fixture**: a `specship_node` call whose symbol doesn't 
 - [ ] **Step 2: Run, verify FAIL.**
 - [ ] **Step 3: Implement** — select `WHERE is_specship = 1 AND resolution IS NULL`, recompute via the shared `classifyToolCall` from Task 4 (DRY), `UPDATE` `resolution` + `displaced_files`. Cap batch size; safe to re-run (idempotent).
 - [ ] **Step 4: Run, verify PASS.**
-- [ ] **Step 5: Commit** — `feat(ingest): backfill displaced_chars for existing specship calls`
+- [ ] **Step 5: Commit** — `feat(ingest): backfill displaced_files for existing specship calls`
 
 ---
 
