@@ -9,6 +9,9 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+
+## [0.5.0] - 2026-06-24
+
 ### New Features
 
 - **New `/ss-brainstorm` command for confirmation-gated requirement exploration.** Grounds your idea in the existing codebase (using `specship_explore`), proposes 2–3 approaches with trade-offs, and iterates with you one question at a time — but writes nothing to disk until you explicitly confirm. On confirmation it writes a `specs/<slug>/brief.md` capturing the discussion and hands off to `/ss-spec-author` to produce the formal spec, then links the two documents both ways.
@@ -360,3 +363,4 @@ Thanks @andreinknv for the substantive draft this release was based on.
 [0.7.6]: https://github.com/selvakumarEsra/specship/releases/tag/v0.7.6
 [0.9.8]: https://github.com/selvakumarEsra/specship/releases/tag/v0.9.8
 [0.9.9]: https://github.com/selvakumarEsra/specship/releases/tag/v0.9.9
+[0.5.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.5.0
