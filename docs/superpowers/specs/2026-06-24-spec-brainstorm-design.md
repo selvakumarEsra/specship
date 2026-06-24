@@ -14,7 +14,7 @@ Chain: `/ss-brainstorm <requirement>` → (human confirms) → `spec-author` →
 | Decision | Choice |
 |---|---|
 | Output | A confirmed **design brief**; `spec-author` turns it into the formal spec (not spec-brainstorm writing the spec directly). |
-| Form | A **skill** (conversational loop), not a workflow — brainstorming is divergent multi-turn dialogue, which a deterministic DAG + single-comment approval gate fits poorly. Mirrors `spec-author` (also a skill). |
+| Form | A **conversational loop**, not a workflow (brainstorming is divergent multi-turn dialogue, which a deterministic DAG + single-comment approval gate fits poorly). **Delivered as a self-contained slash command** `commands/ss-brainstorm.md` — full instructions in the body — because SpecShip's installer ships `commands/` + `agents/` but **not** skills (verified: `spec-author`'s `SKILL.md` is an external pre-install; `/ss-spec-author` only references it). This matches how `ss-fix` / `ss-implement` / `ss-design-loop` are self-contained command bodies. |
 | Confirmation gate | **Nothing is written to disk until the human explicitly confirms.** No confirm ⇒ zero output (no brief, no spec). |
 | On confirm | Write the brief, then hand off to `spec-author`, which assigns/uses the real spec **ID** and writes `specs/<ID>.md`. Confirmation reliably yields a real ID'd spec, not a floating brief. |
 | Traceability | **Bidirectional** brief ↔ spec links (added requirement). |
@@ -47,11 +47,12 @@ In order:
 ### Brief contents
 Problem statement · code-grounding findings (relevant files / symbols / conventions) · approaches considered + chosen + rationale · key decisions · edge cases · acceptance criteria · proposed slug · (after handoff) the produced spec ID. Mirrors the design-loop's `decision-record.md` provenance pattern.
 
-## 5. Traceability — make the link first-class
+## 5. Traceability — link lives in the files, read on demand
 
-- **Spec → brief:** add an optional `brief:` document-level frontmatter field. `src/extraction/specs/markdown-spec-extractor.ts` already parses frontmatter; **add `brief` to its known-keys set** so it surfaces as a **top-level field** on the spec node (not nested under `metadata`) and round-trips through the index + API.
-- **Brief → spec:** the brief's header names the spec `id` + path (human-readable; not indexed as a spec).
-- This reuses the same provenance idea the design-import flow already uses (`specs/<slug>/source.md`), so the convention is consistent.
+- **Spec → brief:** the spec file's frontmatter carries an optional **`brief: <slug>/brief.md`** field (written at handoff). It is **not** pushed through the indexer/DB (no extractor or schema change — the design stays schema-free). Instead the new brief endpoint (§6) **reads the spec's source file and parses `brief:` directly**, exactly like the existing `GET /api/spec/:id` already reads `source` from disk.
+- **Brief → spec:** the brief's header names the spec `id` + path (human-readable).
+- This reuses the same provenance idea the design-import flow uses (`specs/<slug>/source.md`), so the convention is consistent.
+- *(Surfacing the brief link inside `specship_spec` MCP output would need the extractor/metadata work — deferred to a later phase; v1 traceability is the file frontmatter + the dashboard.)*
 
 ## 6. UI — visualise the brief on the Specs page
 
@@ -61,12 +62,14 @@ Problem statement · code-grounding findings (relevant files / symbols / convent
 
 ## 7. Packaging
 
-Ships like `spec-author`:
-- `skills/spec-brainstorm/SKILL.md` + `references/` (loop guide, approaches rubric, **confirmation rules**, brief format, handoff-to-spec-author contract).
-- `commands/ss-brainstorm.md` (bundled slash command `/ss-brainstorm <requirement>`).
-- Installer wiring so `specship install` lays down the command + skill (plus the plugin manifest), with matching `installer-targets` coverage and a CHANGELOG entry.
+Delivered as a **self-contained slash command** (the installer ships commands, not skills):
+- **`commands/ss-brainstorm.md`** — the full conversational loop in the command body: scope check, code-grounding, 2–3 approaches, one-question-at-a-time clarify, the **confirmation gate** rules (no write until explicit yes), the brief format, and the handoff that calls **`/ss-spec-author`** with the brief path for the convergent drafting. `allowed-tools` mirrors `ss-spec-author` (Read, Write, Edit, Bash, the read-only `specship_*` tools).
+- **Register** `'ss-brainstorm.md'` in `SHIPPED_COMMANDS` (`src/installer/targets/claude.ts`) so `specship install` copies it (global `~/.claude/commands/` or local `./.claude/commands/`). The npm `files` array already includes `commands/`.
+- **Installer test** coverage in `__tests__/installer-targets.test.ts` (the contract suite asserts the shipped command set installs + uninstalls) and a CHANGELOG entry.
 
-No workflow YAML. No MCP tool changes. Schema: none required (the `brief` field rides existing frontmatter parsing + node metadata).
+No separate `SKILL.md`, no `skills/` dir (not shippable by this installer). No workflow YAML. No MCP tool changes. Schema: none (the `brief` field rides existing frontmatter parsing).
+
+> The convergent handoff target `/ss-spec-author` already depends on an externally-installed `spec-author` skill — that's the existing project reality, unchanged by this feature.
 
 ## 8. Error handling & edge cases
 
@@ -79,8 +82,7 @@ No workflow YAML. No MCP tool changes. Schema: none required (the `brief` field 
 ## 9. Testing
 
 - **Skill evals** (like `spec-author/evals/`): the confirmation gate refuses to write without an explicit yes; a confirmed run yields a brief **and** an ID'd spec via spec-author; it grounds in code; the boundary with spec-author has no duplicated drafting.
-- **Extractor unit test:** a spec with `brief:` frontmatter exposes it on the spec node/metadata; absent ⇒ undefined.
-- **Server test:** `GET /api/spec/:id/brief` returns the markdown for a spec with a brief, 404 without, and rejects path traversal.
+- **Server test:** `GET /api/spec/:id/brief` parses the spec file's `brief:` frontmatter, returns the brief markdown for a spec with one, 404 without (or no brief field), and rejects path traversal outside the specs root.
 - **Installer test:** `/ss-brainstorm` + the skill are installed and removed by uninstall (parameterised contract suite).
 - **Web build** passes with the new panel.
 
