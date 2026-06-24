@@ -54,6 +54,7 @@ export class Sidebar {
         { id: 'sessions', label: 'Sessions', icon: 'sessions' },
         { id: 'heatmap', label: 'Heatmap', icon: 'heatmap' },
         { id: 'costs', label: 'Costs', icon: 'dollar' },
+        { id: 'specship-impact', label: 'SpecShip Impact', icon: 'graph' },
         { id: 'compare', label: 'Compare projects', icon: 'compare' },
         { id: 'memory', label: 'Memory', icon: 'memory' },
         {

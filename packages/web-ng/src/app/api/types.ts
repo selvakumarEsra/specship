@@ -425,3 +425,19 @@ export interface ProjectsChange {
 export interface ProjectsRefresh {
   list: ProjectEntry[];
 }
+
+export interface SpecshipImpactResponse {
+  spendTokens: number;
+  spendCostUsd: number;
+  savedTokens: number;
+  savedCostUsd: number;
+  overheadTokens: number;
+  netTokens: number;
+  netCostUsd: number;
+  unresolvedCalls: number;
+  totalSpecshipCalls: number;
+  byTool: { tool: string; calls: number; spendTokens: number; savedTokens: number }[];
+  /** Only present when no project filter is active (all-projects mode). */
+  byProject: { project: string; spendTokens: number; savedTokens: number; netTokens: number }[];
+  trend: { ts: number; spendTokens: number; savedTokens: number }[];
+}
