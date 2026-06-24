@@ -40,7 +40,8 @@ import {
   summarizeToolInput,
   toolResultLength,
 } from './parser.js';
-import { classifyToolCall, GraphLike } from '@selvakumaresra/specship';
+import { classifyToolCall } from './specship-classify.js';
+import type { GraphLike } from './specship-classify.js';
 
 /** SQLite handle shape we depend on. Matches specship's SqliteDatabase. */
 export interface IngestDb {

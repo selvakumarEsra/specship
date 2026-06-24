@@ -16,8 +16,8 @@
  *   - Must never crash the caller. The server bootstrap wraps in try/catch.
  */
 
-import { classifyToolCall } from '@selvakumaresra/specship';
-import type { GraphLike } from '@selvakumaresra/specship';
+import { classifyToolCall } from './specship-classify.js';
+import type { GraphLike } from './specship-classify.js';
 import type { IngestDb } from './ingestor.js';
 
 /**
