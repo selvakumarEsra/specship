@@ -35,10 +35,10 @@ Chain: `/ss-brainstorm <requirement>` → (human confirms) → `spec-author` →
 
 ## 4. On confirmation → brief + ID'd spec (with traceability)
 
-In order, atomically as far as practical:
+In order:
 
-1. **Write the brief** to `specs/<slug>/brief.md` — provenance for *why* the spec looks the way it does. The brief's frontmatter/header records the **spec ID** it produced (filled in after step 2, or the proposed ID then reconciled).
-2. **Hand off to `spec-author`** with the brief as input. `spec-author` writes `specs/<ID>.md` (frontmatter `id`/`title`/`owner`/`priority`, `<!-- id: REQ-… -->` markers, RFC-2119 MUST/SHOULD).
+1. **Write the brief** to **`specs/<slug>/brief.md`** (locked: subdirectory form, matching the design-import flow's `specs/<slug>/source.md`). The brief's `spec:` field is **omitted (or `(pending)`)** until step 2 succeeds, so a partial-write state is detectable.
+2. **Hand off to `spec-author`** by passing it the **brief file path** (no new spec-author "mode" — it reads the brief and, because grounding is already in the brief, **skips its own re-grounding**). `spec-author` writes `specs/<ID>.md` (frontmatter `id`/`title`/`owner`/`priority`, `<!-- id: REQ-… -->` markers, RFC-2119 MUST/SHOULD). **On spec-author failure:** the brief stays with `spec:` unset and the skill surfaces the error; retry = re-run `spec-author` with the same brief path. No half-linked spec is left.
 3. **Link both directions:**
    - Spec frontmatter gains **`brief: <slug>/brief.md`** (relative to the specs root).
    - Brief header gains **`spec: <ID>`** (and the spec's path).
@@ -49,14 +49,14 @@ Problem statement · code-grounding findings (relevant files / symbols / convent
 
 ## 5. Traceability — make the link first-class
 
-- **Spec → brief:** add an optional `brief:` document-level frontmatter field. `src/extraction/specs/markdown-spec-extractor.ts` already parses frontmatter (`id`, `owner`, `priority`, `title`, …); capture `brief` into the spec node's metadata so it round-trips through the index and the API.
+- **Spec → brief:** add an optional `brief:` document-level frontmatter field. `src/extraction/specs/markdown-spec-extractor.ts` already parses frontmatter; **add `brief` to its known-keys set** so it surfaces as a **top-level field** on the spec node (not nested under `metadata`) and round-trips through the index + API.
 - **Brief → spec:** the brief's header names the spec `id` + path (human-readable; not indexed as a spec).
 - This reuses the same provenance idea the design-import flow already uses (`specs/<slug>/source.md`), so the convention is consistent.
 
 ## 6. UI — visualise the brief on the Specs page
 
 - **Server:** add `GET /api/spec/:id/brief` to `packages/server/src/routes/spec.ts` — resolves the spec's `brief:` frontmatter to a path under the project's specs root, reads the markdown, returns `{ path, markdown }` (404 when the spec has no brief; path-traversal guarded to the specs dir).
-- **Web-ng:** on the Specs page (`packages/web-ng/src/app/pages/specs/`), when the selected spec has a brief, show a **"Brainstorm"** panel/tab that renders `brief.md` with the existing markdown renderer (the same one Memory/Specs already use). A small "Rationale" affordance next to the spec body; empty/absent brief ⇒ no panel.
+- **Web-ng:** on the Specs page (`packages/web-ng/src/app/pages/specs/`), when the selected spec has a brief, show a **collapsible "Brainstorm" panel** (locked: a collapsible `@if` block, not a new tab strip — lighter, matches the page) that renders `brief.md` with the existing markdown renderer (the same one Memory/Specs use). Absent brief ⇒ no panel.
 - **Types:** extend the spec detail type with an optional `brief` indicator so the page knows whether to fetch.
 
 ## 7. Packaging
@@ -90,8 +90,9 @@ No workflow YAML. No MCP tool changes. Schema: none required (the `brief` field 
 - The brief is not indexed as a spec node (it's provenance, not requirements).
 - No automated "approaches" generation beyond what the skill prompts — it's a guided dialogue, not a generator.
 
-## 11. Open assumptions to confirm in the plan
+## 11. Decisions locked (were open during review)
 
-- Exact `brief:` field name and path convention (`specs/<slug>/brief.md` vs a sibling of the spec file).
-- Whether `spec-author` needs a new "consume a brief" input mode, or just reads the brief path the skill passes.
-- The Specs-page affordance (tab vs collapsible panel) — match the page's existing pattern.
+- **Brief path:** `specs/<slug>/brief.md` (subdirectory form, matching `source.md`).
+- **spec-author input:** the skill passes the **brief file path**; spec-author reads it and skips re-grounding. **No new spec-author "mode"** — at most a one-line note in `spec-author`'s skill that a supplied brief means grounding is done. Keeps installer/test scope tight.
+- **Specs-page affordance:** a **collapsible panel** (`@if` block), not a tab strip.
+- **`brief:` frontmatter:** promoted to the extractor's known-keys → top-level spec-node field.
