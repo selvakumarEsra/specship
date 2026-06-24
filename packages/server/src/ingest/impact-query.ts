@@ -252,9 +252,6 @@ export function computeSpecshipImpact(
   const spendCharsByModel = new Map<string, number>();
   const savedCharsByModel = new Map<string, number>();
 
-  // Track sessions that have ≥1 specship call (for overhead).
-  const specshipSessions = new Set<string>();
-
   // Per-tool accumulators: spend is exact; saved is a per-tool APPROXIMATION.
   // Exact per-tool saved attribution is ambiguous when two tools in the same
   // prompt share a file. We approximate: a tool's saved chars = its own
