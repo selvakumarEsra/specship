@@ -17,7 +17,7 @@ import { existsSync, promises as fs } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import Fastify, { FastifyInstance, FastifyRequest } from 'fastify';
 import cors from '@fastify/cors';
-import { startWatcher, type WatcherHandle } from './ingest/index.js';
+import { startWatcher, primaryProjectMatcher, type WatcherHandle } from './ingest/index.js';
 import { backfillDisplaced } from './ingest/impact-backfill.js';
 import { ProjectRegistry, type SpecShipInstance } from './project-registry.js';
 import { makeStaticHandler } from './static-handler.js';
@@ -164,9 +164,15 @@ export async function createServer(options: ServerOptions): Promise<ServerHandle
       // already-open SpecShip instance (which satisfies GraphLike).
       // Sessions from other project paths resolve to null — they'll be left
       // as 'unresolved' and retried on the next boot when that project is primary.
+      // The stored project_path is the lossy-decoded slug (every '-' → '/'), so
+      // an exact compare against the real primaryPath never matched and savings
+      // stayed 0. primaryProjectMatcher accepts both the real path and its
+      // mangled stored form. Sessions from OTHER projects still resolve to null
+      // (left 'unresolved', retried when that project is primary).
       const primaryPath = options.projectRoot ?? null;
+      const isPrimary = primaryPath ? primaryProjectMatcher(primaryPath) : () => false;
       const resolveGraph = (projectPath: string) =>
-        primaryPath && projectPath === primaryPath ? primaryCg : null;
+        primaryPath && isPrimary(projectPath) ? primaryCg : null;
 
       watcher = startWatcher(dbHandle as Parameters<typeof startWatcher>[0], { verbose, resolveGraph });
       ownedWatcher = true;

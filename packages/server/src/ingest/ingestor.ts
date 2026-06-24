@@ -78,6 +78,25 @@ export function decodeProjectSlug(slug: string): string {
 }
 
 /**
+ * Build a predicate that tells whether a stored `project_path` belongs to the
+ * primary project, given the primary's REAL filesystem path.
+ *
+ * Why this isn't a plain `===`: `decodeProjectSlug` lossily turns every '-' in
+ * the slug into '/', so a real path like `/Users/a/dev/claude-projects/x` gets
+ * STORED as `/Users/a/dev/claude/projects/x`. The savings graph resolver only
+ * has the real primary path, so it never matched the mangled stored form and
+ * every call resolved to a null graph (savedTokens stuck at 0). We match BOTH
+ * the real path and its mangled form (computed by round-tripping the real path
+ * through the same encode→decode the storage used). No stored data is changed,
+ * so the (consistently-mangled) project filter is unaffected.
+ */
+export function primaryProjectMatcher(primaryRealPath: string): (storedPath: string) => boolean {
+  // encode: real path → slug form (every '/' → '-'); decode: slug → mangled path.
+  const mangled = decodeProjectSlug(primaryRealPath.replace(/\//g, '-'));
+  return (storedPath: string) => storedPath === primaryRealPath || storedPath === mangled;
+}
+
+/**
  * List every JSONL file inside `<claudeRoot>/<slug>/<sessionId>.jsonl`.
  * Returns the absolute file path + the decoded project path.
  */

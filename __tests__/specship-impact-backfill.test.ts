@@ -9,6 +9,7 @@
  *   - non-specship rows are left untouched
  *   - already-resolved rows are left untouched (idempotent)
  *   - a second run is a no-op (idempotent)
+ *   - previously-'unresolved' rows ARE retried (resolver/extractor were fixed)
  */
 
 import { describe, it, expect } from 'vitest';
@@ -252,6 +253,34 @@ describe('backfillDisplaced', () => {
     const after2 = db.prepare('SELECT id, resolution, displaced_files FROM claude_tool_calls WHERE id = ?').get(id) as Row;
     expect(after2.resolution).toBe(after1.resolution);
     expect(after2.displaced_files).toBe(after1.displaced_files);
+  });
+
+  it("retries a previously-'unresolved' row and upgrades it to resolved", () => {
+    const db = new Database(':memory:');
+    buildSchema(db);
+    insertSession(db, 'sess-re', '/proj/retry');
+    insertPrompt(db, 'prompt-re', 'sess-re');
+
+    // Simulates the buggy state: a source-returning call that the OLD resolver/
+    // extractor left 'unresolved' (graph was null / symbols weren't extracted).
+    const id = insertToolCall(db, {
+      promptId: 'prompt-re',
+      sessionId: 'sess-re',
+      toolName: 'mcp__specship__specship_node',
+      inputJson: JSON.stringify({ symbol: 'alpha' }),
+      resultLength: 500,
+      isSpecship: 1,
+      resolution: 'unresolved',
+      displacedFiles: null,
+    });
+
+    // Now the graph resolves it (fixes applied).
+    backfillDisplaced(db as any, (_p: string) => makeGraph());
+
+    type Row = { resolution: string | null; displaced_files: string | null };
+    const row = db.prepare('SELECT resolution, displaced_files FROM claude_tool_calls WHERE id = ?').get(id) as Row;
+    expect(row.resolution).toBe('resolved');
+    expect(JSON.parse(row.displaced_files!).length).toBeGreaterThan(0);
   });
 
   it('handles resolveGraph returning null gracefully (classifies as unresolved)', () => {

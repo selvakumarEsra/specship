@@ -39,7 +39,12 @@ export function backfillDisplaced(
     SELECT tc.id, tc.tool_name, tc.input_json, tc.result_length, s.project_path
     FROM claude_tool_calls tc
     JOIN claude_sessions s ON s.id = tc.session_id
-    WHERE tc.is_specship = 1 AND tc.resolution IS NULL
+    -- NULL = never classified (pre-upgrade rows). 'unresolved' = classified but
+    -- the graph/symbols didn't resolve — retry those too, since the resolver and
+    -- the symbol extractor have both been fixed, and a row left unresolved while
+    -- its project wasn't primary should resolve once that project IS primary.
+    -- 'resolved' and 'n/a' are terminal and never reprocessed.
+    WHERE tc.is_specship = 1 AND (tc.resolution IS NULL OR tc.resolution = 'unresolved')
   `).all() as Array<{
     id: number;
     tool_name: string;
