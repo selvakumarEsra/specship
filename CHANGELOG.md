@@ -13,6 +13,8 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - **SpecShip Token Impact — data layer (v9 schema migration).** Each tool-call row in the analytics database now carries an `is_specship` flag (1 for any `mcp__specship__*` call, 0 for everything else), a `displaced_files` JSON column (files whose content a SpecShip call made unnecessary to Read), and a `resolution` column (`resolved`/`unresolved`/`n/a`). Existing rows are backfilled automatically on upgrade. This is the foundational data layer for the upcoming SpecShip Impact dashboard panel.
 
+- **SpecShip Token Impact — aggregation endpoint (`GET /api/claude/specship-impact`).** New endpoint and `computeSpecshipImpact()` function that rolls up how many tokens SpecShip calls spent vs. how many tokens' worth of file reads they displaced (saved). Uses per-prompt dedup so a file referenced by two SpecShip calls in the same turn counts only once. Returns spend/saved tokens and estimated USD cost broken out globally, per-tool, per-project, and as a daily trend series. Filterable by `?range=` window and `?project=` path.
+
 ### Fixes
 
 - **`specship install --yes` help text now matches its behavior.** The `--yes` flag's help (and the matching `uninstall` help) said it defaulted to a global install; the non-interactive default has been project-local since 0.4.0. The text now reads `--location=local`, so `specship install --help` no longer implies the wrong scope. Pass `--location global` for the old behavior.
