@@ -87,6 +87,12 @@ export function parseBriefField(source: string): string | null {
       (value.startsWith("'") && value.endsWith("'"))
     ) {
       value = value.slice(1, -1).trim();
+    } else {
+      // Strip a trailing ` # comment` from an UNQUOTED value only. Requires
+      // whitespace before the `#` so a `#fragment` inside the path — or a `#`
+      // inside a quoted value (handled above) — isn't mangled.
+      const hashIdx = value.search(/\s#/);
+      if (hashIdx !== -1) value = value.slice(0, hashIdx).trim();
     }
     return value || null;
   }
@@ -164,15 +170,28 @@ export async function registerSpecRoutes(app: FastifyInstance): Promise<void> {
     if (!spec) return reply.code(404).send({ error: 'spec not found' });
     const projectRoot = cg.getProjectRoot();
     const specAbs = safeProjectPath(projectRoot, spec.sourcePath);
-    if (!specAbs || !fs.existsSync(specAbs)) return reply.code(404).send({ error: 'no brief' });
-    const briefRel = parseBriefField(fs.readFileSync(specAbs, 'utf-8'));
+    if (!specAbs) return reply.code(404).send({ error: 'no brief' });
+    // TOCTOU: read directly under try/catch rather than existsSync-then-read,
+    // so a file deleted between the check and the read degrades to 404 (the
+    // sibling GET /api/spec/:id read is guarded the same way) instead of 500.
+    let specSource: string;
+    try {
+      specSource = fs.readFileSync(specAbs, 'utf-8');
+    } catch {
+      return reply.code(404).send({ error: 'no brief' });
+    }
+    const briefRel = parseBriefField(specSource);
     if (!briefRel) return reply.code(404).send({ error: 'no brief' });
     // CONVENTION: `brief:` is relative to the SPEC FILE's own directory (resolves
     // whether the spec is flat at specs/<id>.md or nested at specs/<area>/<id>.md).
     // safeProjectPath GUARDS against traversal outside the project root.
     const briefAbs = safeProjectPath(projectRoot, path.join(path.dirname(spec.sourcePath), briefRel));
-    if (!briefAbs || !fs.existsSync(briefAbs)) return reply.code(404).send({ error: 'no brief' });
-    return { path: briefRel, markdown: fs.readFileSync(briefAbs, 'utf-8') };
+    if (!briefAbs) return reply.code(404).send({ error: 'no brief' });
+    try {
+      return { path: briefRel, markdown: fs.readFileSync(briefAbs, 'utf-8') };
+    } catch {
+      return reply.code(404).send({ error: 'no brief' });
+    }
   });
 
   app.get('/api/drift', async (req: FastifyRequest<{ Querystring: ProjectQuery & { state?: string; limit?: string } }>, reply) => {

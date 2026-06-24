@@ -83,6 +83,22 @@ brief: 'baz/brief.md'
     expect(parseBriefField(source)).toBe('baz/brief.md');
   });
 
+  it('strips a trailing inline # comment from an unquoted value', () => {
+    const source = `---
+brief: foo/brief.md # note
+---
+`;
+    expect(parseBriefField(source)).toBe('foo/brief.md');
+  });
+
+  it('does not mangle a # that is part of the path (no preceding whitespace)', () => {
+    const source = `---
+brief: foo/brief.md#frag
+---
+`;
+    expect(parseBriefField(source)).toBe('foo/brief.md#frag');
+  });
+
   it('returns null when there is no brief key', () => {
     const source = `---
 id: DOC
@@ -259,40 +275,54 @@ Body.
   // -------------------------------------------------------------------------
   // Traversal guard: brief: value containing ../ must NOT escape project root.
   // -------------------------------------------------------------------------
-  it('returns 404 for a traversal brief path (../../etc/passwd)', async () => {
-    const specDir = path.join(dir, 'specs');
-    fs.mkdirSync(specDir, { recursive: true });
-    const specContent = `---
+  it('returns 404 for a traversal brief path and never leaks the outside file', async () => {
+    // Plant a real sentinel file OUTSIDE the project root. The spec lives at
+    // <root>/specs/traversal.md, so `../../secret.txt` from that file's dir
+    // resolves to <parent-of-root>/secret.txt — genuinely outside the root.
+    const SENTINEL = 'TOP-SECRET-SENTINEL-9f3a2b';
+    const outsideFile = path.join(path.dirname(dir), 'secret.txt');
+    fs.writeFileSync(outsideFile, SENTINEL, 'utf-8');
+
+    try {
+      const specDir = path.join(dir, 'specs');
+      fs.mkdirSync(specDir, { recursive: true });
+      const specContent = `---
 id: TRAV-DOC
 title: Traversal spec
-brief: ../../etc/passwd
+brief: ../../secret.txt
 ---
 <!-- id: REQ-TRAV-001 -->
 # Traversal requirement
 
 Body.
 `;
-    fs.writeFileSync(path.join(specDir, 'traversal.md'), specContent, 'utf-8');
+      fs.writeFileSync(path.join(specDir, 'traversal.md'), specContent, 'utf-8');
 
-    const now = Date.now();
-    cg.getSpecQueries().insertSpec({
-      id: 'TRAV-DOC',
-      kind: 'document',
-      title: 'Traversal spec',
-      body: 'Body.',
-      format: 'markdown',
-      sourcePath: 'specs/traversal.md',
-      startLine: 1,
-      endLine: 9,
-      contentHash: 'hash-trav',
-      createdAt: now,
-      updatedAt: now,
-    });
+      const now = Date.now();
+      cg.getSpecQueries().insertSpec({
+        id: 'TRAV-DOC',
+        kind: 'document',
+        title: 'Traversal spec',
+        body: 'Body.',
+        format: 'markdown',
+        sourcePath: 'specs/traversal.md',
+        startLine: 1,
+        endLine: 9,
+        contentHash: 'hash-trav',
+        createdAt: now,
+        updatedAt: now,
+      });
 
-    const res = await app.inject({ method: 'GET', url: '/api/spec/TRAV-DOC/brief' });
-    // Must not return 200 — either 404 (traversal blocked) or 400.
-    expect(res.statusCode).not.toBe(200);
-    // The traversal should be blocked (safeProjectPath returns null).
-    expect([400, 404]).toContain(res.statusCode);
+      const res = await app.inject({ method: 'GET', url: '/api/spec/TRAV-DOC/brief' });
+      // Must not return 200 — either 404 (traversal blocked) or 400.
+      expect(res.statusCode).not.toBe(200);
+      expect([400, 404]).toContain(res.statusCode);
+      // Prove the guard FIRED rather than relying on file-absence: the
+      // outside file exists and is readable, yet its content must never
+      // appear in the response.
+      expect(res.payload).not.toContain(SENTINEL);
+    } finally {
+      fs.rmSync(outsideFile, { force: true });
+    }
   });
 });
