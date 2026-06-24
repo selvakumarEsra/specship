@@ -24,7 +24,7 @@
 Requires Node.js 22.5+ (Node 24.x recommended — its bundled SQLite has FTS5, which SpecShip needs):
 
 ```bash
-npm i -g @selvakumaresra/specship@0.1.0
+npm i -g @selvakumaresra/specship@0.5.0
 ```
 
 Offline / air-gapped client workstation? Clone or copy this repo onto the machine and run:
@@ -262,7 +262,7 @@ SpecShip detects web-framework routing files and emits `route` nodes linked by `
 ## Quick Start
 
 ```bash
-npm i -g @selvakumaresra/specship@0.1.0
+npm i -g @selvakumaresra/specship@0.5.0
 specship install --yes           # writes ~/.claude.json + ~/.claude/settings.json
 cd your-project && specship init -i
 # restart Claude Code
@@ -294,7 +294,7 @@ specship install --no-permissions            # skip auto-allow list
 
 **Install globally:**
 ```bash
-npm install -g @selvakumaresra/specship@0.1.0
+npm install -g @selvakumaresra/specship@0.5.0
 ```
 
 **Add to `~/.claude.json`:**
@@ -480,7 +480,7 @@ that drive the graph directly: `DatabaseConnection`, `QueryBuilder`,
 
 **Embedding requirements**
 
-- Install from npm (`npm i @selvakumaresra/specship@0.1.0`) so the matching
+- Install from npm (`npm i @selvakumaresra/specship@0.5.0`) so the matching
   per-platform package — which carries the compiled library and its
   dependencies — is fetched alongside the shim.
 - The API runs on **your** runtime, so it needs **Node 22.5+** for the built-in
@@ -561,9 +561,9 @@ See [Get Started](#get-started) for the one-line install commands.
 
 **MCP hits `database is locked`** — current builds shouldn't: SpecShip bundles its own Node runtime and uses Node's built-in `node:sqlite` in WAL mode, where concurrent reads never block on a writer. If you still see it:
 
-- **You're on an old (pre-0.9) install.** Reinstall: `npm i -g @selvakumaresra/specship@0.1.0`.
-- **`specship status` shows `Journal:` other than `wal`** — WAL couldn't be enabled on this filesystem (common on network shares and WSL2 `/mnt`), so reads can block on writes. Move the project (with its `.specship/` folder) onto a local disk.
+- **You're on an old (pre-0.9) install.** Reinstall: `npm i -g @selvakumaresra/specship@0.5.0`.
 
+**`specship status` shows `Journal:` other than `wal`** — WAL couldn't be enabled on this filesystem (common on network shares and WSL2 `/mnt`), so reads can block on writes. Move the project (with its `.specship/` folder) onto a local disk.
 **MCP server not connecting** — Ensure the project is initialized/indexed, verify the path in your MCP config, and check that `specship serve --mcp` works from the command line.
 
 **Missing symbols** — The MCP server auto-syncs on save (wait a couple seconds). Run `specship sync` manually if needed. Check that the file's language is supported and isn't inside a `.gitignore`d or default-excluded directory (e.g. `node_modules`, `dist`).

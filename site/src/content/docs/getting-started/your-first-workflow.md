@@ -21,7 +21,7 @@ Verify:
 
 ```bash
 specship --version
-# specship 0.4.0
+# specship 0.5.0
 ```
 
 ## 2. Wire up Claude Code
