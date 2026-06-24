@@ -287,6 +287,11 @@ export interface SpecDetailResponse {
   links: SpecLink[];
 }
 
+export interface SpecBriefResponse {
+  path: string;
+  markdown: string;
+}
+
 export interface WorkflowDef {
   name: string;
   description?: string;

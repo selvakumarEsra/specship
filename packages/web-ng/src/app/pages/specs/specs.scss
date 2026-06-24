@@ -117,6 +117,43 @@
   text-wrap: pretty;
 }
 
+/* Brainstorm brief collapsible panel */
+.brief-panel {
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 0 12px;
+  margin-bottom: 22px;
+  background: var(--bg-panel);
+}
+
+.brief-summary {
+  padding: 10px 0;
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  user-select: none;
+  margin-bottom: 0;
+}
+
+.brief-summary::-webkit-details-marker { display: none; }
+
+.brief-summary::before {
+  content: '▶';
+  font-size: 8px;
+  color: var(--text-muted);
+  transition: transform 0.15s;
+}
+
+details[open] > .brief-summary::before {
+  transform: rotate(90deg);
+}
+
+.brief-body {
+  margin-bottom: 12px;
+}
+
 /* Link row inside the card */
 .link-row {
   padding: 10px 12px;

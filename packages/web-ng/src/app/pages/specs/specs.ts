@@ -19,7 +19,7 @@ import { StatePill } from '../../ui/state-pill';
 import { Pill } from '../../ui/pill';
 import { CopyBtn } from '../../ui/copy-btn';
 import { STATE } from '../../ui/state';
-import type { Spec, SpecsResponse, SpecDetailResponse, SpecLink } from '../../api/types';
+import type { Spec, SpecsResponse, SpecDetailResponse, SpecLink, SpecBriefResponse } from '../../api/types';
 
 interface Group { path: string; title: string; specs: Spec[]; }
 
@@ -60,6 +60,20 @@ export class Specs {
       if (!id) return null;
       return `/api/spec/${encodeURIComponent(id)}${this.projects.projectQuery()}`;
     },
+  );
+
+  /** Fetches the brainstorm brief for the selected spec (404 → no data → panel hidden). */
+  protected readonly briefResource = apiResource<SpecBriefResponse>(
+    this.api,
+    () => {
+      const id = this.sel();
+      if (!id) return null;
+      return `/api/spec/${encodeURIComponent(id)}/brief${this.projects.projectQuery()}`;
+    },
+  );
+
+  protected readonly briefHtml = computed<string>(() =>
+    this.mdHtml(this.briefResource.state().data?.markdown ?? ''),
   );
 
   protected readonly sel = signal<string | null>(null);

@@ -149,6 +149,15 @@
         <!-- eslint-disable-next-line @angular-eslint/template/no-inner-html -->
         <div class="detail-body" [innerHTML]="mdHtml(s.body)"></div>
 
+        <!-- Brainstorm brief (only when the spec has a linked brief) -->
+        @if (briefResource.state().data) {
+          <details class="brief-panel">
+            <summary class="eyebrow brief-summary">Brainstorm</summary>
+            <!-- eslint-disable-next-line @angular-eslint/template/no-inner-html -->
+            <div class="detail-body brief-body" [innerHTML]="briefHtml()"></div>
+          </details>
+        }
+
         <!-- Linked code -->
         <div class="eyebrow" style="margin-bottom:8px">Linked code</div>
         @if (detailResource.state().loading) {
