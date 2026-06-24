@@ -95,6 +95,13 @@ describe('classifyToolCall', () => {
     },
   };
 
+  // Stub graph that throws — simulates a locked/corrupt index.
+  const throwingGraph: GraphLike = {
+    estimateReadEquivalent(_symbols: string[]): { files: { path: string; size: number }[]; resolved: boolean } {
+      throw new Error('index locked');
+    },
+  };
+
   it('non-specship tool → isSpecship:0, resolution:null, displacedFiles:null', () => {
     const result = classifyToolCall(
       { toolName: 'Read', inputJson: JSON.stringify({ file_path: '/foo.ts' }), resultLength: 500 },
@@ -141,6 +148,17 @@ describe('classifyToolCall', () => {
       unresolvedGraph,
     );
     expect(result).toEqual({ isSpecship: 1, resolution: 'unresolved', displacedFiles: null });
+  });
+
+  it('specship_node when estimateReadEquivalent throws → unresolved (does not propagate)', () => {
+    let result: ReturnType<typeof classifyToolCall>;
+    expect(() => {
+      result = classifyToolCall(
+        { toolName: 'mcp__specship__specship_node', inputJson: JSON.stringify({ symbol: 'alpha' }), resultLength: 800 },
+        throwingGraph,
+      );
+    }).not.toThrow();
+    expect(result!).toEqual({ isSpecship: 1, resolution: 'unresolved', displacedFiles: null });
   });
 
   it('designer tool → n/a (specship but not source-returning)', () => {

@@ -93,6 +93,12 @@ function buildSchema(db: ReturnType<typeof Database>): void {
 }
 
 /**
+/** The specship_node tool_result body written into every transcript. Its
+ *  character length is what the ingestor records as result_length. */
+const SPECSHIP_NODE_RESULT_CONTENT = 'export function alpha() { return 1; }  // 40 chars of source result';
+const SPECSHIP_NODE_RESULT_LEN = SPECSHIP_NODE_RESULT_CONTENT.length;
+
+/**
  * Write a synthetic Claude JSONL transcript.
  * The JSONL format: each line is one JSON object with `type` field.
  *
@@ -162,7 +168,7 @@ function writeTranscript(dir: string, sessionId: string, promptId: string): stri
           {
             type: 'tool_result',
             tool_use_id: toolUseId,
-            content: 'export function alpha() { return 1; }  // 40 chars of source result',
+            content: SPECSHIP_NODE_RESULT_CONTENT,
           },
           {
             type: 'tool_result',
@@ -280,13 +286,14 @@ describe('ingestAll + classifyToolCall integration', () => {
     });
 
     const calls = db.prepare(`
-      SELECT tool_name, is_specship, resolution, displaced_files
+      SELECT tool_name, is_specship, resolution, displaced_files, result_length
       FROM claude_tool_calls
     `).all() as Array<{
       tool_name: string;
       is_specship: number;
       resolution: string | null;
       displaced_files: string | null;
+      result_length: number;
     }>;
 
     const nodeCall = calls.find(c => c.tool_name === 'mcp__specship__specship_node');
@@ -294,6 +301,10 @@ describe('ingestAll + classifyToolCall integration', () => {
     expect(nodeCall!.is_specship).toBe(1);
     expect(nodeCall!.resolution).toBe('unresolved');
     expect(nodeCall!.displaced_files).toBeNull();
+    // The row must still exist with the correct (non-zero) result_length — the
+    // tool_result content length (the specship_node source we wrote).
+    expect(nodeCall!.result_length).toBe(SPECSHIP_NODE_RESULT_LEN);
+    expect(nodeCall!.result_length).toBeGreaterThan(0);
   });
 
   it('specship_node with unknown symbol → resolution=unresolved even with live graph', async () => {
@@ -320,13 +331,14 @@ describe('ingestAll + classifyToolCall integration', () => {
     });
 
     const calls = db.prepare(`
-      SELECT tool_name, is_specship, resolution, displaced_files
+      SELECT tool_name, is_specship, resolution, displaced_files, result_length
       FROM claude_tool_calls
     `).all() as Array<{
       tool_name: string;
       is_specship: number;
       resolution: string | null;
       displaced_files: string | null;
+      result_length: number;
     }>;
 
     const nodeCall = calls.find(c => c.tool_name === 'mcp__specship__specship_node');
@@ -334,6 +346,9 @@ describe('ingestAll + classifyToolCall integration', () => {
     expect(nodeCall!.is_specship).toBe(1);
     expect(nodeCall!.resolution).toBe('unresolved');
     expect(nodeCall!.displaced_files).toBeNull();
+    // Row still present with the correct (non-zero) result_length.
+    expect(nodeCall!.result_length).toBe(SPECSHIP_NODE_RESULT_LEN);
+    expect(nodeCall!.result_length).toBeGreaterThan(0);
 
     ss.close();
   });

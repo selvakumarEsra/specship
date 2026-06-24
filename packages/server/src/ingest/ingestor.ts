@@ -279,8 +279,17 @@ function ingestFile(
   `).run(projectPath, projectName, now, now);
 
   // Resolve the graph once per file (per project path) — avoids reopening the DB
-  // on every tool call. Returns null when no resolver is configured.
-  const graph = options.resolveGraph ? options.resolveGraph(projectPath) : null;
+  // on every tool call. Returns null when no resolver is configured. The
+  // resolver can throw on a locked/corrupt index; that estimate is best-effort
+  // decoration and must NEVER abort transcript ingest, so degrade to null.
+  let graph: GraphLike | null = null;
+  if (options.resolveGraph) {
+    try {
+      graph = options.resolveGraph(projectPath);
+    } catch {
+      graph = null;
+    }
+  }
 
   // Per-file ingest in a transaction.
   const txn = db.transaction(() => {

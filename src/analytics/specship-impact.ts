@@ -196,7 +196,16 @@ export function classifyToolCall(
       return { isSpecship: 1, resolution: 'unresolved', displacedFiles: null };
     }
 
-    const { files, resolved } = graph.estimateReadEquivalent(symbols);
+    // A locked/corrupt index can make estimateReadEquivalent throw. The estimate
+    // is best-effort decoration on the tool call — it must NEVER break core
+    // transcript ingest. Degrade to 'unresolved' on any failure.
+    let files: { path: string; size: number }[];
+    let resolved: boolean;
+    try {
+      ({ files, resolved } = graph.estimateReadEquivalent(symbols));
+    } catch {
+      return { isSpecship: 1, resolution: 'unresolved', displacedFiles: null };
+    }
     if (resolved) {
       return {
         isSpecship: 1,
