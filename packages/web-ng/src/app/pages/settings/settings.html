@@ -127,6 +127,16 @@
           [attr.aria-pressed]="notify.enabled('drift')" aria-label="Notify when drift is detected"
           (click)="notify.toggle('drift')"><span class="toggle-thumb"></span></button>
       </div>
+
+      <div class="toggle-row row" [style.opacity]="notify.granted() ? '1' : '0.5'">
+        <div class="grow">
+          <div class="toggle-label">New improvement</div>
+          <div class="muted" style="font-size:11px;">A new high-severity self-improvement proposal was found</div>
+        </div>
+        <button type="button" class="toggle-btn" [class.on]="notify.enabled('reflect')"
+          [attr.aria-pressed]="notify.enabled('reflect')" aria-label="Notify when a new improvement is found"
+          (click)="notify.toggle('reflect')"><span class="toggle-thumb"></span></button>
+      </div>
     </section>
 
     <!-- PRICING TABLE -->

@@ -29,6 +29,7 @@ import { registerStatusRoutes } from './routes/status.js';
 import { registerMemoryRoutes } from './routes/memory.js';
 import { registerProjectsRoutes } from './routes/projects.js';
 import { registerEventsRoutes } from './routes/events.js';
+import { registerReflectRoutes } from './routes/reflect.js';
 
 export interface ServerOptions {
   /**
@@ -224,6 +225,7 @@ export async function createServer(options: ServerOptions): Promise<ServerHandle
   await registerMemoryRoutes(app);
   await registerProjectsRoutes(app);
   await registerEventsRoutes(app);
+  await registerReflectRoutes(app);
 
   // Optional: serve the built Angular UI from `webDir` and fall back to
   // index.html for client-side routes. Must register AFTER the /api/*

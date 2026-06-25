@@ -48,6 +48,22 @@ import {
 import { SpecLinkResolver, SpecLinkResolverStats } from './resolution/spec-link-resolver';
 import { computeSpecFunnel, SpecFunnel } from './resolution/brief-link-resolver';
 import { SpecQueries } from './db/spec-queries';
+import {
+  analyze as reflectAnalyzeImpl,
+  sweep as reflectSweepImpl,
+  ReflectStore,
+  previewProposal,
+  applyProposal,
+  undoProposal,
+  AnalyzeResult,
+  SweepResult,
+  Proposal,
+  ProposalState,
+  PreviewResult,
+  ApplyOutcome,
+  UndoOutcome,
+} from './reflect';
+import * as os from 'os';
 import * as fs from 'fs';
 import { createHash } from 'crypto';
 import { GraphTraverser, GraphQueryManager } from './graph';
@@ -87,6 +103,30 @@ export type {
   BriefRollup,
   BriefFunnelEntry,
 } from './resolution/brief-link-resolver';
+// Reflection engine (REFLECT-DOC) — proposals mined from transcripts.
+export {
+  analyze as reflectAnalyze,
+  sweep as reflectSweep,
+  ReflectStore,
+  previewProposal,
+  applyProposal,
+  undoProposal,
+} from './reflect';
+export type {
+  Proposal,
+  ProposalType,
+  ProposalSeverity,
+  ProposalState,
+  TargetKind,
+  ProposalEvidence,
+  ProposalPayload,
+  PreviewResult,
+  ApplyOutcome,
+  UndoOutcome,
+  ReflectContext,
+  AnalyzeResult,
+  SweepResult,
+} from './reflect';
 export {
   SpecShipError,
   FileError,
@@ -209,6 +249,73 @@ export class SpecShip {
    */
   getSpecFunnel(): SpecFunnel {
     return computeSpecFunnel(this.specQueries);
+  }
+
+  // ===========================================================================
+  // Reflection engine (REFLECT-DOC)
+  //
+  // Mines the ingested claude_* transcript tables for recurring, actionable
+  // patterns and turns them into durable, human-gated proposals. Exposed as
+  // instance methods so the desktop server drives them on the live instance
+  // (no runtime package import) and the CLI calls them directly.
+  // ===========================================================================
+
+  private reflectContext() {
+    return { projectRoot: this.projectRoot, homeDir: os.homedir() };
+  }
+
+  /** Run a reflection pass, persist the batch, return the open proposals. */
+  reflectAnalyze(): AnalyzeResult {
+    return reflectAnalyzeImpl(this.db.getDb(), this.reflectContext());
+  }
+
+  /** Run a sweep: analyze + return new high-severity proposals to notify on. */
+  reflectSweep(): SweepResult {
+    return reflectSweepImpl(this.db.getDb(), this.reflectContext());
+  }
+
+  /** List persisted proposals, optionally filtered by state. */
+  reflectList(state?: ProposalState): Proposal[] {
+    return new ReflectStore(this.db.getDb()).list(state);
+  }
+
+  /** Fetch one proposal by its content hash. */
+  reflectGet(hash: string): Proposal | null {
+    return new ReflectStore(this.db.getDb()).get(hash);
+  }
+
+  /** Non-mutating preview of the change a proposal would make (REQ-REFLECT-003). */
+  reflectPreview(hash: string): PreviewResult | null {
+    const p = this.reflectGet(hash);
+    return p ? previewProposal(p) : null;
+  }
+
+  /** Apply a proposal — write idempotently + reversibly, then record state. */
+  reflectApply(hash: string): ApplyOutcome | null {
+    const p = this.reflectGet(hash);
+    if (!p) return null;
+    const outcome = applyProposal(p, os.homedir());
+    if (outcome === 'applied' || outcome === 'unchanged') {
+      new ReflectStore(this.db.getDb()).setState(hash, 'applied');
+    }
+    return outcome;
+  }
+
+  /** Undo a previously applied proposal — remove exactly what apply added. */
+  reflectUndo(hash: string): UndoOutcome | null {
+    const p = this.reflectGet(hash);
+    if (!p) return null;
+    const outcome = undoProposal(p, os.homedir());
+    new ReflectStore(this.db.getDb()).setState(hash, 'undone');
+    return outcome;
+  }
+
+  /** Dismiss a proposal so it does not resurface on later sweeps (REQ-REFLECT-007.A2). */
+  reflectDismiss(hash: string): boolean {
+    const p = this.reflectGet(hash);
+    if (!p) return false;
+    new ReflectStore(this.db.getDb()).setState(hash, 'dismissed');
+    return true;
   }
 
   // ===========================================================================

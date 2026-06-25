@@ -20,7 +20,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { enumerate } from './projects.js';
 
 interface AlertEvent {
-  kind: 'approval' | 'runDone' | 'drift';
+  kind: 'approval' | 'runDone' | 'drift' | 'reflect';
   project: string;
   projectPath: string;
   id: string;
@@ -31,6 +31,10 @@ interface AlertEvent {
 
 const POLL_MS = 3000;
 const KEEPALIVE_MS = 15000;
+// Reflection sweep cadence — high-severity-only, roughly daily (REQ-REFLECT-006).
+// The persisted reflect_proposals store dedupes across sweeps/connections, so a
+// proposal is only ever notified once regardless of how often the sweep runs.
+const SWEEP_MS = 24 * 60 * 60 * 1000;
 
 export async function registerEventsRoutes(app: FastifyInstance): Promise<void> {
   const claudeRoot = path.join(os.homedir(), '.claude', 'projects');
@@ -44,6 +48,7 @@ export async function registerEventsRoutes(app: FastifyInstance): Promise<void> 
     // Per-connection seen-state — emit only NEW transitions.
     const lastStatus = new Map<string, string>(); // `${slug}:${runId}` -> status
     const seenDrift = new Set<string>(); // `${slug}:${linkId}`
+    const lastSweep = new Map<string, number>(); // slug -> last reflection sweep ms
     let primed = false; // first pass seeds state silently (no burst on connect)
     let closed = false;
 
@@ -86,6 +91,21 @@ export async function registerEventsRoutes(app: FastifyInstance): Promise<void> 
           seenDrift.add(key);
           if (!primed) continue;
           send({ kind: 'drift', project: p.slug, projectPath: p.path, id: String(l.id), title: 'Drift detected', detail: `${l.specId} → ${l.targetQualifiedName}` });
+        }
+
+        // Reflection sweep — throttled to ~daily. Notifies only on NEW
+        // high-severity proposals; the persisted store dedupes, so this is NOT
+        // gated on `primed` (a brand-new finding should alert even on connect,
+        // while an already-seen one never re-fires regardless of connection).
+        const now = Date.now();
+        if (now - (lastSweep.get(p.slug) ?? 0) >= SWEEP_MS) {
+          lastSweep.set(p.slug, now);
+          try {
+            const res = cg.reflectSweep();
+            for (const prop of res.notify) {
+              send({ kind: 'reflect', project: p.slug, projectPath: p.path, id: prop.contentHash, title: prop.title, detail: prop.evidence.detail });
+            }
+          } catch { /* ignore — a sweep failure must not break the stream */ }
         }
       }
       primed = true;

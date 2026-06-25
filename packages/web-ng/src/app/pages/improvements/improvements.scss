@@ -1,0 +1,98 @@
+.page { padding: 20px 24px 48px; }
+
+.banner-error {
+  background: var(--error-soft);
+  color: var(--error);
+  border: 1px solid color-mix(in srgb, var(--error) 30%, transparent);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 12.5px;
+  margin-bottom: 14px;
+  &.small { margin: 8px 0; padding: 8px 10px; font-size: 11.5px; }
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+  padding: 64px 24px;
+  color: var(--text-muted);
+  .empty-title { font-size: 15px; font-weight: 600; color: var(--text); }
+  .empty-sub { font-size: 12.5px; max-width: 460px; line-height: 1.5; }
+}
+
+.card-skel { height: 132px; border-radius: 12px; margin-bottom: 12px; }
+
+.prop-list { display: flex; flex-direction: column; gap: 12px; }
+
+.prop-card {
+  position: relative;
+  display: flex;
+  overflow: hidden;
+  padding: 0;
+  .sev-bar { width: 3px; flex: 0 0 3px; }
+  .prop-body { flex: 1; min-width: 0; padding: 14px 16px; }
+}
+
+.head-row { margin-bottom: 8px; }
+.chips { margin-bottom: 6px; }
+
+.type-chip {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--surface-2, color-mix(in srgb, var(--text) 7%, transparent));
+  border-radius: 5px;
+  padding: 2px 7px;
+}
+
+.outcome {
+  font-size: 10.5px;
+  color: var(--success);
+  font-weight: 600;
+  text-transform: lowercase;
+}
+
+.prop-title { font-size: 14px; font-weight: 600; color: var(--text); line-height: 1.35; }
+.prop-why { font-size: 12.5px; color: var(--text-secondary, var(--text-muted)); line-height: 1.5; margin-bottom: 10px; }
+
+.prop-meta {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 10px;
+  .detail { font-size: 11px; margin-top: 2px; word-break: break-all; }
+}
+
+.preview {
+  margin: 8px 0 12px;
+  .diff {
+    background: var(--surface-2, color-mix(in srgb, var(--text) 5%, transparent));
+    border: 1px solid var(--border, color-mix(in srgb, var(--text) 12%, transparent));
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 11.5px;
+    line-height: 1.5;
+    max-height: 280px;
+    overflow: auto;
+    white-space: pre;
+    margin-top: 4px;
+  }
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.applied-tag {
+  font-size: 11px;
+  color: var(--success);
+  font-weight: 600;
+}

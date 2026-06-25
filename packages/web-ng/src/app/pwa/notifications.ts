@@ -1,12 +1,12 @@
 import { Injectable, computed, signal } from '@angular/core';
 
 /** The alert classes a user can toggle independently (REQ-PWA-003). */
-export type AlertType = 'approval' | 'runDone' | 'drift';
+export type AlertType = 'approval' | 'runDone' | 'drift' | 'reflect';
 
 type PermState = 'granted' | 'denied' | 'default' | 'unsupported';
 
 const LS_PREFS = 'specship.notify.prefs';
-const DEFAULT_PREFS: Record<AlertType, boolean> = { approval: true, runDone: true, drift: true };
+const DEFAULT_PREFS: Record<AlertType, boolean> = { approval: true, runDone: true, drift: true, reflect: true };
 
 /**
  * Desktop-notification permission + per-type preferences (REQ-PWA-003), plus a

@@ -425,3 +425,27 @@ CREATE TABLE IF NOT EXISTS claude_pricing (
     cache_read_per_mtok     REAL NOT NULL,
     updated_at      INTEGER NOT NULL
 );
+
+-- Reflection engine (REFLECT-DOC): self-improvement proposals mined from the
+-- ingested claude_* transcript tables. Each row is one durable, human-gated
+-- proposal keyed by a stable content_hash so a re-mine of the same pattern
+-- converges to one row (REQ-REFLECT-007). The engine PROPOSES; a change reaches
+-- disk only on an explicit per-proposal apply.
+CREATE TABLE IF NOT EXISTS reflect_proposals (
+    content_hash    TEXT PRIMARY KEY,    -- stable id derived from type+target+payload
+    type            TEXT NOT NULL,       -- 'memory_rule' | 'skill' | 'hook'
+    severity        TEXT NOT NULL,       -- 'high' | 'warn' | 'info' (tips scale)
+    title           TEXT NOT NULL,
+    body            TEXT NOT NULL,       -- why this proposal exists, user-facing
+    target_kind     TEXT NOT NULL,       -- 'claude_md' | 'memory_note' | 'command' | 'settings_hook'
+    target_path     TEXT NOT NULL,       -- absolute path the apply will write
+    payload         TEXT NOT NULL,       -- JSON: artifact-type-specific intended content
+    evidence        TEXT NOT NULL,       -- JSON: { sessions:[], prompts:[], detail }
+    state           TEXT NOT NULL DEFAULT 'open',  -- open | applied | undone | dismissed
+    created_at      INTEGER NOT NULL,
+    updated_at      INTEGER NOT NULL,
+    applied_at      INTEGER               -- set when state first becomes 'applied'
+);
+
+CREATE INDEX IF NOT EXISTS idx_reflect_proposals_state ON reflect_proposals(state);
+CREATE INDEX IF NOT EXISTS idx_reflect_proposals_severity ON reflect_proposals(severity);
