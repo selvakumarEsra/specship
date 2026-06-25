@@ -56,6 +56,7 @@ const EV_COLOR: Record<string, string> = {
   step_started: 'var(--info)',
   step_completed: 'var(--success)',
   tool_called: 'var(--node-code)',
+  agent_message: 'var(--node-spec)',
   artifact_created: 'var(--node-route)',
   approval_requested: 'var(--warn)',
   run_started: 'var(--info)',
@@ -322,16 +323,21 @@ export class RunDetail implements OnInit, OnDestroy {
   }
 
   protected eventDetail(e: WorkflowEvent): string {
-    if (!e.data) return '';
-    const out = e.data['output'];
-    const err = e.data['error'];
-    if (typeof err === 'string') return err;
-    if (typeof out === 'string') return out.length > 200 ? out.slice(0, 200) + '…' : out;
+    const d = e.data;
+    if (!d) return '';
+    const cap = (s: string) => (s.length > 200 ? s.slice(0, 200) + '…' : s);
+    if (typeof d['error'] === 'string') return d['error'] as string;
+    // agent_message — the agent's text turn.
+    if (typeof d['text'] === 'string') return cap(d['text'] as string);
+    // tool_called — tool name + short input summary.
+    if (typeof d['name'] === 'string') {
+      const input = typeof d['input'] === 'string' ? (d['input'] as string) : '';
+      return cap(input ? `${d['name']} ${input}` : (d['name'] as string));
+    }
+    const out = d['output'];
+    if (typeof out === 'string') return cap(out);
     if (out != null) {
-      try {
-        const s = JSON.stringify(out);
-        return s.length > 200 ? s.slice(0, 200) + '…' : s;
-      } catch { return ''; }
+      try { return cap(JSON.stringify(out)); } catch { return ''; }
     }
     return '';
   }
