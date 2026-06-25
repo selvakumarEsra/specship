@@ -15,6 +15,8 @@
 import type SpecShip from '../index';
 import type { SpecLink, SpecLinkState, SpecLinkKind, NodeKind } from '../types';
 import type { ToolDefinition, ToolResult } from './tools';
+import { summarizeBriefFunnel } from '../resolution/brief-link-resolver';
+import type { FunnelLookup } from '../resolution/brief-link-resolver';
 
 const projectPathProperty = {
   type: 'string',
@@ -53,17 +55,16 @@ export const specToolDefinitions: ToolDefinition[] = [
   {
     name: 'specship_spec',
     description:
-      'Fetch a spec/requirement by its ID. Call this FIRST whenever the user mentions a spec ID (e.g., REQ-AUTH-005) or a requirement. Returns the spec body, its parent doc and sibling requirements, and the code it currently links to with link state (verified / drifted / orphaned). Use this instead of Read-ing the spec file — it returns more (linked code + state) than the file alone.',
+      'Fetch a spec/requirement by its ID. Call this FIRST whenever the user mentions a spec ID (e.g., REQ-AUTH-005) or a requirement. Returns the spec body, its parent doc and sibling requirements, and the code it currently links to with link state (verified / drifted / orphaned). Use this instead of Read-ing the spec file — it returns more (linked code + state) than the file alone. Called WITHOUT a spec_id, it returns the project\'s spec lifecycle funnel: brainstormed ideas → specs → implemented, with per-document rollups.',
     inputSchema: {
       type: 'object',
       properties: {
         spec_id: {
           type: 'string',
-          description: 'Embedded spec ID (e.g., "REQ-AUTH-005", "AUTH-DOC")',
+          description: 'Embedded spec ID (e.g., "REQ-AUTH-005", "AUTH-DOC"). Omit to get the lifecycle funnel.',
         },
         projectPath: projectPathProperty,
       },
-      required: ['spec_id'],
     },
   },
   {
@@ -169,15 +170,104 @@ function formatLink(link: SpecLink): string {
   return `  - [${link.state}${driftSuffix}] ${resolved} ${link.kind} → ${link.targetFilePath}:${link.targetQualifiedName} <${link.provenance}${conf}>  #${link.id}`;
 }
 
+/**
+ * Build the spec lifecycle funnel markdown (REQ-FUNNEL-005): brainstormed ideas
+ * → specs → implemented, with per-document rollups. Shown when `specship_spec`
+ * is called without a spec_id.
+ */
+function buildFunnel(sq: FunnelLookup): string {
+  const all = sq.getAllSpecs();
+  if (all.length === 0) {
+    return '# Spec lifecycle funnel\n\n_No specs or briefs found. Author one with /ss-spec-author or /ss-brainstorm._';
+  }
+
+  const briefs = all.filter((s) => s.kind === 'brief');
+  const documents = all.filter((s) => s.kind === 'document');
+  const requirements = all.filter((s) => s.kind === 'requirement');
+  const entries = briefs.map((b) => summarizeBriefFunnel(sq, b));
+  const byState = (st: string) => entries.filter((e) => e.state === st);
+
+  const docRollup = (docId: string) => {
+    const reqs = sq.getSpecsByParent(docId).filter((s) => s.kind === 'requirement');
+    const r = { requirements: reqs.length, implemented: 0, verified: 0, degraded: 0 };
+    for (const req of reqs) {
+      for (const lk of sq.getLinksBySpec(req.id)) {
+        if (lk.state === 'implemented') r.implemented++;
+        else if (lk.state === 'verified') r.verified++;
+        else if (lk.state === 'drifted' || lk.state === 'broken' || lk.state === 'orphaned') r.degraded++;
+      }
+    }
+    return r;
+  };
+
+  // Global implementation counts across every requirement (covers requirements
+  // whose parent isn't a document too).
+  let implemented = 0;
+  let verified = 0;
+  let degraded = 0;
+  for (const req of requirements) {
+    for (const lk of sq.getLinksBySpec(req.id)) {
+      if (lk.state === 'implemented') implemented++;
+      else if (lk.state === 'verified') verified++;
+      else if (lk.state === 'drifted' || lk.state === 'broken' || lk.state === 'orphaned') degraded++;
+    }
+  }
+
+  const lines: string[] = [];
+  lines.push('# Spec lifecycle funnel');
+  lines.push('');
+  lines.push(
+    `**ideas** ${byState('idea').length} · **specified** ${byState('specified').length}` +
+      (byState('conflict').length ? ` · **conflicts** ${byState('conflict').length} ⚠` : '')
+  );
+  lines.push(
+    `**documents** ${documents.length} · **requirements** ${requirements.length} (implemented ${implemented} · verified ${verified} · degraded ${degraded})`
+  );
+
+  if (documents.length) {
+    lines.push('');
+    lines.push('## Documents');
+    for (const d of documents) {
+      const r = docRollup(d.id);
+      lines.push(
+        `- ${d.id} — ${d.title}  [${r.requirements} reqs · ${r.implemented} impl · ${r.verified} ver${r.degraded ? ` · ${r.degraded} degraded` : ''}]`
+      );
+    }
+  }
+
+  const ideas = byState('idea');
+  if (ideas.length) {
+    lines.push('');
+    lines.push('## Ideas (unlinked briefs)');
+    for (const e of ideas) {
+      const b = sq.getSpecById(e.briefId);
+      lines.push(`- ${e.briefId} — ${b?.title ?? ''}`);
+    }
+  }
+
+  const conflicts = entries.filter((e) => e.state === 'conflict');
+  if (conflicts.length) {
+    lines.push('');
+    lines.push('## Conflicts (mismatched brief↔spec pointers)');
+    for (const e of conflicts) lines.push(`- ${e.briefId} ⚠`);
+  }
+
+  return lines.join('\n');
+}
+
 export async function handleSpecshipSpec(
   cg: SpecShip,
   args: Record<string, unknown>
 ): Promise<ToolResult> {
   const specId = args.spec_id;
-  if (typeof specId !== 'string' || specId.length === 0) {
-    return error('spec_id is required (string)');
-  }
   const sq = cg.getSpecQueries();
+  // No id → the lifecycle funnel (REQ-FUNNEL-005). The id case below is unchanged.
+  if (specId === undefined || specId === null || specId === '') {
+    return text(buildFunnel(sq));
+  }
+  if (typeof specId !== 'string') {
+    return error('spec_id must be a string');
+  }
   const spec = sq.getSpecById(specId);
   if (!spec) {
     return error(`Spec "${specId}" not found. Use specship_drifted or specship_search to discover specs.`);
