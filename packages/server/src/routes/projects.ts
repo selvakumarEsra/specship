@@ -42,7 +42,7 @@ export interface ProjectsResponse {
 const projectsBus = new EventEmitter();
 projectsBus.setMaxListeners(0); // many SSE subscribers + internal
 
-async function enumerate(claudeRoot: string): Promise<ProjectEntry[]> {
+export async function enumerate(claudeRoot: string): Promise<ProjectEntry[]> {
   let entries: import('node:fs').Dirent[];
   try {
     entries = await fs.readdir(claudeRoot, { withFileTypes: true });

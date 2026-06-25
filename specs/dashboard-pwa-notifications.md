@@ -52,13 +52,12 @@ newly-detected **spec→code drift**. Activating a notification MUST focus the a
 and navigate to the relevant run or drift. The same event MUST NOT raise more
 than one notification, and routine high-volume activity MUST NOT notify.
 
-[needs review] Source coverage: the existing `workflow_events` SSE is scoped to
-the active project's database, and drift has no live stream today. Delivering
-"all tracked projects" + drift will likely require new server plumbing — a
-cross-project event stream and/or a drift signal (or a periodic drift poll) —
-rather than consuming the single existing SSE. Resolve the source during
-implementation; if drift cannot be sourced cleanly in this iteration, split it
-into a follow-up rather than dropping the dedupe/scope guarantees for runs.
+Source coverage (resolved): a dedicated cross-project `GET /api/events` SSE
+watches every initialized project — polling each project's workflow runs (paused
+→ approval; completed/failed → run done) and drifted/broken/orphaned links
+(drift) — and emits only NEW transitions (per-connection seen-state, primed
+silently on connect). Run + drift alerts are sourced together; no per-project
+selection is required.
 
 ## Acceptance
 <!-- id: REQ-PWA-002.A1 -->
