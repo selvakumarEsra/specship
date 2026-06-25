@@ -12,6 +12,7 @@
   "dependencies": {
     "@astrojs/starlight": "^0.39.2",
     "@fontsource-variable/geist": "^5.2.8",
+    "@fontsource-variable/newsreader": "^5.2.10",
     "@fontsource/geist-mono": "^5.2.7",
     "astro": "^6.3.1",
     "sharp": "^0.34.5"

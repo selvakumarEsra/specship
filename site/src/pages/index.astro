@@ -3,6 +3,7 @@ import '@fontsource-variable/geist';
 import '@fontsource/geist-mono/400.css';
 import '@fontsource/geist-mono/500.css';
 import '@fontsource/geist-mono/600.css';
+import '@fontsource-variable/newsreader';
 import '../styles/theme.css';
 import LogoMark from '../components/LogoMark.astro';
 import { getStarsLabel } from '../lib/github';
@@ -227,7 +228,7 @@ steps:
 					</header>
 					<figure class="show-fig">
 						<img
-							src="https://raw.githubusercontent.com/selvakumarEsra/specship/main/assets/screenshots/dashboard.png?v=1"
+							src="https://raw.githubusercontent.com/selvakumarEsra/specship/main/assets/screenshots/dashboard.png?v=2"
 							alt="SpecShip desktop dashboard"
 							loading="lazy"
 						/>
@@ -799,6 +800,36 @@ specship init -i</code></pre>
 				.star { display: none; }
 				.wordmark-sub { display: none; }
 				.foot { padding: 1.4rem 1.25rem; }
+			}
+
+			/* ---- ANTHROPIC LIGHT THEME (landing) ----
+			   Serif headings, soft corners, warm shadows in place of the
+			   brutalist square/offset look. Light mode only; dark untouched.
+			   Radii need !important — theme.css resets all corners to 0. */
+			:global([data-theme='light']) h1,
+			:global([data-theme='light']) .prod-head h2,
+			:global([data-theme='light']) .show-head h2,
+			:global([data-theme='light']) .pillar h2,
+			:global([data-theme='light']) .prod h3 {
+				font-family: var(--ss-font-serif, 'Newsreader Variable', Georgia, serif);
+				letter-spacing: -0.008em;
+			}
+			:global([data-theme='light']) h1 { font-weight: 600; }
+
+			:global([data-theme='light']) .yaml-frame {
+				border-radius: 14px !important;
+				box-shadow: 0 2px 6px rgba(38, 34, 24, 0.05), 0 14px 36px rgba(38, 34, 24, 0.08);
+			}
+			:global([data-theme='light']) .yaml-head { border-radius: 14px 14px 0 0 !important; }
+			:global([data-theme='light']) .show-fig {
+				border-radius: 16px !important;
+				box-shadow: 0 4px 12px rgba(38, 34, 24, 0.06), 0 18px 44px rgba(38, 34, 24, 0.1);
+			}
+			:global([data-theme='light']) .btn,
+			:global([data-theme='light']) .install,
+			:global([data-theme='light']) .star,
+			:global([data-theme='light']) .theme-btn {
+				border-radius: 8px !important;
 			}
 		</style>
 	</body>

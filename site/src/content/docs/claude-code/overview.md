@@ -51,6 +51,19 @@ The reconciliation parses any new `.jsonl` files (and any new lines on existing 
 
 The watcher runs in-process; pass `--ingest` to be explicit, or `--no-web` to run the API headless (no SPA). The UI hits `127.0.0.1:4242` by default — change it with `--port` / `--host`.
 
+## Install as a desktop app
+
+The SpecShip Desktop UI is a **Progressive Web App (PWA)** — once `specship serve --ui` is running and you open `http://127.0.0.1:4242`, Chromium browsers offer to install it as a standalone desktop app:
+
+- **Chrome / Edge:** click the **install icon** in the address bar (a monitor with a down-arrow), or open the **⋮** menu → **Apps → Install this site as an app…**, then confirm **Install**.
+- **Safari (macOS 14+):** **File → Add to Dock**.
+
+The installed app opens in its own frameless window — no browser chrome (`display: standalone`) — with its own Dock / taskbar icon and app-switcher entry, using SpecShip's icon and dark `#0B0D11` theme. It still talks to the local `127.0.0.1:4242` server, so keep `specship serve --ui` running (or start it first); the app is the front-end, the CLI server is the back-end.
+
+Because the app registers a service worker that caches its shell, the window still opens and shows your last-loaded data even when the server is momentarily down — see [Offline mode](#offline-mode) below.
+
+To remove it, open the app's **⋮** menu → **Uninstall**, or delete it from your browser's `chrome://apps` / `edge://apps` list. Uninstalling the app does not touch any SpecShip data — that lives in the project's `.specship/` on disk.
+
 ## Offline mode
 
 If the SpecShip server is down or unreachable, the desktop UI doesn't fall back to the browser's "this site can't be reached" page — it loads from a local cache and keeps showing the last data it loaded, each surface marked with how old it is (e.g. "Offline · 4m ago"). The connection indicator switches from **● Live** to **● Offline**, and actions that need the server (Refresh, saving a spec) are disabled with an offline notice. Data reloads automatically and the indicator returns to **● Live** once the server is back.

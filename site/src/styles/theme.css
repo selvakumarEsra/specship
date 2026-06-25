@@ -78,62 +78,70 @@
 }
 
 /* ============================================================
-   LIGHT — desktop's light theme (bg #F4F6F8)
+   LIGHT — Anthropic design system.
+   Ivory canvas (#F0EEE6), clay/"book cloth" accent (#CC785C),
+   warm slate ink, Tiempos-like serif headings, soft corners.
+   (Dark theme above is untouched — the SpecShip Desktop look.)
    ============================================================ */
 :root[data-theme='light'] {
 	color-scheme: light;
 
-	--sl-color-accent-low: #dbe7fa;
-	--sl-color-accent: #2563eb;
-	--sl-color-accent-high: #1a4cc4;
-	--sl-color-white: #161b22;
-	--sl-color-gray-1: #1f2530;
-	--sl-color-gray-2: #4a5566;
-	--sl-color-gray-3: #6b7484;
-	--sl-color-gray-4: #7b8696;
-	--sl-color-gray-5: #a9b2c0;
-	--sl-color-gray-6: #d8dde4;
-	--sl-color-gray-7: #e9ecf1;
-	--sl-color-black: #f4f6f8;
+	/* Serif used for headings in light mode only. */
+	--ss-font-serif: 'Newsreader Variable', 'Newsreader', Georgia, 'Times New Roman', serif;
 
-	--sl-color-bg: #f4f6f8;
-	--sl-color-bg-nav: #f4f6f8;
-	--sl-color-bg-sidebar: #ffffff;
-	--sl-color-bg-inline-code: #e9ecf1;
-	--sl-color-bg-accent: #2563eb;
+	--sl-color-accent-low: #f1dcd1;
+	--sl-color-accent: #cc785c;
+	--sl-color-accent-high: #8a4128;
+	--sl-color-white: #1a1a17;
+	--sl-color-gray-1: #2b2a25;
+	--sl-color-gray-2: #44423a;
+	--sl-color-gray-3: #6a685d;
+	--sl-color-gray-4: #8a887b;
+	--sl-color-gray-5: #b7b4a5;
+	--sl-color-gray-6: #dcd8ca;
+	--sl-color-gray-7: #ebe8dd;
+	--sl-color-black: #f0eee6;
 
-	--sl-color-text: #161b22;
-	--sl-color-text-accent: #1a4cc4;
-	--sl-color-text-invert: #f4f6f8;
+	--sl-color-bg: #f0eee6;
+	--sl-color-bg-nav: #f0eee6;
+	--sl-color-bg-sidebar: #ebe8de;
+	--sl-color-bg-inline-code: #e6e2d4;
+	--sl-color-bg-accent: #cc785c;
 
-	--sl-color-hairline: #161b22;
-	--sl-color-hairline-light: rgba(15, 23, 42, 0.1);
-	--sl-color-hairline-shade: rgba(15, 23, 42, 0.18);
+	--sl-color-text: #1a1a17;
+	--sl-color-text-accent: #a8482a;
+	--sl-color-text-invert: #f7f6f1;
 
-	--ss-bg: #f4f6f8;
-	--ss-bg-2: #ffffff;
-	--ss-bg-elev: #ffffff;
-	--ss-bg-press: #e9ecf1;
-	--ss-bg-void: #e9ecf1;
-	--ss-ink: #161b22;
-	--ss-ink-2: #4a5566;
-	--ss-ink-3: #7b8696;
-	--ss-ink-4: #a9b2c0;
-	--ss-accent: #2563eb;
-	--ss-accent-2: #1a4cc4;
-	--ss-accent-strong: #2563eb;
-	--ss-accent-soft: rgba(37, 99, 235, 0.1);
-	--ss-rule: rgba(15, 23, 42, 0.1);
-	--ss-rule-strong: rgba(15, 23, 42, 0.18);
+	--sl-color-hairline: #1a1a17;
+	--sl-color-hairline-light: rgba(38, 34, 24, 0.1);
+	--sl-color-hairline-shade: rgba(38, 34, 24, 0.16);
 
+	/* SpecShip Desktop tokens — Anthropic remap. */
+	--ss-bg: #f0eee6;
+	--ss-bg-2: #f7f6f1;
+	--ss-bg-elev: #fbfaf6;
+	--ss-bg-press: #e6e2d4;
+	--ss-bg-void: #ebe8de;
+	--ss-ink: #1a1a17;
+	--ss-ink-2: #54524a;
+	--ss-ink-3: #807e72;
+	--ss-ink-4: #a8a698;
+	--ss-accent: #cc785c;
+	--ss-accent-2: #a8482a;
+	--ss-accent-strong: #8a4128;
+	--ss-accent-soft: rgba(204, 120, 92, 0.16);
+	--ss-rule: rgba(38, 34, 24, 0.1);
+	--ss-rule-strong: rgba(38, 34, 24, 0.2);
+
+	/* Node family — kept distinct for the graph/diagram, nudged warmer. */
 	--ss-node-spec: #2f6fe0;
-	--ss-node-code: #7c56e0;
-	--ss-node-test: #1e9e4c;
-	--ss-node-route: #0e9c8e;
+	--ss-node-code: #8a5cc4;
+	--ss-node-test: #3f8f4e;
+	--ss-node-route: #1f8f86;
 	--ss-node-spec-soft: rgba(47, 111, 224, 0.12);
-	--ss-node-code-soft: rgba(124, 86, 224, 0.12);
-	--ss-node-test-soft: rgba(30, 158, 76, 0.12);
-	--ss-node-route-soft: rgba(14, 156, 142, 0.12);
+	--ss-node-code-soft: rgba(138, 92, 196, 0.12);
+	--ss-node-test-soft: rgba(63, 143, 78, 0.12);
+	--ss-node-route-soft: rgba(31, 143, 134, 0.12);
 }
 
 /* ---- Global resets ---- */
@@ -333,4 +341,40 @@ button[data-open-modal] {
 ::selection {
 	background: var(--ss-accent-soft);
 	color: var(--ss-ink);
+}
+
+/* ============================================================
+   ANTHROPIC LIGHT — serif headings, soft corners, warm elevation.
+   All scoped to [data-theme='light']; the dark theme is untouched.
+   ============================================================ */
+
+/* Tiempos-like serif headings (lighter weight, gentler tracking than the
+   Geist headings — serifs read heavy otherwise). */
+:root[data-theme='light']
+	:where(h1, h2, h3, .sl-markdown-content h1, .sl-markdown-content h2, .sl-markdown-content h3) {
+	font-family: var(--ss-font-serif);
+	font-weight: 560;
+	letter-spacing: -0.004em;
+}
+:root[data-theme='light'] :where(.sl-markdown-content h1) {
+	font-weight: 600;
+}
+
+/* Soften the square corners (override the global `* { border-radius:0 }` reset).
+   :is() carries the class specificity, so these win over the !important reset. */
+:root[data-theme='light']
+	:is(.card, .starlight-aside, .pagination-links a, button[data-open-modal],
+		.sl-markdown-content table, .sl-markdown-content img, .sl-markdown-content figure) {
+	border-radius: 12px !important;
+	overflow: hidden;
+}
+:root[data-theme='light'] :is(.sl-markdown-content :not(pre) > code) {
+	border-radius: 6px !important;
+}
+
+/* Warm, subtle elevation instead of hairline-only surfaces. */
+:root[data-theme='light'] :is(.card, .starlight-aside) {
+	box-shadow:
+		0 1px 2px rgba(38, 34, 24, 0.04),
+		0 8px 20px rgba(38, 34, 24, 0.05);
 }
