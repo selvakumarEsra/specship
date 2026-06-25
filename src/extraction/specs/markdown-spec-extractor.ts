@@ -142,25 +142,61 @@ export class MarkdownSpecExtractor {
       }
     }
 
-    // 3. Resolve parent IDs via heading-level nesting.
-    const docId =
+    // 3. Determine the document node (kind='document', no parent).
+    //
+    // The document's id comes from the frontmatter `id:`, or — when frontmatter
+    // omits it — from the first top-level (H1) section carrying an embedded id.
+    // When an H1 carries the document id (the canonical frontmatter-id + same-id
+    // H1 pattern), that H1 IS the document: it MUST NOT also be emitted as a
+    // requirement. A prior version did, with `parentId = docId` (self-parented),
+    // and `INSERT OR REPLACE` then clobbered the real document row — leaving every
+    // document mis-typed as a self-parented requirement (REQ-PROJECTION-001).
+    const frontmatterId =
       typeof frontmatter.id === 'string' && frontmatter.id.length > 0
         ? frontmatter.id
         : undefined;
 
-    // The document is its own spec entity. If frontmatter declared `id:`,
-    // use it; otherwise the file produces no top-level document node (just
-    // its requirements). Most authors will either declare frontmatter or
-    // use a single H1 as the document.
+    // The H1 that represents the document, if any:
+    //  - frontmatter id present → the first H1 whose id equals it (same-id pattern);
+    //  - frontmatter id absent  → the first H1 with an id (it becomes the document,
+    //    per REQ-PROJECTION-002).
+    const docSectionIdx = pendingSections.findIndex(
+      (s) => s.level === 1 && (frontmatterId === undefined || s.id === frontmatterId)
+    );
+    const documentSection =
+      docSectionIdx >= 0 ? pendingSections[docSectionIdx] : undefined;
+
+    const docId = frontmatterId ?? documentSection?.id;
+
     if (docId !== undefined) {
-      const firstSection = pendingSections[0];
-      const docBodyEnd =
-        firstSection !== undefined ? firstSection.headingLineIdx : lines.length;
-      const docBody = lines.slice(firstContentLine, docBodyEnd).join('\n').trim();
+      // Body + line range of the document.
+      let docStartLine: number;
+      let docBodyStart: number;
+      let docBodyEnd: number;
+      if (documentSection !== undefined) {
+        // The H1 IS the document: its body is the intro prose between the H1 and
+        // the first following section (the first requirement) — NOT the H1's full
+        // heading-nesting body, which would swallow every requirement beneath it.
+        const nextAfterDoc = pendingSections[docSectionIdx + 1];
+        docStartLine = documentSection.startLine;
+        docBodyStart = documentSection.headingLineIdx + 1;
+        docBodyEnd =
+          nextAfterDoc !== undefined ? nextAfterDoc.headingLineIdx : lines.length;
+      } else {
+        // Frontmatter id but no matching H1 (requirements start at H2, or the only
+        // H1 carries a different id): the document body is the content before the
+        // first heading, as before.
+        const firstSection = pendingSections[0];
+        docStartLine = firstContentLine + 1;
+        docBodyStart = firstContentLine;
+        docBodyEnd =
+          firstSection !== undefined ? firstSection.headingLineIdx : lines.length;
+      }
+      const docBody = lines.slice(docBodyStart, docBodyEnd).join('\n').trim();
       const docTitle =
         typeof frontmatter.title === 'string' && frontmatter.title.length > 0
           ? frontmatter.title
-          : this.filePath;
+          : documentSection?.title ?? this.filePath;
       specs.push({
         id: docId,
         kind: 'document',
@@ -168,7 +204,7 @@ export class MarkdownSpecExtractor {
         body: docBody,
         format: 'markdown',
         sourcePath: this.filePath,
-        startLine: firstContentLine + 1,
+        startLine: docStartLine,
         endLine: docBodyEnd,
         parentId: undefined,
         contentHash: hash(docBody),
@@ -192,6 +228,9 @@ export class MarkdownSpecExtractor {
     for (let s = 0; s < pendingSections.length; s++) {
       const section = pendingSections[s];
       if (section === undefined) continue;
+      // The H1 that IS the document was already emitted above (kind='document').
+      // Skip it here so it isn't also written as a self-parented requirement.
+      if (section === documentSection) continue;
 
       // Find body end: next section at level <= section.level, else EOF.
       let bodyEndLine = lines.length;

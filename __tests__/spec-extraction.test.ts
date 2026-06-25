@@ -137,4 +137,75 @@ ${body}
     const rb = b.specs.find((s) => s.id === 'R')!;
     expect(ra.contentHash).not.toBe(rb.contentHash);
   });
+
+  it('treats a same-id frontmatter + H1 as the document, not a self-parented requirement (REQ-PROJECTION-001)', () => {
+    const source = `---
+id: FUNNEL-DOC
+title: Funnel
+---
+<!-- id: FUNNEL-DOC -->
+# Funnel
+
+Intro prose for the document.
+
+<!-- id: REQ-1 -->
+## A requirement
+
+Body.
+`;
+    const result = new MarkdownSpecExtractor('specs/funnel.md', source).extract();
+    expect(result.errors).toEqual([]);
+
+    // Exactly one spec carries the document id, and it is the document — not a
+    // self-parented requirement clobbering it.
+    const withDocId = result.specs.filter((s) => s.id === 'FUNNEL-DOC');
+    expect(withDocId).toHaveLength(1);
+    const doc = withDocId[0]!;
+    expect(doc.kind).toBe('document');
+    expect(doc.parentId).toBeUndefined();
+
+    // Body is the H1 intro prose — non-empty, and does not swallow the requirement.
+    expect(doc.body).toContain('Intro prose for the document.');
+    expect(doc.body).not.toContain('A requirement');
+
+    // The requirement parents to the document.
+    const req = result.specs.find((s) => s.id === 'REQ-1')!;
+    expect(req.kind).toBe('requirement');
+    expect(req.parentId).toBe('FUNNEL-DOC');
+  });
+
+  it('promotes a lone H1 with an id to the document when frontmatter has no id (REQ-PROJECTION-002)', () => {
+    const source = `<!-- id: SOLO-DOC -->
+# Solo document
+
+Intro.
+
+<!-- id: REQ-X -->
+## A requirement
+
+Body.
+`;
+    const result = new MarkdownSpecExtractor('specs/solo.md', source).extract();
+    expect(result.errors).toEqual([]);
+
+    const doc = result.specs.find((s) => s.id === 'SOLO-DOC')!;
+    expect(doc.kind).toBe('document');
+    expect(doc.parentId).toBeUndefined();
+
+    const req = result.specs.find((s) => s.id === 'REQ-X')!;
+    expect(req.kind).toBe('requirement');
+    expect(req.parentId).toBe('SOLO-DOC');
+  });
+
+  it('emits no document when there is neither a frontmatter id nor an H1 id (REQ-PROJECTION-002)', () => {
+    const source = `<!-- id: REQ-ONLY -->
+## A requirement
+
+Body.
+`;
+    const result = new MarkdownSpecExtractor('specs/reqonly.md', source).extract();
+    expect(result.specs.filter((s) => s.kind === 'document')).toHaveLength(0);
+    const req = result.specs.find((s) => s.id === 'REQ-ONLY')!;
+    expect(req.parentId).toBeUndefined();
+  });
 });
