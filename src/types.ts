@@ -840,6 +840,7 @@ export type WorkflowEventType =
   | 'step_failed'
   | 'step_skipped'
   | 'tool_called'
+  | 'agent_message'
   | 'artifact_created'
   | 'approval_requested'
   | 'approval_granted'
