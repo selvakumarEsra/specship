@@ -30,6 +30,11 @@ const THRESHOLDS = {
   editHotspotTotal: 8, // R6: same file Edited ≥N times overall
   editHotspotSessions: 2, // R6: …across ≥N sessions
   correctionMin: 2, // R7: same corrective instruction repeated ≥N times
+  specshipColdReadMin: 15, // R8: reads/greps in a session to count as read-heavy
+  specshipColdSessions: 2, // R8: ≥N read-heavy sessions with zero specship calls
+  heavyOutputBytes: 50000, // R9: a Bash call whose result exceeds N "tokens"
+  heavyOutputMin: 2, // R9: …seen ≥N times
+  refDocSessions: 3, // R10: a doc file Read across ≥N distinct sessions
 };
 
 /** Per-rule cap so a noisy corpus can't flood the Improvements list. */
@@ -60,6 +65,10 @@ export function mineProposals(db: SqliteDatabase, ctx: ReflectContext): Proposal
   out.push(...ruleDestructiveCommands(db, ctx));
   out.push(...ruleEditHotspot(db, ctx));
   out.push(...ruleRecurringCorrection(db, ctx));
+  // Round 3 detectors.
+  out.push(...ruleSpecshipCold(db, ctx));
+  out.push(...ruleHeavyOutput(db, ctx));
+  out.push(...ruleReferenceDoc(db, ctx));
   return out;
 }
 
@@ -382,6 +391,133 @@ function ruleRecurringCorrection(db: SqliteDatabase, ctx: ReflectContext): Propo
       },
     }),
   );
+}
+
+/**
+ * R8 → memory_rule (portable ~/.claude/memory): sessions that lean hard on
+ * Read/grep while making zero specship calls. SpecShip is indexed here, so a
+ * portable habit-note to query it first is the durable fix. Uses the
+ * `is_specship` classification on tool calls.
+ */
+function ruleSpecshipCold(db: SqliteDatabase, ctx: ReflectContext): Proposal[] {
+  const rows = db
+    .prepare(
+      `SELECT session_id,
+              SUM(CASE WHEN tool_name IN ('Read','Grep')
+                        OR (tool_name='Bash' AND (input_summary LIKE 'grep%' OR input_summary LIKE '%grep %'
+                              OR input_summary LIKE 'find %' OR input_summary LIKE 'rg %'))
+                       THEN 1 ELSE 0 END) AS reads,
+              SUM(is_specship) AS ss
+       FROM claude_tool_calls
+       GROUP BY session_id
+       HAVING reads >= ? AND ss = 0`,
+    )
+    .all(THRESHOLDS.specshipColdReadMin) as Array<{ session_id: string; reads: number; ss: number }>;
+  if (rows.length < THRESHOLDS.specshipColdSessions) return [];
+  const totalReads = rows.reduce((a, r) => a + r.reads, 0);
+  return [
+    buildProposal(ctx, {
+      type: 'memory_rule',
+      scope: 'portable',
+      severity: 'warn',
+      nameSeed: 'query-specship-first',
+      title: 'Query SpecShip before reading or grepping',
+      body: `${rows.length} read-heavy sessions (${totalReads} Read/grep calls) made no specship calls at all. SpecShip is the pre-built index for this code — a structural query usually answers in one call what a grep+read loop takes many.`,
+      content:
+        'This project is indexed by SpecShip. For "how does X work" / "where is X" / trace / impact questions, call `specship_explore` (or `specship_search`) FIRST and treat the returned source as already Read — only fall back to Read/grep to confirm a detail it did not cover.',
+      evidence: {
+        sessions: rows.map((r) => r.session_id).slice(0, 8),
+        prompts: [],
+        detail: `${rows.length} read-heavy sessions with 0 specship calls`,
+      },
+    }),
+  ];
+}
+
+/**
+ * R9 → memory_rule (project CLAUDE.md): a Bash command that dumps a huge result
+ * into context, repeatedly. Scoping its output (or using a structural query) is
+ * the durable fix. Uses `result_length`.
+ */
+function ruleHeavyOutput(db: SqliteDatabase, ctx: ReflectContext): Proposal[] {
+  const rows = db
+    .prepare(
+      `SELECT input_summary AS cmd, COUNT(*) AS n, MAX(result_length) AS maxlen,
+              GROUP_CONCAT(DISTINCT session_id) AS sessions
+       FROM claude_tool_calls
+       WHERE tool_name = 'Bash' AND input_summary != '' AND result_length > ?
+       GROUP BY input_summary
+       HAVING n >= ?
+       ORDER BY maxlen DESC
+       LIMIT ?`,
+    )
+    .all(THRESHOLDS.heavyOutputBytes, THRESHOLDS.heavyOutputMin, PER_RULE_LIMIT) as Array<{
+    cmd: string;
+    n: number;
+    maxlen: number;
+    sessions: string;
+  }>;
+  return rows.map((r) =>
+    buildProposal(ctx, {
+      type: 'memory_rule',
+      scope: 'project',
+      severity: 'warn',
+      nameSeed: `heavy-output-${r.cmd}`,
+      title: `Scope the output of \`${truncate(r.cmd, 40)}\``,
+      body: `\`${truncate(r.cmd, 80)}\` returned up to ~${Math.round(r.maxlen / 1000)}k tokens and ran ${r.n} times. Dumping large output into context is a dominant cost driver.`,
+      content: `When you need the result of \`${truncate(r.cmd, 80)}\`, scope it (filter, head, or target a path) — or answer the underlying question with a \`specship_search\`/\`specship_explore\` query instead of reading the full output into context.`,
+      evidence: {
+        sessions: (r.sessions || '').split(',').filter(Boolean).slice(0, 8),
+        prompts: [],
+        detail: `~${Math.round(r.maxlen / 1000)}k-token output × ${r.n}`,
+      },
+    }),
+  );
+}
+
+/**
+ * R10 → memory_rule (project CLAUDE.md): a documentation file read across many
+ * separate sessions is context the agent keeps rediscovering. Pointing at it
+ * from CLAUDE.md keeps it in context. Distinct from R1 (in-session re-reads of
+ * any file) — this keys on cross-session breadth of a *doc* file.
+ */
+function ruleReferenceDoc(db: SqliteDatabase, ctx: ReflectContext): Proposal[] {
+  const rows = db
+    .prepare(
+      `SELECT input_summary AS file, COUNT(DISTINCT session_id) AS s,
+              GROUP_CONCAT(DISTINCT session_id) AS sessions
+       FROM claude_tool_calls
+       WHERE tool_name = 'Read' AND input_summary != ''
+         AND (input_summary LIKE '%.md' OR input_summary LIKE '%.mdx'
+              OR input_summary LIKE '%.txt' OR input_summary LIKE '%.rst'
+              OR input_summary LIKE '%.adoc')
+       GROUP BY input_summary
+       HAVING s >= ?
+       ORDER BY s DESC
+       LIMIT ?`,
+    )
+    .all(THRESHOLDS.refDocSessions, PER_RULE_LIMIT) as Array<{
+    file: string;
+    s: number;
+    sessions: string;
+  }>;
+  return rows.map((r) => {
+    const base = r.file.split('/').pop() || r.file;
+    return buildProposal(ctx, {
+      type: 'memory_rule',
+      scope: 'project',
+      severity: 'warn',
+      nameSeed: `reference-${base}`,
+      title: `Reference ${base} from CLAUDE.md`,
+      body: `${base} was read in ${r.s} separate sessions — context the agent keeps rediscovering. Pointing at it from CLAUDE.md (or importing it with @path) keeps it on hand without a Read each time.`,
+      content: `\`${base}\` is frequently-needed context. Add a short pointer to it here (or import it with \`@${r.file}\`) so its guidance is always in context instead of re-Read each session.`,
+      evidence: {
+        sessions: (r.sessions || '').split(',').filter(Boolean).slice(0, 8),
+        prompts: [],
+        detail: `${base} read across ${r.s} sessions`,
+      },
+    });
+  });
 }
 
 function truncate(s: string, n: number): string {
