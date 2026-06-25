@@ -303,6 +303,49 @@ export async function handleSpecshipSpec(
     for (const link of links) lines.push(formatLink(link));
   }
 
+  // Inherited code (REQ-DOMAIN-002): a domain fact carries no direct code links;
+  // its code association + drift are inherited transitively through the
+  // requirement specs it depends on (parent_id / depends_on). Also covers any
+  // link-less spec that declares spec deps. Drift surfaces automatically because
+  // each inherited link renders its live `state` (A1 + A2). A fact that resolves
+  // to no inherited code is reported as a gap, never an error (A3).
+  const dep = spec.metadata?.depends_on;
+  const hasSpecDeps =
+    (typeof spec.parentId === 'string' && spec.parentId.length > 0) ||
+    (Array.isArray(dep) ? dep.length > 0 : typeof dep === 'string' && dep.length > 0);
+
+  if (spec.kind === 'domain' || (links.length === 0 && hasSpecDeps)) {
+    const inherited = cg.getSpecLinkResolver().getInheritedLinks(spec);
+    lines.push('');
+    if (inherited.links.length > 0) {
+      lines.push('## Inherited code');
+      lines.push(
+        '_Code linked transitively through the specs this fact depends on. Drift here is inherited — no domain-specific drift state._'
+      );
+      const byVia = new Map<string, SpecLink[]>();
+      for (const { viaSpecId, link } of inherited.links) {
+        const arr = byVia.get(viaSpecId) ?? [];
+        arr.push(link);
+        byVia.set(viaSpecId, arr);
+      }
+      for (const [viaSpecId, viaLinks] of byVia) {
+        const viaSpec = sq.getSpecById(viaSpecId);
+        lines.push(`### via ${viaSpecId}${viaSpec ? ` — ${viaSpec.title}` : ''}`);
+        for (const link of viaLinks) lines.push(formatLink(link));
+      }
+    } else {
+      lines.push('## Gap');
+      lines.push('_Unlinked fact (proposed). No requirement spec linked yet._');
+    }
+    // Declared-but-missing dependency ids are a gap, not an error.
+    if (inherited.gaps.length > 0) {
+      lines.push('');
+      lines.push(
+        `_Declared spec dependencies not found in the index: ${inherited.gaps.join(', ')}._`
+      );
+    }
+  }
+
   return text(lines.join('\n'));
 }
 

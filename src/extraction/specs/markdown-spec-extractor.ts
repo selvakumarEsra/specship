@@ -398,6 +398,21 @@ export class MarkdownSpecExtractor {
 
     const body = lines.slice(firstContentLine).join('\n').trim();
 
+    // Spec-tier linking (REQ-DOMAIN-002): a domain fact attaches to requirement
+    // specs via `parent_id` (single) and/or `depends_on` (one or many). Code
+    // association + drift are inherited transitively through those specs'
+    // `implements` links — there is NO direct domain→code row. Missing/unknown
+    // referenced specs stay silent here (no link candidate emitted); the fact
+    // still indexes (A3) and the dangling id surfaces later as a gap.
+    const parentId =
+      typeof meta.parent_id === 'string' && meta.parent_id.trim().length > 0
+        ? meta.parent_id.trim()
+        : undefined;
+    if (parentId !== undefined) delete meta.parent_id; // promoted to spec.parentId
+    const dependsOn = normalizeSpecIdList(meta.depends_on);
+    if (dependsOn.length > 0) meta.depends_on = dependsOn;
+    else delete meta.depends_on;
+
     const spec: Spec = {
       id,
       kind: 'domain',
@@ -407,7 +422,7 @@ export class MarkdownSpecExtractor {
       sourcePath: this.filePath,
       startLine: firstContentLine + 1,
       endLine: lines.length,
-      parentId: undefined,
+      parentId,
       contentHash: hash(body),
       version: typeof frontmatter.version === 'number' ? frontmatter.version : 1,
       owner: typeof frontmatter.owner === 'string' ? frontmatter.owner : undefined,
@@ -620,4 +635,27 @@ export class MarkdownSpecExtractor {
 
 function hash(s: string): string {
   return createHash('sha256').update(s).digest('hex').substring(0, 32);
+}
+
+/**
+ * Normalize a `depends_on` frontmatter value into a list of spec ids.
+ *
+ * The dependency-free frontmatter parser yields strings, so we accept both a
+ * single id and a comma-separated / inline-`[a, b]` list; an already-array
+ * value (future YAML extractor) is taken as-is. Empty entries are dropped and
+ * the result is deduped.
+ */
+function normalizeSpecIdList(value: unknown): string[] {
+  let parts: string[];
+  if (Array.isArray(value)) {
+    parts = value.filter((v): v is string => typeof v === 'string');
+  } else if (typeof value === 'string') {
+    parts = value
+      .replace(/^\[|\]$/g, '') // tolerate inline `[a, b]`
+      .split(',');
+  } else {
+    return [];
+  }
+  const out = parts.map((p) => p.trim()).filter((p) => p.length > 0);
+  return [...new Set(out)];
 }

@@ -66,6 +66,46 @@ export interface SpecLinkResolverStats {
   commentLinksApplied: number;
 }
 
+/** One code link inherited by a spec through a spec→spec dependency edge. */
+export interface InheritedLink {
+  /** The dependency spec id whose `implements` link this is. */
+  viaSpecId: string;
+  /** The inherited link itself (carries live `state` / `driftAxis`). */
+  link: SpecLink;
+}
+
+/** Result of {@link SpecLinkResolver.getInheritedLinks}. */
+export interface InheritedLinksResult {
+  /** Code links reached transitively through the spec's parent / depends_on chain. */
+  links: InheritedLink[];
+  /** Declared dependency spec ids that don't resolve to an indexed spec (gaps). */
+  gaps: string[];
+}
+
+/** Default cap on how deep the parent / depends_on chain is followed. */
+const INHERITED_LINK_MAX_DEPTH = 5;
+
+/**
+ * The spec ids a spec links to at the spec tier: its `parentId` plus every
+ * entry of `metadata.depends_on` (REQ-DOMAIN-002). `depends_on` may be a
+ * single string or a string[]; both normalize to a deduped list of non-empty
+ * ids.
+ */
+export function sourceSpecIds(spec: Spec): string[] {
+  const out: string[] = [];
+  if (typeof spec.parentId === 'string' && spec.parentId.length > 0) {
+    out.push(spec.parentId);
+  }
+  const dep = spec.metadata?.depends_on;
+  if (Array.isArray(dep)) {
+    for (const d of dep) if (typeof d === 'string' && d.length > 0) out.push(d);
+  } else if (typeof dep === 'string' && dep.length > 0) {
+    out.push(dep);
+  }
+  // Dedup while preserving order.
+  return [...new Set(out)];
+}
+
 export class SpecLinkResolver {
   private queries: QueryBuilder;
   private specQueries: SpecQueries;
@@ -308,6 +348,66 @@ export class SpecLinkResolver {
       count++;
     }
     return count;
+  }
+
+  // ===========================================================================
+  // Transitive (spec-tier) inheritance — REQ-DOMAIN-002
+  // ===========================================================================
+
+  /**
+   * Compute the code links a spec inherits transitively through its
+   * spec→spec edges (`parentId` + `metadata.depends_on`). A `domain` fact
+   * carries NO direct domain→code rows; its code association and drift state
+   * are derived here by following those spec edges to requirement specs and
+   * reusing *their* `spec_links` — whose `resolved_node_id`/`state` the normal
+   * `resolveAll`/`resolveLinksForFiles` pass already refreshed this sync. So
+   * "re-resolved after each sync" holds with no stored domain rows, and drift
+   * surfaces automatically through each inherited link's live `state`.
+   *
+   * Read-time derivation only — writes nothing. Cycle-guarded via a visited
+   * `Set`, depth-capped (default {@link INHERITED_LINK_MAX_DEPTH}). A declared
+   * dependency that doesn't resolve to an indexed spec is returned in `gaps`
+   * (an unlinked/proposed fact, never an error — REQ-DOMAIN-002.A3).
+   */
+  getInheritedLinks(
+    spec: Spec,
+    maxDepth: number = INHERITED_LINK_MAX_DEPTH
+  ): InheritedLinksResult {
+    const links: InheritedLink[] = [];
+    const gaps: string[] = [];
+    const visited = new Set<string>([spec.id]);
+    const seenLinkIds = new Set<number>();
+
+    // BFS over the parent / depends_on chain.
+    const queue: Array<{ id: string; depth: number }> = sourceSpecIds(spec).map(
+      (id) => ({ id, depth: 1 })
+    );
+
+    while (queue.length > 0) {
+      const { id, depth } = queue.shift()!;
+      if (visited.has(id)) continue;
+      visited.add(id);
+
+      const src = this.specQueries.getSpecById(id);
+      if (!src) {
+        gaps.push(id);
+        continue;
+      }
+
+      for (const link of this.specQueries.getLinksBySpec(id)) {
+        if (seenLinkIds.has(link.id)) continue;
+        seenLinkIds.add(link.id);
+        links.push({ viaSpecId: id, link });
+      }
+
+      if (depth < maxDepth) {
+        for (const nextId of sourceSpecIds(src)) {
+          if (!visited.has(nextId)) queue.push({ id: nextId, depth: depth + 1 });
+        }
+      }
+    }
+
+    return { links, gaps };
   }
 
   // ===========================================================================

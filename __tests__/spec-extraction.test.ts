@@ -332,6 +332,64 @@ Body that does not change.
     const b = new MarkdownSpecExtractor('specs/domain/payments.md', source).extract();
     expect(a.specs[0]!.contentHash).toBe(b.specs[0]!.contentHash);
   });
+
+  // --- REQ-DOMAIN-002: spec-tier linking via parent_id / depends_on ---
+
+  it('parses parent_id into spec.parentId and depends_on into metadata.depends_on', () => {
+    const source = `---
+id: DOM-PAY-004
+type: rule
+parent_id: REQ-PAY-001
+depends_on: REQ-PAY-004, REQ-PAY-005
+---
+# Settlement rule
+
+Body.
+`;
+    const result = new MarkdownSpecExtractor('specs/domain/payments.md', source).extract();
+    expect(result.specs).toHaveLength(1);
+    const fact = result.specs[0]!;
+    expect(fact.parentId).toBe('REQ-PAY-001');
+    expect((fact.metadata as Record<string, unknown>).depends_on).toEqual([
+      'REQ-PAY-004',
+      'REQ-PAY-005',
+    ]);
+    // parent_id is promoted out of metadata (it lives on spec.parentId now).
+    expect((fact.metadata as Record<string, unknown>).parent_id).toBeUndefined();
+    // No direct code link candidates — code is inherited at read time.
+    expect(result.linkCandidates).toEqual([]);
+  });
+
+  it('normalizes a single depends_on id to a one-element array', () => {
+    const source = `---
+id: DOM-PAY-005
+type: rule
+depends_on: REQ-PAY-004
+---
+# Single dep
+
+Body.
+`;
+    const fact = new MarkdownSpecExtractor('specs/domain/payments.md', source).extract()
+      .specs[0]!;
+    expect((fact.metadata as Record<string, unknown>).depends_on).toEqual(['REQ-PAY-004']);
+  });
+
+  it('indexes a domain fact with no spec deps and no parent (graceful, A3)', () => {
+    const source = `---
+id: DOM-PAY-006
+type: rule
+---
+# Unlinked fact
+
+Body.
+`;
+    const result = new MarkdownSpecExtractor('specs/domain/payments.md', source).extract();
+    expect(result.errors.filter((e) => e.severity === 'error')).toEqual([]);
+    const fact = result.specs[0]!;
+    expect(fact.parentId).toBeUndefined();
+    expect((fact.metadata as Record<string, unknown>).depends_on).toBeUndefined();
+  });
 });
 
 /** Probe whether the current process has FTS5 (mirrors spec-link-resolver.test.ts). */
