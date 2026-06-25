@@ -34,6 +34,8 @@ export default defineConfig({
 				'@fontsource/geist-mono/400.css',
 				'@fontsource/geist-mono/500.css',
 				'@fontsource/geist-mono/600.css',
+				// Tiempos-like serif used for headings in the Anthropic light theme.
+				'@fontsource-variable/newsreader',
 				'./src/styles/theme.css',
 			],
 			components: {

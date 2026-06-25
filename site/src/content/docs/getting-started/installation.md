@@ -72,6 +72,40 @@ Every release ships a self-contained build (bundled Node runtime — nothing to 
 | macOS | x64, arm64 | shell installer or npm |
 | Linux | x64, arm64 | shell installer or npm |
 
+## Offline / air-gapped install
+
+Every release is a **self-contained bundle** — a vendored Node runtime plus the app, with zero native addons to compile — so it installs on a machine with no internet. Download the bundle on a connected machine, copy it across, and unpack it.
+
+**1. On a machine with internet**, grab the archive matching the *offline* machine's platform from the [Releases page](https://github.com/selvakumarEsra/specship/releases) — `specship-<target>.tar.gz` (or `.zip` on Windows), where `<target>` is one of `darwin-arm64`, `darwin-x64`, `linux-x64`, `linux-arm64`, `win32-x64`, `win32-arm64`.
+
+**2. On the offline machine** (macOS / Linux), unpack and link it — this mirrors what `install.sh` does, minus the download:
+
+```bash
+VER=vX.Y.Z            # the release tag you downloaded
+TARGET=darwin-arm64   # the offline machine's platform
+dest="$HOME/.specship/versions/$VER"
+
+mkdir -p "$dest"
+tar -xzf specship-$TARGET.tar.gz -C "$dest" --strip-components=1
+ln -sfn "$dest" "$HOME/.specship/current"
+mkdir -p "$HOME/.local/bin"
+ln -sf "$dest/bin/specship" "$HOME/.local/bin/specship"
+export PATH="$HOME/.local/bin:$PATH"
+
+specship --help
+```
+
+On **macOS**, clear Gatekeeper quarantine on the unsigned bundle first, or the launcher is blocked: `xattr -dr com.apple.quarantine "$dest"`. On **Windows**, unzip `specship-win32-x64.zip` and add its `bin\` folder to `PATH`.
+
+**3. Wire into Claude Code** — fully offline once the binary is on disk:
+
+```bash
+specship install
+cd your-repo && specship init
+```
+
+The bundle vendors its own Node, so the offline machine needs no Node installed. `npm i -g` is *not* an offline path (it resolves per-platform packages from the npm registry) — use the release archive above.
+
 ## Uninstall
 
 ```bash
