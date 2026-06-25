@@ -59,11 +59,26 @@ function seedPrompt(sessionId: string, text: string): string {
     .run(id, sessionId, text, promptSeq);
   return id;
 }
-function seedTool(sessionId: string, promptId: string, tool: string, summary: string): void {
+function seedTool(
+  sessionId: string,
+  promptId: string,
+  tool: string,
+  summary: string,
+  opts: { resultLength?: number; isSpecship?: boolean } = {},
+): void {
   db.prepare(
-    `INSERT INTO claude_tool_calls (prompt_id, session_id, assistant_uuid, tool_name, input_summary, ts)
-     VALUES (?,?,?,?,?,?)`,
-  ).run(promptId, sessionId, `a-${callSeq++}`, tool, summary, callSeq);
+    `INSERT INTO claude_tool_calls (prompt_id, session_id, assistant_uuid, tool_name, input_summary, result_length, is_specship, ts)
+     VALUES (?,?,?,?,?,?,?,?)`,
+  ).run(
+    promptId,
+    sessionId,
+    `a-${callSeq++}`,
+    tool,
+    summary,
+    opts.resultLength ?? 0,
+    opts.isSpecship ? 1 : 0,
+    callSeq,
+  );
 }
 
 describe('reflect miner', () => {
@@ -167,6 +182,67 @@ describe('reflect miner', () => {
     const props = mineProposals(db, ctx);
     // It may surface as an R3 skill, but never as an R7 correction note.
     expect(props.find((x) => x.targetKind === 'memory_note' && /correction/i.test(x.title))).toBeUndefined();
+  });
+
+  it('proposes a query-SpecShip-first note for read-heavy, specship-cold sessions (R8 → memory_rule/portable)', () => {
+    for (const s of ['s1', 's2']) {
+      seedSession(s);
+      const p = seedPrompt(s, 'explore');
+      for (let i = 0; i < 16; i++) seedTool(s, p, 'Read', `src/file-${i}.ts`); // no specship calls
+    }
+    const props = mineProposals(db, ctx);
+    const r8 = props.find((x) => /query specship/i.test(x.title));
+    expect(r8).toBeTruthy();
+    expect(r8!.type).toBe('memory_rule');
+    expect(r8!.targetKind).toBe('memory_note');
+    expect(r8!.evidence.detail).toMatch(/2 read-heavy sessions/);
+  });
+
+  it('does not fire R8 when a session does use specship', () => {
+    seedSession('s1');
+    const p = seedPrompt('s1', 'explore');
+    for (let i = 0; i < 16; i++) seedTool('s1', p, 'Read', `src/file-${i}.ts`);
+    seedTool('s1', p, 'mcp__specship__specship_explore', 'foo', { isSpecship: true });
+    seedSession('s2');
+    const p2 = seedPrompt('s2', 'explore');
+    for (let i = 0; i < 16; i++) seedTool('s2', p2, 'Read', `src/g-${i}.ts`);
+    seedTool('s2', p2, 'mcp__specship__specship_search', 'bar', { isSpecship: true });
+    const props = mineProposals(db, ctx);
+    expect(props.find((x) => /query specship/i.test(x.title))).toBeUndefined();
+  });
+
+  it('proposes scoping a heavy-output Bash command (R9 → memory_rule/project)', () => {
+    seedSession('s1');
+    const p = seedPrompt('s1', 'dump');
+    for (let i = 0; i < 2; i++) seedTool('s1', p, 'Bash', 'cat huge.log', { resultLength: 80000 });
+    const props = mineProposals(db, ctx);
+    const r9 = props.find((x) => /scope the output/i.test(x.title));
+    expect(r9).toBeTruthy();
+    expect(r9!.targetKind).toBe('claude_md');
+    expect(r9!.evidence.detail).toMatch(/80k-token output × 2/);
+  });
+
+  it('proposes referencing a doc read across many sessions (R10 → memory_rule/project)', () => {
+    for (const s of ['s1', 's2', 's3']) {
+      seedSession(s);
+      const p = seedPrompt(s, 'read docs');
+      seedTool(s, p, 'Read', 'docs/architecture.md');
+    }
+    const props = mineProposals(db, ctx);
+    const r10 = props.find((x) => /reference architecture\.md/i.test(x.title));
+    expect(r10).toBeTruthy();
+    expect(r10!.targetKind).toBe('claude_md');
+    expect(r10!.evidence.detail).toMatch(/across 3 sessions/);
+  });
+
+  it('does not fire R10 for a non-doc source file', () => {
+    for (const s of ['s1', 's2', 's3']) {
+      seedSession(s);
+      const p = seedPrompt(s, 'read');
+      seedTool(s, p, 'Read', 'src/index.ts');
+    }
+    const props = mineProposals(db, ctx);
+    expect(props.find((x) => /reference index\.ts from CLAUDE/i.test(x.title))).toBeUndefined();
   });
 });
 
