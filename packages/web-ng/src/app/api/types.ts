@@ -264,7 +264,7 @@ export interface DriftResponse {
 
 export interface Spec {
   id: string;
-  kind: 'document' | 'requirement' | 'acceptance' | 'contract' | 'data_schema';
+  kind: 'document' | 'requirement' | 'acceptance' | 'contract' | 'data_schema' | 'brief';
   title: string;
   body: string;
   format: string;
@@ -277,6 +277,25 @@ export interface Spec {
 
 export interface SpecsResponse {
   specs: Spec[];
+}
+
+/** Spec lifecycle funnel: idea → spec → implemented (GET /api/spec/funnel). */
+export interface SpecFunnel {
+  summary: {
+    ideas: number;
+    specified: number;
+    conflicts: number;
+    documents: number;
+    requirements: number;
+    links: { implemented: number; verified: number; drifted: number; broken: number; orphaned: number };
+  };
+  documents: Array<{
+    id: string;
+    title: string;
+    rollup: { requirements: number; implemented: number; verified: number; drifted: number; broken: number; orphaned: number };
+  }>;
+  ideas: Array<{ briefId: string; title: string }>;
+  conflicts: Array<{ briefId: string; briefSide: string | null; specSide: string | null }>;
 }
 
 export interface SpecDetailResponse {

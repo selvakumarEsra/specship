@@ -19,7 +19,7 @@ import { StatePill } from '../../ui/state-pill';
 import { Pill } from '../../ui/pill';
 import { CopyBtn } from '../../ui/copy-btn';
 import { STATE } from '../../ui/state';
-import type { Spec, SpecsResponse, SpecDetailResponse, SpecLink, SpecBriefResponse } from '../../api/types';
+import type { Spec, SpecsResponse, SpecDetailResponse, SpecLink, SpecBriefResponse, SpecFunnel } from '../../api/types';
 
 interface Group { path: string; title: string; specs: Spec[]; }
 
@@ -51,6 +51,18 @@ export class Specs {
     this.api,
     () => `/api/specs${this.projects.projectQuery()}`,
   );
+
+  // @implements REQ-FUNNEL-006
+  /** Spec lifecycle funnel (idea → spec → implemented). Cached/offline via apiResource. */
+  protected readonly funnelResource = apiResource<SpecFunnel>(
+    this.api,
+    () => `/api/spec/funnel${this.projects.projectQuery()}`,
+  );
+
+  protected readonly funnel = computed<SpecFunnel | null>(() => this.funnelResource.state().data ?? null);
+
+  /** Idea-state briefs (brainstormed, not yet linked to a spec). */
+  protected readonly ideas = computed(() => this.funnel()?.ideas ?? []);
 
   /** Fetches links + siblings for the selected spec. */
   protected readonly detailResource = apiResource<SpecDetailResponse>(
@@ -90,7 +102,8 @@ export class Specs {
   protected readonly STATE = STATE;
 
   protected readonly groups = computed<Group[]>(() => {
-    const all = this.resource.state().data?.specs ?? [];
+    // Briefs are surfaced separately in the Ideas section, not as doc groups.
+    const all = (this.resource.state().data?.specs ?? []).filter((s) => s.kind !== 'brief');
     const map = new Map<string, Group>();
     for (const s of all) {
       const path = s.sourcePath || '(unknown)';
@@ -107,8 +120,10 @@ export class Specs {
   protected readonly selectedSpec = computed<Spec | null>(() => {
     const id = this.sel();
     if (!id) return null;
-    for (const g of this.groups()) for (const s of g.specs) if (s.id === id) return s;
-    return null;
+    // Search all specs (including briefs, which are filtered out of the doc
+    // groups but selectable from the Ideas section) so a selected brief renders.
+    const all = this.resource.state().data?.specs ?? [];
+    return all.find((s) => s.id === id) ?? null;
   });
 
   protected readonly selectedLinks = computed<SpecLink[]>(

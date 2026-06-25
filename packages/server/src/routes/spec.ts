@@ -125,6 +125,14 @@ export async function registerSpecRoutes(app: FastifyInstance): Promise<void> {
     return { specs: docs };
   });
 
+  // Spec lifecycle funnel: idea → spec → implemented (REQ-FUNNEL-006). Computed
+  // on the dynamically-loaded SpecShip instance — no runtime import of the
+  // package from the server.
+  app.get('/api/spec/funnel', async (req: FastifyRequest<{ Querystring: ProjectQuery }>, reply) => {
+    const cg = await resolveCg(app, req, reply); if (!cg) return;
+    return cg.getSpecFunnel();
+  });
+
   app.get('/api/spec/:id', async (req: FastifyRequest<{ Params: { id: string }; Querystring: ProjectQuery }>, reply) => {
     const cg = await resolveCg(app, req, reply); if (!cg) return;
     const sq = cg.getSpecQueries();

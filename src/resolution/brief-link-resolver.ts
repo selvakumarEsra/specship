@@ -115,6 +115,95 @@ export function resolveBriefLink(sq: SpecLookup, brief: Spec): BriefLink {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Project-wide funnel (REQ-FUNNEL-004/005/006 share this one computation)
+// ---------------------------------------------------------------------------
+
+export interface SpecFunnelSummary {
+  ideas: number;
+  specified: number;
+  conflicts: number;
+  documents: number;
+  requirements: number;
+  links: { implemented: number; verified: number; drifted: number; broken: number; orphaned: number };
+}
+
+export interface SpecFunnelDoc {
+  id: string;
+  title: string;
+  rollup: BriefRollup;
+}
+
+export interface SpecFunnel {
+  summary: SpecFunnelSummary;
+  documents: SpecFunnelDoc[];
+  ideas: Array<{ briefId: string; title: string }>;
+  conflicts: Array<{ briefId: string; briefSide: string | null; specSide: string | null }>;
+}
+
+/** Implementation rollup for a single document's requirements. */
+function documentRollup(sq: FunnelLookup, docId: string): BriefRollup {
+  const reqs = sq.getSpecsByParent(docId).filter((s) => s.kind === 'requirement');
+  const r: BriefRollup = {
+    requirements: reqs.length,
+    implemented: 0,
+    verified: 0,
+    drifted: 0,
+    broken: 0,
+    orphaned: 0,
+  };
+  for (const req of reqs) {
+    for (const lk of sq.getLinksBySpec(req.id)) {
+      if (lk.state === 'implemented') r.implemented++;
+      else if (lk.state === 'verified') r.verified++;
+      else if (lk.state === 'drifted') r.drifted++;
+      else if (lk.state === 'broken') r.broken++;
+      else if (lk.state === 'orphaned') r.orphaned++;
+    }
+  }
+  return r;
+}
+
+/** Compute the project-wide spec lifecycle funnel (idea → spec → implemented). */
+export function computeSpecFunnel(sq: FunnelLookup): SpecFunnel {
+  const all = sq.getAllSpecs();
+  const documents = all.filter((s) => s.kind === 'document');
+  const requirements = all.filter((s) => s.kind === 'requirement');
+  const briefLinks = all.filter((s) => s.kind === 'brief').map((b) => resolveBriefLink(sq, b));
+
+  const links = { implemented: 0, verified: 0, drifted: 0, broken: 0, orphaned: 0 };
+  for (const req of requirements) {
+    for (const lk of sq.getLinksBySpec(req.id)) {
+      if (lk.state === 'implemented') links.implemented++;
+      else if (lk.state === 'verified') links.verified++;
+      else if (lk.state === 'drifted') links.drifted++;
+      else if (lk.state === 'broken') links.broken++;
+      else if (lk.state === 'orphaned') links.orphaned++;
+    }
+  }
+
+  const ideas = briefLinks
+    .filter((l) => l.state === 'idea')
+    .map((l) => ({ briefId: l.briefId, title: sq.getSpecById(l.briefId)?.title ?? '' }));
+  const conflicts = briefLinks
+    .filter((l) => l.state === 'conflict')
+    .map((l) => ({ briefId: l.briefId, briefSide: l.briefSide, specSide: l.specSide }));
+
+  return {
+    summary: {
+      ideas: ideas.length,
+      specified: briefLinks.filter((l) => l.state === 'specified').length,
+      conflicts: conflicts.length,
+      documents: documents.length,
+      requirements: requirements.length,
+      links,
+    },
+    documents: documents.map((d) => ({ id: d.id, title: d.title, rollup: documentRollup(sq, d.id) })),
+    ideas,
+    conflicts,
+  };
+}
+
 /** All briefs that resolve (non-conflicting) to a given document. */
 export function findBriefsForSpec(sq: SpecLookup, docId: string): BriefLink[] {
   const out: BriefLink[] = [];
