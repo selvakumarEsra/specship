@@ -9,6 +9,9 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+
+## [0.7.0] - 2026-06-25
+
 ### New Features
 
 - **Install the dashboard as a desktop app — and get notified when a run needs you.** The SpecShip dashboard is now an installable app that opens in its own standalone window (look for the **Install** button in the top bar), and it can raise desktop notifications — across **all** your projects — when a workflow run pauses for approval, completes or fails, or spec→code drift appears. Turn it on under **Settings → Notifications**, with a per-type toggle for each alert; popups fire while the dashboard is open or in the background. Built on the existing offline cache, so there's nothing native to download.
@@ -378,3 +381,4 @@ Thanks @andreinknv for the substantive draft this release was based on.
 [0.9.9]: https://github.com/selvakumarEsra/specship/releases/tag/v0.9.9
 [0.5.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.5.0
 [0.6.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.6.0
+[0.7.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.7.0
