@@ -15,6 +15,21 @@
       </span>
     </div>
 
+    <!-- Lifecycle funnel summary (REQ-FUNNEL-006) -->
+    @if (funnel(); as f) {
+      <div class="row gap-8" style="padding:6px 12px;border-bottom:1px solid var(--border-subtle);font-size:11px;color:var(--text-secondary)" aria-label="Spec lifecycle funnel">
+        <span><b style="color:var(--text-primary)">{{ f.summary.ideas }}</b> ideas</span>
+        <span style="color:var(--text-muted)">→</span>
+        <span><b style="color:var(--text-primary)">{{ f.summary.specified }}</b> specs</span>
+        <span style="color:var(--text-muted)">→</span>
+        <span><b style="color:var(--text-primary)">{{ f.summary.links.implemented }}</b> impl · <b style="color:var(--text-primary)">{{ f.summary.links.verified }}</b> ver</span>
+        @if (f.summary.conflicts > 0) {
+          <span class="grow"></span>
+          <span style="color:var(--warn)">{{ f.summary.conflicts }} ⚠</span>
+        }
+      </div>
+    }
+
     <!-- Scrollable tree -->
     <div class="scroll-y tree-scroll">
       @if (groups().length === 0 && !resource.state().loading) {
@@ -71,6 +86,26 @@
           </div>
         }
 
+      }
+
+      <!-- Ideas: brainstormed briefs not yet linked to a spec (REQ-FUNNEL-006) -->
+      @if (ideas().length > 0) {
+        <div class="row gap-6" style="padding:10px 12px 2px;font-size:11px;color:var(--text-muted)">
+          <span class="mono grow" style="letter-spacing:0.5px">IDEAS</span>
+          <span class="tabular" style="font-size:10.5px">{{ ideas().length }}</span>
+        </div>
+        @for (idea of ideas(); track idea.briefId) {
+          <div
+            class="req-row row gap-6"
+            [class.selected]="sel() === idea.briefId"
+            (click)="select(idea.briefId)"
+          >
+            <span class="pill-dot" style="background:var(--text-muted);flex-shrink:0"></span>
+            <div class="grow" style="min-width:0">
+              <div class="muted req-title">{{ idea.title }}</div>
+            </div>
+          </div>
+        }
       }
     </div>
   </div>

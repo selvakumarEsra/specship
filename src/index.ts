@@ -46,6 +46,7 @@ import {
   ResolutionResult,
 } from './resolution';
 import { SpecLinkResolver, SpecLinkResolverStats } from './resolution/spec-link-resolver';
+import { computeSpecFunnel, SpecFunnel } from './resolution/brief-link-resolver';
 import { SpecQueries } from './db/spec-queries';
 import * as fs from 'fs';
 import { createHash } from 'crypto';
@@ -71,6 +72,21 @@ export {
 export { IndexProgress, IndexResult, SyncResult } from './extraction';
 export { detectLanguage, isLanguageSupported, isGrammarLoaded, getSupportedLanguages, initGrammars, loadGrammarsForLanguages, loadAllGrammars } from './extraction';
 export { ResolutionResult } from './resolution';
+export {
+  computeSpecFunnel,
+  resolveBriefLink,
+  summarizeBriefFunnel,
+  findBriefsForSpec,
+} from './resolution/brief-link-resolver';
+export type {
+  SpecFunnel,
+  SpecFunnelSummary,
+  SpecFunnelDoc,
+  BriefLink,
+  BriefLinkState,
+  BriefRollup,
+  BriefFunnelEntry,
+} from './resolution/brief-link-resolver';
 export {
   SpecShipError,
   FileError,
@@ -183,6 +199,16 @@ export class SpecShip {
   /** Access to the spec link resolver. */
   getSpecLinkResolver(): SpecLinkResolver {
     return this.specLinkResolver;
+  }
+
+  /**
+   * The project-wide spec lifecycle funnel: brainstormed ideas → specs →
+   * implemented, with per-document rollups (REQ-FUNNEL-006). Exposed on the
+   * instance so the desktop server can serve it without runtime-importing the
+   * package (it calls this on the dynamically-loaded SpecShip).
+   */
+  getSpecFunnel(): SpecFunnel {
+    return computeSpecFunnel(this.specQueries);
   }
 
   // ===========================================================================

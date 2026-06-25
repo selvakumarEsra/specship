@@ -137,4 +137,115 @@ ${body}
     const rb = b.specs.find((s) => s.id === 'R')!;
     expect(ra.contentHash).not.toBe(rb.contentHash);
   });
+
+  it('treats a same-id frontmatter + H1 as the document, not a self-parented requirement (REQ-PROJECTION-001)', () => {
+    const source = `---
+id: FUNNEL-DOC
+title: Funnel
+---
+<!-- id: FUNNEL-DOC -->
+# Funnel
+
+Intro prose for the document.
+
+<!-- id: REQ-1 -->
+## A requirement
+
+Body.
+`;
+    const result = new MarkdownSpecExtractor('specs/funnel.md', source).extract();
+    expect(result.errors).toEqual([]);
+
+    // Exactly one spec carries the document id, and it is the document — not a
+    // self-parented requirement clobbering it.
+    const withDocId = result.specs.filter((s) => s.id === 'FUNNEL-DOC');
+    expect(withDocId).toHaveLength(1);
+    const doc = withDocId[0]!;
+    expect(doc.kind).toBe('document');
+    expect(doc.parentId).toBeUndefined();
+
+    // Body is the H1 intro prose — non-empty, and does not swallow the requirement.
+    expect(doc.body).toContain('Intro prose for the document.');
+    expect(doc.body).not.toContain('A requirement');
+
+    // The requirement parents to the document.
+    const req = result.specs.find((s) => s.id === 'REQ-1')!;
+    expect(req.kind).toBe('requirement');
+    expect(req.parentId).toBe('FUNNEL-DOC');
+  });
+
+  it('promotes a lone H1 with an id to the document when frontmatter has no id (REQ-PROJECTION-002)', () => {
+    const source = `<!-- id: SOLO-DOC -->
+# Solo document
+
+Intro.
+
+<!-- id: REQ-X -->
+## A requirement
+
+Body.
+`;
+    const result = new MarkdownSpecExtractor('specs/solo.md', source).extract();
+    expect(result.errors).toEqual([]);
+
+    const doc = result.specs.find((s) => s.id === 'SOLO-DOC')!;
+    expect(doc.kind).toBe('document');
+    expect(doc.parentId).toBeUndefined();
+
+    const req = result.specs.find((s) => s.id === 'REQ-X')!;
+    expect(req.kind).toBe('requirement');
+    expect(req.parentId).toBe('SOLO-DOC');
+  });
+
+  it('emits no document when there is neither a frontmatter id nor an H1 id (REQ-PROJECTION-002)', () => {
+    const source = `<!-- id: REQ-ONLY -->
+## A requirement
+
+Body.
+`;
+    const result = new MarkdownSpecExtractor('specs/reqonly.md', source).extract();
+    expect(result.specs.filter((s) => s.kind === 'document')).toHaveLength(0);
+    const req = result.specs.find((s) => s.id === 'REQ-ONLY')!;
+    expect(req.parentId).toBeUndefined();
+  });
+
+  it('indexes a brief.md as a single brief-kind spec (REQ-FUNNEL-001)', () => {
+    const source = `---
+slug: foo-feature
+spec: REQ-FOO-001
+created: 2026-06-25
+---
+# Brainstorm: Foo feature
+
+## Problem
+The widget frobnicates incorrectly.
+`;
+    const result = new MarkdownSpecExtractor('specs/foo-feature/brief.md', source).extract();
+    expect(result.errors.filter((e) => e.severity === 'error')).toEqual([]);
+    expect(result.specs).toHaveLength(1);
+
+    const brief = result.specs[0]!;
+    expect(brief.id).toBe('brief:foo-feature');
+    expect(brief.kind).toBe('brief');
+    expect(brief.title).toBe('Brainstorm: Foo feature');
+    expect(brief.parentId).toBeUndefined();
+    // Full prose is in the body (so specs_fts indexes it — A2).
+    expect(brief.body).toContain('frobnicates');
+    // The spec pointer is carried in metadata for REQ-FUNNEL-002 to reconcile.
+    expect((brief.metadata as Record<string, unknown>).spec).toBe('REQ-FOO-001');
+  });
+
+  it('skips a brief.md with no slug without failing the index (REQ-FUNNEL-001.A4)', () => {
+    const source = `---
+created: 2026-06-25
+---
+# Brainstorm: slugless
+
+## Problem
+x
+`;
+    const result = new MarkdownSpecExtractor('specs/bad/brief.md', source).extract();
+    expect(result.specs).toHaveLength(0);
+    expect(result.errors.filter((e) => e.severity === 'error')).toEqual([]);
+  });
 });
