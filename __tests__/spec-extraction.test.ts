@@ -10,8 +10,13 @@
  *   - Frontmatter populates owner / priority / metadata.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
 import { MarkdownSpecExtractor } from '../src/extraction/specs/markdown-spec-extractor';
+import SpecShip from '../src';
+import type { QueryBuilder } from '../src/db/queries';
 
 describe('MarkdownSpecExtractor', () => {
   it('extracts document + requirement with embedded IDs', () => {
@@ -247,5 +252,159 @@ x
     const result = new MarkdownSpecExtractor('specs/bad/brief.md', source).extract();
     expect(result.specs).toHaveLength(0);
     expect(result.errors.filter((e) => e.severity === 'error')).toEqual([]);
+  });
+});
+
+describe('MarkdownSpecExtractor — domain spec kind (REQ-DOMAIN-001)', () => {
+  it('parses a specs/domain/ file with frontmatter id + type into a domain spec (A1)', () => {
+    const source = `---
+id: DOM-PAY-001
+title: Settlement currency
+type: rule
+---
+# Settlement currency
+
+All payments settle in the merchant's account currency, never the buyer's.
+`;
+    const result = new MarkdownSpecExtractor('specs/domain/payments.md', source).extract();
+
+    // No requirement-walker errors — the frontmatter-only file MUST NOT trip
+    // spec_missing_id / spec_bad_frontmatter.
+    expect(result.errors.find((e) => e.code === 'spec_missing_id')).toBeUndefined();
+    expect(result.errors.find((e) => e.code === 'spec_bad_frontmatter')).toBeUndefined();
+    expect(result.errors.filter((e) => e.severity === 'error')).toEqual([]);
+
+    expect(result.specs).toHaveLength(1);
+    const fact = result.specs[0]!;
+    expect(fact.id).toBe('DOM-PAY-001');
+    expect(fact.kind).toBe('domain');
+    expect(fact.title).toBe('Settlement currency');
+    expect(fact.parentId).toBeUndefined();
+    expect(fact.body).toContain("merchant's account currency");
+    expect((fact.metadata as Record<string, unknown>).type).toBe('rule');
+  });
+
+  it('skips a domain file with no frontmatter id without failing the index', () => {
+    const source = `---
+type: rule
+---
+# Untitled fact
+
+Body.
+`;
+    const result = new MarkdownSpecExtractor('specs/domain/orphan.md', source).extract();
+    expect(result.specs).toHaveLength(0);
+    expect(result.errors.filter((e) => e.severity === 'error')).toEqual([]);
+  });
+
+  it('still indexes a domain fact with an unknown type, emitting a warning (A3)', () => {
+    const source = `---
+id: DOM-PAY-002
+type: bogus
+---
+# A questionable fact
+
+Body.
+`;
+    const result = new MarkdownSpecExtractor('specs/domain/payments.md', source).extract();
+
+    // The fact is NEVER dropped.
+    expect(result.specs).toHaveLength(1);
+    expect(result.specs[0]!.kind).toBe('domain');
+    expect((result.specs[0]!.metadata as Record<string, unknown>).type).toBe('bogus');
+
+    const warn = result.errors.find((e) => e.code === 'spec_unknown_domain_type');
+    expect(warn).toBeDefined();
+    expect(warn!.severity).toBe('warning');
+    expect(warn!.message).toContain('bogus');
+  });
+
+  it('produces an identical content_hash across two extractions of the same source (A4)', () => {
+    const source = `---
+id: DOM-PAY-003
+type: decision
+---
+# Stable fact
+
+Body that does not change.
+`;
+    const a = new MarkdownSpecExtractor('specs/domain/payments.md', source).extract();
+    const b = new MarkdownSpecExtractor('specs/domain/payments.md', source).extract();
+    expect(a.specs[0]!.contentHash).toBe(b.specs[0]!.contentHash);
+  });
+});
+
+/** Probe whether the current process has FTS5 (mirrors spec-link-resolver.test.ts). */
+const fts5Available = (() => {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const Database = require('better-sqlite3');
+    const db = new Database(':memory:');
+    try {
+      db.exec('CREATE VIRTUAL TABLE _probe USING fts5(x)');
+      db.close();
+      return true;
+    } catch {
+      db.close();
+    }
+  } catch {
+    /* fall through */
+  }
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { DatabaseSync } = require('node:sqlite');
+    const db = new DatabaseSync(':memory:');
+    try {
+      db.exec('CREATE VIRTUAL TABLE _probe USING fts5(x)');
+      db.close();
+      return true;
+    } catch {
+      db.close();
+    }
+  } catch {
+    /* node:sqlite unavailable */
+  }
+  return false;
+})();
+
+describe.skipIf(!fts5Available)('domain spec DB projection (REQ-DOMAIN-001.A2)', () => {
+  let dir: string;
+  let cg: SpecShip;
+
+  beforeEach(async () => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-domain-'));
+    cg = await SpecShip.init(dir);
+  });
+
+  afterEach(async () => {
+    cg?.close();
+    if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('projects a domain spec as a spec: node (A2)', () => {
+    const sq = cg.getSpecQueries();
+    const now = Date.now();
+    sq.insertSpec({
+      id: 'DOM-PAY-001',
+      kind: 'domain',
+      title: 'Settlement currency',
+      body: "All payments settle in the merchant's account currency.",
+      format: 'markdown',
+      sourcePath: 'specs/domain/payments.md',
+      contentHash: 'hash-domain',
+      metadata: { type: 'rule' },
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const queries = (cg as unknown as { queries: QueryBuilder }).queries;
+    const node = queries.getNodeById('spec:DOM-PAY-001');
+    expect(node).not.toBeNull();
+    expect(node!.kind).toBe('spec');
+    expect(node!.qualifiedName).toBe('DOM-PAY-001');
+
+    // Returned by search (FTS over the projected node).
+    const hits = cg.searchNodes('Settlement');
+    expect(hits.some((r) => r.node.id === 'spec:DOM-PAY-001')).toBe(true);
   });
 });
