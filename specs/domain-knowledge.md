@@ -62,15 +62,15 @@ implementations:
 - The same fact is projected as a node `id='spec:DOM-PAY-001'`, `kind='spec'`,
   and is returned by `specship_search`/`specship_explore`.
 <!-- id: REQ-DOMAIN-001.A3 -->
-- A `type` value outside `{term, rule, decision, constraint}` is surfaced as a
-  parse diagnostic (the fact does not silently index with an unknown type).
-  `[needs review: warning vs hard error]`
+- A `type` value outside `{term, rule, decision, constraint}` still indexes the
+  fact but emits a parse **warning** identifying the unknown type — the fact is
+  never silently dropped.
 <!-- id: REQ-DOMAIN-001.A4 -->
 - A second `specship sync` with no file change leaves the fact's `content_hash`
   and row unchanged (idempotent round-trip).
 
 <!-- id: REQ-DOMAIN-002 -->
-## Domain facts MUST link to specs and inherit code drift, not link to code directly
+## Domain facts MUST attach only at the spec tier, never directly to code
 
 A domain fact MUST attach to one or more requirement specs via the existing
 `parent_id` / `depends_on` linking, and MUST NOT create direct domain→code links
@@ -98,10 +98,11 @@ implementations:
 <!-- id: REQ-DOMAIN-003 -->
 ## The system MUST surface a gap-seed of undocumented entities and specs
 
-SpecShip MUST provide a read-only pass that lists the code entities — nodes of
-kind `class`, `struct`, `interface`, `route`, or `component` — and the specs
-that have **no** linked domain fact, plus a coverage rollup (count documented vs.
-count of gaps). This pass writes nothing; it exists to target the capture
+SpecShip MUST provide a read-only pass **in the core library** that lists the
+code entities — nodes of kind `class`, `struct`, `interface`, `route`, or
+`component` — and the specs that have **no** linked domain fact, plus a coverage
+rollup of `{documented, gaps}` measured over that combined universe of entities
+**and** specs. This pass writes nothing; it exists to target the capture
 interview and to drive the dashboard coverage strip.
 
 implementations:
@@ -114,10 +115,9 @@ implementations:
 <!-- id: REQ-DOMAIN-003.A2 -->
 - An entity that already has a linked domain fact is excluded from the gap list.
 <!-- id: REQ-DOMAIN-003.A3 -->
-- The pass returns a coverage rollup of `{documented, gaps}` over the
-  entity+spec universe and performs no writes. `[needs review: exact denominator
-  of the coverage universe]` `[needs user confirmation: pass lives in core
-  library vs. the dashboard server route]`
+- The pass returns a coverage rollup of `{documented, gaps}` whose denominator is
+  the union of in-scope code entities (class/struct/interface/route/component)
+  and specs, and performs no writes.
 
 <!-- id: REQ-DOMAIN-004 -->
 ## The `/ss-domain` capture command MUST write only human-confirmed facts via a grounded, targeted interview
@@ -169,7 +169,7 @@ implementations:
 <!-- id: REQ-DOMAIN-006 -->
 ## The dashboard MUST present a dedicated Domain page with type-grouped readable cards
 
-The desktop UI MUST add a lazy-loaded **Domain** page (route + sidebar entry)
+The desktop UI MUST add a **Domain** page (route + sidebar entry)
 that renders domain facts grouped into `Terms`, `Rules`, `Decisions`, and
 `Constraints` sections. A coverage strip MUST show `documented · gaps`. Each fact
 MUST render as a readable card showing its statement/body, what it governs
