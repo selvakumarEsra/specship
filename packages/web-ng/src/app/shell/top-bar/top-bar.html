@@ -9,6 +9,13 @@
     <kbd>⌘K</kbd>
   </button>
   <span class="grow"></span>
+  @if (pwa.canInstall()) {
+    <button class="ghost" (click)="onInstall()" title="Install SpecShip as an app" aria-label="Install SpecShip as an app"
+      style="display:inline-flex;align-items:center;gap:6px;padding:0 10px;height:30px;font-size:12px">
+      <app-icon name="plus" [size]="14" />
+      <span>Install</span>
+    </button>
+  }
   <button class="ghost icon-btn" (click)="onToggleTheme()" [title]="'Theme: ' + effective()" aria-label="Toggle theme">
     <app-icon [name]="effective() === 'dark' ? 'sun' : 'moon'" [size]="16" />
   </button>

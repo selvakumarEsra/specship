@@ -4,6 +4,7 @@ import { PageHead } from '../../ui/page-head';
 import { Segmented } from '../../ui/segmented';
 import { ApiService } from '../../api/api';
 import { ThemeService } from '../../theme/theme';
+import { NotificationsService } from '../../pwa/notifications';
 
 interface PricingRow { model: string; input: string; output: string; }
 
@@ -17,8 +18,11 @@ interface PricingRow { model: string; input: string; output: string; }
 export class Settings {
   protected readonly api = inject(ApiService);
   protected readonly theme = inject(ThemeService);
+  protected readonly notify = inject(NotificationsService);
 
   protected setTheme(p: 'dark' | 'light' | 'system'): void { this.theme.setPref(p); }
+
+  protected enableNotifications(): void { void this.notify.requestPermission(); }
 
   // Claude Code toggles
   protected readonly ingest = signal(true);

@@ -69,6 +69,66 @@
       </div>
     </section>
 
+    <!-- NOTIFICATIONS (REQ-PWA-003) -->
+    <section class="card card-pad section-card">
+      <div class="section-head row gap-8">
+        <app-icon name="zap" [size]="15" style="color:var(--accent);" />
+        <span class="section-title">Notifications</span>
+      </div>
+
+      <div class="toggle-row row">
+        <div class="grow">
+          <div class="toggle-label">Desktop notifications</div>
+          <div class="muted" style="font-size:11px;">
+            @switch (notify.permission()) {
+              @case ('granted') { Enabled — popups fire while the dashboard is open or backgrounded }
+              @case ('denied') { Blocked — re-enable notifications for this site in your browser settings }
+              @case ('unsupported') { Not supported in this browser }
+              @default { Get a desktop popup when a run needs approval, finishes, or drift appears }
+            }
+          </div>
+        </div>
+        @if (notify.permission() === 'default') {
+          <button type="button" (click)="enableNotifications()"
+            style="height:30px;padding:0 12px;border-radius:6px;border:1px solid var(--accent);background:var(--accent);color:#fff;font-size:12px;cursor:pointer">Enable</button>
+        } @else if (notify.permission() === 'granted') {
+          <span style="font-size:12px;color:var(--accent)">● On</span>
+        } @else {
+          <span class="muted" style="font-size:12px">—</span>
+        }
+      </div>
+
+      <div class="toggle-row row" [style.opacity]="notify.granted() ? '1' : '0.5'">
+        <div class="grow">
+          <div class="toggle-label">Run needs approval</div>
+          <div class="muted" style="font-size:11px;">A workflow run paused at an approval gate</div>
+        </div>
+        <button type="button" class="toggle-btn" [class.on]="notify.enabled('approval')"
+          [attr.aria-pressed]="notify.enabled('approval')" aria-label="Notify when a run needs approval"
+          (click)="notify.toggle('approval')"><span class="toggle-thumb"></span></button>
+      </div>
+
+      <div class="toggle-row row" [style.opacity]="notify.granted() ? '1' : '0.5'">
+        <div class="grow">
+          <div class="toggle-label">Run completed or failed</div>
+          <div class="muted" style="font-size:11px;">A workflow run finished or errored</div>
+        </div>
+        <button type="button" class="toggle-btn" [class.on]="notify.enabled('runDone')"
+          [attr.aria-pressed]="notify.enabled('runDone')" aria-label="Notify when a run completes or fails"
+          (click)="notify.toggle('runDone')"><span class="toggle-thumb"></span></button>
+      </div>
+
+      <div class="toggle-row row" [style.opacity]="notify.granted() ? '1' : '0.5'">
+        <div class="grow">
+          <div class="toggle-label">Drift detected</div>
+          <div class="muted" style="font-size:11px;">Spec → code drift appeared</div>
+        </div>
+        <button type="button" class="toggle-btn" [class.on]="notify.enabled('drift')"
+          [attr.aria-pressed]="notify.enabled('drift')" aria-label="Notify when drift is detected"
+          (click)="notify.toggle('drift')"><span class="toggle-thumb"></span></button>
+      </div>
+    </section>
+
     <!-- PRICING TABLE -->
     <section class="card card-pad section-card">
       <div class="section-head row gap-8">

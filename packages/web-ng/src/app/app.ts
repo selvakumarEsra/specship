@@ -9,6 +9,7 @@ import { StatusStrip } from './shell/status-strip/status-strip';
 import { TopBar } from './shell/top-bar/top-bar';
 import { CommandPalette } from './shell/command-palette/command-palette';
 import { ThemeService } from './theme/theme';
+import { EventMonitorService } from './pwa/event-monitor';
 
 @Component({
   selector: 'app-root',
@@ -25,6 +26,13 @@ export class App {
   private readonly _theme = inject(ThemeService);
   private readonly _destroyRef = inject(DestroyRef);
   private readonly _router = inject(Router);
+  private readonly _events = inject(EventMonitorService);
+
+  constructor() {
+    // Start the cross-project alert stream → desktop notifications (gated on
+    // permission + per-type toggles inside NotificationsService).
+    this._events.start();
+  }
 
   protected readonly sidebarCollapsed = signal(
     typeof window !== 'undefined' && window.innerWidth < 1100
