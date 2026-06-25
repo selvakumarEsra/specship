@@ -9,6 +9,9 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+
+## [0.6.0] - 2026-06-25
+
 ### New Features
 
 - **See your spec pipeline at a glance — from brainstormed idea to shipped code.** A new spec lifecycle funnel shows, for the whole project, how many brainstormed ideas you have, how many became specs, and how many requirements are implemented versus verified. The brainstorm briefs that `/ss-brainstorm` writes are now first-class and full-text searchable, linked to the spec they turned into (and flagged when an idea isn't linked to anything yet, or when a brief and a spec disagree about the link). View it three ways: run `specship spec` in your terminal, call `specship_spec` with no argument from Claude Code, or open the **Specs** page in the dashboard — which now lists your idea-stage briefs alongside the specs they became.
@@ -371,3 +374,4 @@ Thanks @andreinknv for the substantive draft this release was based on.
 [0.9.8]: https://github.com/selvakumarEsra/specship/releases/tag/v0.9.8
 [0.9.9]: https://github.com/selvakumarEsra/specship/releases/tag/v0.9.9
 [0.5.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.5.0
+[0.6.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.6.0
