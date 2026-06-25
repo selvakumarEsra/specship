@@ -9,7 +9,7 @@ import { SqliteDatabase } from './sqlite-adapter';
 /**
  * Current schema version
  */
-export const CURRENT_SCHEMA_VERSION = 9;
+export const CURRENT_SCHEMA_VERSION = 10;
 
 /**
  * Migration definition
@@ -413,6 +413,34 @@ const migrations: Migration[] = [
         db.exec(`ALTER TABLE claude_tool_calls ADD COLUMN resolution TEXT;`);
       db.exec(`UPDATE claude_tool_calls SET is_specship = 1 WHERE tool_name LIKE 'mcp__specship__%';`);
       db.exec(`CREATE INDEX IF NOT EXISTS idx_claude_tool_calls_specship ON claude_tool_calls(is_specship);`);
+    },
+  },
+  {
+    version: 10,
+    description:
+      'reflection engine (REFLECT-DOC): reflect_proposals table for self-improvement proposals mined from the claude_* transcript tables, keyed by content_hash with an open/applied/undone/dismissed state machine',
+    up: (db) => {
+      // Mirrors the reflect_proposals block in schema.sql so existing databases
+      // pick up the table. Starts empty; the first reflection pass populates it.
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS reflect_proposals (
+          content_hash    TEXT PRIMARY KEY,
+          type            TEXT NOT NULL,
+          severity        TEXT NOT NULL,
+          title           TEXT NOT NULL,
+          body            TEXT NOT NULL,
+          target_kind     TEXT NOT NULL,
+          target_path     TEXT NOT NULL,
+          payload         TEXT NOT NULL,
+          evidence        TEXT NOT NULL,
+          state           TEXT NOT NULL DEFAULT 'open',
+          created_at      INTEGER NOT NULL,
+          updated_at      INTEGER NOT NULL,
+          applied_at      INTEGER
+        );
+        CREATE INDEX IF NOT EXISTS idx_reflect_proposals_state ON reflect_proposals(state);
+        CREATE INDEX IF NOT EXISTS idx_reflect_proposals_severity ON reflect_proposals(severity);
+      `);
     },
   },
 ];

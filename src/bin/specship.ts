@@ -1238,6 +1238,68 @@ function printFileTree(
 }
 
 /**
+ * specship reflect
+ *
+ * Run a reflection pass over the ingested Claude Code transcripts and print the
+ * self-improvement proposals it surfaces (REQ-REFLECT-006.A1). Headless — no
+ * dashboard required. With no usable transcript history, prints an empty state.
+ */
+program
+  .command('reflect [path]')
+  .description('Mine ingested transcripts for self-improvement proposals (memory rules, skills, hooks)')
+  .option('-j, --json', 'Output as JSON')
+  .action(async (pathArg: string | undefined, options: { json?: boolean }) => {
+    const projectPath = resolveProjectPath(pathArg);
+    try {
+      if (!isInitialized(projectPath)) {
+        error(`SpecShip not initialized in ${projectPath}`);
+        process.exit(1);
+      }
+      const { default: SpecShip } = await loadSpecShip();
+      const cg = await SpecShip.open(projectPath);
+      const result = cg.reflectAnalyze();
+
+      if (options.json) {
+        console.log(JSON.stringify(result, null, 2));
+        cg.destroy();
+        return;
+      }
+
+      if (result.empty || result.open.length === 0) {
+        info('No proposals yet — not enough signal in the ingested transcripts.');
+        info('Tip: run the dashboard with `specship serve --ui --ingest` to build transcript history.');
+        cg.destroy();
+        return;
+      }
+
+      const sevColor: Record<string, (s: string) => string> = {
+        high: chalk.red,
+        warn: chalk.yellow,
+        info: chalk.cyan,
+      };
+      const typeLabel: Record<string, string> = {
+        memory_rule: 'memory/rule',
+        skill: 'skill',
+        hook: 'hook',
+      };
+      console.log(chalk.bold(`\nReflection proposals (${result.open.length}):\n`));
+      for (const p of result.open) {
+        const sev = (sevColor[p.severity] ?? chalk.white)(p.severity.toUpperCase().padEnd(5));
+        console.log(`${sev} ${chalk.bold(p.title)}`);
+        console.log(chalk.dim(`      ${typeLabel[p.type] ?? p.type} → ${p.targetPath}`));
+        console.log(chalk.dim(`      ${p.evidence.detail}`));
+        console.log(chalk.dim(`      ${p.body}`));
+        console.log();
+      }
+      info('Review and apply proposals from the dashboard Improvements page (preview-diff → confirm).');
+      cg.destroy();
+    } catch (err) {
+      error(`reflect failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(1);
+    }
+  });
+
+/**
  * specship serve
  */
 program

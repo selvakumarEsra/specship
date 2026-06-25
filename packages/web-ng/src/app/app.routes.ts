@@ -30,6 +30,11 @@ export const routes: Routes = [
     data: { nav: 'drift', title: 'Drift queue' },
   },
   {
+    path: 'improvements',
+    loadComponent: () => import('./pages/improvements/improvements').then((m) => m.Improvements),
+    data: { nav: 'improvements', title: 'Improvements' },
+  },
+  {
     path: 'workflows',
     loadComponent: () => import('./pages/workflows/workflows').then((m) => m.Workflows),
     data: { nav: 'workflows', title: 'Workflows' },

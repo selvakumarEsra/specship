@@ -465,3 +465,56 @@ export interface SpecshipImpactResponse {
   byProject: { project: string; spendTokens: number; savedTokens: number; netTokens: number }[];
   trend: { ts: number; spendTokens: number; savedTokens: number }[];
 }
+
+// --- Reflection engine (REFLECT-DOC) ---
+
+export type ReflectProposalType = 'memory_rule' | 'skill' | 'hook';
+export type ReflectSeverity = 'high' | 'warn' | 'info';
+export type ReflectState = 'open' | 'applied' | 'undone' | 'dismissed';
+export type ReflectTargetKind = 'claude_md' | 'memory_note' | 'command' | 'settings_hook';
+
+export interface ReflectEvidence {
+  sessions: string[];
+  prompts: string[];
+  detail: string;
+}
+
+export interface ReflectProposal {
+  contentHash: string;
+  type: ReflectProposalType;
+  severity: ReflectSeverity;
+  title: string;
+  body: string;
+  targetKind: ReflectTargetKind;
+  targetPath: string;
+  evidence: ReflectEvidence;
+  state: ReflectState;
+  createdAt: number;
+  updatedAt: number;
+  appliedAt: number | null;
+}
+
+export interface ReflectListResponse {
+  proposals: ReflectProposal[];
+}
+
+export interface ReflectAnalyzeResponse {
+  open: ReflectProposal[];
+  empty: boolean;
+}
+
+export interface ReflectPreview {
+  targetPath: string;
+  targetKind: ReflectTargetKind;
+  exists: boolean;
+  before: string;
+  after: string;
+  diff: string;
+  conflict?: boolean;
+}
+
+export interface ReflectActionResponse {
+  outcome?: 'applied' | 'unchanged' | 'conflict' | 'undone' | 'noop';
+  ok?: boolean;
+  proposal: ReflectProposal;
+}

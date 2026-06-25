@@ -1,0 +1,92 @@
+<div class="page scroll-y">
+  <app-page-head icon="sparkles" title="Improvements" sub="Durable fixes mined from your transcripts — preview, then apply">
+    <ng-container actions>
+      <app-pill [color]="'var(--error)'" [bg]="'var(--error-soft)'">{{ counts().high }} high</app-pill>
+      <app-pill [color]="'var(--warn)'" [bg]="'var(--warn-soft)'">{{ counts().warn }} warn</app-pill>
+      <app-pill [color]="'var(--info)'" [bg]="'var(--info-soft)'">{{ counts().info }} info</app-pill>
+      <button type="button" class="btn btn-primary btn-sm" (click)="analyze()" [disabled]="analyzing()">
+        <app-icon name="sparkles" [size]="13" />
+        {{ analyzing() ? 'Analyzing…' : 'Analyze' }}
+      </button>
+    </ng-container>
+  </app-page-head>
+
+  @if (errorMsg()) {
+    <div class="banner-error">{{ errorMsg() }}</div>
+  }
+
+  @if (resource.state().loading) {
+    @for (i of [0,1,2]; track i) { <div class="skel card-skel"></div> }
+  } @else if (proposals().length === 0) {
+    <div class="empty">
+      <app-icon name="sparkles" [size]="28" />
+      <div class="empty-title">No proposals yet</div>
+      <div class="empty-sub">Run <strong>Analyze</strong> to mine your ingested transcripts for recurring patterns worth turning into a durable rule, skill, or hook.</div>
+    </div>
+  } @else {
+    <div class="prop-list">
+      @for (p of proposals(); track p.contentHash) {
+        <div class="prop-card card" [attr.data-sev]="p.severity">
+          <div class="sev-bar" [style.background]="sevColor(p.severity)"></div>
+          <div class="prop-body">
+            <div class="row gap-10 head-row">
+              <div class="grow" style="min-width: 0;">
+                <div class="row gap-6 chips">
+                  <span class="type-chip">{{ typeLabel(p.type) }}</span>
+                  <app-pill [color]="sevColor(p.severity)" [bg]="'color-mix(in srgb, ' + sevColor(p.severity) + ' 16%, transparent)'">{{ p.severity }}</app-pill>
+                  @if (outcomeOf(p.contentHash)) {
+                    <span class="outcome">{{ outcomeOf(p.contentHash) }}</span>
+                  }
+                </div>
+                <div class="prop-title">{{ p.title }}</div>
+              </div>
+            </div>
+
+            <div class="prop-why">{{ p.body }}</div>
+
+            <div class="prop-meta">
+              <div class="kv-block">
+                <div class="eyebrow">Evidence</div>
+                <div class="mono secondary detail">{{ p.evidence.detail }}</div>
+              </div>
+              <div class="kv-block">
+                <div class="eyebrow">Writes to</div>
+                <div class="mono secondary detail">{{ p.targetPath }}</div>
+              </div>
+            </div>
+
+            @if (previewOf(p.contentHash) !== undefined) {
+              <div class="preview">
+                @if (previewOf(p.contentHash) === null) {
+                  <div class="muted">Loading preview…</div>
+                } @else {
+                  @if (previewOf(p.contentHash)?.conflict) {
+                    <div class="banner-error small">A non-SpecShip file already exists at this path — apply is blocked to avoid clobbering it.</div>
+                  }
+                  <div class="eyebrow">Preview diff</div>
+                  <pre class="diff mono">{{ previewOf(p.contentHash)?.diff }}</pre>
+                }
+              </div>
+            }
+
+            <div class="actions">
+              <button type="button" class="btn btn-secondary btn-sm" (click)="togglePreview(p.contentHash)">
+                {{ (previewOf(p.contentHash) !== undefined) ? 'Hide preview' : 'Preview' }}
+              </button>
+              <div class="grow"></div>
+              @if (p.state === 'applied') {
+                <span class="applied-tag">applied</span>
+                <button type="button" class="btn btn-secondary btn-sm" (click)="undoProposal(p.contentHash)" [disabled]="isBusy(p.contentHash)">Undo</button>
+              } @else {
+                <button type="button" class="btn btn-secondary btn-sm" (click)="dismissProposal(p.contentHash)" [disabled]="isBusy(p.contentHash)">Dismiss</button>
+                <button type="button" class="btn btn-primary btn-sm" (click)="applyProposal(p.contentHash)" [disabled]="isBusy(p.contentHash) || previewOf(p.contentHash)?.conflict">
+                  {{ isBusy(p.contentHash) ? 'Applying…' : 'Apply' }}
+                </button>
+              }
+            </div>
+          </div>
+        </div>
+      }
+    </div>
+  }
+</div>

@@ -40,7 +40,7 @@ export class EventMonitorService {
       } catch {
         return;
       }
-      if (!ev || (ev.kind !== 'approval' && ev.kind !== 'runDone' && ev.kind !== 'drift')) return;
+      if (!ev || (ev.kind !== 'approval' && ev.kind !== 'runDone' && ev.kind !== 'drift' && ev.kind !== 'reflect')) return;
       this.notify.notify(ev.kind, ev.title, {
         body: ev.detail,
         tag: `${ev.project}:${ev.kind}:${ev.id}`,
@@ -59,6 +59,8 @@ export class EventMonitorService {
     const queryParams = { project: ev.project };
     if (ev.kind === 'drift') {
       void this.router.navigate(['/drift'], { queryParams });
+    } else if (ev.kind === 'reflect') {
+      void this.router.navigate(['/improvements'], { queryParams });
     } else {
       void this.router.navigate(['/runs', ev.id], { queryParams });
     }

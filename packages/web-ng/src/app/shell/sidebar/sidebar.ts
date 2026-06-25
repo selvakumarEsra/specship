@@ -3,7 +3,7 @@ import { RouterLink, RouterLinkActive } from '@angular/router';
 import { ApiService } from '../../api/api';
 import { apiResource } from '../../api/resource';
 import { ProjectsService } from '../../api/projects';
-import type { StatusResponse, TipsResponse } from '../../api/types';
+import type { StatusResponse, TipsResponse, ReflectListResponse } from '../../api/types';
 import { Icon } from '../icon/icon';
 import { LogoMark } from '../logo-mark/logo-mark';
 
@@ -34,6 +34,7 @@ export class Sidebar {
   private readonly projects = inject(ProjectsService);
   private readonly status = apiResource<StatusResponse>(this.api, () => `/api/status${this.projects.projectQuery()}`);
   private readonly tips = apiResource<TipsResponse>(this.api, () => '/api/claude/tips');
+  private readonly improvements = apiResource<ReflectListResponse>(this.api, () => '/api/reflect?state=open');
 
   protected readonly nav: NavGroup[] = [
     {
@@ -43,6 +44,13 @@ export class Sidebar {
         { id: 'graph', label: 'Graph', icon: 'graph' },
         { id: 'specs', label: 'Specs', icon: 'book' },
         { id: 'drift', label: 'Drift queue', icon: 'drift', badge: () => this.status.state().data?.drift ?? 0, badgeKind: 'warn' },
+        {
+          id: 'improvements',
+          label: 'Improvements',
+          icon: 'sparkles',
+          badge: () => (this.improvements.state().data?.proposals ?? []).filter((p) => p.severity === 'high').length,
+          badgeKind: 'error',
+        },
         { id: 'workflows', label: 'Workflows', icon: 'workflow' },
         { id: 'runs', label: 'Runs', icon: 'play' },
         { id: 'chat', label: 'Chat', icon: 'chat' },
