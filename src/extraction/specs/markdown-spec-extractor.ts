@@ -66,6 +66,16 @@ export class MarkdownSpecExtractor {
 
   extract(): SpecExtractionResult {
     const start = Date.now();
+
+    // Brainstorm briefs (`specs/<slug>/brief.md`) take a wholly separate path:
+    // they have no `<!-- id: -->`-marked headings, so the requirement parser
+    // would only emit `spec_missing_id` errors. Handling them here keeps the
+    // document/requirement/acceptance extraction below completely unchanged
+    // (REQ-FUNNEL-001.A5).
+    if (this.isBriefFile()) {
+      return this.extractBrief(start);
+    }
+
     const specs: Spec[] = [];
     const linkCandidates: SpecLinkCandidate[] = [];
     const errors: ExtractionError[] = [];
@@ -285,6 +295,92 @@ export class MarkdownSpecExtractor {
     return {
       specs,
       linkCandidates,
+      errors,
+      format: 'markdown',
+      durationMs: Date.now() - start,
+    };
+  }
+
+  /** True when this file is a brainstorm brief (`.../brief.md`). */
+  private isBriefFile(): boolean {
+    const base = this.filePath.split(/[/\\]/).pop() ?? '';
+    return base.toLowerCase() === 'brief.md';
+  }
+
+  /**
+   * Extract a brainstorm brief as a single `brief`-kind spec.
+   *
+   * A brief carries `slug` / `spec` / `created` frontmatter and freeform prose
+   * (no `<!-- id: -->`-marked headings). It becomes one spec entity:
+   *   - id      `brief:<slug>` (stable, derived from the brief's slug)
+   *   - kind    'brief'
+   *   - title   the first heading (`# Brainstorm: <feature>`), else the slug
+   *   - body    the full brief prose (so it is full-text searchable, A2)
+   *   - metadata the frontmatter (slug / spec / created) — `spec` is what
+   *             REQ-FUNNEL-002 reconciles the brief → spec link against.
+   *
+   * A brief with no `slug` in its frontmatter isn't addressable, so it is
+   * skipped gracefully — no spec, no fatal error — and the rest of the index
+   * proceeds (REQ-FUNNEL-001.A4).
+   */
+  private extractBrief(start: number): SpecExtractionResult {
+    const errors: ExtractionError[] = [];
+    const lines = this.source.split(/\r?\n/);
+    const now = Date.now();
+
+    const { frontmatter, firstContentLine } = this.parseFrontmatter(lines, errors);
+    const meta =
+      frontmatter.metadata && typeof frontmatter.metadata === 'object'
+        ? (frontmatter.metadata as Record<string, unknown>)
+        : {};
+    const slug =
+      typeof meta.slug === 'string' && meta.slug.trim().length > 0
+        ? meta.slug.trim()
+        : undefined;
+
+    if (slug === undefined) {
+      // Not an addressable brief — skip without erroring.
+      return {
+        specs: [],
+        linkCandidates: [],
+        errors,
+        format: 'markdown',
+        durationMs: Date.now() - start,
+      };
+    }
+
+    // Title: the first heading line (the `# Brainstorm: …` H1), else the slug.
+    let title = slug;
+    for (let i = firstContentLine; i < lines.length; i++) {
+      const h = (lines[i] ?? '').match(HEADING);
+      if (h && h[2]) {
+        title = h[2];
+        break;
+      }
+    }
+
+    const body = lines.slice(firstContentLine).join('\n').trim();
+
+    const spec: Spec = {
+      id: `brief:${slug}`,
+      kind: 'brief',
+      title,
+      body,
+      format: 'markdown',
+      sourcePath: this.filePath,
+      startLine: firstContentLine + 1,
+      endLine: lines.length,
+      parentId: undefined,
+      contentHash: hash(body),
+      version: 1,
+      metadata: meta,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    return {
+      specs: [spec],
+      linkCandidates: [],
       errors,
       format: 'markdown',
       durationMs: Date.now() - start,

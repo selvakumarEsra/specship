@@ -208,4 +208,44 @@ Body.
     const req = result.specs.find((s) => s.id === 'REQ-ONLY')!;
     expect(req.parentId).toBeUndefined();
   });
+
+  it('indexes a brief.md as a single brief-kind spec (REQ-FUNNEL-001)', () => {
+    const source = `---
+slug: foo-feature
+spec: REQ-FOO-001
+created: 2026-06-25
+---
+# Brainstorm: Foo feature
+
+## Problem
+The widget frobnicates incorrectly.
+`;
+    const result = new MarkdownSpecExtractor('specs/foo-feature/brief.md', source).extract();
+    expect(result.errors.filter((e) => e.severity === 'error')).toEqual([]);
+    expect(result.specs).toHaveLength(1);
+
+    const brief = result.specs[0]!;
+    expect(brief.id).toBe('brief:foo-feature');
+    expect(brief.kind).toBe('brief');
+    expect(brief.title).toBe('Brainstorm: Foo feature');
+    expect(brief.parentId).toBeUndefined();
+    // Full prose is in the body (so specs_fts indexes it — A2).
+    expect(brief.body).toContain('frobnicates');
+    // The spec pointer is carried in metadata for REQ-FUNNEL-002 to reconcile.
+    expect((brief.metadata as Record<string, unknown>).spec).toBe('REQ-FOO-001');
+  });
+
+  it('skips a brief.md with no slug without failing the index (REQ-FUNNEL-001.A4)', () => {
+    const source = `---
+created: 2026-06-25
+---
+# Brainstorm: slugless
+
+## Problem
+x
+`;
+    const result = new MarkdownSpecExtractor('specs/bad/brief.md', source).extract();
+    expect(result.specs).toHaveLength(0);
+    expect(result.errors.filter((e) => e.severity === 'error')).toEqual([]);
+  });
 });

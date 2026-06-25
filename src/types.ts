@@ -610,6 +610,10 @@ export const SPEC_KINDS = [
   'acceptance',
   'contract',
   'data_schema',
+  // A brainstorm brief (`specs/<slug>/brief.md`) — the "idea" stage of the
+  // spec lifecycle, indexed as a first-class entity so the idea → spec →
+  // implemented funnel is queryable (REQ-FUNNEL-001).
+  'brief',
 ] as const;
 
 export type SpecKind = (typeof SPEC_KINDS)[number];
