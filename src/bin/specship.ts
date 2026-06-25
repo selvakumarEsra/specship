@@ -2026,6 +2026,179 @@ program
     }
   });
 
+// @implements REQ-FUNNEL-004
+program
+  .command('spec [id]')
+  .description('Spec lifecycle funnel (idea → spec → implemented). With an id, show that spec/brief detail.')
+  .option('--json', 'emit JSON')
+  .action(async (id: string | undefined, options: { json?: boolean }) => {
+    const projectRoot = path.resolve(process.cwd());
+    if (!isInitialized(projectRoot)) {
+      error(`SpecShip not initialized in ${projectRoot}. Run \`specship init -i\` first.`);
+      process.exit(1);
+    }
+    const { default: SpecShip } = await loadSpecShip();
+    const { summarizeBriefFunnel, resolveBriefLink, findBriefsForSpec } = await import(
+      '../resolution/brief-link-resolver'
+    );
+    const cg = await SpecShip.open(projectRoot);
+    try {
+      const sq = cg.getSpecQueries();
+
+      // Implementation rollup for a document's requirements.
+      const docRollup = (docId: string) => {
+        const reqs = sq.getSpecsByParent(docId).filter((s) => s.kind === 'requirement');
+        const r = { requirements: reqs.length, implemented: 0, verified: 0, drifted: 0, broken: 0, orphaned: 0 };
+        for (const req of reqs) {
+          for (const lk of sq.getLinksBySpec(req.id)) {
+            if (lk.state === 'implemented') r.implemented++;
+            else if (lk.state === 'verified') r.verified++;
+            else if (lk.state === 'drifted') r.drifted++;
+            else if (lk.state === 'broken') r.broken++;
+            else if (lk.state === 'orphaned') r.orphaned++;
+          }
+        }
+        return r;
+      };
+      const degraded = (r: { drifted: number; broken: number; orphaned: number }) =>
+        r.drifted + r.broken + r.orphaned;
+
+      // ---- Detail view (an id was given) ----
+      if (id) {
+        const spec = sq.getSpecById(id);
+        if (!spec) {
+          if (options.json) {
+            // eslint-disable-next-line no-console
+            console.log(JSON.stringify({ error: 'not_found', id }, null, 2));
+          } else {
+            error(`No spec or brief with id "${id}".`);
+          }
+          process.exit(1);
+        }
+        if (spec!.kind === 'brief') {
+          const entry = summarizeBriefFunnel(sq, spec!);
+          const link = resolveBriefLink(sq, spec!);
+          if (options.json) {
+            // eslint-disable-next-line no-console
+            console.log(JSON.stringify({ ...entry, briefSide: link.briefSide, specSide: link.specSide }, null, 2));
+          } else {
+            /* eslint-disable no-console */
+            console.log(`${spec!.id}  (brief)  ${spec!.title}`);
+            console.log(`  state: ${entry.state}`);
+            if (entry.state === 'conflict') {
+              console.log(`  ⚠ conflict: brief → ${link.briefSide}, spec → ${link.specSide} (resolve the mismatched pointer)`);
+            } else if (entry.linkedSpecId) {
+              console.log(`  linked spec: ${entry.linkedSpecId}`);
+            }
+            if (entry.rollup) {
+              const r = entry.rollup;
+              console.log(`  rollup: ${r.requirements} reqs · ${r.implemented} implemented · ${r.verified} verified · ${degraded(r)} degraded`);
+            }
+            /* eslint-enable no-console */
+          }
+        } else {
+          const links = sq.getLinksBySpec(spec!.id);
+          const briefs = spec!.kind === 'document' ? findBriefsForSpec(sq, spec!.id) : [];
+          if (options.json) {
+            const detail: Record<string, unknown> = { id: spec!.id, kind: spec!.kind, title: spec!.title, links };
+            if (spec!.kind === 'document') detail.rollup = docRollup(spec!.id);
+            detail.briefs = briefs.map((b) => b.briefId);
+            // eslint-disable-next-line no-console
+            console.log(JSON.stringify(detail, null, 2));
+          } else {
+            /* eslint-disable no-console */
+            console.log(`${spec!.id}  (${spec!.kind})  ${spec!.title}`);
+            if (spec!.kind === 'document') {
+              const r = docRollup(spec!.id);
+              console.log(`  rollup: ${r.requirements} reqs · ${r.implemented} implemented · ${r.verified} verified · ${degraded(r)} degraded`);
+              if (briefs.length) console.log(`  from briefs: ${briefs.map((b) => b.briefId).join(', ')}`);
+            }
+            for (const lk of links) {
+              console.log(`  [${lk.state}] → ${lk.targetFilePath}:${lk.targetQualifiedName}`);
+            }
+            /* eslint-enable no-console */
+          }
+        }
+        return;
+      }
+
+      // ---- Funnel view (no id) ----
+      const all = sq.getAllSpecs();
+      const briefs = all.filter((s) => s.kind === 'brief');
+      const documents = all.filter((s) => s.kind === 'document');
+      const requirements = all.filter((s) => s.kind === 'requirement');
+      const entries = briefs.map((b) => summarizeBriefFunnel(sq, b));
+      const byState = (st: string) => entries.filter((e) => e.state === st);
+      const links = sq.getAllLinks();
+      const lc = (st: string) => links.filter((l) => l.state === st).length;
+
+      if (all.length === 0) {
+        if (options.json) {
+          // eslint-disable-next-line no-console
+          console.log(JSON.stringify({ summary: { ideas: 0, specified: 0, conflicts: 0, documents: 0, requirements: 0 }, specs: [], briefs: [] }, null, 2));
+        } else {
+          // eslint-disable-next-line no-console
+          console.log('No specs or briefs found. Author one with /ss-spec-author or /ss-brainstorm.');
+        }
+        return;
+      }
+
+      if (options.json) {
+        // eslint-disable-next-line no-console
+        console.log(
+          JSON.stringify(
+            {
+              summary: {
+                ideas: byState('idea').length,
+                specified: byState('specified').length,
+                conflicts: byState('conflict').length,
+                documents: documents.length,
+                requirements: requirements.length,
+                links: { implemented: lc('implemented'), verified: lc('verified'), drifted: lc('drifted'), broken: lc('broken'), orphaned: lc('orphaned') },
+              },
+              specs: documents.map((d) => ({ id: d.id, title: d.title, rollup: docRollup(d.id) })),
+              briefs: entries,
+            },
+            null,
+            2
+          )
+        );
+        return;
+      }
+
+      /* eslint-disable no-console */
+      console.log('Spec lifecycle funnel');
+      console.log(`  ideas        ${byState('idea').length}`);
+      console.log(`  specified    ${byState('specified').length}`);
+      if (byState('conflict').length) console.log(`  conflicts    ${byState('conflict').length}  ⚠`);
+      console.log(`  documents    ${documents.length}`);
+      console.log(`  requirements ${requirements.length}   (implemented ${lc('implemented')} · verified ${lc('verified')} · degraded ${lc('drifted') + lc('broken') + lc('orphaned')})`);
+      if (documents.length) {
+        console.log('\nDocuments:');
+        for (const d of documents) {
+          const r = docRollup(d.id);
+          console.log(`  ${d.id}  —  ${d.title}   [${r.requirements} reqs · ${r.implemented} impl · ${r.verified} ver${degraded(r) ? ` · ${degraded(r)} degraded` : ''}]`);
+        }
+      }
+      const ideas = byState('idea');
+      if (ideas.length) {
+        console.log('\nIdeas (unlinked briefs):');
+        for (const e of ideas) {
+          const b = sq.getSpecById(e.briefId);
+          console.log(`  ${e.briefId}  —  ${b?.title ?? ''}`);
+        }
+      }
+      const conflicts = byState('conflict');
+      if (conflicts.length) {
+        console.log('\nConflicts (mismatched brief↔spec pointers):');
+        for (const e of conflicts) console.log(`  ${e.briefId}  ⚠`);
+      }
+      /* eslint-enable no-console */
+    } finally {
+      cg.close();
+    }
+  });
+
 program
   .command('workflow <action> [arg]')
   .description('Workflow engine: list | run <name> | resume <runId> | cancel <runId> | approve <runId> | reject <runId> | runs')
