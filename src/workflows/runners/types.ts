@@ -10,7 +10,7 @@
  */
 
 import { DagNode } from '../schemas/workflow';
-import { ApprovalContext } from '../../types';
+import { ApprovalContext, WorkflowEventType } from '../../types';
 import { NodeOutput } from '../condition-evaluator';
 
 export interface RunnerContext {
@@ -29,6 +29,12 @@ export interface RunnerContext {
   outputs: Map<string, NodeOutput>;
   /** Verbose logging flag. */
   verbose?: boolean;
+  /**
+   * Emit a workflow event mid-step — used by the agent runner to stream its
+   * live activity (tool calls, message turns) into the run view. No-op when
+   * unset. The executor stamps the step id/kind; callers pass type + data.
+   */
+  emitEvent?: (type: WorkflowEventType, data?: Record<string, unknown>) => void;
 }
 
 export type NodeRunResult =

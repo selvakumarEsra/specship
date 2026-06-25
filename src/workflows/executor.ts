@@ -415,6 +415,10 @@ export class WorkflowExecutor {
         variables: opts.variables,
         outputs,
         verbose: opts.verbose,
+        // Stream a step's live activity (agent tool calls / messages) into the
+        // run view (WF-STREAM-DOC). Stamp the step id/kind so the UI can group.
+        emitEvent: (type, data) =>
+          this.event(run.id, type, { stepId: nodeId, stepKind: node.kind, ...data }),
       };
 
       const result = await this.runWithRetry(runner, processed, runnerCtx, node);
@@ -662,6 +666,7 @@ export class WorkflowExecutor {
       | 'step_failed'
       | 'step_skipped'
       | 'tool_called'
+      | 'agent_message'
       | 'artifact_created'
       | 'approval_requested'
       | 'approval_granted'

@@ -279,7 +279,7 @@ CREATE INDEX IF NOT EXISTS idx_workflow_runs_last_activity ON workflow_runs(last
 CREATE TABLE IF NOT EXISTS workflow_events (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     workflow_run_id TEXT NOT NULL,
-    event_type      TEXT NOT NULL,              -- 'step_started' | 'step_completed' | 'step_failed' | 'tool_called' | 'artifact_created' | 'approval_requested' | 'approval_granted' | 'approval_rejected'
+    event_type      TEXT NOT NULL,              -- 'step_started' | 'step_completed' | 'step_failed' | 'tool_called' | 'agent_message' | 'artifact_created' | 'approval_requested' | 'approval_granted' | 'approval_rejected'
     step_id         TEXT,
     step_kind       TEXT,                       -- 'prompt' | 'bash' | 'script' | 'approval' | 'cancel'
     data            TEXT,                       -- JSON
