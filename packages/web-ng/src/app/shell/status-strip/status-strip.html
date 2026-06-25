@@ -3,8 +3,6 @@
     @let s = status.state().data!;
     <span class="seg mono">{{ s.projectPath }}</span>
     <span class="divider"></span>
-    <span class="seg"><span class="lbl">backend</span> <span class="mono val">{{ s.backend }}</span></span>
-    <span class="divider"></span>
     <span class="seg"><span class="lbl">nodes</span> <span class="mono val">{{ s.nodeCount.toLocaleString() }}</span></span>
     <span class="seg"><span class="lbl">edges</span> <span class="mono val">{{ s.edgeCount.toLocaleString() }}</span></span>
     <span class="divider"></span>

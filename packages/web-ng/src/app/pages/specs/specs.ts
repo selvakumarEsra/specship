@@ -20,15 +20,14 @@ import { Pill } from '../../ui/pill';
 import { CopyBtn } from '../../ui/copy-btn';
 import { STATE } from '../../ui/state';
 import type { Spec, SpecsResponse, SpecDetailResponse, SpecLink, SpecBriefResponse, SpecFunnel } from '../../api/types';
+import { DomSanitizer, type SafeHtml } from '@angular/platform-browser';
+import { renderMd } from '../../util/render-md';
 
 interface Group { path: string; title: string; specs: Spec[]; }
 
-/** Minimal inline markdown: bold + backtick code. */
-function mdInline(s: string): string {
-  return s
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
-    .replace(/\*\*(.+?)\*\*/g, "<strong style='color:var(--text-primary)'>$1</strong>")
-    .replace(/`(.+?)`/g, "<code class='mono' style='font-size:12px;background:var(--bg-canvas);padding:1px 5px;border-radius:4px;border:1px solid var(--border-subtle)'>$1</code>");
+/** Strip embedded `<!-- id: REQ-X -->` markers — structural noise, not prose. */
+function stripSpecMarkers(s: string): string {
+  return s.replace(/<!--[\s\S]*?-->/g, '');
 }
 
 @Component({
@@ -46,6 +45,7 @@ export class Specs {
   private readonly projects = inject(ProjectsService);
   private readonly router = inject(Router);
   protected readonly conn = inject(ConnectionService);
+  private readonly sanitizer = inject(DomSanitizer);
 
   protected readonly resource = apiResource<SpecsResponse>(
     this.api,
@@ -84,8 +84,8 @@ export class Specs {
     },
   );
 
-  protected readonly briefHtml = computed<string>(() =>
-    this.mdHtml(this.briefResource.state().data?.markdown ?? ''),
+  protected readonly briefHtml = computed<SafeHtml>(() =>
+    this.renderBody(this.briefResource.state().data?.markdown ?? ''),
   );
 
   protected readonly sel = signal<string | null>(null);
@@ -172,7 +172,10 @@ export class Specs {
     this.sel.set(id);
   }
 
-  protected mdHtml(s: string): string { return mdInline(s); }
+  /** Render spec/brief markdown to sanitized HTML (headings, lists, code, tables). */
+  protected renderBody(md: string): SafeHtml {
+    return this.sanitizer.bypassSecurityTrustHtml(renderMd(stripSpecMarkers(md)));
+  }
 
   protected goToGraph(specId: string): void {
     this.router.navigate(['/graph'], { queryParams: { focus: 'spec:' + specId } });
