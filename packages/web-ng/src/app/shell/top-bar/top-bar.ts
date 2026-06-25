@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, inject, output } from '@angular/cor
 import { ThemeService } from '../../theme/theme';
 import { Icon } from '../icon/icon';
 import { ProjectPicker } from '../project-picker/project-picker';
+import { PwaInstallService } from '../../pwa/install';
 
 @Component({
   selector: 'app-top-bar',
@@ -16,8 +17,10 @@ export class TopBar {
 
   private readonly theme = inject(ThemeService);
   protected readonly effective = this.theme.effective;
+  protected readonly pwa = inject(PwaInstallService);
 
   protected onToggleTheme(): void { this.theme.toggle(); }
   protected onMenuClick(): void { this.toggleSidebar.emit(); }
   protected onPalette(): void { this.openPalette.emit(); }
+  protected onInstall(): void { void this.pwa.install(); }
 }
