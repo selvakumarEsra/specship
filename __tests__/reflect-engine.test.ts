@@ -115,6 +115,59 @@ describe('reflect miner', () => {
     expect(r4!.targetKind).toBe('settings_hook');
     expect(r4!.targetPath).toBe(path.join(ctx.projectRoot, '.claude', 'settings.json'));
   });
+
+  it('proposes a high-severity caution for destructive commands (R5 → memory_rule/project)', () => {
+    seedSession('s1');
+    const p = seedPrompt('s1', 'cleanup');
+    seedTool('s1', p, 'Bash', 'rm -rf build/');
+    seedTool('s1', p, 'Bash', 'rm -rf dist');
+    const props = mineProposals(db, ctx);
+    const r5 = props.find((x) => x.severity === 'high' && /care|caution|delete/i.test(x.title));
+    expect(r5).toBeTruthy();
+    expect(r5!.type).toBe('memory_rule');
+    expect(r5!.targetKind).toBe('claude_md');
+    expect(r5!.evidence.detail).toMatch(/× 2/);
+  });
+
+  it('does not flag a single destructive command below threshold', () => {
+    seedSession('s1');
+    const p = seedPrompt('s1', 'cleanup');
+    seedTool('s1', p, 'Bash', 'rm -rf one-off');
+    const props = mineProposals(db, ctx);
+    expect(props.find((x) => /care|caution/i.test(x.title))).toBeUndefined();
+  });
+
+  it('proposes documenting a frequently-edited hotspot file (R6 → memory_rule/project)', () => {
+    for (const s of ['s1', 's2']) {
+      seedSession(s);
+      const p = seedPrompt(s, 'edit');
+      for (let i = 0; i < 5; i++) seedTool(s, p, 'Edit', 'src/core/engine.ts');
+    }
+    const props = mineProposals(db, ctx);
+    const r6 = props.find((x) => /changes often|contract of/i.test(x.title));
+    expect(r6).toBeTruthy();
+    expect(r6!.type).toBe('memory_rule');
+    expect(r6!.targetKind).toBe('claude_md');
+    expect(r6!.evidence.detail).toMatch(/edited × 10/);
+  });
+
+  it('proposes a portable note for a recurring correction (R7 → memory_rule/portable)', () => {
+    seedSession('s1');
+    for (let i = 0; i < 3; i++) seedPrompt('s1', "don't add comments to every line");
+    const props = mineProposals(db, ctx);
+    const r7 = props.find((x) => x.type === 'memory_rule' && x.targetKind === 'memory_note' && /correction/i.test(x.title));
+    expect(r7).toBeTruthy();
+    expect(r7!.severity).toBe('warn');
+    expect(r7!.evidence.prompts.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('ignores non-corrective repeated prompts in the correction detector', () => {
+    seedSession('s1');
+    for (let i = 0; i < 3; i++) seedPrompt('s1', 'show me the architecture overview');
+    const props = mineProposals(db, ctx);
+    // It may surface as an R3 skill, but never as an R7 correction note.
+    expect(props.find((x) => x.targetKind === 'memory_note' && /correction/i.test(x.title))).toBeUndefined();
+  });
 });
 
 describe('proposal hashing (REQ-REFLECT-007.A1)', () => {
