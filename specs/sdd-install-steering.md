@@ -3,13 +3,14 @@ id: SDD-INSTALL-DOC
 title: Spec-driven steering at install
 owner: installer
 priority: medium
+brief: spec-driven-skill-gate/brief.md   # REQ-SDD-004 originated from this brainstorm brief
 ---
 
 <!-- id: SDD-INSTALL-DOC -->
 # Spec-driven steering at install
 
 `specship install` makes spec-author the canonical first step for feature and
-bug work in the project it's installed into, via two reinforcing mechanisms:
+bug work in the project it's installed into, via three reinforcing mechanisms:
 
 1. A short, human-readable rule in the project CLAUDE.md that tells the agent
    to author a spec (via spec-author, under `specs/`) before any brainstorming
@@ -18,9 +19,16 @@ bug work in the project it's installed into, via two reinforcing mechanisms:
 2. A harness-executed `UserPromptSubmit` hook in `settings.json` that detects
    feature/bug-shaped intent and nudges toward the same path — independent of
    the agent's skill-selection judgment.
+3. A harness-executed `PreToolUse` gate on skill invocation that, for
+   feature/bug-shaped work, **blocks** a competing brainstorm/plan/spec skill
+   and redirects the agent to the SpecShip flow. Mechanisms 1–2 are advisory
+   (they can lose to a high-salience skill); the gate is the deterministic
+   backstop for when they do.
 
-Both are written **on by default** (with an opt-out flag), are idempotent, and
-are fully reversed by `specship uninstall`. This is Claude Code only — the
+All three are written **on by default** (with a shared opt-out flag), are
+idempotent, and are fully reversed by `specship uninstall`. Mechanisms 1–2 are
+non-blocking (work always proceeds); mechanism 3 is blocking by design — it is
+the only one that can stop a skill from running. This is Claude Code only — the
 fork's single supported target.
 
 Constraint carried from issue #529: the CLAUDE.md write here MUST stay a tiny
@@ -85,11 +93,13 @@ implementations:
 <!-- id: REQ-SDD-003 -->
 ## The steering MUST be on by default, opt-out, and fully reversible
 
-The CLAUDE.md rule (REQ-SDD-001) and the hook (REQ-SDD-002) MUST both be written
-by a no-flag `specship install`, with a documented flag to skip them (e.g.
-`--no-sdd`). `specship uninstall` MUST remove both — the marked CLAUDE.md block
-and the hook entry — leaving no residue and preserving the user's other CLAUDE.md
-content, permissions, and sibling hooks.
+The CLAUDE.md rule (REQ-SDD-001), the nudge hook (REQ-SDD-002), and the
+PreToolUse gate (REQ-SDD-004) MUST all be written by a no-flag
+`specship install`, governed by a single documented opt-out flag (e.g.
+`--no-sdd`) that skips all three together. `specship uninstall` MUST remove all
+of them — the marked CLAUDE.md block, the nudge hook entry, and the gate hook
+entry — leaving no residue and preserving the user's other CLAUDE.md content,
+permissions, and sibling hooks.
 
 implementations:
   - src/installer/targets/claude.ts:install
@@ -97,10 +107,56 @@ implementations:
 
 ## Acceptance
 <!-- id: REQ-SDD-003.A1 -->
-- A no-flag `specship install` writes both the CLAUDE.md rule and the hook.
+- A no-flag `specship install` writes all three SDD steering artifacts: the CLAUDE.md rule, the nudge hook, and the gate hook.
 <!-- id: REQ-SDD-003.A2 -->
-- `specship install` with the opt-out flag writes neither and does not modify an existing CLAUDE.md or `settings.json` for these additions.
+- `specship install` with the opt-out flag writes none of the three and does not modify an existing CLAUDE.md or `settings.json` for these additions.
 <!-- id: REQ-SDD-003.A3 -->
-- `specship uninstall` removes the SDD CLAUDE.md block (via its markers) and the hook entry, reporting `removed`; a CLAUDE.md left empty afterward is deleted, and user content outside the markers is preserved.
+- `specship uninstall` removes the SDD CLAUDE.md block (via its markers), the nudge hook entry, and the gate hook entry, reporting `removed`; a CLAUDE.md left empty afterward is deleted, and user content outside the markers is preserved.
 <!-- id: REQ-SDD-003.A4 -->
 - An install → uninstall round-trip returns CLAUDE.md and `settings.json` to their pre-install state for the SpecShip-owned additions (byte-equivalent).
+
+<!-- id: REQ-SDD-004 -->
+## The installer MUST add a PreToolUse gate that blocks competing brainstorm/plan/spec skills for feature/bug work
+
+On install (default-on), the installer MUST add a harness-executed `PreToolUse`
+hook on skill invocation — in both the project `settings.json` and the shipped
+plugin hooks manifest, so the `specship install` path and the plugin path do not
+drift — that invokes a shipped gate command. When the agent invokes a skill
+whose name matches the competing brainstorm / plan / spec / sdd-workflow
+families **and** the triggering user request is feature/bug-shaped, the gate
+MUST deny the invocation and return a reason that redirects the agent to the
+SpecShip flow (`/ss-brainstorm → /ss-spec-author → /ss-implement`).
+
+The gate MUST NOT deny a SpecShip-owned skill under any circumstances — the
+`ss-*` commands, `spec-author`, `spec-reverse-engineer`, and the `specship:`
+namespace are always allowed, even when their name matches a family token (e.g.
+`ss-brainstorm`, `spec-author`). The gate MUST be intent-gated by the same
+notion of "feature/bug-shaped" that the nudge hook (REQ-SDD-002) uses, so the
+two mechanisms never disagree about what counts as feature/bug work. The gate
+MUST fail open: if the triggering intent cannot be determined or the gate errors
+internally, the invocation proceeds — the gate MUST NOT break or block the agent
+on its own failure.
+
+[needs review] The triggering request is read from the `PreToolUse` payload
+(the session transcript); confirm during implementation that the payload exposes
+the originating user prompt reliably, and fail open if it does not.
+
+implementations:
+  - src/installer/targets/claude.ts:writeHooksFor
+  - src/installer/targets/claude.ts:isSddHookCommand
+
+## Acceptance
+<!-- id: REQ-SDD-004.A1 -->
+- After install, `settings.json` contains a `PreToolUse` hook (matching skill invocation) that invokes the shipped gate command, and the identical hook is present in the plugin hooks manifest.
+<!-- id: REQ-SDD-004.A2 -->
+- When a skill whose name matches the brainstorm/plan/spec/sdd-workflow families is invoked while the triggering request is feature/bug-shaped, the gate denies the invocation and the returned reason names the SpecShip flow (`/ss-brainstorm → /ss-spec-author → /ss-implement`).
+<!-- id: REQ-SDD-004.A3 -->
+- A SpecShip-owned skill (`ss-*`, `spec-author`, `spec-reverse-engineer`, `specship:` namespace) is never denied, including when its name matches a family token (e.g. `ss-brainstorm`, `spec-author`).
+<!-- id: REQ-SDD-004.A4 -->
+- A family-matching skill invoked while the triggering request is NOT feature/bug-shaped (a question or read-only ask) is allowed through.
+<!-- id: REQ-SDD-004.A5 -->
+- A skill whose name does not match the families (e.g. an unrelated trading skill) is allowed through regardless of the triggering request's intent.
+<!-- id: REQ-SDD-004.A6 -->
+- When the triggering intent cannot be determined or the gate errors internally, the invocation is allowed (the gate exits without denying).
+<!-- id: REQ-SDD-004.A7 -->
+- A second install reports `settings.json` as `unchanged` when the gate hook already matches; sibling hooks and permissions are left untouched.
