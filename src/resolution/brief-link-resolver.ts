@@ -19,7 +19,7 @@
  */
 
 import * as path from 'path';
-import { Spec } from '../types';
+import { Spec, SpecLink } from '../types';
 
 export type BriefLinkState = 'idea' | 'specified' | 'conflict';
 
@@ -124,4 +124,79 @@ export function findBriefsForSpec(sq: SpecLookup, docId: string): BriefLink[] {
     if (link.linkedSpecId === docId) out.push(link);
   }
   return out;
+}
+
+// ---------------------------------------------------------------------------
+// Lifecycle rollup (REQ-FUNNEL-003)
+// ---------------------------------------------------------------------------
+
+/** SpecLookup plus the queries needed to roll up a document's implementation. */
+export interface FunnelLookup extends SpecLookup {
+  getSpecsByParent(parentId: string): Spec[];
+  getLinksBySpec(specId: string): SpecLink[];
+}
+
+/**
+ * Implementation rollup for a linked brief's document — counts of the
+ * document's requirement→code links by state. `implemented` (declared) and
+ * `verified` (test-confirmed) are kept distinct so a declared-but-unverified
+ * link is never reported as proven. `drafted` / `implementing` are in-progress
+ * and counted as neither (they are not "implemented").
+ */
+export interface BriefRollup {
+  requirements: number;
+  implemented: number;
+  verified: number;
+  drifted: number;
+  broken: number;
+  orphaned: number;
+}
+
+export interface BriefFunnelEntry {
+  briefId: string;
+  state: BriefLinkState;
+  linkedSpecId: string | null;
+  /** Implementation rollup of the linked document; null for `idea` / `conflict`. */
+  rollup: BriefRollup | null;
+}
+
+/**
+ * Roll a brief up to its lifecycle state (REQ-FUNNEL-003): `idea` (unlinked),
+ * `conflict` (ambiguous link), or `specified` with an implementation rollup of
+ * the linked document's requirements. A document whose links are all
+ * drifted/broken/orphaned yields implemented=0 — degraded states are surfaced
+ * rather than mistaken for a working implementation.
+ */
+export function summarizeBriefFunnel(sq: FunnelLookup, brief: Spec): BriefFunnelEntry {
+  const link = resolveBriefLink(sq, brief);
+  if (link.state !== 'specified' || !link.linkedSpecId) {
+    return { briefId: brief.id, state: link.state, linkedSpecId: link.linkedSpecId, rollup: null };
+  }
+
+  const requirements = sq
+    .getSpecsByParent(link.linkedSpecId)
+    .filter((s) => s.kind === 'requirement');
+
+  const rollup: BriefRollup = {
+    requirements: requirements.length,
+    implemented: 0,
+    verified: 0,
+    drifted: 0,
+    broken: 0,
+    orphaned: 0,
+  };
+  for (const req of requirements) {
+    for (const lk of sq.getLinksBySpec(req.id)) {
+      switch (lk.state) {
+        case 'implemented': rollup.implemented++; break;
+        case 'verified': rollup.verified++; break;
+        case 'drifted': rollup.drifted++; break;
+        case 'broken': rollup.broken++; break;
+        case 'orphaned': rollup.orphaned++; break;
+        default: break; // drafted / implementing — in-progress, not "implemented"
+      }
+    }
+  }
+
+  return { briefId: brief.id, state: 'specified', linkedSpecId: link.linkedSpecId, rollup };
 }

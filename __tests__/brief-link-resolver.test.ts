@@ -11,8 +11,11 @@ import {
   findBriefsForSpec,
   cleanSpecPointer,
   resolveToDocumentId,
+  summarizeBriefFunnel,
   SpecLookup,
+  FunnelLookup,
 } from '../src/resolution/brief-link-resolver';
+import { SpecLink, SpecLinkState } from '../src/types';
 
 function spec(p: Partial<Spec> & { id: string; kind: Spec['kind'] }): Spec {
   return {
@@ -123,5 +126,74 @@ describe('resolveBriefLink (REQ-FUNNEL-002)', () => {
     expect(link.linkedSpecId).toBe('DOC');
     // It does not claim the sibling requirement.
     expect(link.linkedSpecId).not.toBe('REQ-2');
+  });
+});
+
+describe('summarizeBriefFunnel (REQ-FUNNEL-003)', () => {
+  const doc = spec({ id: 'DOC', kind: 'document', sourcePath: 'specs/doc.md', metadata: { brief: 'doc/brief.md' } });
+  const req1 = spec({ id: 'REQ-1', kind: 'requirement', parentId: 'DOC', sourcePath: 'specs/doc.md' });
+  const req2 = spec({ id: 'REQ-2', kind: 'requirement', parentId: 'DOC', sourcePath: 'specs/doc.md' });
+  const brief = spec({ id: 'brief:doc', kind: 'brief', sourcePath: 'specs/doc/brief.md', metadata: { spec: 'DOC' } });
+
+  function link(specId: string, state: SpecLinkState): SpecLink {
+    return { specId, state } as unknown as SpecLink;
+  }
+
+  function funnelLookup(specs: Spec[], links: Record<string, SpecLink[]>): FunnelLookup {
+    const byId = new Map(specs.map((s) => [s.id, s]));
+    return {
+      getSpecById: (id) => byId.get(id) ?? null,
+      getAllSpecs: () => specs,
+      getSpecsByParent: (pid) => specs.filter((s) => s.parentId === pid),
+      getLinksBySpec: (sid) => links[sid] ?? [],
+    };
+  }
+
+  it('A1: an unlinked brief has state idea and no rollup', () => {
+    const lonely = spec({ id: 'brief:l', kind: 'brief', sourcePath: 'specs/l/brief.md', metadata: {} });
+    const sq = funnelLookup([doc, req1, lonely], {});
+    const e = summarizeBriefFunnel(sq, lonely);
+    expect(e.state).toBe('idea');
+    expect(e.rollup).toBeNull();
+  });
+
+  it('A2: a linked doc with zero implemented links is specified with an all-zero rollup', () => {
+    const sq = funnelLookup([doc, req1, req2, brief], {});
+    const e = summarizeBriefFunnel(sq, brief);
+    expect(e.state).toBe('specified');
+    expect(e.rollup).toEqual({ requirements: 2, implemented: 0, verified: 0, drifted: 0, broken: 0, orphaned: 0 });
+  });
+
+  it('A3/A4: rolls up requirement link-states, keeping implemented distinct from verified', () => {
+    const sq = funnelLookup([doc, req1, req2, brief], {
+      'REQ-1': [link('REQ-1', 'implemented')],
+      'REQ-2': [link('REQ-2', 'verified'), link('REQ-2', 'drifted')],
+    });
+    const e = summarizeBriefFunnel(sq, brief);
+    expect(e.rollup).toEqual({ requirements: 2, implemented: 1, verified: 1, drifted: 1, broken: 0, orphaned: 0 });
+  });
+
+  it('A5: a doc whose links are all degraded reports implemented=0, surfacing the degraded states', () => {
+    const sq = funnelLookup([doc, req1, req2, brief], {
+      'REQ-1': [link('REQ-1', 'drifted')],
+      'REQ-2': [link('REQ-2', 'orphaned')],
+    });
+    const e = summarizeBriefFunnel(sq, brief);
+    expect(e.rollup!.implemented).toBe(0);
+    expect(e.rollup!.verified).toBe(0);
+    expect(e.rollup!.drifted).toBe(1);
+    expect(e.rollup!.orphaned).toBe(1);
+  });
+
+  it('a conflicting brief has state conflict and no rollup', () => {
+    // DOC does NOT point back; DOCY does — so brief.spec (DOC) and the
+    // spec-side pointer (DOCY) disagree.
+    const docNoBrief = spec({ id: 'DOC', kind: 'document', sourcePath: 'specs/doc.md', metadata: {} });
+    const docY = spec({ id: 'DOCY', kind: 'document', sourcePath: 'specs/docy.md', metadata: { brief: 'doc/brief.md' } });
+    const conflicting = spec({ id: 'brief:doc', kind: 'brief', sourcePath: 'specs/doc/brief.md', metadata: { spec: 'DOC' } });
+    const sq = funnelLookup([docNoBrief, docY, req1, conflicting], {});
+    const e = summarizeBriefFunnel(sq, conflicting);
+    expect(e.state).toBe('conflict');
+    expect(e.rollup).toBeNull();
   });
 });
