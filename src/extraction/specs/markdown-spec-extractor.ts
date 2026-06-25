@@ -44,6 +44,9 @@ const HEADING = /^(#{1,6})\s+(.+?)\s*$/;
 /** Pattern: implementation reference inside an `implementations:` block */
 const IMPL_REF = /^[-*]\s+([^\s:]+)\s*:\s*([A-Za-z0-9_$.]+)\s*$/;
 
+/** The four recognized domain-fact `type` values (REQ-DOMAIN-001). */
+const DOMAIN_TYPES = new Set(['term', 'rule', 'decision', 'constraint']);
+
 /**
  * Heuristic: guess the target node kind from a qualified name. Used only
  * for the `target_node_kind` hint on SpecLinkCandidate — the resolver
@@ -74,6 +77,15 @@ export class MarkdownSpecExtractor {
     // (REQ-FUNNEL-001.A5).
     if (this.isBriefFile()) {
       return this.extractBrief(start);
+    }
+
+    // Domain facts (`specs/domain/*.md`) likewise take a separate path: they are
+    // frontmatter-keyed (`id: DOM-<AREA>-NNN`, `type: …`) with freeform prose and
+    // no `<!-- id: -->`-marked headings, so the requirement walker below would only
+    // emit `spec_missing_id`. Routing them here keeps that walker untouched, which
+    // REQ-DOMAIN-001.A1 requires (parse without `spec_missing_id`).
+    if (this.isDomainFile()) {
+      return this.extractDomain(start);
     }
 
     const specs: Spec[] = [];
@@ -305,6 +317,113 @@ export class MarkdownSpecExtractor {
   private isBriefFile(): boolean {
     const base = this.filePath.split(/[/\\]/).pop() ?? '';
     return base.toLowerCase() === 'brief.md';
+  }
+
+  /** True when this file lives under a `specs/domain/` directory. */
+  private isDomainFile(): boolean {
+    return this.filePath.replace(/\\/g, '/').includes('specs/domain/');
+  }
+
+  /**
+   * Extract a domain fact (`specs/domain/*.md`) as a single `domain`-kind spec.
+   *
+   * A domain fact carries `id` / `title` / `type` frontmatter and freeform prose
+   * (no `<!-- id: -->`-marked headings). It becomes one spec entity:
+   *   - id      the frontmatter `id` (the `DOM-<AREA>-NNN` value)
+   *   - kind    'domain'
+   *   - title   the frontmatter `title`, else the first `# ` heading, else the id
+   *   - body    the full post-frontmatter prose (so it is full-text searchable)
+   *   - metadata the frontmatter metadata, which carries `type`
+   *
+   * The `type` (term / rule / decision / constraint) lives in `metadata` — no new
+   * column. An unknown `type` value emits a `warning` (`spec_unknown_domain_type`)
+   * but the fact is still indexed, never dropped (REQ-DOMAIN-001.A3).
+   *
+   * A domain file with no `id` in its frontmatter isn't addressable, so it is
+   * skipped gracefully — no spec, no fatal error — matching the brief path.
+   */
+  private extractDomain(start: number): SpecExtractionResult {
+    const errors: ExtractionError[] = [];
+    const lines = this.source.split(/\r?\n/);
+    const now = Date.now();
+
+    const { frontmatter, firstContentLine } = this.parseFrontmatter(lines, errors);
+    const id =
+      typeof frontmatter.id === 'string' && frontmatter.id.trim().length > 0
+        ? frontmatter.id.trim()
+        : undefined;
+
+    if (id === undefined) {
+      // Not an addressable domain fact — skip without erroring.
+      return {
+        specs: [],
+        linkCandidates: [],
+        errors,
+        format: 'markdown',
+        durationMs: Date.now() - start,
+      };
+    }
+
+    const meta =
+      frontmatter.metadata && typeof frontmatter.metadata === 'object'
+        ? (frontmatter.metadata as Record<string, unknown>)
+        : {};
+
+    // Type validation: present but unrecognized → warn, but still emit the fact.
+    const type = meta.type;
+    if (typeof type === 'string' && !DOMAIN_TYPES.has(type)) {
+      errors.push({
+        message: `Domain fact "${id}" has unknown type "${type}" (expected one of: term, rule, decision, constraint)`,
+        filePath: this.filePath,
+        line: 1,
+        severity: 'warning',
+        code: 'spec_unknown_domain_type',
+      });
+    }
+
+    // Title: frontmatter `title`, else the first heading, else the id.
+    let title =
+      typeof frontmatter.title === 'string' && frontmatter.title.length > 0
+        ? frontmatter.title
+        : id;
+    if (title === id) {
+      for (let i = firstContentLine; i < lines.length; i++) {
+        const h = (lines[i] ?? '').match(HEADING);
+        if (h && h[2]) {
+          title = h[2];
+          break;
+        }
+      }
+    }
+
+    const body = lines.slice(firstContentLine).join('\n').trim();
+
+    const spec: Spec = {
+      id,
+      kind: 'domain',
+      title,
+      body,
+      format: 'markdown',
+      sourcePath: this.filePath,
+      startLine: firstContentLine + 1,
+      endLine: lines.length,
+      parentId: undefined,
+      contentHash: hash(body),
+      version: typeof frontmatter.version === 'number' ? frontmatter.version : 1,
+      owner: typeof frontmatter.owner === 'string' ? frontmatter.owner : undefined,
+      priority: typeof frontmatter.priority === 'string' ? frontmatter.priority : undefined,
+      metadata: meta,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    return {
+      specs: [spec],
+      linkCandidates: [],
+      errors,
+      format: 'markdown',
+      durationMs: Date.now() - start,
+    };
   }
 
   /**

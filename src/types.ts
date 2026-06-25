@@ -603,6 +603,8 @@ export interface FindRelevantContextOptions {
  * - `acceptance`: an acceptance criterion under a requirement
  * - `contract`: an API/data contract (OpenAPI, AsyncAPI, etc.)
  * - `data_schema`: a data shape definition
+ * - `domain`: a human-confirmed domain fact (term / rule / decision /
+ *   constraint), authored under `specs/domain/` (REQ-DOMAIN-001)
  */
 export const SPEC_KINDS = [
   'document',
@@ -614,6 +616,10 @@ export const SPEC_KINDS = [
   // spec lifecycle, indexed as a first-class entity so the idea → spec →
   // implemented funnel is queryable (REQ-FUNNEL-001).
   'brief',
+  // A domain fact (`specs/domain/*.md`) — the project's ubiquitous language,
+  // rules/invariants, decisions, and constraints. Its `type` (term / rule /
+  // decision / constraint) lives in the spec's `metadata` (REQ-DOMAIN-001).
+  'domain',
 ] as const;
 
 export type SpecKind = (typeof SPEC_KINDS)[number];

@@ -159,7 +159,7 @@ CREATE TABLE IF NOT EXISTS project_metadata (
 -- acceptance criteria point to their parent doc/req via parent_id.
 CREATE TABLE IF NOT EXISTS specs (
     id              TEXT PRIMARY KEY,           -- embedded ID, e.g. REQ-AUTH-001
-    kind            TEXT NOT NULL,              -- 'document' | 'requirement' | 'acceptance' | 'contract' | 'data_schema'
+    kind            TEXT NOT NULL,              -- 'document' | 'requirement' | 'acceptance' | 'contract' | 'data_schema' | 'brief' | 'domain'
     title           TEXT NOT NULL,
     body            TEXT NOT NULL,
     format          TEXT NOT NULL,              -- 'markdown' | 'yaml' | 'gherkin' | 'openapi'

@@ -9,6 +9,10 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### New Features
+
+- **Capture your project's domain knowledge as first-class facts.** SpecShip now recognizes a new `domain` spec kind — terms, rules, decisions, and constraints authored as Markdown under `specs/domain/`. Each fact declares a `type` (`term`, `rule`, `decision`, or `constraint`), is indexed and full-text searchable alongside your other specs, and shows up in `specship_explore` and `specship_search`. An unrecognized `type` still indexes the fact and surfaces a parse warning rather than dropping it.
+
 
 ## [0.6.0] - 2026-06-25
 
