@@ -98,4 +98,4 @@ Reports node/edge/file counts, the active SQLite backend, and the journal mode. 
 
 ## What gets indexed
 
-Every file whose extension maps to a [supported language](/specship/reference/languages/), minus dependency/build directories excluded by default (`node_modules`, `vendor`, `dist`, …), anything your `.gitignore` excludes, and files over 1 MB. See [Configuration](/specship/getting-started/configuration/).
+Every file whose extension maps to a [supported language](/reference/languages/), minus dependency/build directories excluded by default (`node_modules`, `vendor`, `dist`, …), anything your `.gitignore` excludes, and files over 1 MB. See [Configuration](/getting-started/configuration/).

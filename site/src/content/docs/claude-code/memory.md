@@ -105,4 +105,4 @@ When you edit a `CLAUDE.md`, the change takes effect on the **next Claude Code s
 
 For notes (`~/.claude/memory/*.md`), Claude Code re-reads on every turn — so changes apply immediately.
 
-→ Next: [Heatmap](/specship/claude-code/heatmap/) — the file/tool/subagent drill-down.
+→ Next: [Heatmap](/claude-code/heatmap/) — the file/tool/subagent drill-down.

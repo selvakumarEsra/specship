@@ -25,7 +25,7 @@ A no-flag install is **project-local** by default — it writes to `./.mcp.json`
 }
 ```
 
-This tells Claude Code: "when you start, spawn `specship serve --mcp` as a stdio MCP server". The server exposes the code-graph tools (`specship_search`, `specship_explore`, `specship_node`, `specship_callers`, `specship_callees`, `specship_impact`, `specship_status`, `specship_files`), the spec tools (`specship_spec`, `specship_link_assert`, `specship_link_verify`, `specship_drifted`), and the design tools (`designer_session`, `designer_prompt`, `designer_ask`, `designer_list`, `designer_snapshot`, `designer_handoff`). See the [MCP server reference](/specship/reference/mcp-server/) for what each does.
+This tells Claude Code: "when you start, spawn `specship serve --mcp` as a stdio MCP server". The server exposes the code-graph tools (`specship_search`, `specship_explore`, `specship_node`, `specship_callers`, `specship_callees`, `specship_impact`, `specship_status`, `specship_files`), the spec tools (`specship_spec`, `specship_link_assert`, `specship_link_verify`, `specship_drifted`), and the design tools (`designer_session`, `designer_prompt`, `designer_ask`, `designer_list`, `designer_snapshot`, `designer_handoff`). See the [MCP server reference](/reference/mcp-server/) for what each does.
 
 ### 2. The auto-allow permissions list
 
@@ -81,7 +81,7 @@ Slash commands and the `specship-explorer` subagent ship as a Claude Code plugin
 | `/ss-design-implement <url>` | Snapshots a Claude Design URL and drafts + implements a spec from it. |
 | `/ss-design-loop` | Runs the full human-tasted design→spec→code loop. |
 
-See [Design-to-code](/specship/workflows/design-to-code/) for the design commands.
+See [Design-to-code](/workflows/design-to-code/) for the design commands.
 
 ## Manual wiring
 

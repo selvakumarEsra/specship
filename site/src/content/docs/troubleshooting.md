@@ -24,4 +24,4 @@ Ensure the project is initialized/indexed, verify the path in your MCP config, a
 
 ## Missing symbols
 
-The MCP server auto-syncs on save (wait a couple of seconds). Run `specship sync` manually if needed. Check that the file's language is [supported](/specship/reference/languages/) and isn't excluded by `.gitignore`.
+The MCP server auto-syncs on save (wait a couple of seconds). Run `specship sync` manually if needed. Check that the file's language is [supported](/reference/languages/) and isn't excluded by `.gitignore`.

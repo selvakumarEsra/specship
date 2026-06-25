@@ -1,0 +1,12 @@
+{
+  // Assets-only Worker: serves the static Astro build in ./dist with no
+  // Worker script (no `main`). Deployed via Cloudflare Workers Builds with
+  // the dashboard "Root directory" set to `site`, so paths are relative here.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "specship-cc",
+  "compatibility_date": "2025-11-01",
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "404-page"
+  }
+}

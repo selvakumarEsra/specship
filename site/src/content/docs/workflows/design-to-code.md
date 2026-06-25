@@ -40,7 +40,7 @@ The workflow writes four files under `specs/<slug>/` rather than one spec:
 | `tokens.css` | Design tokens as CSS variables | No (reference data) |
 | `specs/<slug>.md` | The contract: REQs + acceptance criteria | **Yes — the drift gate** |
 
-Specs that name pixel values flag drift on every theme tweak; specs that name token symbols (`MUST use --error`) survive token-value changes silently. The split keeps the [drift queue](/specship/specs/links-and-drift/) meaningful. When the designer iterates, re-running keeps existing REQ IDs stable, so in-flight implementation work survives — and `git diff` separates a *visual* change (the snapshot) from a *contract* change (the spec).
+Specs that name pixel values flag drift on every theme tweak; specs that name token symbols (`MUST use --error`) survive token-value changes silently. The split keeps the [drift queue](/specs/links-and-drift/) meaningful. When the designer iterates, re-running keeps existing REQ IDs stable, so in-flight implementation work survives — and `git diff` separates a *visual* change (the snapshot) from a *contract* change (the spec).
 
 ## The design tools
 

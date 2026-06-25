@@ -149,4 +149,4 @@ If you move the symbol to a different file, same thing — the file path updates
 
 If you delete the symbol entirely, the link goes `orphaned`. Either restore it, point the link at the replacement (via `specship spec link-assert` or the `spec-relink` workflow), or accept the orphan.
 
-→ Back to [Why specs](/specship/specs/why-specs/).
+→ Back to [Why specs](/specs/why-specs/).

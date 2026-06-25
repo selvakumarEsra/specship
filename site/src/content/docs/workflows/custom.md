@@ -164,4 +164,4 @@ A few patterns we keep coming back to in custom workflows:
 | **Agent → script → agent** | An agent produces a structured plan, a `script` step parses + filters it, a second agent acts on the filtered subset. |
 | **Loop until green** | A `loop:` runner that re-runs `fix` + `test` until tests pass or `max_iterations: 3` is hit. |
 
-→ Next: [Isolation & worktrees](/specship/workflows/isolation/) — what's actually happening under `.specship/wt/`.
+→ Next: [Isolation & worktrees](/workflows/isolation/) — what's actually happening under `.specship/wt/`.

@@ -84,4 +84,4 @@ The heatmap surfaces the patterns. The fix is usually one of:
 | One subagent is 70% of the cost | Restructure your workflow to either inline the subagent's job or give it a stable plan reference. |
 | Cache rate < 30% on certain prompts | Pin a stable system-prompt prefix in your project's CLAUDE.md. |
 
-→ Next: [Costs & cache](/specship/claude-code/costs/) — the financial view.
+→ Next: [Costs & cache](/claude-code/costs/) — the financial view.

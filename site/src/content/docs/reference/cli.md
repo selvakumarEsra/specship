@@ -35,7 +35,7 @@ specship impact AuthMiddleware --depth 3
 
 ## affected
 
-Traces import dependencies transitively to find which test files are affected by changed source files. See [Affected Tests in CI](/specship/guides/affected-tests/) for options and a CI example.
+Traces import dependencies transitively to find which test files are affected by changed source files. See [Affected Tests in CI](/guides/affected-tests/) for options and a CI example.
 
 ## drifted
 
@@ -45,11 +45,11 @@ Lists spec links that are `drifted`, `broken`, or `orphaned`. Add `--fail-on=bro
 specship drifted --fail-on=broken,drifted,orphaned
 ```
 
-See [Spec links & drift](/specship/specs/links-and-drift/).
+See [Spec links & drift](/specs/links-and-drift/).
 
 ## workflow
 
-Drives the workflow engine from the terminal — `list`, `run <name>`, `resume <runId>`, `cancel <runId>`, `approve <runId>`, `reject <runId>`, `runs`. Pass inputs with repeatable `-i KEY=VALUE`. See [Workflows](/specship/workflows/overview/).
+Drives the workflow engine from the terminal — `list`, `run <name>`, `resume <runId>`, `cancel <runId>`, `approve <runId>`, `reject <runId>`, `runs`. Pass inputs with repeatable `-i KEY=VALUE`. See [Workflows](/workflows/overview/).
 
 ```bash
 specship workflow run spec-implement -i SPEC_ID=REQ-AUTH-005

@@ -161,7 +161,7 @@ The whole thing is one YAML file. You could edit it, customize it, share it. Or 
 
 ## Next
 
-- [Workflows — Overview](/specship/workflows/overview/) — the engine's full feature set.
-- [YAML schema](/specship/workflows/yaml-schema/) — every field you can set.
-- [Writing custom workflows](/specship/workflows/custom/) — a worked example of a code-review workflow from scratch.
-- [Why specs](/specship/specs/why-specs/) — what specs buy you beyond "shared brief".
+- [Workflows — Overview](/workflows/overview/) — the engine's full feature set.
+- [YAML schema](/workflows/yaml-schema/) — every field you can set.
+- [Writing custom workflows](/workflows/custom/) — a worked example of a code-review workflow from scratch.
+- [Why specs](/specs/why-specs/) — what specs buy you beyond "shared brief".

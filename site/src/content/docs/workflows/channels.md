@@ -57,7 +57,7 @@ The CLI is a thin client over SpecShip's runner; an approval issued via CLI and 
 
 The Web UI is also where you go for **historical** runs — every event and artifact is persisted in SpecShip's SQLite, so you can replay the timeline of a run from a week ago and see exactly what happened.
 
-→ Read the full UI walkthrough at [Claude Code — Overview](/specship/claude-code/overview/) (the dashboard) and [the README's Dashboard section](https://github.com/selvakumarEsra/specship#dashboard).
+→ Read the full UI walkthrough at [Claude Code — Overview](/claude-code/overview/) (the dashboard) and [the README's Dashboard section](https://github.com/selvakumarEsra/specship#dashboard).
 
 ## GitHub Actions
 
@@ -125,4 +125,4 @@ A loose rule of thumb:
 
 All three read and write the same SQLite, so a run started on the CLI can be approved in the Web UI and inspected later from CI.
 
-→ Back to [Workflows — Overview](/specship/workflows/overview/).
+→ Back to [Workflows — Overview](/workflows/overview/).

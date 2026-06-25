@@ -58,7 +58,7 @@ A spec gives you:
 - A **link to code** with state — `verified`, `drifted`, `broken`, `orphaned`.
 - A **brief the agent can read** without you re-describing the goal every turn.
 
-→ [Why specs](/specship/specs/why-specs/) for the longer version.
+→ [Why specs](/specs/why-specs/) for the longer version.
 
 ## Why a graph
 
@@ -85,8 +85,8 @@ No data leaves your machine. No API keys, no external services. Everything lives
 
 ## What to read next
 
-- **[Quickstart](/specship/getting-started/quickstart/)** — the 30-second install + first command.
-- **[Your first workflow](/specship/getting-started/your-first-workflow/)** — the 12-minute walkthrough: install, init, run `spec-implement` against a real spec, watch the timeline, approve the diff.
-- **[Workflows — Overview](/specship/workflows/overview/)** — the engine's full feature set.
-- **[Why specs](/specship/specs/why-specs/)** — what specs buy you beyond "shared brief".
-- **[Claude Code — Overview](/specship/claude-code/overview/)** — the desktop UI's analytics surfaces.
+- **[Quickstart](/getting-started/quickstart/)** — the 30-second install + first command.
+- **[Your first workflow](/getting-started/your-first-workflow/)** — the 12-minute walkthrough: install, init, run `spec-implement` against a real spec, watch the timeline, approve the diff.
+- **[Workflows — Overview](/workflows/overview/)** — the engine's full feature set.
+- **[Why specs](/specs/why-specs/)** — what specs buy you beyond "shared brief".
+- **[Claude Code — Overview](/claude-code/overview/)** — the desktop UI's analytics surfaces.

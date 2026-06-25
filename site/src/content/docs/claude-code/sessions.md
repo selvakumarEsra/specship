@@ -80,4 +80,4 @@ SpecShip sums `cost_usd` separately for `is_sidechain: true` vs `false`. The sub
 
 For **per-subagent-name** attribution (which specific subagent type ate the budget), SpecShip looks up the parent prompt's Task call and reads its `subagent_type` field, joining back to the sidechain prompt rows. This shows up in the Heatmap → Subagents lane.
 
-→ Next: [Memory](/specship/claude-code/memory/) — the CLAUDE.md hierarchy.
+→ Next: [Memory](/claude-code/memory/) — the CLAUDE.md hierarchy.

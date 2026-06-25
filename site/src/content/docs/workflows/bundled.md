@@ -15,7 +15,7 @@ specship workflow list
 # claude-design-implement  bundled  Snapshot a design → draft a spec → hand off to implement
 ```
 
-The four spec workflows take a `SPEC_ID` and run inside a worktree by default; `claude-design-implement` takes a design URL or handoff bundle and is covered in [Design-to-code](/specship/workflows/design-to-code/). Override any of them by dropping your own `<name>.yaml` under `.specship/workflows/` — project tier always wins.
+The four spec workflows take a `SPEC_ID` and run inside a worktree by default; `claude-design-implement` takes a design URL or handoff bundle and is covered in [Design-to-code](/workflows/design-to-code/). Override any of them by dropping your own `<name>.yaml` under `.specship/workflows/` — project tier always wins.
 
 ## `spec-implement`
 
@@ -105,4 +105,4 @@ The bundled YAMLs are intentionally close to the minimum useful version. Most te
 - Changing the `branch:` pattern.
 - Restricting the agent's allowed tools at the `agent` step.
 
-→ Next: [Writing custom workflows](/specship/workflows/custom/) for a worked example from scratch.
+→ Next: [Writing custom workflows](/workflows/custom/) for a worked example from scratch.

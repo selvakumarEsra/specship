@@ -15,7 +15,7 @@ After parsing, SpecShip resolves:
 
 ## Framework awareness
 
-SpecShip recognizes web-framework routing files and emits `route` nodes linked by `references` edges to their handler classes or functions — so querying the callers of a view or controller surfaces the URL pattern that binds it. See [Framework Routes](/specship/guides/framework-routes/) for the full list of recognized frameworks.
+SpecShip recognizes web-framework routing files and emits `route` nodes linked by `references` edges to their handler classes or functions — so querying the callers of a view or controller surfaces the URL pattern that binds it. See [Framework Routes](/guides/framework-routes/) for the full list of recognized frameworks.
 
 ## Dynamic-dispatch coverage
 

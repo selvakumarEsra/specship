@@ -39,4 +39,4 @@ Session Detail carries the same numbers inline: a `SpecShip ~N tok` chip on each
 - Cost is priced at your model's input rate; unknown models contribute tokens but no cost.
 - v1 estimates **savings for the primary project only** — other projects show their spend exactly but their savings as unresolved. Per-workflow attribution is not yet broken out.
 
-→ Back to the [Claude Code overview](/specship/claude-code/overview/).
+→ Back to the [Claude Code overview](/claude-code/overview/).
