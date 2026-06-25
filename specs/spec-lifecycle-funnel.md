@@ -155,4 +155,4 @@ through to its implementation state.
 <!-- id: REQ-FUNNEL-006.A3 -->
 - Selecting a brief shows its content and its linked spec, if any.
 <!-- id: REQ-FUNNEL-006.A4 -->
-- When the server is unreachable, the page degrades per the existing offline behavior rather than crashing on the new funnel data. [needs review] — confirm the intended interaction with OFFLINE-DOC.
+- When the server is unreachable, the funnel degrades per OFFLINE-DOC — it is served from the shared client cache (marked stale, like every other surface) rather than crashing on the new funnel data.
