@@ -2,11 +2,11 @@
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 
-// Project page on GitHub Pages: https://selvakumarEsra.github.io/specship/
-// `site` + `base` make every internal link resolve under the /specship/ prefix.
+// Deployed to Cloudflare Workers (assets-only) at the apex domain specship.cc.
+// Root domain → no `base` prefix; internal links resolve at /. Code reads
+// import.meta.env.BASE_URL throughout, so dropping `base` needs no link edits.
 export default defineConfig({
-	site: 'https://selvakumarEsra.github.io',
-	base: '/specship',
+	site: 'https://specship.cc',
 	integrations: [
 		starlight({
 			title: 'SpecShip',

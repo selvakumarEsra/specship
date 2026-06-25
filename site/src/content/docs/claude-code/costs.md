@@ -88,4 +88,4 @@ The "most efficient project" callout highlights the project with the best `cache
 
 This is the surface team leads use for **weekly cost reviews**.
 
-→ Next: [Tips engine](/specship/claude-code/tips/) — pattern-matching over your transcripts.
+→ Next: [Tips engine](/claude-code/tips/) — pattern-matching over your transcripts.

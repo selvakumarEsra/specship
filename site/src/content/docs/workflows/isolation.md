@@ -98,4 +98,4 @@ Or `cd` in, clean it up manually, then re-run `specship workflow cleanup`.
 
 Worktrees share the `.git/` object database with your main checkout, so they're **lightweight** — only the checked-out files take real space, not the whole git history. For a 50 MB-checkout repo, an active worktree is ~50 MB; ten of them is ~500 MB, not 50 × full-repo size.
 
-→ Next: [Channels — CLI, Web UI, GitHub Actions](/specship/workflows/channels/).
+→ Next: [Channels — CLI, Web UI, GitHub Actions](/workflows/channels/).

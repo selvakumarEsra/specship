@@ -50,7 +50,7 @@ steps:
 | `description` | string | no | Shown in the desktop UI and CLI list. |
 | `inputs[]` | array | no | Runtime parameters the user must (or may) supply. |
 | `variables` | object | no | Static key/value pairs. Available in every step as `$KEY`. |
-| `isolation` | `worktree` \| `none` | no | Default `worktree`. See [Isolation & worktrees](/specship/workflows/isolation/). |
+| `isolation` | `worktree` \| `none` | no | Default `worktree`. See [Isolation & worktrees](/workflows/isolation/). |
 | `requires[]` | array | no | Capability gates — e.g. `claude-code`, `pnpm`. Workflow refuses to start if any capability is missing. |
 | `steps[]` | array | yes | The DAG. Order doesn't matter; `depends_on:` is what defines edges. |
 
@@ -227,4 +227,4 @@ Three locations, in priority order:
 
 If two tiers have the same `name:`, the higher-priority one wins.
 
-→ Next: [Bundled workflows](/specship/workflows/bundled/) — exact steps for the four built-ins.
+→ Next: [Bundled workflows](/workflows/bundled/) — exact steps for the four built-ins.

@@ -166,4 +166,4 @@ spec:
     - "**/draft/**"
 ```
 
-→ Next: [Spec links & drift](/specship/specs/links-and-drift/) — the link lifecycle and how drift detection works.
+→ Next: [Spec links & drift](/specs/links-and-drift/) — the link lifecycle and how drift detection works.

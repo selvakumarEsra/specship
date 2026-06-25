@@ -37,8 +37,8 @@ specship impact AuthMiddleware      # what a change would affect
 specship files --filter src/auth    # scoped file structure from the index
 ```
 
-Each accepts `--json` for machine-readable output. See the full [CLI reference](/specship/reference/cli/).
+Each accepts `--json` for machine-readable output. See the full [CLI reference](/reference/cli/).
 
 ## Hand it to your agent
 
-With a `.specship/` directory present and an agent configured (see [Installation](/specship/getting-started/installation/)), your agent uses the [MCP tools](/specship/reference/mcp-server/) automatically — no extra step.
+With a `.specship/` directory present and an agent configured (see [Installation](/getting-started/installation/)), your agent uses the [MCP tools](/reference/mcp-server/) automatically — no extra step.

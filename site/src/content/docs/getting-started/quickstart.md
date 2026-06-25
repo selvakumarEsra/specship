@@ -33,4 +33,4 @@ specship init
 
 That's it — Claude Code will use SpecShip tools automatically when a `.specship/` directory exists.
 
-Next: build [Your First Graph](/specship/getting-started/your-first-graph/), or see the full [Installation](/specship/getting-started/installation/) options.
+Next: build [Your First Graph](/getting-started/your-first-graph/), or see the full [Installation](/getting-started/installation/) options.

@@ -79,7 +79,7 @@ When a workflow starts, SpecShip provisions a **git worktree** under `.specship/
 
 If the workflow succeeds and reaches a `shell` step that fast-forward-merges back, the worktree's branch lands on `main` (or wherever). If anything fails, the worktree is **left behind** for you to inspect.
 
-→ Read [Isolation & worktrees](/specship/workflows/isolation/) for the details.
+→ Read [Isolation & worktrees](/workflows/isolation/) for the details.
 
 ## Portability — same workflow, three surfaces
 
@@ -95,8 +95,8 @@ You author once. Where it runs is the user's choice.
 
 ## What's next
 
-- [Quickstart](/specship/getting-started/quickstart/) — install, init, run your first workflow.
-- [YAML schema](/specship/workflows/yaml-schema/) — the full reference for fields, runners, and conditions.
-- [Bundled workflows](/specship/workflows/bundled/) — what `spec-implement` / `spec-fix` / `spec-verify` / `spec-relink` actually do, step by step.
-- [Writing custom workflows](/specship/workflows/custom/) — drop your own under `.specship/workflows/`.
-- [Channels](/specship/workflows/channels/) — running workflows from CLI, the web UI, or GitHub Actions.
+- [Quickstart](/getting-started/quickstart/) — install, init, run your first workflow.
+- [YAML schema](/workflows/yaml-schema/) — the full reference for fields, runners, and conditions.
+- [Bundled workflows](/workflows/bundled/) — what `spec-implement` / `spec-fix` / `spec-verify` / `spec-relink` actually do, step by step.
+- [Writing custom workflows](/workflows/custom/) — drop your own under `.specship/workflows/`.
+- [Channels](/workflows/channels/) — running workflows from CLI, the web UI, or GitHub Actions.

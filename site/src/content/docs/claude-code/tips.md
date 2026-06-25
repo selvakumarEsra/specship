@@ -142,4 +142,4 @@ specship tips snooze <tip-id> --duration 1w
 specship tips reload             # re-read rule files
 ```
 
-→ Back to the desktop UI overview at [Claude Code — Overview](/specship/claude-code/overview/).
+→ Back to the desktop UI overview at [Claude Code — Overview](/claude-code/overview/).

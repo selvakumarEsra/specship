@@ -3,7 +3,7 @@ title: Installation
 description: Install SpecShip and wire it into Claude Code.
 ---
 
-SpecShip is **Claude Code only** — the installer configures one agent on purpose, so the surface stays small and easy to keep correct. If you need MCP integration with another agent that speaks the protocol, point it at `specship serve --mcp` by hand (see [MCP & Claude Code wiring](/specship/reference/integrations/)).
+SpecShip is **Claude Code only** — the installer configures one agent on purpose, so the surface stays small and easy to keep correct. If you need MCP integration with another agent that speaks the protocol, point it at `specship serve --mcp` by hand (see [MCP & Claude Code wiring](/reference/integrations/)).
 
 ## 1. Run the installer
 

@@ -24,4 +24,4 @@ Most edges come straight from the AST. A few — at dynamic-dispatch boundaries 
 - **Impact** computes the transitive radius affected by a change.
 - **Trace** returns a whole call path between two symbols in one call.
 
-See the [CLI](/specship/reference/cli/) and [MCP Server](/specship/reference/mcp-server/) references for how to run these.
+See the [CLI](/reference/cli/) and [MCP Server](/reference/mcp-server/) references for how to run these.

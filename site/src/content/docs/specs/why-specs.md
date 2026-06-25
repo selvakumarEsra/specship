@@ -85,4 +85,4 @@ Three of the four bundled workflows are named `spec-*` for a reason — the spec
 
 The agent has direct MCP access to `specship_spec(<id>)` to read the spec, `specship_link_assert(...)` to declare it built the thing, and `specship_link_verify(...)` to confirm tests pass.
 
-→ Next: [Writing specs](/specship/specs/writing-specs/) — the file format, ID conventions, and a few patterns that scale.
+→ Next: [Writing specs](/specs/writing-specs/) — the file format, ID conventions, and a few patterns that scale.

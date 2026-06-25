@@ -47,7 +47,7 @@ When `specship serve --ui` starts, three things happen in parallel:
 2. The codegraph engine opens the project's SQLite (or the picker's selected project, if you boot projectless).
 3. The **ingest watcher** does a one-shot reconciliation pass against `~/.claude/projects/`, then registers an `fs.watch` on that directory.
 
-The reconciliation parses any new `.jsonl` files (and any new lines on existing files) and writes them into SpecShip's SQLite. The watcher then triggers incremental ingests on every file-mtime change with a debounce — so live sessions stream into the desktop UI within roughly a second of Claude Code writing them. (The Session Detail page also pushes new prompts and tool calls live over SSE — see [Sessions](/specship/claude-code/sessions/).)
+The reconciliation parses any new `.jsonl` files (and any new lines on existing files) and writes them into SpecShip's SQLite. The watcher then triggers incremental ingests on every file-mtime change with a debounce — so live sessions stream into the desktop UI within roughly a second of Claude Code writing them. (The Session Detail page also pushes new prompts and tool calls live over SSE — see [Sessions](/claude-code/sessions/).)
 
 The watcher runs in-process; pass `--ingest` to be explicit, or `--no-web` to run the API headless (no SPA). The UI hits `127.0.0.1:4242` by default — change it with `--port` / `--host`.
 
@@ -72,4 +72,4 @@ The ingest reads files **only from your local `~/.claude/projects/`**. Nothing i
 
 The data lives in whichever project's `.specship/specship.db` is hosting the analytics (called the "primary project"). Delete that DB and you delete the ingested data. Re-run the watcher and it re-ingests from the JSONL source of truth.
 
-→ Read [Sessions](/specship/claude-code/sessions/) next — the per-session deep dive.
+→ Read [Sessions](/claude-code/sessions/) next — the per-session deep dive.

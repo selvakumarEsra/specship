@@ -35,7 +35,7 @@ Agents configured by the installer launch this automatically. When a `.specship/
 
 ## Design tools
 
-Merged in from the standalone `designer` MCP, these drive [claude.ai/design](https://claude.ai/design) over a debug Chrome. macOS only; they only launch Chrome when invoked. See [Design-to-code](/specship/workflows/design-to-code/).
+Merged in from the standalone `designer` MCP, these drive [claude.ai/design](https://claude.ai/design) over a debug Chrome. macOS only; they only launch Chrome when invoked. See [Design-to-code](/workflows/design-to-code/).
 
 | Tool | Purpose |
 |---|---|

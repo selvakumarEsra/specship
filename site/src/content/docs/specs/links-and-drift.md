@@ -121,4 +121,4 @@ specship spec link-assert \
 
 The pragma + comment approach is friendlier for "this is the spec source of truth": just drop a `// @implements REQ-AUTH-005` above the function and the next sync picks it up.
 
-→ Next: [The `@implements` pragma](/specship/specs/implements-pragma/) — the comment annotation form.
+→ Next: [The `@implements` pragma](/specs/implements-pragma/) — the comment annotation form.
