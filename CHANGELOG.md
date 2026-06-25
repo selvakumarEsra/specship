@@ -9,6 +9,9 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### New Features
+
+- **Watch your workflow runs work, live.** When a workflow runs an agent step, the run view now streams the agent's activity as it happens — each tool it calls (with a short summary) and each message it writes — instead of just a silent "running…". The activity replays when you reopen a finished run, too. Open a run in `specship serve --ui` to follow along.
 
 ## [0.7.0] - 2026-06-25
 
