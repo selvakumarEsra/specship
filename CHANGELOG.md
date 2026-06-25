@@ -9,6 +9,13 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### New Features
+
+- **See your spec pipeline at a glance — from brainstormed idea to shipped code.** A new spec lifecycle funnel shows, for the whole project, how many brainstormed ideas you have, how many became specs, and how many requirements are implemented versus verified. The brainstorm briefs that `/ss-brainstorm` writes are now first-class and full-text searchable, linked to the spec they turned into (and flagged when an idea isn't linked to anything yet, or when a brief and a spec disagree about the link). View it three ways: run `specship spec` in your terminal, call `specship_spec` with no argument from Claude Code, or open the **Specs** page in the dashboard — which now lists your idea-stage briefs alongside the specs they became.
+
+### Fixes
+
+- **Spec documents now report their requirements correctly.** A document was being indexed as its own child, so anything that walked a document's requirements — drift checks and the new lifecycle funnel — could miscount by including the document itself. Documents now index cleanly with their requirements beneath them; a re-index repairs any project already affected.
 
 ## [0.5.0] - 2026-06-24
 
