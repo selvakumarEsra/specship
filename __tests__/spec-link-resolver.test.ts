@@ -337,6 +337,182 @@ describe.skipIf(!fts5Available)('SpecLinkResolver refactor scenarios', () => {
     expect(sq.getLinksBySpec('REQ-5')).toHaveLength(0);
   });
 
+  // ===========================================================================
+  // Transitive spec-tier inheritance — REQ-DOMAIN-002 (getInheritedLinks)
+  // ===========================================================================
+
+  /** Insert a requirement spec + a resolved code link in one helper. */
+  function seedRequirementWithLink(
+    sq: ReturnType<SpecShip['getSpecQueries']>,
+    queries: import('../src/db/queries').QueryBuilder,
+    specId: string,
+    file: string,
+    symbol: string,
+    sig: string,
+    now: number
+  ): void {
+    sq.insertSpec({
+      id: specId,
+      kind: 'requirement',
+      title: specId,
+      body: 'b',
+      format: 'markdown',
+      sourcePath: `specs/${specId}.md`,
+      contentHash: 'h',
+      createdAt: now,
+      updatedAt: now,
+    });
+    const v = makeNode(file, symbol, 'function', 1, sig);
+    queries.insertNode(v);
+    sq.upsertSpecLink({
+      specId,
+      targetFilePath: file,
+      targetQualifiedName: symbol,
+      targetNodeKind: 'function',
+      resolvedNodeId: v.id,
+      kind: 'implements',
+      state: 'implemented',
+      driftAxis: null,
+      specHashAtLink: 'h',
+      nodeSigAtLink: sig,
+      provenance: 'agent-asserted',
+      confidence: 1.0,
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+
+  /** Insert a domain fact spec with optional parent / depends_on. */
+  function insertDomainFact(
+    sq: ReturnType<SpecShip['getSpecQueries']>,
+    id: string,
+    now: number,
+    opts: { parentId?: string; dependsOn?: string[] } = {}
+  ): import('../src/types').Spec {
+    const spec: import('../src/types').Spec = {
+      id,
+      kind: 'domain',
+      title: id,
+      body: 'A domain fact.',
+      format: 'markdown',
+      sourcePath: 'specs/domain/fact.md',
+      contentHash: 'dh',
+      parentId: opts.parentId,
+      metadata: opts.dependsOn ? { type: 'rule', depends_on: opts.dependsOn } : { type: 'rule' },
+      createdAt: now,
+      updatedAt: now,
+    };
+    sq.insertSpec(spec);
+    return spec;
+  }
+
+  it('surfaces a depends_on requirement\'s code links transitively (A1)', () => {
+    const sq = cg.getSpecQueries();
+    const resolver = cg.getSpecLinkResolver();
+    const queries = (cg as unknown as { queries: import('../src/db/queries').QueryBuilder }).queries;
+    const now = Date.now();
+
+    seedRequirementWithLink(sq, queries, 'REQ-PAY-004', 'src/pay.ts', 'settle', 'settle(x)', now);
+    const fact = insertDomainFact(sq, 'DOM-PAY-001', now, { dependsOn: ['REQ-PAY-004'] });
+
+    const { links, gaps } = resolver.getInheritedLinks(fact);
+    expect(gaps).toEqual([]);
+    expect(links).toHaveLength(1);
+    expect(links[0]!.viaSpecId).toBe('REQ-PAY-004');
+    expect(links[0]!.link.targetQualifiedName).toBe('settle');
+  });
+
+  it('inherits via parent_id as well as depends_on', () => {
+    const sq = cg.getSpecQueries();
+    const resolver = cg.getSpecLinkResolver();
+    const queries = (cg as unknown as { queries: import('../src/db/queries').QueryBuilder }).queries;
+    const now = Date.now();
+
+    seedRequirementWithLink(sq, queries, 'REQ-A', 'src/a.ts', 'fa', 'fa()', now);
+    seedRequirementWithLink(sq, queries, 'REQ-B', 'src/b.ts', 'fb', 'fb()', now);
+    const fact = insertDomainFact(sq, 'DOM-X-001', now, {
+      parentId: 'REQ-A',
+      dependsOn: ['REQ-B'],
+    });
+
+    const { links } = resolver.getInheritedLinks(fact);
+    const vias = links.map((l) => l.viaSpecId).sort();
+    expect(vias).toEqual(['REQ-A', 'REQ-B']);
+  });
+
+  it('reflects drifted state on an inherited link (A2)', () => {
+    const sq = cg.getSpecQueries();
+    const resolver = cg.getSpecLinkResolver();
+    const queries = (cg as unknown as { queries: import('../src/db/queries').QueryBuilder }).queries;
+    const now = Date.now();
+
+    seedRequirementWithLink(sq, queries, 'REQ-PAY-004', 'src/pay.ts', 'settle', 'settle(x)', now);
+    const fact = insertDomainFact(sq, 'DOM-PAY-002', now, { dependsOn: ['REQ-PAY-004'] });
+
+    // Code signature changes → resolver flips REQ-PAY-004's link to drifted(code).
+    queries.deleteNodesByFile('src/pay.ts');
+    queries.insertNode(makeNode('src/pay.ts', 'settle', 'function', 1, 'settle(x, y)'));
+    resolver.resolveLinksForFiles(['src/pay.ts']);
+
+    const { links } = resolver.getInheritedLinks(fact);
+    expect(links).toHaveLength(1);
+    expect(links[0]!.link.state).toBe('drifted');
+    expect(links[0]!.link.driftAxis).toBe('code');
+  });
+
+  it('reports an unresolvable dependency as a gap, not an error (A3)', () => {
+    const sq = cg.getSpecQueries();
+    const resolver = cg.getSpecLinkResolver();
+    const now = Date.now();
+
+    // Fact depends on a spec that was never indexed.
+    const fact = insertDomainFact(sq, 'DOM-GAP-001', now, { dependsOn: ['REQ-MISSING'] });
+
+    const { links, gaps } = resolver.getInheritedLinks(fact);
+    expect(links).toEqual([]);
+    expect(gaps).toEqual(['REQ-MISSING']);
+  });
+
+  it('a fact with no spec deps yields no links and no gaps (unlinked/proposed)', () => {
+    const sq = cg.getSpecQueries();
+    const resolver = cg.getSpecLinkResolver();
+    const now = Date.now();
+    const fact = insertDomainFact(sq, 'DOM-NONE-001', now, {});
+
+    const { links, gaps } = resolver.getInheritedLinks(fact);
+    expect(links).toEqual([]);
+    expect(gaps).toEqual([]);
+  });
+
+  it('follows a multi-hop chain and survives a cycle without infinite loop', () => {
+    const sq = cg.getSpecQueries();
+    const resolver = cg.getSpecLinkResolver();
+    const queries = (cg as unknown as { queries: import('../src/db/queries').QueryBuilder }).queries;
+    const now = Date.now();
+
+    // REQ-LEAF has the code; REQ-MID depends on it; the fact depends on REQ-MID.
+    seedRequirementWithLink(sq, queries, 'REQ-LEAF', 'src/leaf.ts', 'leaf', 'leaf()', now);
+    // REQ-MID is a requirement that depends_on REQ-LEAF and (cycle) back on itself's parent fact.
+    sq.insertSpec({
+      id: 'REQ-MID',
+      kind: 'requirement',
+      title: 'mid',
+      body: 'b',
+      format: 'markdown',
+      sourcePath: 'specs/mid.md',
+      contentHash: 'h',
+      metadata: { depends_on: ['REQ-LEAF', 'DOM-CYCLE-001'] }, // cycle back to the fact
+      createdAt: now,
+      updatedAt: now,
+    });
+    const fact = insertDomainFact(sq, 'DOM-CYCLE-001', now, { dependsOn: ['REQ-MID'] });
+
+    const { links } = resolver.getInheritedLinks(fact);
+    // Reaches REQ-LEAF's code through REQ-MID; the cycle back to the fact is guarded.
+    expect(links.map((l) => l.viaSpecId)).toContain('REQ-LEAF');
+    expect(links.some((l) => l.link.targetQualifiedName === 'leaf')).toBe(true);
+  });
+
   it('agent-asserted (1.0) wins over spec-declaration (0.7) on the same logical key', () => {
     const sq = cg.getSpecQueries();
     const now = Date.now();
