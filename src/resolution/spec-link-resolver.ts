@@ -80,6 +80,14 @@ export interface InheritedLinksResult {
   links: InheritedLink[];
   /** Declared dependency spec ids that don't resolve to an indexed spec (gaps). */
   gaps: string[];
+  /**
+   * Every *indexed* spec id reached through the spec-tier chain (excludes the
+   * originating spec and the unresolved `gaps`). A spec a fact reaches but that
+   * contributes no code link still appears here, so consumers like the domain
+   * gap-seed (REQ-DOMAIN-003) can treat "reached by a domain fact" as documented
+   * even when the reached spec carries no `spec_links` of its own.
+   */
+  visitedSpecIds: string[];
 }
 
 /** Default cap on how deep the parent / depends_on chain is followed. */
@@ -375,6 +383,7 @@ export class SpecLinkResolver {
   ): InheritedLinksResult {
     const links: InheritedLink[] = [];
     const gaps: string[] = [];
+    const visitedSpecIds: string[] = [];
     const visited = new Set<string>([spec.id]);
     const seenLinkIds = new Set<number>();
 
@@ -393,6 +402,7 @@ export class SpecLinkResolver {
         gaps.push(id);
         continue;
       }
+      visitedSpecIds.push(id);
 
       for (const link of this.specQueries.getLinksBySpec(id)) {
         if (seenLinkIds.has(link.id)) continue;
@@ -407,7 +417,7 @@ export class SpecLinkResolver {
       }
     }
 
-    return { links, gaps };
+    return { links, gaps, visitedSpecIds };
   }
 
   // ===========================================================================

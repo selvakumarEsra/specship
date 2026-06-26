@@ -47,6 +47,7 @@ import {
 } from './resolution';
 import { SpecLinkResolver, SpecLinkResolverStats } from './resolution/spec-link-resolver';
 import { computeSpecFunnel, SpecFunnel } from './resolution/brief-link-resolver';
+import { computeDomainGapSeed, DomainGapSeed } from './resolution/domain-gap-seed';
 import { SpecQueries } from './db/spec-queries';
 import {
   analyze as reflectAnalyzeImpl,
@@ -103,6 +104,13 @@ export type {
   BriefRollup,
   BriefFunnelEntry,
 } from './resolution/brief-link-resolver';
+export { computeDomainGapSeed } from './resolution/domain-gap-seed';
+export type {
+  DomainGapSeed,
+  GapSeedEntity,
+  GapSeedSpec,
+  DomainCoverage,
+} from './resolution/domain-gap-seed';
 // Reflection engine (REFLECT-DOC) — proposals mined from transcripts.
 export {
   analyze as reflectAnalyze,
@@ -249,6 +257,17 @@ export class SpecShip {
    */
   getSpecFunnel(): SpecFunnel {
     return computeSpecFunnel(this.specQueries);
+  }
+
+  /**
+   * The domain gap-seed (REQ-DOMAIN-003): the structural code entities and
+   * non-domain specs that no domain fact yet covers, plus a coverage tally.
+   * Read-only — computed from live state, writes nothing. Exposed on the
+   * instance so the `/ss-domain` command and the desktop server can drive it
+   * without runtime-importing the package.
+   */
+  getDomainGapSeed(): DomainGapSeed {
+    return computeDomainGapSeed(this.queries, this.specQueries, this.specLinkResolver);
   }
 
   // ===========================================================================
