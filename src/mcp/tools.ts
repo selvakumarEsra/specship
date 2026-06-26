@@ -1475,6 +1475,59 @@ export class ToolHandler {
    * that have no dependents (nothing to warn about), and returns '' when none
    * qualify so a leaf-only exploration stays clean.
    */
+  /**
+   * Domain-facts section for `specship_explore` (REQ-DOMAIN-005.A2). Domain
+   * facts live in the spec layer, not the node graph, so explore's symbol
+   * search never reaches them. When the query names a documented domain term
+   * or entity, surface the matching human-confirmed fact bodies inline so the
+   * agent gets the authoritative project semantics without a second call.
+   *
+   * Additive + silent: returns '' unless a domain fact matches a query token,
+   * so it never bloats a normal code exploration (the hot-path guard in
+   * CLAUDE.md). Facts are few and human-authored, so a linear scan + token
+   * match is cheap and precise enough.
+   */
+  private buildDomainFactsSection(cg: SpecShip, query: string): string {
+    let facts;
+    try {
+      facts = cg.getSpecQueries().getSpecsByKind('domain');
+    } catch {
+      return '';
+    }
+    if (!facts || facts.length === 0) return '';
+
+    // Tokens of length >= 4 keep the match precise — short words ("the", "id")
+    // would match almost any fact body.
+    const tokens = [...new Set(
+      query.toLowerCase().split(/[^a-z0-9_]+/i).filter((t) => t.length >= 4)
+    )];
+    if (tokens.length === 0) return '';
+
+    const matched = facts
+      .filter((f) => {
+        const hay = `${f.title} ${f.body ?? ''}`.toLowerCase();
+        return tokens.some((t) => hay.includes(t));
+      })
+      .slice(0, 5);
+    if (matched.length === 0) return '';
+
+    const out: string[] = [
+      '### Domain facts',
+      '',
+      '_Human-confirmed domain knowledge matching this query (from the spec layer, not code). Treat as authoritative project context — no need to look further for these terms._',
+      '',
+    ];
+    for (const f of matched) {
+      const factType = (f.metadata as Record<string, unknown> | undefined)?.type;
+      const typeSuffix = typeof factType === 'string' ? ` · ${factType}` : '';
+      out.push(`#### ${f.id} — ${f.title}${typeSuffix}`);
+      const body = (f.body ?? '').trim();
+      out.push(body.length > 800 ? `${body.slice(0, 800)}…` : body || '_(empty)_');
+      out.push('');
+    }
+    return out.join('\n');
+  }
+
   private buildBlastRadiusSection(cg: SpecShip, subgraph: Subgraph): string {
     const ROOT_CAP = 5; // only the symbols the query actually targeted
     const FILE_CAP = 4; // caller files listed per symbol before "+N more"
@@ -1639,6 +1692,13 @@ export class ToolHandler {
     });
 
     if (subgraph.nodes.size === 0) {
+      // No code matched — but a documented domain term may still have a fact
+      // (it lives in the spec layer, not the node graph). Surface it so naming
+      // a pure domain concept isn't a dead end (REQ-DOMAIN-005.A2).
+      const domainOnly = this.buildDomainFactsSection(cg, query);
+      if (domainOnly) {
+        return this.textResult(`## Exploration: ${query}\n\n${domainOnly}`);
+      }
       return this.textResult(`No relevant code found for "${query}"`);
     }
 
@@ -1958,6 +2018,13 @@ export class ToolHandler {
       `Found ${subgraph.nodes.size} symbols across ${fileGroups.size} files.`,
       '',
     ];
+
+    // Domain facts (REQ-DOMAIN-005.A2): if the query names a documented domain
+    // term/entity, lead with the human-confirmed fact body. Placed near the top
+    // (before the source sections) so it is never lost to the output-budget
+    // truncation that drops trailing file sections.
+    const domainFacts = this.buildDomainFactsSection(cg, query);
+    if (domainFacts) lines.push(domainFacts);
 
     // Blast radius (always-on, compact): for the entry symbols, who depends on
     // them + which tests cover them — locations only, no source — so the agent

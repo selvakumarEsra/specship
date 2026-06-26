@@ -346,6 +346,32 @@ export async function handleSpecshipSpec(
     }
   }
 
+  // Linked domain facts (REQ-DOMAIN-005.A1): the inverse of the inherited-code
+  // path above. A domain fact attaches to a requirement via `depends_on` (or
+  // `parent_id`), so querying the *requirement* must surface the domain
+  // knowledge layered on top of it — not just its code. Domain facts are few
+  // and human-confirmed, so we render each fact's body inline (no extra call).
+  if (spec.kind !== 'domain') {
+    const dependentFacts = sq.getSpecsByKind('domain').filter((f) => {
+      if (f.id === spec.id) return false;
+      if (f.parentId === spec.id) return true;
+      const d = (f.metadata as Record<string, unknown> | undefined)?.depends_on;
+      if (Array.isArray(d)) return d.includes(spec.id);
+      return typeof d === 'string' && d === spec.id;
+    });
+    if (dependentFacts.length > 0) {
+      lines.push('');
+      lines.push('## Domain facts');
+      lines.push('_Human-confirmed domain knowledge linked to this spec (from the domain layer)._');
+      for (const f of dependentFacts) {
+        const factType = (f.metadata as Record<string, unknown> | undefined)?.type;
+        const typeSuffix = typeof factType === 'string' ? ` · ${factType}` : '';
+        lines.push(`### ${f.id} — ${f.title}${typeSuffix}`);
+        lines.push((f.body || '').trim() || '_(empty)_');
+      }
+    }
+  }
+
   return text(lines.join('\n'));
 }
 
