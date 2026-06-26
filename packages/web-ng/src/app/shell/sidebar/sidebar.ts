@@ -44,6 +44,7 @@ export class Sidebar {
         { id: 'graph', label: 'Graph', icon: 'graph' },
         { id: 'specs', label: 'Specs', icon: 'book' },
         { id: 'drift', label: 'Drift queue', icon: 'drift', badge: () => this.status.state().data?.drift ?? 0, badgeKind: 'warn' },
+        { id: 'maintainability', label: 'Maintainability', icon: 'wrench' },
         {
           id: 'improvements',
           label: 'Improvements',

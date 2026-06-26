@@ -68,6 +68,18 @@ import * as os from 'os';
 import * as fs from 'fs';
 import { createHash } from 'crypto';
 import { GraphTraverser, GraphQueryManager } from './graph';
+import {
+  computeMaintainability,
+  resolveThresholds,
+  MaintainabilityReport,
+  MaintainabilityThresholds,
+} from './graph/maintainability';
+import {
+  evaluateFitness,
+  loadFitnessRules,
+  FitnessReport,
+  FitnessRule,
+} from './fitness/fitness';
 import { ContextBuilder, createContextBuilder } from './context';
 import { Mutex, FileLock } from './utils';
 import { FileWatcher, WatchOptions, PendingFile, LockUnavailableError } from './sync';
@@ -135,6 +147,29 @@ export type {
   AnalyzeResult,
   SweepResult,
 } from './reflect';
+// Maintainability harness (MAINT-DOC / REQ-MAINT-001).
+export { computeMaintainability, resolveThresholds, DEFAULT_THRESHOLDS, CONFIG_FILE_NAME } from './graph/maintainability';
+// Architecture-fitness harness (FITNESS-DOC / REQ-FITNESS-001…003).
+export { evaluateFitness, loadFitnessRules, FITNESS_CONFIG_FILE } from './fitness/fitness';
+export type {
+  FitnessRule,
+  ForbiddenRule,
+  LayersRule,
+  IsolationRule,
+  FitnessReport,
+  FitnessViolation,
+  FitnessConfigError,
+  Selector,
+} from './fitness/fitness';
+export type {
+  MaintainabilityReport,
+  MaintainabilityThresholds,
+  CouplingFinding,
+  OversizedFinding,
+  GodFileFinding,
+  CycleFinding,
+  DeadCodeFinding,
+} from './graph/maintainability';
 export {
   SpecShipError,
   FileError,
@@ -268,6 +303,28 @@ export class SpecShip {
    */
   getDomainGapSeed(): DomainGapSeed {
     return computeDomainGapSeed(this.queries, this.specQueries, this.specLinkResolver);
+  }
+
+  /**
+   * The maintainability harness (REQ-MAINT-001): coupling, size hotspots,
+   * dependency cycles, and dead-code candidates, derived from the graph with no
+   * additional parse. Read-only and deterministic. Exposed on the instance so
+   * the CLI / MCP / desktop server can drive it without runtime-importing the
+   * package.
+   */
+  getMaintainability(thresholds?: Partial<MaintainabilityThresholds>): MaintainabilityReport {
+    return computeMaintainability(this.queries, resolveThresholds(this.projectRoot, thresholds));
+  }
+
+  /**
+   * The architecture-fitness harness (REQ-FITNESS-001/002): evaluate declarative
+   * architecture rules (from specship.config.json `fitness.rules`, or an explicit
+   * override) against the graph. Read-only, deterministic. Exposed on the
+   * instance so the CLI / MCP / server drive it without runtime-importing the
+   * package.
+   */
+  getFitness(rules?: FitnessRule[]): FitnessReport {
+    return evaluateFitness(this.queries, rules ?? loadFitnessRules(this.projectRoot));
   }
 
   // ===========================================================================

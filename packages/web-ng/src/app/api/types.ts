@@ -518,3 +518,29 @@ export interface ReflectActionResponse {
   ok?: boolean;
   proposal: ReflectProposal;
 }
+
+// --- Maintainability harness (MAINT-DOC / REQ-MAINT-003) ---
+
+export interface MaintCoupling {
+  nodeId: string; name: string; qualifiedName: string; filePath: string; kind: string;
+  fanIn: number; fanOut: number; reason: string;
+}
+export interface MaintOversized {
+  nodeId: string; name: string; qualifiedName: string; filePath: string; kind: string;
+  startLine: number; endLine: number; lines: number; reason: string;
+}
+export interface MaintGodFile { filePath: string; symbolCount: number; reason: string; }
+export interface MaintCycle { files: string[]; reason: string; }
+export interface MaintDeadCode {
+  nodeId: string; name: string; qualifiedName: string; filePath: string; kind: string;
+  startLine: number; reason: string;
+}
+export interface MaintainabilityReport {
+  thresholds: { highDegree: number; largeSymbolLines: number; godFileSymbols: number };
+  coupling: MaintCoupling[];
+  oversized: MaintOversized[];
+  godFiles: MaintGodFile[];
+  cycles: MaintCycle[];
+  deadCode: MaintDeadCode[];
+  clean: boolean;
+}
