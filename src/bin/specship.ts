@@ -1430,6 +1430,61 @@ program
   });
 
 /**
+ * specship check
+ *
+ * The enforcement gate (REQ-ENFORCE-001/002/003): runs the harness checks
+ * (drift + fitness + maintainability + behaviour) and exits non-zero if any
+ * GATING check fails. Which checks gate vs advise is configured in
+ * specship.config.json `enforce.gate`; with no config every check is advisory
+ * and the command exits 0 (opt-in — never breaks an existing repo).
+ */
+program
+  .command('check [path]')
+  .description('Run the enforcement gate (drift + fitness + maintainability + behaviour); exits non-zero on a gating failure')
+  .option('-j, --json', 'Output as JSON')
+  .action(async (pathArg: string | undefined, options: { json?: boolean }) => {
+    const projectPath = resolveProjectPath(pathArg);
+    try {
+      if (!isInitialized(projectPath)) {
+        error(`SpecShip not initialized in ${projectPath}`);
+        process.exit(1);
+      }
+      const { default: SpecShip } = await loadSpecShip();
+      const cg = await SpecShip.open(projectPath);
+      const r = cg.getEnforce();
+
+      if (options.json) {
+        console.log(JSON.stringify(r, null, 2));
+        cg.destroy();
+        process.exit(r.passed ? 0 : 1);
+      }
+
+      console.log(chalk.bold('\nEnforcement gate\n'));
+      for (const c of r.checks) {
+        const tag = c.gating ? chalk.dim('[gating]') : chalk.dim('[advisory]');
+        const mark = c.passed ? chalk.green('✓') : (c.gating ? chalk.red('✗') : chalk.yellow('•'));
+        console.log(`  ${mark} ${c.check.padEnd(16)} ${tag} ${c.passed ? 'pass' : `${c.findings.length} finding(s)`}`);
+        if (!c.passed) for (const f of c.findings.slice(0, 8)) console.log(chalk.dim(`        ${f}`));
+        if (!c.passed && c.findings.length > 8) console.log(chalk.dim(`        …and ${c.findings.length - 8} more`));
+      }
+      console.log();
+      if (r.passed) {
+        success(r.gatedFailures.length === 0 && r.checks.some((c) => c.gating)
+          ? 'All gating checks pass.'
+          : 'Pass (no gating checks failed).');
+        cg.destroy();
+        return;
+      }
+      error(`Gating checks failed: ${r.gatedFailures.join(', ')}`);
+      cg.destroy();
+      process.exit(1);
+    } catch (err) {
+      error(`check failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(1);
+    }
+  });
+
+/**
  * specship serve
  */
 program

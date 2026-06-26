@@ -37,6 +37,9 @@ architecture fitness, maintainability thresholds, and the behaviour gate — and
 exits non-zero if any gating check fails, so it is usable as one CI step or git
 hook.
 
+implementations:
+  - src/enforce/enforce.ts:evaluateEnforcement
+
 ## Acceptance
 <!-- id: REQ-ENFORCE-001.A1 -->
 - A single headless command runs the configured set of checks and exits non-zero
@@ -57,6 +60,9 @@ Which checks gate versus merely advise is configured per project, and the
 default with no configuration is advisory-only, so turning SpecShip on in an
 existing repo never breaks a build on day one.
 
+implementations:
+  - src/enforce/enforce.ts:loadEnforceConfig
+
 ## Acceptance
 <!-- id: REQ-ENFORCE-002.A1 -->
 - Whether each check is gating or advisory is configurable per project.
@@ -73,7 +79,11 @@ existing repo never breaks a build on day one.
 A requirement's acceptance criteria are linked to verifying tests, and the
 behaviour gate fails when a gated requirement is unverified or its verification
 is broken — reusing the existing spec-link state machine rather than inventing a
-parallel one.
+parallel one. (The `verifies` link is realized by the existing `tests` link kind
+in the `verified`/`broken` state.)
+
+implementations:
+  - src/enforce/enforce.ts:evaluateEnforcement
 
 ## Acceptance
 <!-- id: REQ-ENFORCE-003.A1 -->

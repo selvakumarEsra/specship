@@ -111,8 +111,10 @@ function waitFor<T>(
 describe('REQ-DOMAIN-005 — no new MCP tool; instructions pointer present', () => {
   it('A3: the MCP tool list is unchanged in count and has no domain-named tool', () => {
     // 8 core (search/callers/callees/impact/node/explore/status/files)
-    // + 4 spec (spec/link_assert/link_verify/drifted) + 6 designer = 18.
-    expect(tools.length).toBe(18);
+    // + 4 spec (spec/link_assert/link_verify/drifted)
+    // + 2 harness (maintainability/fitness — MAINT-DOC/FITNESS-DOC)
+    // + 6 designer = 20.
+    expect(tools.length).toBe(20);
     expect(tools.some((t) => /domain/i.test(t.name))).toBe(false);
   });
 
