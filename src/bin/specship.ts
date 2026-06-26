@@ -2088,6 +2088,63 @@ program
     }
   });
 
+// @implements REQ-DOMAIN-003
+// Thin surface over the read-only gap-seed pass (SpecShip.getDomainGapSeed,
+// REQ-DOMAIN-003) so the `/ss-domain` capture command can cite the SAME real
+// undocumented entities/specs the library computes (REQ-DOMAIN-004.A4) without a
+// new MCP tool (REQ-DOMAIN-005) or a runtime package import. Writes nothing.
+program
+  .command('domain-gaps [path]')
+  .description('List code entities and specs not yet covered by a domain fact (the domain gap-seed). Feeds the /ss-domain capture interview.')
+  .option('-l, --limit <n>', 'max entities and specs to print in text mode (default: 50)')
+  .option('--json', 'emit JSON')
+  .action(async (pathArg: string | undefined, options: { limit?: string; json?: boolean }) => {
+    const projectRoot = path.resolve(pathArg ?? process.cwd());
+    if (!isInitialized(projectRoot)) {
+      error(`SpecShip not initialized in ${projectRoot}. Run \`specship init -i\` first.`);
+      process.exit(1);
+    }
+    const { default: SpecShip } = await loadSpecShip();
+    const cg = await SpecShip.open(projectRoot);
+    try {
+      const seed = cg.getDomainGapSeed();
+
+      if (options.json) {
+        // eslint-disable-next-line no-console
+        console.log(JSON.stringify(seed, null, 2));
+        return;
+      }
+
+      const limit = options.limit ? Math.max(1, parseInt(options.limit, 10) || 50) : 50;
+      const { documented, gaps } = seed.coverage;
+      const total = documented + gaps;
+      /* eslint-disable no-console */
+      console.log(`Domain coverage: ${documented}/${total} documented · ${gaps} gap${gaps === 1 ? '' : 's'}`);
+      if (gaps === 0) {
+        console.log('✨ Every in-scope entity and spec is covered by a domain fact.');
+      } else {
+        if (seed.entities.length > 0) {
+          console.log(`\nUndocumented entities (${seed.entities.length}):`);
+          for (const e of seed.entities.slice(0, limit)) {
+            console.log(`  [${e.kind}] ${e.qualifiedName} — ${e.filePath}`);
+          }
+          if (seed.entities.length > limit) console.log(`  … and ${seed.entities.length - limit} more`);
+        }
+        if (seed.specs.length > 0) {
+          console.log(`\nUndocumented specs (${seed.specs.length}):`);
+          for (const s of seed.specs.slice(0, limit)) {
+            console.log(`  [${s.kind}] ${s.id} — ${s.title}`);
+          }
+          if (seed.specs.length > limit) console.log(`  … and ${seed.specs.length - limit} more`);
+        }
+        console.log(`\nCapture a fact for any of these with \`/ss-domain\`.`);
+      }
+      /* eslint-enable no-console */
+    } finally {
+      cg.close();
+    }
+  });
+
 // @implements REQ-FUNNEL-004
 program
   .command('spec [id]')

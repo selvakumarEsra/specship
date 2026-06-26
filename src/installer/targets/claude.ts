@@ -123,6 +123,8 @@ const SHIPPED_COMMANDS = [
   'ss-design-loop.md',
   // Confirmation-gated brainstorm → brief → spec-author handoff:
   'ss-brainstorm.md',
+  // Human-confirmed domain-fact capture (domain knowledge layer):
+  'ss-domain.md',
 ] as const;
 
 /**
