@@ -68,6 +68,11 @@ import * as os from 'os';
 import * as fs from 'fs';
 import { createHash } from 'crypto';
 import { GraphTraverser, GraphQueryManager } from './graph';
+import {
+  computeMaintainability,
+  MaintainabilityReport,
+  MaintainabilityThresholds,
+} from './graph/maintainability';
 import { ContextBuilder, createContextBuilder } from './context';
 import { Mutex, FileLock } from './utils';
 import { FileWatcher, WatchOptions, PendingFile, LockUnavailableError } from './sync';
@@ -135,6 +140,17 @@ export type {
   AnalyzeResult,
   SweepResult,
 } from './reflect';
+// Maintainability harness (MAINT-DOC / REQ-MAINT-001).
+export { computeMaintainability, DEFAULT_THRESHOLDS } from './graph/maintainability';
+export type {
+  MaintainabilityReport,
+  MaintainabilityThresholds,
+  CouplingFinding,
+  OversizedFinding,
+  GodFileFinding,
+  CycleFinding,
+  DeadCodeFinding,
+} from './graph/maintainability';
 export {
   SpecShipError,
   FileError,
@@ -268,6 +284,17 @@ export class SpecShip {
    */
   getDomainGapSeed(): DomainGapSeed {
     return computeDomainGapSeed(this.queries, this.specQueries, this.specLinkResolver);
+  }
+
+  /**
+   * The maintainability harness (REQ-MAINT-001): coupling, size hotspots,
+   * dependency cycles, and dead-code candidates, derived from the graph with no
+   * additional parse. Read-only and deterministic. Exposed on the instance so
+   * the CLI / MCP / desktop server can drive it without runtime-importing the
+   * package.
+   */
+  getMaintainability(thresholds?: MaintainabilityThresholds): MaintainabilityReport {
+    return computeMaintainability(this.queries, thresholds);
   }
 
   // ===========================================================================

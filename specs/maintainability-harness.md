@@ -40,6 +40,9 @@ additional file parsing: coupling, size hotspots, dependency cycles, and
 dead-code candidates. The signals are deterministic so they can underpin a
 future CI gate.
 
+implementations:
+  - src/graph/maintainability.ts:computeMaintainability
+
 ## Acceptance
 <!-- id: REQ-MAINT-001.A1 -->
 - Reports per-symbol and per-file **coupling** — fan-in (incoming edge count) and
