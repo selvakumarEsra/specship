@@ -29,10 +29,11 @@ export const SPECSHIP_SDD_SECTION_START = '<!-- SPECSHIP_SDD_START -->';
 export const SPECSHIP_SDD_SECTION_END = '<!-- SPECSHIP_SDD_END -->';
 
 /**
- * The spec-driven-development steering rule written into the project CLAUDE.md.
- * A repo's CLAUDE.md takes precedence over a skill's own description, so this
- * deterministically flips feature/bug work to spec-author-first. Kept to the
- * ordering rule only — it MUST NOT duplicate the MCP server instructions.
+ * The spec-driven-development steering rules written into the project CLAUDE.md.
+ * A repo's CLAUDE.md takes precedence over a skill's own description, so these
+ * deterministically flip feature/bug work to spec-author-first, and steer
+ * claude.ai/design links to the design loop. Kept to ordering rules only — they
+ * MUST NOT duplicate the MCP server instructions.
  */
 export function getSddRuleBlock(): string {
   return [
@@ -44,6 +45,11 @@ export function getSddRuleBlock(): string {
     'Spec-driven development is canonical here: the spec is the contract, and the',
     'implementation follows from it (`/ss-implement`). This rule intentionally takes',
     "precedence over a skill's own \"use me first\" guidance.",
+    '',
+    'When the user shares a **claude.ai/design** link (or references a Claude Design',
+    'project), recommend **`/ss-design-loop`** first and get explicit confirmation',
+    'before proceeding — even mid spec-author. That is the design→code path: taste',
+    'the design with the user → snapshot → spec → review → `/ss-implement`.',
     SPECSHIP_SDD_SECTION_END,
   ].join('\n');
 }
