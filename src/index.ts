@@ -80,6 +80,13 @@ import {
   FitnessReport,
   FitnessRule,
 } from './fitness/fitness';
+import {
+  evaluateEnforcement,
+  loadEnforceConfig,
+  EnforceConfig,
+  EnforceReport,
+  RequirementVerification,
+} from './enforce/enforce';
 import { ContextBuilder, createContextBuilder } from './context';
 import { Mutex, FileLock } from './utils';
 import { FileWatcher, WatchOptions, PendingFile, LockUnavailableError } from './sync';
@@ -151,6 +158,17 @@ export type {
 export { computeMaintainability, resolveThresholds, DEFAULT_THRESHOLDS, CONFIG_FILE_NAME } from './graph/maintainability';
 // Architecture-fitness harness (FITNESS-DOC / REQ-FITNESS-001…003).
 export { evaluateFitness, loadFitnessRules, FITNESS_CONFIG_FILE } from './fitness/fitness';
+// Enforcement mode (ENFORCE-DOC / REQ-ENFORCE-001…003).
+export { evaluateEnforcement, loadEnforceConfig, ENFORCE_CONFIG_FILE } from './enforce/enforce';
+export type {
+  EnforceConfig,
+  GateConfig,
+  EnforceReport,
+  EnforceDeps,
+  CheckOutcome,
+  CheckName,
+  RequirementVerification,
+} from './enforce/enforce';
 export type {
   FitnessRule,
   ForbiddenRule,
@@ -325,6 +343,33 @@ export class SpecShip {
    */
   getFitness(rules?: FitnessRule[]): FitnessReport {
     return evaluateFitness(this.queries, rules ?? loadFitnessRules(this.projectRoot));
+  }
+
+  /**
+   * Enforcement mode (REQ-ENFORCE-001/002/003): compose drift + fitness +
+   * maintainability + the spec→test→verify behaviour chain into one gate. Which
+   * checks gate vs advise comes from specship.config.json `enforce` (or an
+   * explicit override); with no config every check is advisory and the run
+   * passes. The behaviour chain reads `tests`-kind spec-links on each requirement
+   * and its acceptance criteria (verified = passing, broken = ran-and-failed).
+   */
+  getEnforce(config?: EnforceConfig): EnforceReport {
+    const cfg = config ?? loadEnforceConfig(this.projectRoot);
+    const sq = this.specQueries;
+    const drift = sq.getLinksByState(['drifted', 'broken', 'orphaned']);
+    const requirements: RequirementVerification[] = sq.getSpecsByKind('requirement').map((req) => {
+      const testsLinks = sq.getLinksBySpec(req.id).filter((l) => l.kind === 'tests');
+      for (const child of sq.getSpecsByParent(req.id)) {
+        if (child.kind === 'acceptance') {
+          testsLinks.push(...sq.getLinksBySpec(child.id).filter((l) => l.kind === 'tests'));
+        }
+      }
+      return { id: req.id, title: req.title, testsLinks };
+    });
+    return evaluateEnforcement(
+      { drift, fitness: this.getFitness(), maintainability: this.getMaintainability(), requirements },
+      cfg,
+    );
   }
 
   // ===========================================================================
