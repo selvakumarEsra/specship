@@ -410,6 +410,9 @@ describe('Claude target — specifics', () => {
     expect(sessionCommands).toContain('specship sync --quiet');
 
     expect(after.permissions?.allow).toContain('mcp__specship__specship_search');
+    // Harness read tools are auto-allowed too (MAINT-DOC / FITNESS-DOC).
+    expect(after.permissions?.allow).toContain('mcp__specship__specship_maintainability');
+    expect(after.permissions?.allow).toContain('mcp__specship__specship_fitness');
   });
 
   it('cleanupLegacyHooks preserves a sibling hook sharing our matcher group', () => {
