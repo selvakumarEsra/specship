@@ -36,6 +36,10 @@ export function getSpecShipPermissions(): string[] {
     'mcp__specship__specship_impact',
     'mcp__specship__specship_files',
     'mcp__specship__specship_status',
+    // Harness read tools (MAINT-DOC / FITNESS-DOC) — read-only analysis the
+    // agent may run while exploring, so auto-allow to avoid a prompt.
+    'mcp__specship__specship_maintainability',
+    'mcp__specship__specship_fitness',
     // Designer tools (vendored from @pro-vi/designer) — the design loop is
     // human-driven, so auto-allow to avoid a prompt on every taste iteration.
     'mcp__specship__designer_session',
