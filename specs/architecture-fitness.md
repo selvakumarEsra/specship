@@ -38,6 +38,9 @@ v1 supports three rule types, each a constraint over dependency edges, with
 targets addressable in a language-agnostic way (file globs / directory or module
 paths / qualified-name patterns).
 
+implementations:
+  - src/fitness/fitness.ts:loadFitnessRules
+
 ## Acceptance
 <!-- id: REQ-FITNESS-001.A1 -->
 - A **forbidden-dependency** rule can be declared: "module/dir A MUST NOT import
@@ -63,6 +66,9 @@ edges and reports every violation with the offending edge, deterministically. A
 rule that matches nothing is treated as a configuration error, never a silent
 pass.
 
+implementations:
+  - src/fitness/fitness.ts:evaluateFitness
+
 ## Acceptance
 <!-- id: REQ-FITNESS-002.A1 -->
 - Each rule is evaluated against the graph's import/call edges, and every
@@ -84,6 +90,9 @@ pass.
 
 The fitness check runs headlessly so it can gate CI on its own, and is also
 reachable by the agent through an MCP tool.
+
+implementations:
+  - src/mcp/fitness-tool.ts:handleSpecshipFitness
 
 ## Acceptance
 <!-- id: REQ-FITNESS-003.A1 -->

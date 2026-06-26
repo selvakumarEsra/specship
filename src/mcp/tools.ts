@@ -388,6 +388,10 @@ import {
   handleSpecshipMaintainability,
 } from './maintainability-tool';
 import {
+  fitnessToolDefinitions,
+  handleSpecshipFitness,
+} from './fitness-tool';
+import {
   designerToolDefinitions,
   handleDesignerSession,
   handleDesignerPrompt,
@@ -577,6 +581,7 @@ export const tools: ToolDefinition[] = [
   // Spec-layer tools (v5): see ./spec-tools.ts for handlers.
   ...specToolDefinitions,
   ...maintainabilityToolDefinitions,
+  ...fitnessToolDefinitions,
   // Designer tools: claude.ai/design driving, vendored from @pro-vi/designer.
   // See ./designer-tools.ts for handlers. Drives a debug Chrome over CDP.
   ...designerToolDefinitions,
@@ -1080,6 +1085,8 @@ export class ToolHandler {
           result = await handleSpecshipDrifted(this.getSpecShip(args.projectPath as string | undefined), args); break;
         case 'specship_maintainability':
           result = await handleSpecshipMaintainability(this.getSpecShip(args.projectPath as string | undefined), args); break;
+        case 'specship_fitness':
+          result = await handleSpecshipFitness(this.getSpecShip(args.projectPath as string | undefined), args); break;
         // Designer tools are independent of the code graph — return directly,
         // bypassing the worktree/staleness notice wrappers (which assume a
         // code-graph query).

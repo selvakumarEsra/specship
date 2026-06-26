@@ -1370,6 +1370,66 @@ program
   });
 
 /**
+ * specship fitness
+ *
+ * Evaluate the project's architecture-fitness rules (specship.config.json
+ * `fitness.rules`) against the graph (REQ-FITNESS-003). Headless CI gate: exits
+ * non-zero on any violation OR config error (a no-match rule is a config error,
+ * never a silent pass).
+ */
+program
+  .command('fitness [path]')
+  .description('Check architecture-fitness rules against the code graph (CI gate; exits non-zero on violation)')
+  .option('-j, --json', 'Output as JSON')
+  .action(async (pathArg: string | undefined, options: { json?: boolean }) => {
+    const projectPath = resolveProjectPath(pathArg);
+    try {
+      if (!isInitialized(projectPath)) {
+        error(`SpecShip not initialized in ${projectPath}`);
+        process.exit(1);
+      }
+      const { default: SpecShip } = await loadSpecShip();
+      const cg = await SpecShip.open(projectPath);
+      const r = cg.getFitness();
+      const fail = r.violations.length > 0 || r.configErrors.length > 0;
+
+      if (options.json) {
+        console.log(JSON.stringify(r, null, 2));
+        cg.destroy();
+        process.exit(fail ? 1 : 0);
+      }
+
+      if (r.ruleCount === 0) {
+        info('No architecture-fitness rules declared. Add a `fitness.rules` array to specship.config.json.');
+        cg.destroy();
+        return;
+      }
+      if (r.clean) {
+        success(`Architecture fitness: all ${r.ruleCount} rule(s) pass.`);
+        cg.destroy();
+        return;
+      }
+      if (r.configErrors.length) {
+        console.log(chalk.bold(chalk.red(`\nConfig errors (${r.configErrors.length}):`)));
+        for (const e of r.configErrors) console.log(chalk.red(`  ✗ ${e.rule}: ${e.message}`));
+      }
+      if (r.violations.length) {
+        console.log(chalk.bold(chalk.red(`\nViolations (${r.violations.length}):`)));
+        for (const v of r.violations.slice(0, 50)) {
+          console.log(`  ${chalk.red('✗')} [${v.rule}] ${v.source} → ${v.target}`);
+          console.log(chalk.dim(`      ${v.detail} — ${v.location}`));
+        }
+        if (r.violations.length > 50) console.log(chalk.dim(`  …and ${r.violations.length - 50} more`));
+      }
+      cg.destroy();
+      process.exit(1);
+    } catch (err) {
+      error(`fitness failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(1);
+    }
+  });
+
+/**
  * specship serve
  */
 program
