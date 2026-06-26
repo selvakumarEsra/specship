@@ -58,8 +58,9 @@
 	--ss-bg-void: #0b0d11;
 	--ss-ink: #e8ebf0;
 	--ss-ink-2: #9aa3b2;
-	--ss-ink-3: #5c6573;
-	--ss-ink-4: #424b59;
+	/* ink-3/4 lifted to meet WCAG AA on the dark surfaces (REQ-LANDING-005) */
+	--ss-ink-3: #868fa0;
+	--ss-ink-4: #828b9c;
 	--ss-accent: #3b82f6;
 	--ss-accent-2: #6fa0f6;
 	--ss-accent-strong: #2563eb;
@@ -124,8 +125,9 @@
 	--ss-bg-void: #ebe8de;
 	--ss-ink: #1a1a17;
 	--ss-ink-2: #54524a;
-	--ss-ink-3: #807e72;
-	--ss-ink-4: #a8a698;
+	/* ink-3/4 darkened to meet WCAG AA on the light (cream) surfaces (REQ-LANDING-005) */
+	--ss-ink-3: #5e5c52;
+	--ss-ink-4: #6f6d62;
 	--ss-accent: #cc785c;
 	--ss-accent-2: #a8482a;
 	--ss-accent-strong: #8a4128;
@@ -370,6 +372,8 @@ button[data-open-modal] {
 }
 :root[data-theme='light'] :is(.sl-markdown-content :not(pre) > code) {
 	border-radius: 6px !important;
+	/* darker blue so inline code meets WCAG AA on the cream code background (REQ-LANDING-005) */
+	color: #2257b8;
 }
 
 /* Warm, subtle elevation instead of hairline-only surfaces. */
