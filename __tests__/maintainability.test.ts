@@ -11,7 +11,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { DatabaseConnection } from '../src/db';
 import { QueryBuilder } from '../src/db/queries';
-import { computeMaintainability } from '../src/graph/maintainability';
+import { computeMaintainability, resolveThresholds, DEFAULT_THRESHOLDS, CONFIG_FILE_NAME } from '../src/graph/maintainability';
 import type { Node, Edge } from '../src/types';
 
 let dir: string;
@@ -120,5 +120,41 @@ describe('maintainability — determinism + clean (REQ-MAINT-001.A5 / REQ-MAINT-
     expect(r.godFiles).toEqual([]);
     expect(r.cycles).toEqual([]);
     expect(r.deadCode).toEqual([]);
+  });
+});
+
+describe('maintainability — thresholds config (REQ-MAINT-002)', () => {
+  it('uses built-in defaults when no config is present (A1)', () => {
+    expect(resolveThresholds(dir)).toEqual(DEFAULT_THRESHOLDS);
+  });
+
+  it('a checked-in config overrides each threshold (A2)', () => {
+    fs.writeFileSync(path.join(dir, CONFIG_FILE_NAME), JSON.stringify({ maintainability: { thresholds: { highDegree: 5, godFileSymbols: 3 } } }));
+    const t = resolveThresholds(dir);
+    expect(t.highDegree).toBe(5);
+    expect(t.godFileSymbols).toBe(3);
+    expect(t.largeSymbolLines).toBe(DEFAULT_THRESHOLDS.largeSymbolLines); // untouched → default
+  });
+
+  it('an explicit override beats the config which beats defaults', () => {
+    fs.writeFileSync(path.join(dir, CONFIG_FILE_NAME), JSON.stringify({ maintainability: { thresholds: { highDegree: 5 } } }));
+    expect(resolveThresholds(dir, { highDegree: 1 }).highDegree).toBe(1);
+  });
+
+  it('falls back to defaults on an unparseable config (no throw)', () => {
+    fs.writeFileSync(path.join(dir, CONFIG_FILE_NAME), '{ not valid json');
+    expect(resolveThresholds(dir)).toEqual(DEFAULT_THRESHOLDS);
+  });
+
+  it('every flagged finding carries a reason (A3)', () => {
+    fn('hub', 'hub.ts');
+    for (let i = 0; i < 21; i++) { fn(`c${i}`, `c${i}.ts`, { exported: true }); edge(`c${i}`, 'hub', 'calls'); }
+    fn('big', 'big.ts', { startLine: 1, endLine: 260, exported: true });
+    fn('orphan', 'orphan.ts');
+    const r = computeMaintainability(q);
+    expect(r.coupling.every((c) => !!c.reason)).toBe(true);
+    expect(r.oversized.every((o) => !!o.reason)).toBe(true);
+    expect(r.deadCode.every((d) => !!d.reason)).toBe(true);
+    expect(r.coupling.find((c) => c.nodeId === 'hub')!.reason).toMatch(/threshold ≥ 20/);
   });
 });

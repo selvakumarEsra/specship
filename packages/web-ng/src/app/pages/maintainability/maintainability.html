@@ -1,0 +1,69 @@
+<div class="page scroll-y">
+  <app-page-head icon="wrench" title="Maintainability" sub="Graph-derived signals — coupling, size, cycles, dead code">
+    <ng-container actions>
+      <app-pill [color]="'var(--error)'" [bg]="'var(--error-soft)'">{{ counts().coupling }} coupling</app-pill>
+      <app-pill [color]="'var(--warn)'" [bg]="'var(--warn-soft)'">{{ counts().oversized + counts().godFiles }} size</app-pill>
+      <app-pill [color]="'var(--info)'" [bg]="'var(--info-soft)'">{{ counts().cycles }} cycles</app-pill>
+      <app-pill [color]="'var(--text-muted)'" [bg]="'var(--bg-elevated)'">{{ counts().deadCode }} dead</app-pill>
+    </ng-container>
+  </app-page-head>
+
+  @if (resource.state().loading) {
+    @for (i of [0,1,2]; track i) { <div class="skel card-skel"></div> }
+  } @else if (resource.state().noProject) {
+    <div class="empty">Select a project to see its maintainability signals.</div>
+  } @else if (!report()) {
+    <div class="empty">No maintainability data — run <code>specship index</code> first.</div>
+  } @else if (report()!.clean) {
+    <div class="empty">
+      <app-icon name="check" [size]="28" />
+      <div class="empty-title">Clean</div>
+      <div class="empty-sub">Nothing crossed a threshold. Tune them in <code>specship.config.json</code>.</div>
+    </div>
+  } @else {
+    @if (report()!.coupling.length) {
+      <section class="sig card">
+        <div class="sig-head"><span class="dot" style="background:var(--error)"></span>Coupling hotspots <span class="n">{{ report()!.coupling.length }}</span></div>
+        @for (c of report()!.coupling; track c.nodeId) {
+          <div class="row"><span class="sym mono">{{ c.name }}</span><span class="why">{{ c.reason }}</span><span class="loc mono">{{ c.filePath }}</span></div>
+        }
+      </section>
+    }
+    @if (report()!.oversized.length) {
+      <section class="sig card">
+        <div class="sig-head"><span class="dot" style="background:var(--warn)"></span>Oversized symbols <span class="n">{{ report()!.oversized.length }}</span></div>
+        @for (o of report()!.oversized; track o.nodeId) {
+          <div class="row"><span class="sym mono">{{ o.name }}</span><span class="why">{{ o.reason }}</span><span class="loc mono">{{ o.filePath }}:{{ o.startLine }}</span></div>
+        }
+      </section>
+    }
+    @if (report()!.godFiles.length) {
+      <section class="sig card">
+        <div class="sig-head"><span class="dot" style="background:var(--warn)"></span>God files <span class="n">{{ report()!.godFiles.length }}</span></div>
+        @for (f of report()!.godFiles; track f.filePath) {
+          <div class="row"><span class="loc mono grow">{{ f.filePath }}</span><span class="why">{{ f.reason }}</span></div>
+        }
+      </section>
+    }
+    @if (report()!.cycles.length) {
+      <section class="sig card">
+        <div class="sig-head"><span class="dot" style="background:var(--info)"></span>Dependency cycles <span class="n">{{ report()!.cycles.length }}</span></div>
+        @for (c of report()!.cycles; track c.files[0]) {
+          <div class="row"><span class="loc mono grow">{{ c.files.join(' → ') }}</span></div>
+        }
+      </section>
+    }
+    @if (report()!.deadCode.length) {
+      <section class="sig card">
+        <div class="sig-head"><span class="dot" style="background:var(--text-muted)"></span>Dead-code candidates <span class="n">{{ report()!.deadCode.length }}</span><span class="caveat">heuristic — verify before removing</span></div>
+        @for (d of report()!.deadCode; track d.nodeId) {
+          <div class="row"><span class="sym mono">{{ d.name }}</span><span class="loc mono grow">{{ d.filePath }}:{{ d.startLine }}</span></div>
+        }
+      </section>
+    }
+
+    <div class="thresholds">
+      Thresholds — fan-in/out ≥ {{ report()!.thresholds.highDegree }} · symbol ≥ {{ report()!.thresholds.largeSymbolLines }} lines · god-file ≥ {{ report()!.thresholds.godFileSymbols }} symbols. Override in <code>specship.config.json</code>.
+    </div>
+  }
+</div>

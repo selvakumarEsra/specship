@@ -10,6 +10,8 @@
  * Realizes the first harness-engineering expansion lane (REQ-STRATEGY-001).
  */
 
+import * as fs from 'fs';
+import * as path from 'path';
 import { QueryBuilder } from '../db/queries';
 import { Edge, Node, NodeKind } from '../types';
 
@@ -55,6 +57,8 @@ export interface CouplingFinding {
   kind: NodeKind;
   fanIn: number;
   fanOut: number;
+  /** Why this surfaced — the threshold it breached (REQ-MAINT-002.A3). */
+  reason: string;
 }
 
 export interface OversizedFinding {
@@ -66,16 +70,19 @@ export interface OversizedFinding {
   startLine: number;
   endLine: number;
   lines: number;
+  reason: string;
 }
 
 export interface GodFileFinding {
   filePath: string;
   symbolCount: number;
+  reason: string;
 }
 
 export interface CycleFinding {
   /** Files forming a dependency cycle (sorted). */
   files: string[];
+  reason: string;
 }
 
 export interface DeadCodeFinding {
@@ -85,6 +92,7 @@ export interface DeadCodeFinding {
   filePath: string;
   kind: NodeKind;
   startLine: number;
+  reason: string;
 }
 
 export interface MaintainabilityReport {
@@ -145,24 +153,35 @@ export function computeMaintainability(
     const fi = fanIn.get(n.id) ?? 0;
     const fo = fanOut.get(n.id) ?? 0;
     if (fi >= thresholds.highDegree || fo >= thresholds.highDegree) {
-      coupling.push({ nodeId: n.id, name: n.name, qualifiedName: n.qualifiedName, filePath: n.filePath, kind: n.kind, fanIn: fi, fanOut: fo });
+      coupling.push({
+        nodeId: n.id, name: n.name, qualifiedName: n.qualifiedName, filePath: n.filePath, kind: n.kind, fanIn: fi, fanOut: fo,
+        reason: `fan-in ${fi} / fan-out ${fo} (threshold ≥ ${thresholds.highDegree})`,
+      });
     }
 
     const lines = Math.max(0, (n.endLine ?? 0) - (n.startLine ?? 0));
     if (lines >= thresholds.largeSymbolLines) {
-      oversized.push({ nodeId: n.id, name: n.name, qualifiedName: n.qualifiedName, filePath: n.filePath, kind: n.kind, startLine: n.startLine ?? 0, endLine: n.endLine ?? 0, lines });
+      oversized.push({
+        nodeId: n.id, name: n.name, qualifiedName: n.qualifiedName, filePath: n.filePath, kind: n.kind, startLine: n.startLine ?? 0, endLine: n.endLine ?? 0, lines,
+        reason: `${lines} lines (threshold ≥ ${thresholds.largeSymbolLines})`,
+      });
     }
 
     // dead-code: no use-edges in, not part of the public surface, not a test fixture
     if (fi === 0 && !n.isExported && !TEST_FILE.test(n.filePath)) {
-      deadCode.push({ nodeId: n.id, name: n.name, qualifiedName: n.qualifiedName, filePath: n.filePath, kind: n.kind, startLine: n.startLine ?? 0 });
+      deadCode.push({
+        nodeId: n.id, name: n.name, qualifiedName: n.qualifiedName, filePath: n.filePath, kind: n.kind, startLine: n.startLine ?? 0,
+        reason: 'no incoming use-edges; not exported',
+      });
     }
   }
 
   // --- god files ---
   const godFiles: GodFileFinding[] = [];
   for (const [filePath, count] of symbolsPerFile) {
-    if (count >= thresholds.godFileSymbols) godFiles.push({ filePath, symbolCount: count });
+    if (count >= thresholds.godFileSymbols) {
+      godFiles.push({ filePath, symbolCount: count, reason: `${count} symbols (threshold ≥ ${thresholds.godFileSymbols})` });
+    }
   }
 
   // --- dependency cycles (Tarjan SCC over the file-import graph) ---
@@ -219,5 +238,35 @@ function findCycles(graph: Map<string, Set<string>>): CycleFinding[] {
   };
 
   for (const v of order) if (!idx.has(v)) strongconnect(v);
-  return sccs.sort((a, b) => cmp(a[0] ?? '', b[0] ?? '')).map((files) => ({ files }));
+  return sccs
+    .sort((a, b) => cmp(a[0] ?? '', b[0] ?? ''))
+    .map((files) => ({ files, reason: `${files.length} files form an import cycle` }));
+}
+
+/** Default name of the checked-in project config file at the project root. */
+export const CONFIG_FILE_NAME = 'specship.config.json';
+
+/**
+ * Resolve effective thresholds (REQ-MAINT-002): defaults < checked-in
+ * `specship.config.json` (`maintainability.thresholds`) < explicit override.
+ * A missing or unparseable config silently falls back to defaults.
+ */
+export function resolveThresholds(
+  projectRoot: string,
+  override?: Partial<MaintainabilityThresholds>,
+): MaintainabilityThresholds {
+  let fromConfig: Partial<MaintainabilityThresholds> = {};
+  try {
+    const raw = fs.readFileSync(path.join(projectRoot, CONFIG_FILE_NAME), 'utf-8');
+    const cfg = JSON.parse(raw) as { maintainability?: { thresholds?: Partial<MaintainabilityThresholds> } };
+    const t = cfg?.maintainability?.thresholds;
+    if (t && typeof t === 'object') {
+      for (const k of ['highDegree', 'largeSymbolLines', 'godFileSymbols'] as const) {
+        if (typeof t[k] === 'number' && Number.isFinite(t[k])) fromConfig[k] = t[k];
+      }
+    }
+  } catch {
+    // no config / unparseable → defaults
+  }
+  return { ...DEFAULT_THRESHOLDS, ...fromConfig, ...(override ?? {}) };
 }

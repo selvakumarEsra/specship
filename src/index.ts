@@ -70,6 +70,7 @@ import { createHash } from 'crypto';
 import { GraphTraverser, GraphQueryManager } from './graph';
 import {
   computeMaintainability,
+  resolveThresholds,
   MaintainabilityReport,
   MaintainabilityThresholds,
 } from './graph/maintainability';
@@ -141,7 +142,7 @@ export type {
   SweepResult,
 } from './reflect';
 // Maintainability harness (MAINT-DOC / REQ-MAINT-001).
-export { computeMaintainability, DEFAULT_THRESHOLDS } from './graph/maintainability';
+export { computeMaintainability, resolveThresholds, DEFAULT_THRESHOLDS, CONFIG_FILE_NAME } from './graph/maintainability';
 export type {
   MaintainabilityReport,
   MaintainabilityThresholds,
@@ -293,8 +294,8 @@ export class SpecShip {
    * the CLI / MCP / desktop server can drive it without runtime-importing the
    * package.
    */
-  getMaintainability(thresholds?: MaintainabilityThresholds): MaintainabilityReport {
-    return computeMaintainability(this.queries, thresholds);
+  getMaintainability(thresholds?: Partial<MaintainabilityThresholds>): MaintainabilityReport {
+    return computeMaintainability(this.queries, resolveThresholds(this.projectRoot, thresholds));
   }
 
   // ===========================================================================

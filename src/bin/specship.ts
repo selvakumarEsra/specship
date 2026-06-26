@@ -1300,6 +1300,76 @@ program
   });
 
 /**
+ * specship maintainability
+ *
+ * Report graph-derived maintainability signals (REQ-MAINT-003) — coupling, size
+ * hotspots, dependency cycles, dead-code candidates. Advisory (exit 0); the
+ * `--strict` flag is the gating-ready shape consumed later by enforcement mode.
+ */
+program
+  .command('maintainability [path]')
+  .alias('maint')
+  .description('Report graph-derived maintainability signals (coupling, size, cycles, dead code)')
+  .option('-j, --json', 'Output as JSON')
+  .option('--strict', 'Exit non-zero if any signal has findings (gating-ready; default advisory)')
+  .action(async (pathArg: string | undefined, options: { json?: boolean; strict?: boolean }) => {
+    const projectPath = resolveProjectPath(pathArg);
+    try {
+      if (!isInitialized(projectPath)) {
+        error(`SpecShip not initialized in ${projectPath}`);
+        process.exit(1);
+      }
+      const { default: SpecShip } = await loadSpecShip();
+      const cg = await SpecShip.open(projectPath);
+      const r = cg.getMaintainability();
+
+      if (options.json) {
+        console.log(JSON.stringify(r, null, 2));
+        cg.destroy();
+        if (options.strict && !r.clean) process.exit(1);
+        return;
+      }
+
+      if (r.clean) {
+        success('Maintainability: clean — nothing past threshold.');
+        cg.destroy();
+        return;
+      }
+
+      const CAP = 10;
+      const section = (title: string, count: number) => console.log(chalk.bold(`\n${title} (${count})`));
+      if (r.coupling.length) {
+        section('Coupling hotspots', r.coupling.length);
+        for (const c of r.coupling.slice(0, CAP)) console.log(chalk.dim('  ') + `${c.name} ${chalk.dim(`(${c.reason}) — ${c.filePath}`)}`);
+      }
+      if (r.oversized.length) {
+        section('Oversized symbols', r.oversized.length);
+        for (const o of r.oversized.slice(0, CAP)) console.log(chalk.dim('  ') + `${o.name} ${chalk.dim(`(${o.reason}) — ${o.filePath}`)}`);
+      }
+      if (r.godFiles.length) {
+        section('God files', r.godFiles.length);
+        for (const f of r.godFiles.slice(0, CAP)) console.log(chalk.dim('  ') + `${f.filePath} ${chalk.dim(`(${f.reason})`)}`);
+      }
+      if (r.cycles.length) {
+        section('Dependency cycles', r.cycles.length);
+        for (const c of r.cycles.slice(0, CAP)) console.log(chalk.dim('  ') + c.files.join(' → '));
+      }
+      if (r.deadCode.length) {
+        section('Dead-code candidates', r.deadCode.length);
+        for (const d of r.deadCode.slice(0, CAP)) console.log(chalk.dim('  ') + `${d.name} ${chalk.dim(`— ${d.filePath}:${d.startLine}`)}`);
+        if (r.deadCode.length > CAP) console.log(chalk.dim(`  …and ${r.deadCode.length - CAP} more (dead-code is heuristic; tune in ${'specship.config.json'})`));
+      }
+      console.log();
+      info(`Thresholds: highDegree=${r.thresholds.highDegree} largeSymbolLines=${r.thresholds.largeSymbolLines} godFileSymbols=${r.thresholds.godFileSymbols} — override in specship.config.json`);
+      cg.destroy();
+      if (options.strict) process.exit(1);
+    } catch (err) {
+      error(`maintainability failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(1);
+    }
+  });
+
+/**
  * specship serve
  */
 program

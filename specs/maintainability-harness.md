@@ -71,6 +71,9 @@ Each signal flags items against a threshold. SpecShip ships defaults that work
 out of the box and lets a project override them, so the harness adapts to repo
 size and language without code changes.
 
+implementations:
+  - src/graph/maintainability.ts:resolveThresholds
+
 ## Acceptance
 <!-- id: REQ-MAINT-002.A1 -->
 - Every signal has a built-in default threshold, so the harness produces useful
@@ -91,6 +94,10 @@ size and language without code changes.
 The maintainability report is reachable where the agent and the human already
 work: a headless CLI command, an MCP tool, and a dashboard page. The CLI is
 advisory by default but shaped to become a CI gate later.
+
+implementations:
+  - src/mcp/maintainability-tool.ts:handleSpecshipMaintainability
+  - packages/server/src/routes/maintainability.ts:registerMaintainabilityRoutes
 
 ## Acceptance
 <!-- id: REQ-MAINT-003.A1 -->
