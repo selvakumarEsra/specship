@@ -16,6 +16,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { SpecShip } from '../src';
+import { tools } from '../src/mcp/tools';
+import { SERVER_INSTRUCTIONS } from '../src/mcp/server-instructions';
 
 const BIN = path.resolve(__dirname, '../dist/bin/specship.js');
 
@@ -98,6 +100,26 @@ function waitFor<T>(
     tick();
   });
 }
+
+/**
+ * REQ-DOMAIN-005.A3: domain facts surface through the EXISTING tools — the
+ * feature MUST NOT register a new MCP tool (agents under-pick new tools). This
+ * locks the tool count to an EXACT number (not >=) so a stray `specship_domain`
+ * tool can never slip in, and confirms the single permitted server-instructions
+ * pointer landed.
+ */
+describe('REQ-DOMAIN-005 — no new MCP tool; instructions pointer present', () => {
+  it('A3: the MCP tool list is unchanged in count and has no domain-named tool', () => {
+    // 8 core (search/callers/callees/impact/node/explore/status/files)
+    // + 4 spec (spec/link_assert/link_verify/drifted) + 6 designer = 18.
+    expect(tools.length).toBe(18);
+    expect(tools.some((t) => /domain/i.test(t.name))).toBe(false);
+  });
+
+  it('mentions domain facts in the server instructions (the one permitted pointer)', () => {
+    expect(SERVER_INSTRUCTIONS.toLowerCase()).toContain('domain');
+  });
+});
 
 describe('MCP initialize handshake (issue #172)', () => {
   let tempDir: string;

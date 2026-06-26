@@ -13,6 +13,7 @@ import * as path from 'path';
 import * as os from 'os';
 import SpecShip from '../src';
 import { handleSpecshipSpec } from '../src/mcp/spec-tools';
+import { ToolHandler } from '../src/mcp/tools';
 import { Node, NodeKind, Spec } from '../src/types';
 import { generateNodeId } from '../src/extraction/tree-sitter-helpers';
 
@@ -165,5 +166,99 @@ describe.skipIf(!fts5Available)('specship_spec — domain fact inherited code (R
     const out = textOf(result);
     expect(out).toContain('REQ-MISSING');
     expect(out).toContain('not found in the index');
+  });
+});
+
+/**
+ * REQ-DOMAIN-005: domain facts surface through the EXISTING `specship_spec` and
+ * `specship_explore` tools — no new MCP tool. A1 = the requirement-side view (a
+ * fact's `depends_on` is rendered back on the requirement); A2 = explore naming
+ * the documented term returns the fact body. A3 (tool-count unchanged) lives in
+ * mcp-initialize.test.ts where the tool list is imported.
+ */
+describe.skipIf(!fts5Available)('REQ-DOMAIN-005 — domain facts surface through existing tools', () => {
+  let dir: string;
+  let cg: SpecShip;
+  let handler: ToolHandler;
+
+  beforeEach(async () => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-dom005-'));
+    const src = path.join(dir, 'src');
+    fs.mkdirSync(src, { recursive: true });
+    // A code symbol named after the domain term, so explore finds code to lead
+    // with — the domain fact body is then appended alongside it.
+    fs.writeFileSync(
+      path.join(src, 'settlement.ts'),
+      'export function Settlement(x: number) { return x; }\n'
+    );
+
+    cg = SpecShip.initSync(dir, { config: { include: ['**/*.ts'], exclude: [] } });
+    await cg.indexAll();
+    handler = new ToolHandler(cg);
+
+    const sq = cg.getSpecQueries();
+    const now = Date.now();
+    sq.insertSpec({
+      id: 'REQ-PAY-004',
+      kind: 'requirement',
+      title: 'Settlement requirement',
+      body: 'The settlement path.',
+      format: 'markdown',
+      sourcePath: 'specs/pay.md',
+      contentHash: 'h',
+      createdAt: now,
+      updatedAt: now,
+    });
+    // A `term` domain fact that depends_on the requirement.
+    sq.insertSpec({
+      id: 'DOM-PAY-001',
+      kind: 'domain',
+      title: 'Settlement',
+      body: 'Settlement is the final transfer of funds between parties.',
+      format: 'markdown',
+      sourcePath: 'specs/domain/fact.md',
+      contentHash: 'dh',
+      metadata: { type: 'term', depends_on: ['REQ-PAY-004'] },
+      createdAt: now,
+      updatedAt: now,
+    });
+  });
+
+  afterEach(() => {
+    cg?.destroy();
+    if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('A1: specship_spec on the requirement returns its linked domain facts', async () => {
+    const out = textOf(await handleSpecshipSpec(cg, { spec_id: 'REQ-PAY-004' }));
+    expect(out).toContain('## Domain facts');
+    expect(out).toContain('DOM-PAY-001');
+    expect(out).toContain('final transfer of funds');
+  });
+
+  it('A2: specship_explore naming the domain term includes the fact body', async () => {
+    const res = await handler.execute('specship_explore', { query: 'Settlement' });
+    const out = res.content.map((c) => c.text).join('\n');
+    expect(out).toContain('Domain facts');
+    expect(out).toContain('final transfer of funds');
+  });
+
+  it('A2: explore surfaces a pure domain term even when no code matches', async () => {
+    // A rule fact with no co-named code symbol — explore must still surface it.
+    cg.getSpecQueries().insertSpec({
+      id: 'DOM-RULE-001',
+      kind: 'domain',
+      title: 'Reconciliation window',
+      body: 'Reconciliation must complete within two business days.',
+      format: 'markdown',
+      sourcePath: 'specs/domain/rule.md',
+      contentHash: 'rh',
+      metadata: { type: 'rule' },
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+    const res = await handler.execute('specship_explore', { query: 'Reconciliation' });
+    const out = res.content.map((c) => c.text).join('\n');
+    expect(out).toContain('Reconciliation must complete within two business days');
   });
 });

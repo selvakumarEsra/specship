@@ -238,6 +238,7 @@ export class SpecQueries {
     getSpecById?: SqliteStatement;
     getSpecsByFile?: SqliteStatement;
     getSpecsByParent?: SqliteStatement;
+    getSpecsByKind?: SqliteStatement;
     getAllSpecs?: SqliteStatement;
     // spec_files
     upsertSpecFile?: SqliteStatement;
@@ -418,6 +419,20 @@ export class SpecQueries {
       );
     }
     const rows = this.stmts.getSpecsByParent.all(parentId) as SpecRow[];
+    return rows.map(rowToSpec);
+  }
+
+  /**
+   * All specs of one kind. Used to surface the (small) `domain` fact layer
+   * cheaply without scanning every requirement/acceptance row (REQ-DOMAIN-005).
+   */
+  getSpecsByKind(kind: Spec['kind']): Spec[] {
+    if (!this.stmts.getSpecsByKind) {
+      this.stmts.getSpecsByKind = this.db.prepare(
+        `SELECT * FROM specs WHERE kind = ? ORDER BY source_path, start_line`
+      );
+    }
+    const rows = this.stmts.getSpecsByKind.all(kind) as SpecRow[];
     return rows.map(rowToSpec);
   }
 

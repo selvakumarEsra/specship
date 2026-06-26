@@ -37,14 +37,14 @@ typically one to a few calls; a grep/read exploration is dozens.
 
 ## Tool selection by intent
 
-- **Almost any question — "how does X work", architecture, a bug, "what/where is X", or surveying an area** → \`specship_explore\` (PRIMARY — call FIRST; ONE capped call returns the verbatim source of the relevant symbols grouped by file; most often the ONLY call you need)
+- **Almost any question — "how does X work", architecture, a bug, "what/where is X", or surveying an area** → \`specship_explore\` (PRIMARY — call FIRST; ONE capped call returns the verbatim source of the relevant symbols grouped by file; most often the ONLY call you need). Naming a documented domain term/entity also surfaces its human-confirmed fact body inline under "Domain facts".
 - **"How does X reach/become Y? / the flow / the path from X to Y"** → \`specship_explore\`, naming the symbols that span the flow (e.g. \`mutateElement renderScene\`) — it surfaces the call path among them, including dynamic-dispatch hops (callbacks, React re-render, JSX children) grep can't follow
 - **"What is the symbol named X?" (just its location)** → \`specship_search\`
 - **"What calls this?" / "What does this call?" / "What would changing this break?"** → \`specship_callers\` / \`specship_callees\` / \`specship_impact\`
 - **One specific symbol's full source (esp. a body \`specship_explore\` trimmed), or an OVERLOADED name** → \`specship_node\` (with \`includeCode\`): for an ambiguous name it returns EVERY matching definition's body in one call, so you never Read a file to find the right overload
 - **"What's in directory X?"** → \`specship_files\`
 - **"Is the index ready / what's its size?"** → \`specship_status\`
-- **User mentions a spec ID or requirement (e.g. "REQ-AUTH-005", "the rate-limit requirement")** → \`specship_spec\` FIRST. Returns spec body + parent/siblings + linked code with state (verified / drifted / orphaned) — more than Read-ing the spec file alone. Then jump into linked code via \`specship_node\`.
+- **User mentions a spec ID or requirement (e.g. "REQ-AUTH-005", "the rate-limit requirement")** → \`specship_spec\` FIRST. Returns spec body + parent/siblings + linked code with state (verified / drifted / orphaned) — more than Read-ing the spec file alone. If domain facts (ubiquitous-language terms, business rules) are linked to the spec, they come back inline under "Domain facts" — no separate tool. Then jump into linked code via \`specship_node\`.
 - **After editing code in response to a spec** → call \`specship_link_assert\` before reporting done. Idempotent. Supersedes the \`// @implements REQ-X\` comment backstop (which the extractor catches on its own).
 - **After running verification (tests) against a spec link** → \`specship_link_verify\` with \`result: "pass" | "fail"\` so the link moves from \`implemented\` to \`verified\` (or \`broken\`).
 - **"What's drifted / broken / orphaned?" / non-coder review queue** → \`specship_drifted\` (optional \`state\` filter).
