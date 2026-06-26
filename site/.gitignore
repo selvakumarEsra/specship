@@ -19,3 +19,9 @@ pnpm-debug.log*
 
 # macOS-specific files
 .DS_Store
+
+# Claude-Design import: keep the regeneration tooling + provenance, ignore the
+# bulky raw bundle (re-fetchable from the URL in .design-import/PROVENANCE.md).
+.design-import/*.html
+.design-import/*.css
+.design-import/design-script.js
