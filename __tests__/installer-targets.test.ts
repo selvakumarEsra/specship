@@ -230,6 +230,9 @@ describe('Claude target — specifics', () => {
     const body = fs.readFileSync(claudeMd, 'utf-8');
     expect(body).toContain('SPECSHIP_SDD_START');
     expect(body).toContain('spec-author');
+    // The SDD block also steers claude.ai/design links to the design loop.
+    expect(body).toContain('ss-design-loop');
+    expect(body).toContain('claude.ai/design');
     expect(result.files.some((f) => /\/CLAUDE\.md$/.test(f.path.replace(/\\/g, '/')) && !f.path.includes('.claude') && f.action === 'created')).toBe(true);
 
     const settings = JSON.parse(fs.readFileSync(path.join(tmpCwd, '.claude', 'settings.json'), 'utf-8'));
