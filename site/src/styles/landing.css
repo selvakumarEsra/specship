@@ -885,6 +885,10 @@ section { position: relative; }
 /* ---- use the site's bundled Geist (fontsource), not a Google Fonts request ---- */
 :root{ --font-ui:"Geist Variable","Geist",system-ui,-apple-system,sans-serif; }
 
+/* ---- a11y: lift muted/faint text to WCAG AA contrast in both themes (REQ-LANDING-005) ---- */
+:root{ --text-muted:#868fa0; --text-faint:#828b9c; }
+[data-theme="light"]{ --text-muted:#5b6473; --text-faint:#5f6878; --node-route:#0a6e63; }
+
 /* ---- nav theme toggle (added; design had none) ---- */
 .theme-btn{ display:inline-flex; align-items:center; justify-content:center; width:34px; height:34px; border-radius:var(--r-sm); border:1px solid var(--border-subtle); background:transparent; color:var(--text-secondary); cursor:pointer; transition:border-color .12s,color .12s; }
 .theme-btn:hover{ border-color:var(--border-strong); color:var(--text-primary); }
