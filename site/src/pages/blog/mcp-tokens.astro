@@ -1,0 +1,51 @@
+---
+import Article from '../../layouts/Article.astro';
+---
+<Article slug="mcp-tokens">
+  <svg slot="figure" viewBox="0 0 980 440" preserveAspectRatio="xMidYMid slice">
+    <defs><radialGradient id="ht" cx="50%" cy="25%" r="65%"><stop offset="0" stop-color="rgba(41,210,190,0.18)"/><stop offset="1" stop-color="rgba(41,210,190,0)"/></radialGradient></defs>
+    <rect width="980" height="440" fill="url(#ht)"/>
+    <rect x="220" y="120" width="80" height="240" rx="8" fill="#F2555A" opacity="0.85"/>
+    <rect x="640" y="338" width="80" height="22" rx="8" fill="#46C26B"/>
+    <text x="260" y="100" text-anchor="middle" fill="rgba(242,85,90,0.9)" font-family="Geist Mono, monospace" font-size="16">read + grep</text>
+    <text x="680" y="320" text-anchor="middle" fill="rgba(70,194,107,0.95)" font-family="Geist Mono, monospace" font-size="16">one query</text>
+  </svg>
+
+  <p>Take an ordinary task: "find everything that calls <code>validateSession</code>, I'm about to change its signature." Watch how a capable agent does it without a graph, and you'll see the same shape every time — and a token bill that explains a lot about why long sessions get expensive.</p>
+
+  <h2>The grep-and-read path</h2>
+  <p>With only a search tool and a file reader, the agent fans out. It greps for the name and gets forty hits across twenty files — definitions, comments, similarly-named things, strings. It can't tell which are real call sites from the match alone, so it reads files. Whole files, because a 30-line window rarely contains the answer. Each read drops hundreds or thousands of lines into context. By the time it's confident it has the callers, it has pulled tens of thousands of tokens of mostly-irrelevant source through the model — and most of that is structure it could have looked up instead of re-derived.</p>
+
+  <div class="art-stats">
+    <div class="as"><div class="v" style="color:#F2555A">~82k</div><div class="k">tokens, grep + read the files</div></div>
+    <div class="as"><div class="v c-test">~600</div><div class="k">tokens, one structural query</div></div>
+    <div class="as"><div class="v c-route">137×</div><div class="k">less context for the same answer</div></div>
+  </div>
+
+  <h2>The MCP path</h2>
+  <p>SpecShip runs as an <strong>MCP server</strong> over the same local graph. The agent doesn't search text; it asks the index a question. "Callers of <code>validateSession</code>" returns a handful of qualified symbols with their file and line — the actual edges, already resolved, no false positives to read past. The answer is small because it's the answer, not the haystack the answer was hiding in.</p>
+
+  <div class="codeblock">
+    <div class="cb-bar"><div class="traffic"><i style="background:#F2555A"></i><i style="background:#E5A50A"></i><i style="background:#46C26B"></i></div><span class="fn">specship_callers · validateSession</span></div>
+    <pre>src/api/login.ts:authenticate          <span class="c-com">// calls</span>
+src/api/refresh.ts:refreshToken         <span class="c-com">// calls</span>
+src/middleware/guard.ts:requireSession   <span class="c-com">// calls</span></pre>
+  </div>
+
+  <p>One round-trip, a few hundred tokens, zero files read. And because the graph carries provenance, the agent knows which of those edges are hard call edges and which were synthesized from a dynamic dispatch — information a text search can't give it at any token price.</p>
+
+  <div class="callout">
+    <div class="co-ic" style="background:var(--node-route-soft);color:var(--node-route)"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="13 17 18 12 13 7"/><polyline points="6 17 11 12 6 7"/></svg></div>
+    <div class="co-body"><strong>The win is wall-clock, not just dollars.</strong> Fewer, smaller round-trips over a much smaller accumulated context means the agent reaches an answer in a handful of turns instead of dozens — the latency drop is the part you actually feel.</div>
+  </div>
+
+  <h2>One tool, used first</h2>
+  <p>The most-used tool isn't a clever new verb — it's <code>specship_explore</code>, which takes a bag of symbol names and returns their verbatim source grouped by file, with the call path among them surfaced. It's Read-equivalent for the symbols that matter, in one call, so the agent stops the instant the answer is sufficient instead of drilling file by file. The whole design target is exactly that: make the structured answer good enough that the agent never falls back to reading.</p>
+
+  <div class="pullquote">
+    <p>The fix for "the context window is too small" is rarely a bigger window. It's not putting the haystack in the window at all.</p>
+  </div>
+
+  <h2>Why it compounds</h2>
+  <p>A single query saved is nice. The real effect is across a session: every structural question answered from the index is a file <em>not</em> read, which is context <em>not</em> spent, which is a turn <em>not</em> taken. The savings stack, and they stack hardest on exactly the long, multi-step tasks where agents are otherwise least efficient. Store the structure once; query it forever.</p>
+</Article>

@@ -1,0 +1,91 @@
+---
+import Article from '../../layouts/Article.astro';
+---
+<Article slug="why-graphs">
+  <svg slot="figure" viewBox="0 0 980 440" preserveAspectRatio="xMidYMid slice">
+    <defs><radialGradient id="hg" cx="60%" cy="30%" r="62%"><stop offset="0" stop-color="rgba(91,147,242,0.22)"/><stop offset="1" stop-color="rgba(91,147,242,0)"/></radialGradient></defs>
+    <rect width="980" height="440" fill="url(#hg)"/>
+    <g stroke="rgba(150,165,200,0.28)" stroke-width="1.5" fill="none">
+      <path d="M160 300 L320 210"/><path d="M320 210 L500 140"/><path d="M500 140 L680 200"/><path d="M680 200 L820 150"/>
+      <path d="M320 210 L420 330"/><path d="M420 330 L620 320"/><path d="M500 140 L420 330"/><path d="M680 200 L620 320"/>
+    </g>
+    <g stroke="rgba(229,165,10,0.8)" stroke-width="1.5" stroke-dasharray="6 6" fill="none"><path d="M620 320 L680 200"/></g>
+    <g>
+      <circle cx="160" cy="300" r="10" fill="#29D2BE"/>
+      <circle cx="320" cy="210" r="15" fill="#A586F5"/>
+      <circle cx="500" cy="140" r="19" fill="#5B93F2"/><circle cx="500" cy="140" r="8" fill="#12161E"/>
+      <circle cx="680" cy="200" r="13" fill="#A586F5"/>
+      <circle cx="820" cy="150" r="11" fill="#46C26B"/>
+      <circle cx="420" cy="330" r="13" fill="#46C26B"/>
+      <circle cx="620" cy="320" r="15" fill="#5B93F2" stroke="#E5A50A" stroke-width="1.5"/><circle cx="620" cy="320" r="7" fill="#12161E"/>
+    </g>
+  </svg>
+
+  <p>Open any repository and the first thing your editor shows you is a tree: folders inside folders, files inside those. It's a familiar, comfortable shape. It's also the wrong one for an AI agent trying to make a change.</p>
+  <p>A tree answers exactly one question — <strong>where does this file sit on disk?</strong> But almost every question that matters during a real task is a question about <em>relationships</em>: what calls <code>validateSession</code>, which test exercises it, what route exposes it, and which requirement says it has to reject expired tokens. None of those live in the folder structure. They live in the edges between things.</p>
+
+  <h2>The cost of re-deriving structure</h2>
+  <p>When an agent only has a file tree and a search tool, it rebuilds structure the expensive way: it greps, it reads whole files, it follows imports by hand, and it holds the resulting mental model in its context window. Then the session ends, the context evaporates, and next time it does the whole thing again.</p>
+  <p>The single most common action in a typical agent session isn't writing code — it's re-reading files the agent already read in a previous session, to reconstruct relationships it had already worked out once.</p>
+
+  <div class="art-stats">
+    <div class="as"><div class="v c-spec">~60%</div><div class="k">of tool calls are Read/Grep</div></div>
+    <div class="as"><div class="v" style="color:var(--warn)">×17</div><div class="k">re-reads of a hot file / session</div></div>
+    <div class="as"><div class="v c-route">82k</div><div class="k">tokens to find one symbol's callers</div></div>
+  </div>
+
+  <p>That's the tax: structure gets re-derived from raw text, over and over, priced in input tokens every time. The fix isn't a bigger context window. It's <strong>storing the structure once</strong> and letting the agent query it.</p>
+
+  <h2>From parse tree to knowledge graph</h2>
+  <p>SpecShip parses every file with <strong>tree-sitter</strong>, which gives a concrete syntax tree per file. That's the raw material, not the product. We walk those trees to extract typed <strong>nodes</strong> — functions, classes, methods, routes, components, and specs — and then resolve the <strong>edges</strong> between them: calls, imports, extends, implements, references, and "tested-by".</p>
+  <p>The result is a single typed graph stored in a local SQLite database. The node families carry a color that stays meaningful everywhere in the product:</p>
+  <ul>
+    <li><strong>Code</strong> — functions, classes, methods. The bulk of the graph.</li>
+    <li><strong>Spec</strong> — requirements written in RFC-2119 prose, linked to the symbols that satisfy them.</li>
+    <li><strong>Test</strong> — test cases, edged back to the code they cover.</li>
+    <li><strong>Route</strong> — HTTP/RPC entry points the frameworks expose, the doors into the system.</li>
+  </ul>
+
+  <div class="codeblock">
+    <div class="cb-bar"><div class="traffic"><i style="background:#F2555A"></i><i style="background:#E5A50A"></i><i style="background:#46C26B"></i></div><span class="fn">src/extraction/orchestrator.ts</span></div>
+    <pre set:html={`<span class="c-com">// one node per declaration, edges resolved in a second pass</span>
+<span class="c-key">for</span> (<span class="c-key">const</span> decl <span class="c-key">of</span> <span class="c-fn">walk</span>(tree.rootNode)) {
+  <span class="c-key">const</span> node = graph.<span class="c-fn">upsert</span>({
+    kind: decl.kind,        <span class="c-com">// 'function' | 'class' | 'route' | 'component'…</span>
+    name: decl.name,
+    file: rel,
+    span: [decl.startIndex, decl.endIndex],
+  });
+  <span class="c-key">for</span> (<span class="c-key">const</span> call <span class="c-key">of</span> decl.calls) {
+    graph.<span class="c-fn">link</span>(node, call.target, <span class="c-str">'calls'</span>);
+  }
+}`}></pre>
+  </div>
+
+  <p>Some edges can't be read straight off the syntax — a route handler wired up through a framework, a callback invoked dynamically, a React component re-rendering a child. Those we <strong>synthesize</strong>: inferred edges, drawn dashed in the UI and tagged <code>provenance: 'heuristic'</code> in the data so you always know what was extracted versus what was guessed.</p>
+
+  <div class="callout">
+    <div class="co-ic" style="background:var(--node-spec-soft);color:var(--node-spec)"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></div>
+    <div class="co-body"><strong>Provenance is a first-class field.</strong> Every synthesized edge records which synthesizer drew it and where it was wired up. When an agent acts on the graph, it can weight a hard call edge differently from an inferred one — and a half-bridged dynamic flow is left out entirely, because silent beats wrong.</div>
+  </div>
+
+  <h2>What the graph unlocks</h2>
+  <p>Once structure is a queryable object instead of something you reconstruct from text, a lot falls out of it almost for free.</p>
+  <h3>Bounded, structural retrieval</h3>
+  <p>Instead of "read this 1,400-line file," an agent asks for <code>validateSession</code> plus its callers, two hops deep. It gets back a handful of qualified symbols and their source — not every line that happened to match a string. In practice that's the difference between tens of thousands of tokens and a few hundred.</p>
+  <h3>Drift you can actually see</h3>
+  <p>Because specs are nodes with edges to the code that satisfies them, a refactor that moves or renames a symbol breaks an edge. That broken edge <em>is</em> drift — and it lands in a review queue instead of silently shipping.</p>
+
+  <div class="pullquote">
+    <p>A file tree is a map of the building. A knowledge graph is a map of who talks to whom inside it.</p>
+    <cite>— from the SpecShip design notes</cite>
+  </div>
+
+  <h3>Flows across dynamic dispatch</h3>
+  <p>Asking "how does X reach Y" usually means following a chain that crosses callbacks, event emitters, and framework routes — exactly the hops a text search can't follow. Because those hops are synthesized into the graph, one query can connect a state change to the on-screen render across several indirection boundaries, each step showing the source and where the edge was wired.</p>
+
+  <h2>Why local, why SQLite</h2>
+  <p>The whole graph lives on your machine in a single SQLite file. No service to call, nothing leaving your laptop, and queries that return in single-digit milliseconds. Your code and your transcripts are yours; the graph is just an index on top of them.</p>
+
+  <p>File trees aren't going away — they're still how we organize bytes on disk. But for the questions an agent actually asks, the tree was never the answer. The graph is.</p>
+</Article>

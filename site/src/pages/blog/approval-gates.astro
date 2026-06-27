@@ -1,0 +1,55 @@
+---
+import Article from '../../layouts/Article.astro';
+---
+<Article slug="approval-gates">
+  <svg slot="figure" viewBox="0 0 980 440" preserveAspectRatio="xMidYMid slice">
+    <defs><radialGradient id="hw" cx="50%" cy="25%" r="65%"><stop offset="0" stop-color="rgba(91,147,242,0.18)"/><stop offset="1" stop-color="rgba(91,147,242,0)"/></radialGradient></defs>
+    <rect width="980" height="440" fill="url(#hw)"/>
+    <line x1="120" y1="220" x2="860" y2="220" stroke="rgba(150,165,200,0.3)" stroke-width="2"/>
+    <circle cx="150" cy="220" r="13" fill="#A586F5"/>
+    <circle cx="330" cy="220" r="13" fill="#5B93F2"/>
+    <circle cx="510" cy="220" r="19" fill="#E5A50A"/><circle cx="510" cy="220" r="8" fill="#12161E"/>
+    <circle cx="690" cy="220" r="13" fill="#46C26B"/>
+    <circle cx="860" cy="220" r="13" fill="#29D2BE"/>
+    <text x="510" y="285" text-anchor="middle" fill="rgba(229,165,10,0.9)" font-family="Geist Mono, monospace" font-size="15">approval</text>
+  </svg>
+
+  <p>There are two ways to let an AI agent ship a change. The first is to let it run end to end and hope. The second is to give it real control flow — plan, build, test, and then <em>stop</em> at a gate where a human says yes — and have every step run somewhere it can't hurt you. SpecShip's workflow engine is built entirely around the second.</p>
+
+  <h2>A workflow is a DAG, not a prompt</h2>
+  <p>You define a workflow as a small graph of typed steps with dependencies — some run an agent, some run a shell command, some are pure approval gates. It's real control flow: a step can depend on others, branch, or block until a human acts. That's a different object from a single mega-prompt, and it behaves differently: each step's output is captured, and the run can pause and resume across days.</p>
+
+  <div class="codeblock">
+    <div class="cb-bar"><div class="traffic"><i style="background:#F2555A"></i><i style="background:#E5A50A"></i><i style="background:#46C26B"></i></div><span class="fn">spec-implement.yaml</span></div>
+    <pre><span class="c-key">steps</span>:
+  - id: plan        <span class="c-com"># agent drafts a plan from the spec</span>
+  - id: approve     <span class="c-com"># ← human gate: review the plan</span>
+    depends_on: [plan]
+  - id: implement   <span class="c-com"># agent writes code + tests, runs them</span>
+    depends_on: [approve]
+  - id: verify      <span class="c-com"># run the suite</span>
+  - id: link        <span class="c-com"># assert spec → code links</span>
+  - id: review      <span class="c-com"># ← human gate: approve the diff</span></pre>
+  </div>
+
+  <p>The bundled <code>spec-implement</code> workflow runs exactly this shape: it drafts a plan, <strong>pauses</strong>, and waits. You read the plan, approve it, and resume — then it implements, runs the tests, asserts the spec links, and <strong>pauses again</strong> for a final look at the diff before anything lands. Two gates, both human, both load-bearing.</p>
+
+  <h2>Isolated by construction</h2>
+  <p>Every run executes in its own <strong>git worktree</strong> — a separate working tree off your repo. A half-finished agent run, a failed test, an experiment you abandon: none of it touches the branch you're sitting on. Your working tree stays exactly as you left it while the agent works in its own copy.</p>
+
+  <div class="callout">
+    <div class="co-ic" style="background:var(--node-spec-soft);color:var(--node-spec)"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v12"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg></div>
+    <div class="co-body"><strong>The worktree is the unit of safety.</strong> Approve the result and merge it; reject it and the worktree is discarded with the branch. Nothing partial ever has to be cleaned up out of your real tree.</div>
+  </div>
+
+  <h2>The same workflow, three surfaces</h2>
+  <p>The DAG doesn't care where it runs. The same YAML drives a run from the CLI, from the desktop UI, or from a GitHub Actions runner — same steps, same gates, same behaviour. A gate that's an interactive approval at your desk becomes a required reviewer in CI. You write the workflow once and choose where it lives.</p>
+
+  <div class="pullquote">
+    <p>The agent gets to be fast. You keep the one decision that matters: does this merge?</p>
+  </div>
+
+  <h2>Why gates beat guardrails</h2>
+  <p>You can try to constrain an agent with ever-longer system prompts and hope it never colours outside the lines. Or you can let it work freely inside a sandbox and put a hard checkpoint where the risk actually is — the moment code leaves the sandbox. Gates are cheaper to reason about than guardrails: there's exactly one place a human has to be right, and the worktree guarantees that everything before it was reversible.</p>
+  <p>This whole blog's backing feature set was built that way — dozens of <code>spec-implement</code> runs, each planned, gated, implemented in a worktree, and reviewed before merge. The agent moved fast. The gates held.</p>
+</Article>

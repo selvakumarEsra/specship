@@ -1,0 +1,54 @@
+---
+import Article from '../../layouts/Article.astro';
+---
+<Article slug="memory-hierarchy">
+  <svg slot="figure" viewBox="0 0 980 440" preserveAspectRatio="xMidYMid slice">
+    <defs><radialGradient id="hm" cx="50%" cy="20%" r="70%"><stop offset="0" stop-color="rgba(165,134,245,0.18)"/><stop offset="1" stop-color="rgba(165,134,245,0)"/></radialGradient></defs>
+    <rect width="980" height="440" fill="url(#hm)"/>
+    <rect x="320" y="70" width="340" height="48" rx="9" fill="#A586F5" opacity="0.9"/>
+    <rect x="280" y="146" width="420" height="48" rx="9" fill="#5B93F2" opacity="0.62"/>
+    <rect x="240" y="222" width="500" height="48" rx="9" fill="#29D2BE" opacity="0.46"/>
+    <rect x="200" y="298" width="580" height="48" rx="9" fill="#46C26B" opacity="0.32"/>
+    <text x="490" y="100" text-anchor="middle" fill="#0B0D11" font-family="Geist Mono, monospace" font-size="15" font-weight="600">managed</text>
+    <text x="490" y="176" text-anchor="middle" fill="#0B0D11" font-family="Geist Mono, monospace" font-size="15">user</text>
+    <text x="490" y="252" text-anchor="middle" fill="#0B0D11" font-family="Geist Mono, monospace" font-size="15">project</text>
+    <text x="490" y="328" text-anchor="middle" fill="#0B0D11" font-family="Geist Mono, monospace" font-size="15">subdir</text>
+  </svg>
+
+  <p>You ask the agent for something simple and it does something subtly off — uses a library you stopped using, follows a convention you abandoned, refuses a thing you never told it to refuse. The instinct is to blame the model. The answer is almost always a line of memory you forgot was in scope.</p>
+
+  <h2>Memory stacks, and you only wrote part of it</h2>
+  <p>Claude Code doesn't read one instructions file. It reads a <strong>hierarchy</strong>, and every level is live at once:</p>
+  <ul>
+    <li><strong>Managed</strong> — policy set by your org or the harness, highest precedence.</li>
+    <li><strong>User</strong> — your personal <code>~/.claude/CLAUDE.md</code>, applied in every project you open.</li>
+    <li><strong>Project</strong> — the repo's <code>CLAUDE.md</code>, checked into git, shared with your team.</li>
+    <li><strong>Subdirectory</strong> — a nested <code>CLAUDE.md</code> that only applies under its folder.</li>
+  </ul>
+  <p>The agent's behaviour in any given turn is the <em>sum</em> of all of these — not the one file you happened to edit. A rule three levels up that you wrote months ago and a teammate's project rule you've never read are both shaping the same response. When the result surprises you, the cause is usually a level you weren't looking at.</p>
+
+  <div class="codeblock">
+    <div class="cb-bar"><div class="traffic"><i style="background:#F2555A"></i><i style="background:#E5A50A"></i><i style="background:#46C26B"></i></div><span class="fn">CLAUDE.md</span></div>
+    <pre><span class="c-com"># project rules, plus a pulled-in fragment</span>
+@import ./docs/conventions.md
+
+<span class="c-com"># …expands inline, so its rules are in scope too</span></pre>
+  </div>
+
+  <p>And it's not just the four files. <code>@import</code> pulls other documents inline, so a convention doc you forgot links into your <code>CLAUDE.md</code> is, for the agent, simply part of the instructions. The effective prompt is bigger than any single file you can open.</p>
+
+  <h2>Seeing the whole stack at once</h2>
+  <p>SpecShip's <strong>Memory</strong> page resolves the entire hierarchy the way the agent does — every level, with <code>@import</code>s expanded, plus the free-form notes under <code>~/.claude/memory/</code> — and shows it as one view. Instead of opening four files in four places and resolving imports in your head, you read the actual, effective set of instructions in scope for this project, with each rule attributed to the level it came from.</p>
+
+  <div class="callout">
+    <div class="co-ic" style="background:var(--node-code-soft);color:var(--node-code)"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg></div>
+    <div class="co-body"><strong>Precedence is the part people miss.</strong> When two levels disagree, the higher one wins — so a surprising behaviour is often a high-precedence rule quietly overriding the project rule you were relying on.</div>
+  </div>
+
+  <div class="pullquote">
+    <p>The agent isn't ignoring your instructions. It's following all of them — including the ones you forgot you wrote.</p>
+  </div>
+
+  <h2>Memory as a debugging surface</h2>
+  <p>Once the hierarchy is legible, "why did it do that?" becomes a lookup instead of a guess. You scan the resolved set, find the line responsible, and decide where it should live — promote a personal rule to the project, scope a broad rule to a subdirectory, or delete one that's outlived its purpose. Memory stops being a pile of files you hope are consistent and becomes something you can actually reason about — which is the whole point of writing it down in the first place.</p>
+</Article>

@@ -1,0 +1,44 @@
+---
+import Article from '../../layouts/Article.astro';
+---
+<Article slug="cache-economics">
+  <svg slot="figure" viewBox="0 0 980 440" preserveAspectRatio="xMidYMid slice">
+    <defs><radialGradient id="hc" cx="50%" cy="25%" r="65%"><stop offset="0" stop-color="rgba(70,194,107,0.18)"/><stop offset="1" stop-color="rgba(70,194,107,0)"/></radialGradient></defs>
+    <rect width="980" height="440" fill="url(#hc)"/>
+    <path d="M90 330 C260 330 290 130 470 130 C650 130 690 250 890 110" stroke="#46C26B" stroke-width="2.5" fill="none"/>
+    <path d="M90 330 C260 330 290 130 470 130 C650 130 690 250 890 110 L890 380 L90 380 Z" fill="rgba(70,194,107,0.14)"/>
+    <path d="M620 130 L620 380" stroke="rgba(229,165,10,0.7)" stroke-width="1.5" stroke-dasharray="6 6"/>
+    <text x="620" y="115" text-anchor="middle" fill="rgba(229,165,10,0.9)" font-family="Geist Mono, monospace" font-size="14">prompt drifts →</text>
+  </svg>
+
+  <p>If you only look at one number on a long agent session — total tokens — you'll badly misread the economics. The headline figure is enormous, but most of it isn't what it looks like. The interesting story is in the split, and the split is usually invisible.</p>
+
+  <h2>Most of the bill is cache reads</h2>
+  <p>Modern agent sessions lean hard on prompt caching: the big, stable prefix of a conversation — system prompt, tool definitions, the files already pulled in — gets cached and re-read at a fraction of the price of fresh input. In a healthy long session, the <em>majority</em> of token volume is cheap cache reads, not expensive fresh input. That's why raw token counts and actual dollars diverge so sharply: a session can show a frightening token total and a modest cost, because almost all of it was cache hits.</p>
+
+  <div class="art-stats">
+    <div class="as"><div class="v c-test">cache</div><div class="k">where most volume goes</div></div>
+    <div class="as"><div class="v" style="color:var(--warn)">↘</div><div class="k">hit rate when the prefix drifts</div></div>
+    <div class="as"><div class="v c-spec">$</div><div class="k">cost ≠ tokens — read the split</div></div>
+  </div>
+
+  <h2>Until the prefix drifts</h2>
+  <p>Caching is fragile in one specific way: it's a prefix match. Change something early in the conversation — a system prompt that varies run to run, tool definitions that reorder, a file re-read in a slightly different form — and everything after the change point misses. The hit rate doesn't degrade gracefully; it falls off a cliff. A session that was 90% cache reads in the morning can be 90% misses in the evening for no reason you'd notice from the transcript, and the cost climbs to match.</p>
+
+  <div class="pullquote">
+    <p>Your cache hit rate is a property of how <em>stable</em> your prompt is, not how big it is. Stability is the thing to instrument.</p>
+  </div>
+
+  <h2>Reading it off your own transcripts</h2>
+  <p>SpecShip ingests Claude Code's own session logs in the background — every prompt, every tool call, every token count and cost it already records to disk — and turns them into analytics you can actually act on: a per-day cost line, a by-model breakdown, the cache hit rate, and the prompts that cost the most. No new instrumentation; it's reading the audit trail Claude Code already writes.</p>
+
+  <div class="callout">
+    <div class="co-ic" style="background:color-mix(in srgb,#46C26B 16%,transparent);color:#46C26B"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg></div>
+    <div class="co-body"><strong>Compare projects, not just sessions.</strong> When one repo's cache rate sits far below another's, the difference is almost always a system prompt or tool list that isn't holding still — and now you can see which one.</div>
+  </div>
+
+  <h2>Is the index earning its keep?</h2>
+  <p>The same machinery answers a sharper question on the <strong>SpecShip Impact</strong> page: what did the graph tools <em>spend</em> versus what they <em>saved</em>. Spend is measured exactly — the tokens SpecShip's own tool calls put into the conversation. Saved is a deliberately conservative estimate — for each structural query, the cost of the files those symbols live in, which a plain Read would have pulled, minus what the query actually returned. A query whose symbols can't be resolved contributes zero saved, so the number under-claims rather than over-claims. Net is shown honestly, even when it's negative.</p>
+
+  <p>The takeaway isn't "tokens are cheap" or "tokens are expensive." It's that the bill has structure — cache versus fresh, spend versus saved — and once you can see the structure, the expensive long sessions stop being a mystery and start being something you can tune.</p>
+</Article>
