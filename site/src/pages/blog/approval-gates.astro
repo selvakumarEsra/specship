@@ -2,17 +2,7 @@
 import Article from '../../layouts/Article.astro';
 ---
 <Article slug="approval-gates">
-  <svg slot="figure" viewBox="0 0 980 440" preserveAspectRatio="xMidYMid slice">
-    <defs><radialGradient id="hw" cx="50%" cy="25%" r="65%"><stop offset="0" stop-color="rgba(91,147,242,0.18)"/><stop offset="1" stop-color="rgba(91,147,242,0)"/></radialGradient></defs>
-    <rect width="980" height="440" fill="url(#hw)"/>
-    <line x1="120" y1="220" x2="860" y2="220" stroke="rgba(150,165,200,0.3)" stroke-width="2"/>
-    <circle cx="150" cy="220" r="13" fill="#A586F5"/>
-    <circle cx="330" cy="220" r="13" fill="#5B93F2"/>
-    <circle cx="510" cy="220" r="19" fill="#E5A50A"/><circle cx="510" cy="220" r="8" fill="#12161E"/>
-    <circle cx="690" cy="220" r="13" fill="#46C26B"/>
-    <circle cx="860" cy="220" r="13" fill="#29D2BE"/>
-    <text x="510" y="285" text-anchor="middle" fill="rgba(229,165,10,0.9)" font-family="Geist Mono, monospace" font-size="15">approval</text>
-  </svg>
+  <img slot="figure" src="/blog/workflow-gate.png" alt="SpecShip Desktop — a spec-implement run paused at the human approval gate before merge" style="position:relative;width:100%;height:100%;object-fit:cover;object-position:center top;display:block" />
 
   <p>There are two ways to let an AI agent ship a change. The first is to let it run end to end and hope. The second is to give it real control flow — plan, build, test, and then <em>stop</em> at a gate where a human says yes — and have every step run somewhere it can't hurt you. SpecShip's workflow engine is built entirely around the second.</p>
 

@@ -2,24 +2,7 @@
 import Article from '../../layouts/Article.astro';
 ---
 <Article slug="why-graphs">
-  <svg slot="figure" viewBox="0 0 980 440" preserveAspectRatio="xMidYMid slice">
-    <defs><radialGradient id="hg" cx="60%" cy="30%" r="62%"><stop offset="0" stop-color="rgba(91,147,242,0.22)"/><stop offset="1" stop-color="rgba(91,147,242,0)"/></radialGradient></defs>
-    <rect width="980" height="440" fill="url(#hg)"/>
-    <g stroke="rgba(150,165,200,0.28)" stroke-width="1.5" fill="none">
-      <path d="M160 300 L320 210"/><path d="M320 210 L500 140"/><path d="M500 140 L680 200"/><path d="M680 200 L820 150"/>
-      <path d="M320 210 L420 330"/><path d="M420 330 L620 320"/><path d="M500 140 L420 330"/><path d="M680 200 L620 320"/>
-    </g>
-    <g stroke="rgba(229,165,10,0.8)" stroke-width="1.5" stroke-dasharray="6 6" fill="none"><path d="M620 320 L680 200"/></g>
-    <g>
-      <circle cx="160" cy="300" r="10" fill="#29D2BE"/>
-      <circle cx="320" cy="210" r="15" fill="#A586F5"/>
-      <circle cx="500" cy="140" r="19" fill="#5B93F2"/><circle cx="500" cy="140" r="8" fill="#12161E"/>
-      <circle cx="680" cy="200" r="13" fill="#A586F5"/>
-      <circle cx="820" cy="150" r="11" fill="#46C26B"/>
-      <circle cx="420" cy="330" r="13" fill="#46C26B"/>
-      <circle cx="620" cy="320" r="15" fill="#5B93F2" stroke="#E5A50A" stroke-width="1.5"/><circle cx="620" cy="320" r="7" fill="#12161E"/>
-    </g>
-  </svg>
+  <img slot="figure" src="/blog/graph.png" alt="SpecShip Desktop — the knowledge-graph view: nodes and edges, with a symbol’s callers and callees" style="position:relative;width:100%;height:100%;object-fit:cover;object-position:center top;display:block" />
 
   <p>Open any repository and the first thing your editor shows you is a tree: folders inside folders, files inside those. It's a familiar, comfortable shape. It's also the wrong one for an AI agent trying to make a change.</p>
   <p>A tree answers exactly one question — <strong>where does this file sit on disk?</strong> But almost every question that matters during a real task is a question about <em>relationships</em>: what calls <code>validateSession</code>, which test exercises it, what route exposes it, and which requirement says it has to reject expired tokens. None of those live in the folder structure. They live in the edges between things.</p>
