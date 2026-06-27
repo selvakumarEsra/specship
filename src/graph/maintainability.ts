@@ -12,6 +12,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import picomatch from 'picomatch';
 import { QueryBuilder } from '../db/queries';
 import { Edge, Node, NodeKind } from '../types';
 
@@ -30,6 +31,24 @@ export const DEFAULT_THRESHOLDS: MaintainabilityThresholds = {
   largeSymbolLines: 200,
   godFileSymbols: 40,
 };
+
+/**
+ * Generated / vendored files excluded from the analysis by default — they aren't
+ * source-of-truth, so flagging them is noise (e.g. a bundled `chunk-*.js` shows
+ * as a huge coupling hub, a `.d.ts` as dead code). A project may add more via
+ * `maintainability.exclude` in specship.config.json. Globs over the
+ * project-relative file path.
+ */
+export const DEFAULT_EXCLUDE: string[] = [
+  '**/*.d.ts',
+  '**/*.min.js',
+  '**/*.map',
+  '**/dist/**',
+  '**/build/**',
+  '**/vendor/**',
+  '**/public/web/**',
+  '**/chunk-*.js',
+];
 
 /** Definable code symbols considered by the size / coupling / dead-code signals. */
 const SYMBOL_KINDS: ReadonlySet<NodeKind> = new Set<NodeKind>([
@@ -112,8 +131,14 @@ export interface MaintainabilityReport {
 export function computeMaintainability(
   queries: QueryBuilder,
   thresholds: MaintainabilityThresholds = DEFAULT_THRESHOLDS,
+  exclude: string[] = DEFAULT_EXCLUDE,
 ): MaintainabilityReport {
-  const nodes = queries.getAllNodes();
+  // Scope analysis to source files — drop generated/vendored ones up front so
+  // they never appear as findings and never inflate a kept node's degree.
+  const isExcluded = exclude.length
+    ? picomatch(exclude, { dot: true })
+    : () => false;
+  const nodes = queries.getAllNodes().filter((n) => !isExcluded(n.filePath));
   const byId = new Map<string, Node>(nodes.map((n) => [n.id, n]));
 
   const fanIn = new Map<string, number>();
@@ -124,6 +149,7 @@ export function computeMaintainability(
   for (const n of nodes) {
     const out = queries.getOutgoingEdges(n.id);
     for (const e of out) {
+      if (!byId.has(e.target)) continue; // edge to an excluded/missing node — ignore
       if (isUseEdge(e.kind)) {
         fanOut.set(e.source, (fanOut.get(e.source) ?? 0) + 1);
         fanIn.set(e.target, (fanIn.get(e.target) ?? 0) + 1);
@@ -269,4 +295,22 @@ export function resolveThresholds(
     // no config / unparseable → defaults
   }
   return { ...DEFAULT_THRESHOLDS, ...fromConfig, ...(override ?? {}) };
+}
+
+/**
+ * Resolve the exclude globs: the built-in DEFAULT_EXCLUDE plus any
+ * `maintainability.exclude` array from specship.config.json (additive — config
+ * extends the defaults rather than replacing them).
+ */
+export function resolveExclude(projectRoot: string): string[] {
+  let extra: string[] = [];
+  try {
+    const raw = fs.readFileSync(path.join(projectRoot, CONFIG_FILE_NAME), 'utf-8');
+    const cfg = JSON.parse(raw) as { maintainability?: { exclude?: unknown } };
+    const e = cfg?.maintainability?.exclude;
+    if (Array.isArray(e)) extra = e.filter((x): x is string => typeof x === 'string');
+  } catch {
+    // no config / unparseable → defaults only
+  }
+  return [...DEFAULT_EXCLUDE, ...extra];
 }

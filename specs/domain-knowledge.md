@@ -220,3 +220,34 @@ implementations:
 <!-- id: REQ-DOMAIN-007.A3 -->
 - Existing `/api/specs` and `/api/claude/tips` responses are unchanged
   (no regression).
+
+<!-- id: REQ-DOMAIN-008 -->
+## The Domain page MUST show each fact's governed spec and live inherited state
+
+`GET /api/domain` MUST enrich every returned fact with the requirement spec(s) it
+governs (its `depends_on` / `parent_id` targets) and the inherited code-link
+state derived from the linked spec's `implements` links (`verified` / `drifted` /
+`broken` / `none`). The dashboard Domain page MUST render, per card, a
+`governs <spec> → <symbol>` reference and a state chip reflecting that inherited
+state, and MUST expose the **Review** affordance when the inherited state is
+`drifted`. A fact whose linked spec resolves to code MUST NOT display
+"No linked code yet".
+
+implementations:
+  - packages/server/src/routes/domain.ts
+  - packages/web-ng/src/app/pages/domain/domain.ts
+
+## Acceptance
+<!-- id: REQ-DOMAIN-008.A1 -->
+- `GET /api/domain` returns, for each fact, its governed spec id(s) and an
+  inherited link state (one of `verified` / `drifted` / `broken` / `none`).
+<!-- id: REQ-DOMAIN-008.A2 -->
+- A domain fact whose `depends_on` spec resolves to `verified` code shows a
+  `verified` chip and a `governs <spec> → <symbol>` reference on its card — not
+  "No linked code yet".
+<!-- id: REQ-DOMAIN-008.A3 -->
+- A domain fact whose inherited code has `drifted` shows a `drifted` chip and the
+  **Review** affordance.
+<!-- id: REQ-DOMAIN-008.A4 -->
+- A fact with no resolvable linked spec still renders without error, shown as
+  unlinked ("No linked code yet").
