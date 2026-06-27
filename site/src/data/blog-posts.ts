@@ -21,6 +21,16 @@ const grid = '<div class="thumb-grid"></div>';
 
 export const posts: BlogPost[] = [
   {
+    slug: 'domain-knowledge',
+    cat: 'domain', catLabel: 'Domain Knowledge', catColor: '#8B7BFF',
+    title: 'The domain knowledge base that builds itself — your next hire’s shortcut',
+    dek: 'On a large codebase, the “why” lives in people’s heads — the ubiquitous language, the rules, the decisions. SpecShip captures it as you work, links it to the specs and code it governs, and keeps it honest with drift. New team members read the domain, not the tribe.',
+    date: 'Jun 26, 2026', read: '9 min', feat: true,
+    tags: ['#domain-knowledge', '#onboarding', '#enterprise', '#ubiquitous-language'],
+    thumbBg: 'rgba(139,123,255,0.10)',
+    thumb: `<svg viewBox="0 0 360 200" preserveAspectRatio="xMidYMid slice"><rect width="360" height="200" fill="rgba(139,123,255,0.09)"/><g stroke="rgba(150,165,200,0.3)" stroke-width="1.5" fill="none"><path d="M180 50 L180 100"/><path d="M180 100 L110 150"/><path d="M180 100 L250 150"/></g><rect x="138" y="36" width="84" height="28" rx="8" fill="rgba(139,123,255,0.9)"/><circle cx="180" cy="100" r="11" fill="#5B93F2"/><circle cx="110" cy="150" r="9" fill="#46C26B"/><circle cx="250" cy="150" r="9" fill="#A586F5"/><circle cx="58" cy="60" r="6" fill="#29D2BE"/><circle cx="300" cy="64" r="6" fill="#E5A50A"/></svg>`,
+  },
+  {
     slug: 'why-graphs',
     cat: 'graph', catLabel: 'Knowledge Graph', catColor: 'var(--node-spec)',
     title: 'Why we model codebases as graphs, not file trees',
@@ -106,6 +116,7 @@ export const categories = [
   { key: 'all', label: 'All posts', color: '' },
   { key: 'graph', label: 'Knowledge Graph', color: 'var(--node-spec)' },
   { key: 'harness', label: 'Harness Engineering', color: '#F2555A' },
+  { key: 'domain', label: 'Domain Knowledge', color: '#8B7BFF' },
   { key: 'drift', label: 'Spec Drift', color: 'var(--warn)' },
   { key: 'workflows', label: 'Workflows', color: 'var(--accent)' },
   { key: 'tokens', label: 'Tokens', color: 'var(--node-route)' },

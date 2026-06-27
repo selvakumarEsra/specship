@@ -1,0 +1,67 @@
+---
+import Article from '../../layouts/Article.astro';
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+---
+<Article slug="domain-knowledge">
+  <img slot="figure" src={`${base}/blog/domain.png`} alt="SpecShip Desktop — the Domain page: facts grouped by type (terms, rules, decisions, constraints) with a coverage strip and the specs each one governs" style="position:relative;width:100%;height:100%;object-fit:cover;object-position:center top;display:block" />
+
+  <p>Open a million-line codebase you didn't write and the hard part isn't reading the code. It's the thousand small "why"s the code can't tell you: why captures have to be idempotent, what "settlement" means here specifically, why payments go through an outbox instead of a direct call, which fields are PII and must never be logged. That knowledge is real, load-bearing, and almost entirely undocumented — it lives in the heads of the people who've been here longest.</p>
+  <p>For a new team member, absorbing it is the whole onboarding. For an AI agent, not having it is why a perfectly reasonable change quietly violates a rule nobody wrote down. SpecShip's answer is a <strong>domain knowledge layer</strong>: the why, captured as you work, wired into the code it governs, and kept honest over time.</p>
+
+  <h2>What a domain fact is</h2>
+  <p>The structure layer (the graph) tells you <em>what</em> the code is. The spec layer tells you <em>what it must do</em>. The domain layer captures <em>what it means and why</em> — as small, typed facts, one of four kinds:</p>
+  <ul>
+    <li><strong>Term</strong> — a word in your ubiquitous language, defined once. "Capture", "settlement", "chargeback".</li>
+    <li><strong>Rule</strong> — an invariant that must hold. "A repeated capture of the same charge must not double-bill."</li>
+    <li><strong>Decision</strong> — an ADR-style record: the call, why, and what was rejected.</li>
+    <li><strong>Constraint</strong> — a regulatory, security, or performance bound. "PII is never written to logs."</li>
+  </ul>
+
+  <div class="codeblock">
+    <div class="cb-bar"><div class="traffic"><i style="background:#F2555A"></i><i style="background:#E5A50A"></i><i style="background:#46C26B"></i></div><span class="fn">specs/domain/captures-idempotent.md</span></div>
+    <pre><span class="c-com">---</span>
+id: DOM-PAY-001
+type: rule
+depends_on: REQ-PAY-004
+<span class="c-com">---</span>
+<span class="c-key"># Captures are idempotent</span>
+
+A repeated capture of the same charge <span class="c-fn">MUST NOT</span> double-bill.</pre>
+  </div>
+
+  <p>That <code>depends_on</code> is the whole point. A domain fact isn't a wiki page off to the side — it attaches to the <strong>requirement specs</strong> it governs, and through them to the <strong>code</strong> that implements them. The why is wired into the what.</p>
+
+  <h2>It builds itself as you work</h2>
+  <p>Nobody sits down and writes a domain knowledge base — that's why teams don't have one. SpecShip builds it from the work you're already doing, by running the loop automatically and asking only for the part a human has to provide: confirmation.</p>
+
+  <h3>It finds what's undocumented</h3>
+  <p>SpecShip already has the whole graph, so it knows what exists. A gap pass lists the entities and specs that <em>no</em> domain fact covers — "the <code>Payment</code> class is referenced across twelve files and has no stated rules" — and turns that into a coverage number: documented versus gaps. The system generates the questions; you don't have to know what's missing.</p>
+
+  <div class="art-stats">
+    <div class="as"><div class="v" style="color:#8B7BFF">4</div><div class="k">fact types: term · rule · decision · constraint</div></div>
+    <div class="as"><div class="v c-spec">→ spec → code</div><div class="k">every fact links down to what it governs</div></div>
+    <div class="as"><div class="v c-test">drift</div><div class="k">keeps it honest as the code moves</div></div>
+  </div>
+
+  <h3>It captures through interaction, not a blank page</h3>
+  <p>The <code>/ss-domain</code> command grounds in the real repo and interviews you with <em>targeted</em>, per-type questions about the actual undocumented things — not a generic "describe your domain." You answer in a sentence; it writes a well-formed fact under <code>specs/domain/</code>. Crucially, it writes <strong>only on your explicit confirmation</strong>. The knowledge accretes from the specs you author, the functional definitions you give, and the answers you confirm — not from a model guessing.</p>
+
+  <div class="callout">
+    <div class="co-ic" style="background:color-mix(in srgb,#8B7BFF 16%,transparent);color:#8B7BFF"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg></div>
+    <div class="co-body"><strong>Propose, never auto-apply.</strong> The model can detect gaps and draft a fact, but nothing reaches disk until a human confirms it. A domain base full of plausible-but-wrong "knowledge" is worse than none — so the trustworthy facts are the only ones that land.</div>
+  </div>
+
+  <h3>It stays honest by itself</h3>
+  <p>Because each fact rides its spec's links to code, drift comes for free: rename or move the code a rule governs and the fact's chain flips to <strong>drifted</strong>, landing in the review queue. A domain wiki rots the day after it's written; this one tells you the moment reality diverges from what it claims.</p>
+
+  <div class="pullquote">
+    <p>A domain wiki is a snapshot that's wrong by next week. A linked domain layer is a live index on the why — and it raises its hand when the code moves out from under it.</p>
+  </div>
+
+  <h2>The enterprise edge: onboarding at scale</h2>
+  <p>On a small project you can carry the domain in your head. On a large one, the implicit domain knowledge <em>is</em> the moat — and it's also the bottleneck. Every new hire spends their first months reconstructing it by reading code, asking questions, and slowly building the mental model the senior engineers already have.</p>
+  <p>A heavily-scoped domain layer collapses that. A new team member reads the terms, rules, decisions, and constraints — grouped, searchable, each linked to the exact code it governs — and absorbs in hours the context that used to take months. They read the domain, not the tribe. And the coverage number turns an invisible asset into a measurable one: you can <em>see</em> how much of your domain is captured, and where the gaps are.</p>
+  <p>The same payoff lands on the agent. Because facts are surfaced inline — <code>specship_spec</code> on a requirement lists the domain facts that govern it, and naming a documented term in <code>specship_explore</code> returns its confirmed meaning — your AI coding agent writes code with the same domain context a senior engineer carries. It follows the idempotency rule and the no-PII-in-logs constraint not because you re-pasted them into a prompt, but because they're part of the project's indexed knowledge. New hire or new agent, the shortcut is the same.</p>
+
+  <p>Code tells you how the system is built. Specs tell you what it has to do. The domain layer tells you what any of it <em>means</em> — and on a large team, that's the knowledge that's hardest to transfer and most expensive to lose. SpecShip's job is to make sure it isn't only in someone's head.</p>
+</Article>
