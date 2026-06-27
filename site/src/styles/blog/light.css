@@ -1,0 +1,63 @@
+/* ============================================================
+   Blog light theme — remaps the design tokens for [data-theme="light"].
+   Values copied from the landing's light palette (src/styles/landing.css)
+   so the blog matches the rest of the site. Loaded AFTER blog.css so the
+   light override wins over the dark :root in styles.css.
+   ============================================================ */
+[data-theme="light"] {
+  color-scheme: light;
+  --bg-canvas: #F4F6F8;
+  --bg-canvas-2: #E9ECF1;
+  --bg-panel: #FFFFFF;
+  --bg-panel-2: #F8FAFC;
+  --bg-elevated: #FFFFFF;
+  --bg-hover: rgba(15,23,42,0.045);
+  --bg-active: rgba(15,23,42,0.07);
+
+  --border-subtle: rgba(15,23,42,0.10);
+  --border-strong: rgba(15,23,42,0.18);
+  --border-focus: #2563EB;
+
+  --text-primary: #161B22;
+  --text-secondary: #4A5566;
+  --text-muted: #7B8696;
+  --text-faint: #A9B2C0;
+
+  --accent: #2563EB;
+  --accent-strong: #2563EB;
+  --accent-soft: rgba(37,99,235,0.10);
+  --accent-line: rgba(37,99,235,0.30);
+
+  --node-code: #7C56E0;
+  --node-spec: #2F6FE0;
+  --node-test: #1E9E4C;
+  --node-route: #0E9C8E;
+  --node-code-soft: rgba(124,86,224,0.12);
+  --node-spec-soft: rgba(47,111,224,0.12);
+  --node-test-soft: rgba(30,158,76,0.12);
+  --node-route-soft: rgba(14,156,142,0.12);
+  --node-text: #1A2230;
+  --dot-grid: rgba(15,23,42,0.07);
+
+  --success: #1E9E4C;
+  --success-soft: rgba(30,158,76,0.12);
+  --warn: #B27500;
+  --warn-soft: rgba(178,117,0,0.13);
+  --error: #DC4A4F;
+  --error-soft: rgba(220,74,79,0.12);
+  --info: #2563EB;
+  --info-soft: rgba(37,99,235,0.11);
+}
+
+/* Soften the dark-tuned ambient glow + brand mark glow on a light field. */
+[data-theme="light"] .page::after { opacity: 0.45; }
+[data-theme="light"] .nav .brand svg { filter: none !important; }
+[data-theme="light"] .read-progress { opacity: 0.9; }
+/* Code blocks: the syntax greens/purples read fine on white; keep the comment legible. */
+[data-theme="light"] .codeblock pre .c-com { color: #8a93a4; }
+
+/* Theme toggle button (from the landing). */
+.theme-btn{ display:inline-flex; align-items:center; justify-content:center; width:34px; height:34px; border-radius:8px; border:1px solid var(--border-subtle); background:transparent; color:var(--text-secondary); cursor:pointer; transition:border-color .12s,color .12s; }
+.theme-btn:hover{ border-color:var(--border-strong); color:var(--text-primary); }
+.theme-btn .moon{ display:none; } .theme-btn .sun{ display:inline; }
+[data-theme="light"] .theme-btn .sun{ display:none; } [data-theme="light"] .theme-btn .moon{ display:inline; }

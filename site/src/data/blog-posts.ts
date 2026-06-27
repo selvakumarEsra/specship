@@ -31,6 +31,16 @@ export const posts: BlogPost[] = [
     thumb: `<svg viewBox="0 0 360 200" preserveAspectRatio="xMidYMid slice"><rect width="360" height="200" fill="rgba(91,147,242,0.09)"/><g stroke="rgba(150,165,200,0.3)" stroke-width="1.5" fill="none"><path d="M60 140 L150 90 L240 60 L310 90"/><path d="M150 90 L160 150 L250 150"/><path d="M240 60 L250 150"/></g><circle cx="60" cy="140" r="7" fill="#29D2BE"/><circle cx="150" cy="90" r="11" fill="#A586F5"/><circle cx="240" cy="60" r="13" fill="#5B93F2"/><circle cx="240" cy="60" r="5.5" fill="#12161E"/><circle cx="310" cy="90" r="8" fill="#46C26B"/><circle cx="160" cy="150" r="9" fill="#46C26B"/><circle cx="250" cy="150" r="10" fill="#5B93F2"/></svg>`,
   },
   {
+    slug: 'git-worktrees',
+    cat: 'workflows', catLabel: 'Workflows', catColor: 'var(--accent)',
+    title: 'Why every agent run gets its own git worktree',
+    dek: 'Branches and stashes share one working tree; clones and containers are heavyweight. A git worktree is the sweet spot — a real isolated checkout that shares the repo, so a failed agent run never touches yours.',
+    date: 'Jun 23, 2026', read: '8 min',
+    tags: ['#git-worktree', '#isolation', '#workflows', '#safety'],
+    thumbBg: 'rgba(91,147,242,0.10)',
+    thumb: `<svg viewBox="0 0 360 200" preserveAspectRatio="xMidYMid slice"><rect width="360" height="200" fill="rgba(91,147,242,0.08)"/><line x1="40" y1="72" x2="320" y2="72" stroke="rgba(150,165,200,0.3)" stroke-width="1.5"/><path d="M150 72 C172 72 180 124 202 124 L300 124" stroke="rgba(150,165,200,0.3)" stroke-width="1.5" fill="none"/><rect x="246" y="100" width="86" height="50" rx="9" fill="none" stroke="rgba(91,147,242,0.55)" stroke-width="1.4" stroke-dasharray="5 5"/><circle cx="80" cy="72" r="7" fill="#A586F5"/><circle cx="150" cy="72" r="9" fill="#5B93F2"/><circle cx="220" cy="72" r="7" fill="#46C26B"/><circle cx="290" cy="72" r="7" fill="#29D2BE"/><circle cx="289" cy="124" r="9" fill="#E5A50A"/></svg>`,
+  },
+  {
     slug: 'harness-engineering',
     cat: 'harness', catLabel: 'Harness Engineering', catColor: '#F2555A',
     title: 'The harness: maintainability, fitness, and a gate your agent must pass',
