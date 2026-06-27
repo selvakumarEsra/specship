@@ -8,7 +8,13 @@
       "mcp__specship__specship_callees",
       "mcp__specship__specship_impact",
       "mcp__specship__specship_files",
-      "mcp__specship__specship_status"
+      "mcp__specship__specship_status",
+      "mcp__specship__designer_session",
+      "mcp__specship__designer_prompt",
+      "mcp__specship__designer_ask",
+      "mcp__specship__designer_list",
+      "mcp__specship__designer_snapshot",
+      "mcp__specship__designer_handoff"
     ]
   },
   "hooks": {
@@ -31,6 +37,17 @@
           {
             "type": "command",
             "command": "specship sync --quiet"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "specship spec-nudge"
           }
         ]
       }

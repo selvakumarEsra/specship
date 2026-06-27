@@ -261,3 +261,13 @@ publish actions on shared state. Write the files, hand the user the commands.
   - The **current branch's tip** — your own unmerged work obviously can't be what the comment is reacting to.
   Always disambiguate "released," "merged-but-unreleased," and "in-progress" before agreeing that a user-reported problem is unfixed (or that a fix is incomplete). A user saying "your fix only covers X" about a recent PR is usually pointing at the *released* shortcomings — your in-flight branch may already address them but they have no way to know that.
 - **Version-tag every image referenced in `README.md`.** GitHub caches README images (`raw.githubusercontent.com` with a 5-minute TTL; third-party hosts sit behind the long-lived camo proxy), so updating an asset in place can keep showing the stale version. Give each README image URL a `?v=N` query tag and **bump `N` in the same commit whenever the asset bytes change** — e.g. `assets/waitlist.svg?v=2`. The changed URL sidesteps every cache so the new image shows immediately instead of waiting on a TTL to expire.
+
+<!-- SPECSHIP_SDD_START -->
+## Spec-driven development (SpecShip)
+
+For feature or bug work in this repo, FIRST invoke SpecShip's **spec-author**
+to author the spec under `specs/` — before any brainstorming or planning skill.
+Spec-driven development is canonical here: the spec is the contract, and the
+implementation follows from it (`/ss-implement`). This rule intentionally takes
+precedence over a skill's own "use me first" guidance.
+<!-- SPECSHIP_SDD_END -->

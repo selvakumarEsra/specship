@@ -6,6 +6,11 @@ allowed-tools: Read, Write, Edit, Bash, mcp__specship__specship_explore, mcp__sp
 
 # SpecShip Design → Spec → Implement: `$ARGUMENTS`
 
+> **Already settled on a design?** This command imports it by URL. If you instead want to *run
+> the taste loop first* — iterate variants with the human via the `designer` MCP and only then
+> spec the chosen one — use **`/ss-design-loop`**, which drives the loop and hands the resulting
+> bundle to this same workflow via its `HANDOFF_DIR` input.
+
 Run the bundled `claude-design-implement` workflow against the Claude Design URL in `$ARGUMENTS`. The workflow:
 
 1. **Snapshots** the design source byte-for-byte into `specs/<slug>/snapshot.html` (zero-loss fidelity layer).
