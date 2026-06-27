@@ -550,14 +550,27 @@ export interface MaintainabilityReport {
 /** The recognized domain fact buckets; `other` is the catch-all. */
 export type DomainFactType = 'term' | 'rule' | 'decision' | 'constraint' | 'other';
 
+/** The collapsed worst-first state of the code a domain fact governs. */
+export type DomainFactState = 'verified' | 'drifted' | 'broken' | 'none';
+
+/** One code symbol a domain fact governs, via the spec that links it. */
+export interface GovernedRef {
+  specId: string;
+  symbol: string;
+}
+
 /**
- * One human-confirmed domain fact. Carries no link/state info — the Domain
- * page derives verify/drift state by cross-referencing /api/drift on `id`.
+ * One human-confirmed domain fact (REQ-DOMAIN-008). The server enriches each
+ * fact with the symbols it `governs` and the collapsed `state` of that code —
+ * derived server-side from the fact's inherited spec→code links — so the UI no
+ * longer cross-references /api/drift to reconstruct link state client-side.
  */
 export interface DomainFact {
   id: string;
   title: string;
   body: string;
+  governs: GovernedRef[];
+  state: DomainFactState;
 }
 
 export interface DomainResponse {

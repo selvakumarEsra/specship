@@ -1,13 +1,15 @@
 /**
- * Domain page (REQ-DOMAIN-006).
+ * Domain page (REQ-DOMAIN-006 / REQ-DOMAIN-008).
  *
  * Renders the human-confirmed domain knowledge layer — facts grouped by type
  * (Terms / Rules / Decisions / Constraints, plus an Other catch-all) with a
- * coverage strip (documented · gaps). Each fact's verify/drift state chip is
- * derived by cross-referencing /api/drift on `specId === fact.id`, since
- * GET /api/domain carries no link/state info itself. A fact in a concerning
- * state surfaces a Review affordance into the drift queue; every card always
- * offers Capture, and an empty layer prompts the author to capture knowledge.
+ * coverage strip (documented · gaps). Each fact arrives from GET /api/domain
+ * already enriched with the symbols it `governs` and the collapsed `state` of
+ * that code (derived server-side from the fact's inherited spec→code links), so
+ * the page renders the state chip and governed symbols directly — no client-side
+ * cross-reference of /api/drift. A fact whose code has drifted surfaces a Review
+ * affordance into the drift queue; every card always offers Capture, and an
+ * empty layer prompts the author to capture knowledge.
  */
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { Router } from '@angular/router';
@@ -20,7 +22,7 @@ import { StatePill } from '../../ui/state-pill';
 import { Empty } from '../../ui/empty';
 import { Icon } from '../../shell/icon/icon';
 import { PickProjectEmpty } from '../../shell/pick-project-empty/pick-project-empty';
-import type { DomainResponse, DomainFactType, DriftResponse, SpecLink } from '../../api/types';
+import type { DomainResponse, DomainFact, DomainFactType } from '../../api/types';
 
 interface DomainSection {
   type: DomainFactType;
@@ -37,13 +39,6 @@ const SECTION_ORDER: ReadonlyArray<{ type: DomainFactType; label: string }> = [
   { type: 'other', label: 'Other' },
 ];
 
-/** Worst-first priority — the chip reflects the most actionable link state. */
-const STATE_PRIORITY: ReadonlyArray<SpecLink['state']> = [
-  'broken', 'orphaned', 'drifted', 'verified', 'implemented', 'implementing', 'drafted',
-];
-
-const REVIEW_STATES = new Set<SpecLink['state']>(['broken', 'orphaned', 'drifted']);
-
 @Component({
   selector: 'app-domain',
   imports: [PageHead, Pill, StatePill, Empty, Icon, PickProjectEmpty],
@@ -59,13 +54,6 @@ export class Domain {
   protected readonly resource = apiResource<DomainResponse>(
     this.api,
     () => `/api/domain${this.projects.projectQuery()}`,
-  );
-
-  // Full state set (not just the concerning default) so the chip can show
-  // verified/implemented as well as drifted/broken.
-  protected readonly drift = apiResource<DriftResponse>(
-    this.api,
-    () => `/api/drift?state=drafted,implementing,implemented,verified,drifted,broken,orphaned${this.projects.projectQuery('&')}`,
   );
 
   protected readonly data = computed(() => this.resource.state().data);
@@ -94,35 +82,17 @@ export class Domain {
     return !st.loading && !st.noProject && st.data != null && this.total() === 0;
   });
 
-  /** Map a fact id → its drift links (a fact may have several). */
-  private readonly linksByFact = computed<Map<string, SpecLink[]>>(() => {
-    const links = this.drift.state().data?.links ?? [];
-    const m = new Map<string, SpecLink[]>();
-    for (const l of links) {
-      const arr = m.get(l.specId);
-      if (arr) arr.push(l);
-      else m.set(l.specId, [l]);
-    }
-    return m;
-  });
-
   /** The chip state for a fact, or null when no linked code exists yet. */
-  protected stateOf(factId: string): SpecLink['state'] | null {
-    const links = this.linksByFact().get(factId);
-    if (!links?.length) return null;
-    for (const state of STATE_PRIORITY) {
-      if (links.some((l) => l.state === state)) return state;
-    }
-    return null;
+  protected stateOf(f: DomainFact): DomainFact['state'] | null {
+    return f.state === 'none' ? null : f.state;
   }
 
-  /** True when a fact's linked code is in a state that wants attention. */
-  protected needsReview(factId: string): boolean {
-    const s = this.stateOf(factId);
-    return s != null && REVIEW_STATES.has(s);
+  /** True when a fact's governed code has drifted and wants attention. */
+  protected needsReview(f: DomainFact): boolean {
+    return f.state === 'drifted';
   }
 
-  /** Jump to the drift queue to review a fact's drifted/broken links. */
+  /** Jump to the drift queue to review a fact's drifted links. */
   protected review(): void {
     this.router.navigate(['/drift']);
   }
