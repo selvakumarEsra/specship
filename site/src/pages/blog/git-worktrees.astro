@@ -1,0 +1,67 @@
+---
+import Article from '../../layouts/Article.astro';
+---
+<Article slug="git-worktrees">
+  <svg slot="figure" viewBox="0 0 980 440" preserveAspectRatio="xMidYMid slice">
+    <defs><radialGradient id="hgw" cx="50%" cy="25%" r="65%"><stop offset="0" stop-color="rgba(91,147,242,0.18)"/><stop offset="1" stop-color="rgba(91,147,242,0)"/></radialGradient></defs>
+    <rect width="980" height="440" fill="url(#hgw)"/>
+    <!-- main branch -->
+    <line x1="120" y1="150" x2="860" y2="150" stroke="rgba(150,165,200,0.32)" stroke-width="2"/>
+    <circle cx="200" cy="150" r="11" fill="#A586F5"/><circle cx="360" cy="150" r="11" fill="#5B93F2"/>
+    <circle cx="520" cy="150" r="13" fill="#46C26B"/><circle cx="700" cy="150" r="11" fill="#29D2BE"/>
+    <text x="120" y="120" fill="rgba(170,185,220,0.7)" font-family="Geist Mono, monospace" font-size="17">main · your working tree</text>
+    <!-- worktree branch -->
+    <path d="M520 150 C560 150 575 300 615 300 L700 300" stroke="rgba(91,147,242,0.55)" stroke-width="2" fill="none"/>
+    <rect x="640" y="248" width="250" height="120" rx="14" fill="rgba(11,13,17,0.5)" stroke="rgba(91,147,242,0.5)" stroke-width="1.6" stroke-dasharray="7 7"/>
+    <text x="664" y="288" fill="rgba(111,160,246,0.95)" font-family="Geist Mono, monospace" font-size="15">specship/wf-…</text>
+    <circle cx="715" cy="322" r="9" fill="#E5A50A"/><circle cx="760" cy="322" r="9" fill="#5B93F2"/><circle cx="805" cy="322" r="9" fill="#46C26B"/>
+  </svg>
+
+  <p>Hand a coding agent your repository and the first question is: where does it work? If the answer is "in your working tree," you've already lost. A run that edits files in place leaves you with half-applied changes when it fails, a dirty tree you can't reason about, and exactly zero ability to run two experiments at once. Isolation isn't a nice-to-have for agent runs — it's the whole game.</p>
+  <p>SpecShip's answer is the same one for every workflow run: <strong>each run executes in its own git worktree.</strong> Your branch, your working tree, your uncommitted changes — untouched, the entire time the agent works.</p>
+
+  <h2>The four ways to isolate, ranked</h2>
+  <p>"Give the agent a clean place to work" has a few obvious solutions. Most of them are worse than they look.</p>
+
+  <h3>Branch + stash — fragile and not actually isolated</h3>
+  <p>Switching branches and stashing your changes is the reflex move, and it's the worst one. You're still working in the <em>same</em> directory, so the agent and you are sharing one tree; you can't do anything else while it runs. Stashes are easy to lose, easy to apply to the wrong place, and a failed run leaves you reconstructing what was stashed versus what the agent touched. It feels lightweight and quietly isn't.</p>
+
+  <h3>git clone — isolated but heavyweight</h3>
+  <p>A fresh clone genuinely isolates. It also copies the entire object store — every blob, every commit — costing disk and minutes per run, and it severs the shared history, so you're reconciling two repos afterward. Fine once; miserable as the per-run default.</p>
+
+  <h3>Container / VM — isolation by sledgehammer</h3>
+  <p>Spinning up a container or VM per run gives you isolation and then some. But you've taken "the agent needs a clean copy of the code" and answered it with image builds, volume mounts, and a process lifecycle to babysit. It's the right tool for untrusted execution; it's overkill for "let the agent edit some files safely."</p>
+
+  <div class="pullquote">
+    <p>The goal isn't maximum isolation. It's enough isolation that a failed run is free to throw away.</p>
+  </div>
+
+  <h2>Why a worktree is the sweet spot</h2>
+  <p>A <code>git worktree</code> is a second working directory attached to the <em>same</em> repository. It checks out its own branch into its own folder, but it shares the one <code>.git</code> object store underneath. That single property is what makes it the right primitive:</p>
+  <ul>
+    <li><strong>Real isolation</strong> — a separate directory and branch. The agent's edits, builds, and failed tests live entirely outside your working tree.</li>
+    <li><strong>Cheap and instant</strong> — no objects are copied. Creating a worktree is a checkout, not a clone; it's fast even on a large repo.</li>
+    <li><strong>Parallel by default</strong> — many worktrees off one repo at once, so several agent runs proceed without colliding.</li>
+    <li><strong>Clean to discard</strong> — remove the worktree and its branch and the run is simply gone. Nothing partial ever has to be unwound out of your real tree.</li>
+  </ul>
+
+  <div class="codeblock">
+    <div class="cb-bar"><div class="traffic"><i style="background:#F2555A"></i><i style="background:#E5A50A"></i><i style="background:#46C26B"></i></div><span class="fn">what a run does, in git terms</span></div>
+    <pre><span class="c-com"># spin up an isolated checkout off HEAD</span>
+git worktree add ~/.specship/worktrees/wf-<span class="c-num">a1b2</span> -b specship/wf-<span class="c-num">a1b2</span>
+<span class="c-com"># …agent plans, edits, runs tests — all in there…</span>
+<span class="c-com"># approve → merge it; reject → remove it, no trace</span>
+git worktree remove ~/.specship/worktrees/wf-<span class="c-num">a1b2</span></pre>
+  </div>
+
+  <h2>How SpecShip uses it</h2>
+  <p>Every <code>spec-implement</code> (and <code>spec-fix</code>) run does exactly this. When the workflow starts it creates a worktree at <code>~/.specship/worktrees/…</code> on a <code>specship/wf-&lt;runId&gt;</code> branch off your current HEAD. The agent drafts a plan, you approve it, and it implements, runs the tests, and asserts the spec links — all inside that worktree. You sit at your own branch the whole time, free to keep working or kick off another run.</p>
+
+  <div class="callout">
+    <div class="co-ic" style="background:var(--node-spec-soft);color:var(--node-spec)"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v12"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg></div>
+    <div class="co-body"><strong>Discard is the default, not the exception.</strong> Approve a run and its worktree merges; reject or cancel it and the worktree is removed with its branch. An unchanged worktree is auto-cleaned. The reversible path is the one that takes zero effort.</div>
+  </div>
+
+  <h2>The honest caveat</h2>
+  <p>Worktrees aren't magic. They share the object database, so they're bound to one machine and one repo — they don't isolate the filesystem outside the checkout, the network, or the environment. For running untrusted code you still want a container. But for the actual problem here — letting a trusted agent rewrite your code without ever putting your working tree at risk — a worktree gives you the isolation that matters at a cost low enough to pay on every single run. That's why every run gets one.</p>
+</Article>
