@@ -21,6 +21,12 @@ export default defineConfig({
 					content:
 						"try{const k='starlight-theme';if(!localStorage.getItem(k)){const d=window.matchMedia('(prefers-color-scheme: dark)').matches;localStorage.setItem(k,d?'dark':'light');document.documentElement.dataset.theme=d?'dark':'light';document.documentElement.style.colorScheme=d?'dark':'light';}}catch(e){}",
 				},
+				// Default social-share image for docs pages (Starlight sets og:title/description per page).
+				{ tag: 'meta', attrs: { property: 'og:image', content: 'https://specship.cc/og.png' } },
+				{ tag: 'meta', attrs: { property: 'og:image:width', content: '1200' } },
+				{ tag: 'meta', attrs: { property: 'og:image:height', content: '630' } },
+				{ tag: 'meta', attrs: { name: 'twitter:card', content: 'summary_large_image' } },
+				{ tag: 'meta', attrs: { name: 'twitter:image', content: 'https://specship.cc/og.png' } },
 			],
 			social: [
 				{
