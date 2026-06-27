@@ -34,15 +34,22 @@
               <div class="fact-title">{{ f.title }}</div>
               @if (f.body) { <div class="fact-body">{{ f.body }}</div> }
               <div class="fact-id mono">{{ f.id }}</div>
+              @if (f.governs.length) {
+                <div class="fact-governs">
+                  @for (g of f.governs; track g.specId + g.symbol) {
+                    <div class="fact-governs-row mono">governs {{ g.specId }} → {{ g.symbol }}</div>
+                  }
+                </div>
+              }
             </div>
             <div class="fact-side">
-              @if (stateOf(f.id); as st) {
+              @if (stateOf(f); as st) {
                 <app-state-pill [state]="st" />
-              } @else {
+              } @else if (f.state === 'none' && f.governs.length === 0) {
                 <app-pill [color]="'var(--text-muted)'" [bg]="'var(--bg-elevated)'">No linked code yet</app-pill>
               }
               <div class="fact-actions row gap-6">
-                @if (needsReview(f.id)) {
+                @if (needsReview(f)) {
                   <button class="btn btn-secondary btn-sm" type="button" (click)="review()">
                     <app-icon name="drift" [size]="12" />
                     Review
