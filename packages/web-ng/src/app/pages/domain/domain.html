@@ -1,0 +1,63 @@
+@if (resource.state().noProject) {
+  <app-pick-project-empty surface="The domain layer" />
+} @else {
+<div class="page scroll-y">
+  <app-page-head icon="book" title="Domain" sub="Human-confirmed knowledge — terms, rules, decisions, constraints">
+    <ng-container actions>
+      <app-pill [color]="'var(--success)'" [bg]="'var(--success-soft)'">{{ coverage().documented }} documented</app-pill>
+      <app-pill [color]="'var(--warn)'" [bg]="'var(--warn-soft)'">{{ coverage().gaps }} gap{{ coverage().gaps === 1 ? '' : 's' }}</app-pill>
+    </ng-container>
+  </app-page-head>
+
+  @if (resource.state().loading) {
+    @for (i of [0,1,2]; track i) { <div class="skel card-skel"></div> }
+  } @else if (!data()) {
+    <div class="empty">No domain data — run <code>specship index</code> first.</div>
+  } @else if (isEmpty()) {
+    <app-empty
+      icon="book"
+      title="No domain knowledge captured yet"
+      body="Document the terms, rules, decisions, and constraints that the code can't tell you. Run /ss-domain to capture the first fact."
+    >
+      <button action class="btn btn-primary btn-sm" type="button" title="Run /ss-domain to capture a domain fact">
+        <app-icon name="plus" [size]="12" />
+        Capture knowledge
+      </button>
+    </app-empty>
+  } @else {
+    @for (sec of sections(); track sec.type) {
+      <section class="sig card">
+        <div class="sig-head">{{ sec.label }} <span class="n">{{ sec.facts.length }}</span></div>
+        @for (f of sec.facts; track f.id) {
+          <div class="fact">
+            <div class="fact-main">
+              <div class="fact-title">{{ f.title }}</div>
+              @if (f.body) { <div class="fact-body">{{ f.body }}</div> }
+              <div class="fact-id mono">{{ f.id }}</div>
+            </div>
+            <div class="fact-side">
+              @if (stateOf(f.id); as st) {
+                <app-state-pill [state]="st" />
+              } @else {
+                <app-pill [color]="'var(--text-muted)'" [bg]="'var(--bg-elevated)'">No linked code yet</app-pill>
+              }
+              <div class="fact-actions row gap-6">
+                @if (needsReview(f.id)) {
+                  <button class="btn btn-secondary btn-sm" type="button" (click)="review()">
+                    <app-icon name="drift" [size]="12" />
+                    Review
+                  </button>
+                }
+                <button class="btn btn-secondary btn-sm" type="button" title="Run /ss-domain to refine this fact">
+                  <app-icon name="plus" [size]="12" />
+                  Capture
+                </button>
+              </div>
+            </div>
+          </div>
+        }
+      </section>
+    }
+  }
+</div>
+}

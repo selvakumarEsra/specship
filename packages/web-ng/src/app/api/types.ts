@@ -264,7 +264,7 @@ export interface DriftResponse {
 
 export interface Spec {
   id: string;
-  kind: 'document' | 'requirement' | 'acceptance' | 'contract' | 'data_schema' | 'brief';
+  kind: 'document' | 'requirement' | 'acceptance' | 'contract' | 'data_schema' | 'brief' | 'domain';
   title: string;
   body: string;
   format: string;
@@ -543,4 +543,26 @@ export interface MaintainabilityReport {
   cycles: MaintCycle[];
   deadCode: MaintDeadCode[];
   clean: boolean;
+}
+
+// --- Domain knowledge layer (REQ-DOMAIN-006 / REQ-DOMAIN-007) ---
+
+/** The recognized domain fact buckets; `other` is the catch-all. */
+export type DomainFactType = 'term' | 'rule' | 'decision' | 'constraint' | 'other';
+
+/**
+ * One human-confirmed domain fact. Carries no link/state info — the Domain
+ * page derives verify/drift state by cross-referencing /api/drift on `id`.
+ */
+export interface DomainFact {
+  id: string;
+  title: string;
+  body: string;
+}
+
+export interface DomainResponse {
+  /** Facts grouped by their `metadata.type` (GET /api/domain). */
+  factsByType: Record<DomainFactType, DomainFact[]>;
+  /** Coverage rollup from the domain gap-seed. `documented + gaps` = universe. */
+  coverage: { documented: number; gaps: number };
 }

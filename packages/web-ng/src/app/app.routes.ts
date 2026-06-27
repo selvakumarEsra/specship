@@ -40,6 +40,11 @@ export const routes: Routes = [
     data: { nav: 'maintainability', title: 'Maintainability' },
   },
   {
+    path: 'domain',
+    loadComponent: () => import('./pages/domain/domain').then((m) => m.Domain),
+    data: { nav: 'domain', title: 'Domain' },
+  },
+  {
     path: 'workflows',
     loadComponent: () => import('./pages/workflows/workflows').then((m) => m.Workflows),
     data: { nav: 'workflows', title: 'Workflows' },
