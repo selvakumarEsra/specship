@@ -1,0 +1,81 @@
+---
+import BlogLayout from './BlogLayout.astro';
+import { posts, relatedTo } from '../data/blog-posts';
+
+interface Props { slug: string }
+const { slug } = Astro.props;
+const post = posts.find((p) => p.slug === slug)!;
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+const related = relatedTo(slug, 3);
+const arrow = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>`;
+---
+
+<BlogLayout title={`${post.title} — SpecShip Blog`} description={post.dek} variant="article">
+  <article class="article">
+    <div class="art-wrap">
+      <a class="back-link" href={`${base}/blog`}>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+        Back to blog
+      </a>
+
+      <header class="art-head">
+        <span class="art-cat" style={`background:color-mix(in srgb, ${post.catColor} 14%, transparent);color:${post.catColor}`}>
+          <span class="cdot" style={`background:${post.catColor}`}></span>{post.catLabel}
+        </span>
+        <h1>{post.title}</h1>
+        <p class="art-dek">{post.dek}</p>
+        <div class="art-byline">
+          <span class="avatar" style="background:linear-gradient(135deg,#5B93F2,#A586F5)">SE</span>
+          <div>
+            <div class="bl-name">Selva E.</div>
+            <div class="bl-meta">{post.date} · {post.read} read</div>
+          </div>
+          <div class="share">
+            <a href="#" aria-label="Copy link" data-copy><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg></a>
+          </div>
+        </div>
+      </header>
+
+      <figure class="art-figure">
+        <div class="thumb-grid"></div>
+        <slot name="figure" />
+      </figure>
+
+      <div class="prose">
+        <slot />
+      </div>
+    </div>
+
+    <div class="art-foot">
+      <div class="art-tags">
+        {post.tags.map((t) => <span class="tag">{t}</span>)}
+      </div>
+      <div class="bio">
+        <span class="avatar" style="background:linear-gradient(135deg,#5B93F2,#A586F5)">SE</span>
+        <div>
+          <div class="bio-name">Selva E.</div>
+          <div class="bio-role">Building SpecShip · graph, specs &amp; harness</div>
+          <div class="bio-text">Works on the parsing, storage, and spec layers of SpecShip. Spends an unreasonable amount of time thinking about edges.</div>
+        </div>
+      </div>
+    </div>
+  </article>
+
+  <section class="related">
+    <div class="wrap">
+      <h2>Keep reading</h2>
+      <div class="related-grid">
+        {related.map((r) => (
+          <a class="post reveal" href={`${base}/blog/${r.slug}`}>
+            <div class="post-thumb" style="aspect-ratio:16/9"><div class="thumb-art"><div class="thumb-grid"></div><Fragment set:html={r.thumb} /></div></div>
+            <div class="post-body">
+              <span class="post-cat static" style={`color:${r.catColor}`}>{r.catLabel}</span>
+              <h3>{r.title}</h3>
+              <div class="post-foot"><span class="read-link">Read <Fragment set:html={arrow} /></span><span class="read-time">{r.read}</span></div>
+            </div>
+          </a>
+        ))}
+      </div>
+    </div>
+  </section>
+</BlogLayout>

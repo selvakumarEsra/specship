@@ -1,0 +1,57 @@
+---
+import BlogLayout from '../../layouts/BlogLayout.astro';
+import { posts, categories } from '../../data/blog-posts';
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+const arrow = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>`;
+---
+
+<BlogLayout title="Blog — SpecShip Desktop" variant="index">
+  <header class="blog-hero">
+    <div class="wrap">
+      <div class="kicker reveal in"><span class="sq" style="background:var(--node-code)"></span>The SpecShip engineering blog</div>
+      <h1 class="reveal in d1">Field notes on shipping with agents.</h1>
+      <p class="reveal in d2">Deep dives on knowledge graphs, harness engineering, spec drift, token economics, and the workflow design behind SpecShip — written by the people building it.</p>
+      <div class="filters reveal in d3" id="filters">
+        {categories.map((c) => (
+          <button class={`filter-chip${c.key === 'all' ? ' active' : ''}`} data-cat={c.key}>
+            {c.color && <span class="cdot" style={`background:${c.color}`}></span>}
+            {c.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  </header>
+
+  <section class="wrap" style="padding-bottom:8px">
+    <div class="posts-grid">
+      {posts.map((p) => (
+        <a class={`post reveal${p.feat ? ' feat' : ''}`} data-cat={p.cat} href={`${base}/blog/${p.slug}`}>
+          <div class="post-thumb">
+            <div class="thumb-art"><div class="thumb-grid"></div><Fragment set:html={p.thumb} /></div>
+          </div>
+          <div class="post-body">
+            <span class="post-cat static" style={`color:${p.catColor}`}>{p.catLabel}</span>
+            <h3>{p.title}</h3>
+            <p>{p.dek}</p>
+            <div class="post-foot">
+              <span class="read-link">Read <Fragment set:html={arrow} /></span>
+              <span class="read-time">{p.read}</span>
+            </div>
+          </div>
+        </a>
+      ))}
+    </div>
+
+    <div class="subscribe reveal">
+      <div>
+        <h3>The build log, in your inbox.</h3>
+        <p>Occasional deep dives on what we’re building and why — graphs, specs, agents, and the economics of context. No noise.</p>
+      </div>
+      <form class="sub-form" onsubmit="event.preventDefault()">
+        <input type="email" placeholder="you@example.com" aria-label="Email address" />
+        <button class="btn btn-primary" type="submit">Subscribe</button>
+      </form>
+    </div>
+  </section>
+</BlogLayout>

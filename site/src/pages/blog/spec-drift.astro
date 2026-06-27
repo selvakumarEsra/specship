@@ -1,0 +1,57 @@
+---
+import Article from '../../layouts/Article.astro';
+---
+<Article slug="spec-drift">
+  <svg slot="figure" viewBox="0 0 980 440" preserveAspectRatio="xMidYMid slice">
+    <defs><radialGradient id="hd" cx="55%" cy="25%" r="65%"><stop offset="0" stop-color="rgba(229,165,10,0.18)"/><stop offset="1" stop-color="rgba(229,165,10,0)"/></radialGradient></defs>
+    <rect width="980" height="440" fill="url(#hd)"/>
+    <g stroke="rgba(150,165,200,0.28)" stroke-width="1.5" fill="none"><path d="M230 150 L490 220"/><path d="M760 150 L490 220"/></g>
+    <path d="M490 220 L490 360" stroke="rgba(229,165,10,0.9)" stroke-width="2" stroke-dasharray="7 7" fill="none"/>
+    <circle cx="230" cy="150" r="14" fill="#5B93F2"/><circle cx="230" cy="150" r="6" fill="#12161E"/>
+    <circle cx="760" cy="150" r="12" fill="#A586F5"/>
+    <circle cx="490" cy="220" r="13" fill="#A586F5"/>
+    <circle cx="490" cy="360" r="17" fill="#E5A50A"/><circle cx="490" cy="360" r="7" fill="#12161E"/>
+  </svg>
+
+  <p>Here's a failure mode every team with a spec eventually hits: a requirement says the right thing, a test passes, the dashboard shows a reassuring green "verified" — and the code underneath no longer does what the requirement claims. The words and the behaviour have drifted apart, and nothing told you.</p>
+  <p>It usually starts with something innocent. Someone renames a field, splits a function, moves a handler to a new module. The refactor is correct. The test suite is green. But a requirement that pointed at the old symbol is now pointing at nothing — or worse, at something that looks similar and isn't.</p>
+
+  <h2>Specs as nodes, not documents</h2>
+  <p>SpecShip treats a requirement as a first-class node in the same graph as your code. You write it in plain Markdown with a stable ID and an RFC-2119 keyword in the title — <span class="kw must">MUST</span>, <span class="kw should">SHOULD</span>, <span class="kw may">MAY</span> — and link it to the symbols that satisfy it. That link isn't a comment or a wiki entry; it's an edge, and it carries state.</p>
+
+  <div class="codeblock">
+    <div class="cb-bar"><div class="traffic"><i style="background:#F2555A"></i><i style="background:#E5A50A"></i><i style="background:#46C26B"></i></div><span class="fn">specs/auth.md</span></div>
+    <pre><span class="c-com">&lt;!-- id: REQ-AUTH-005 --&gt;</span>
+<span class="c-key">## Sessions MUST reject an expired token</span>
+
+implementations:
+  - src/auth/session.ts:validateSession</pre>
+  </div>
+
+  <p>The interesting part isn't the link existing — it's what the link <em>remembers</em>. When SpecShip resolves <code>REQ-AUTH-005</code> to <code>validateSession</code>, it snapshots the symbol's signature. On the next sync, it re-resolves and compares.</p>
+
+  <h2>What "drifted" actually means</h2>
+  <p>Three things can happen to that edge, and the graph names each one:</p>
+  <ul>
+    <li><strong>verified</strong> — the link resolves and the snapshot matches. You ran a check and it passed.</li>
+    <li><strong>drifted</strong> — the symbol still exists, but its signature changed since the link was made. The requirement might still hold; it might not. Either way, a human should look.</li>
+    <li><strong>broken / orphaned</strong> — the symbol the requirement pointed at is gone. The edge dangles.</li>
+  </ul>
+  <p>That's the whole trick. A renamed field didn't break a test — but it <em>did</em> change the signature of the function a "verified" requirement was pinned to, and that flips the link to <strong>drifted</strong>. The mismatch surfaces the instant the index syncs, not three releases later when someone notices the docs are lying.</p>
+
+  <div class="pullquote">
+    <p>Drift isn't a new kind of bug. It's the gap between intent and code, finally given a place to show up.</p>
+  </div>
+
+  <h2>A queue, not a wall of red</h2>
+  <p>Drifted and broken links don't fail your build by default — most drift is benign and just needs a glance. Instead they land in a <strong>review queue</strong> a non-coder can work: each row shows the requirement, the symbol it pointed at, and what changed. You confirm it still holds (back to <em>verified</em>), or you fix the link, or you fix the code. States you've confirmed are sticky, so a later re-index doesn't quietly undo your judgement.</p>
+
+  <div class="callout">
+    <div class="co-ic" style="background:var(--warn-soft);color:var(--warn)"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
+    <div class="co-body"><strong>Domain facts inherit this for free.</strong> A business rule linked to a requirement reflects that requirement's drift automatically — change the code and the rule that governs it lights up, with no separate tracking.</div>
+  </div>
+
+  <h2>Why this matters more with agents</h2>
+  <p>A human refactoring tends to remember the requirement they're touching. An agent refactoring across forty files does not — it optimizes for the test suite, which says nothing about whether your stated contract still holds. Drift detection is the safety rail for exactly that: the requirements don't have to be re-read to stay honest, because the graph re-checks them every time the code moves.</p>
+  <p>The day a renamed field broke a "verified" requirement, it took about a second to find out — because the requirement was a node, the link had a memory, and the mismatch had somewhere to go.</p>
+</Article>

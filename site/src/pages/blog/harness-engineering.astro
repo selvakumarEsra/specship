@@ -1,0 +1,85 @@
+---
+import Article from '../../layouts/Article.astro';
+---
+<Article slug="harness-engineering">
+  <svg slot="figure" viewBox="0 0 980 440" preserveAspectRatio="xMidYMid slice">
+    <defs><radialGradient id="hh" cx="50%" cy="20%" r="70%"><stop offset="0" stop-color="rgba(242,85,90,0.18)"/><stop offset="1" stop-color="rgba(242,85,90,0)"/></radialGradient></defs>
+    <rect width="980" height="440" fill="url(#hh)"/>
+    <g stroke="rgba(150,165,200,0.22)" stroke-width="1.4" fill="none">
+      <path d="M210 320 L360 230 L520 180 L680 230 L800 180"/>
+      <path d="M360 230 L420 350 L600 340"/><path d="M520 180 L420 350"/>
+    </g>
+    <path d="M490 70 L600 110 V210 C600 290 552 322 490 348 C428 322 380 290 380 210 V110 Z" fill="rgba(11,13,17,0.55)" stroke="rgba(150,165,200,0.4)" stroke-width="1.8"/>
+    <path d="M440 200 L478 240 L552 158" fill="none" stroke="#46C26B" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="210" cy="320" r="9" fill="#29D2BE"/><circle cx="800" cy="180" r="9" fill="#5B93F2"/>
+    <circle cx="680" cy="230" r="11" fill="#A586F5"/><circle cx="600" cy="340" r="12" fill="#F2555A"/>
+  </svg>
+
+  <p>Handing a coding agent the keys to your repository is a strange trade. It can move faster than any human reviewer, and it will — including in directions you didn't ask for. A function grows a tenth parameter. A UI module starts reaching into the database layer. Two modules quietly begin importing each other. None of it fails a test. All of it is debt the next change pays for.</p>
+  <p>The usual answer is "review harder," which doesn't scale against an agent that opens ten PRs a day. SpecShip's answer is different: the same graph that powers retrieval already <em>knows</em> the shape of your codebase. So we turn that shape into <strong>checks</strong> — and let the agent gate itself against them.</p>
+
+  <h2>Maintainability, read off the graph</h2>
+  <p>The first piece is a maintainability harness. It derives findings straight from the index — no second parse, no extra tooling — and each one tells you <em>why</em> it flagged:</p>
+  <ul>
+    <li><strong>Coupling hotspots</strong> — symbols half the codebase depends on. Change one and the blast radius is enormous; the graph already knows the in-degree.</li>
+    <li><strong>Oversized symbols and god-files</strong> — the functions and files that have quietly become too big to reason about.</li>
+    <li><strong>Dependency cycles</strong> — modules that import each other, directly or through a chain.</li>
+    <li><strong>Dead-code candidates</strong> — exported symbols with no inbound edge anywhere in the graph.</li>
+  </ul>
+  <p>Run it from the terminal with <code>specship maintainability</code>, open the <strong>Maintainability</strong> page in the dashboard, or let your agent call it. The thresholds aren't ours to dictate — what counts as "too coupled" differs per project — so they live in <code>specship.config.json</code> and you tune them as you go.</p>
+
+  <div class="art-stats">
+    <div class="as"><div class="v" style="color:#F2555A">0</div><div class="k">extra parses — it reads the index</div></div>
+    <div class="as"><div class="v c-spec">4</div><div class="k">finding kinds, each with a reason</div></div>
+    <div class="as"><div class="v c-route">1</div><div class="k">config file tunes every threshold</div></div>
+  </div>
+
+  <h2>Architecture fitness: rules the agent must follow</h2>
+  <p>Maintainability tells you where the rot is forming. <strong>Fitness functions</strong> let you forbid it outright. You declare the rules your architecture depends on, in plain config, and <code>specship fitness</code> checks them against the real dependency graph — not a convention, not a lint heuristic, the actual edges.</p>
+
+  <div class="codeblock">
+    <div class="cb-bar"><div class="traffic"><i style="background:#F2555A"></i><i style="background:#E5A50A"></i><i style="background:#46C26B"></i></div><span class="fn">specship.config.json</span></div>
+    <pre set:html={`&#123;
+  <span class="c-str">"fitness"</span>: &#123;
+    <span class="c-str">"rules"</span>: [
+      &#123; <span class="c-str">"forbid"</span>: <span class="c-str">"src/ui/**"</span>, <span class="c-str">"from-importing"</span>: <span class="c-str">"src/db/**"</span> &#125;,
+      &#123; <span class="c-str">"layers"</span>: [<span class="c-str">"routes"</span>, <span class="c-str">"services"</span>, <span class="c-str">"db"</span>] &#125;,
+      &#123; <span class="c-str">"isolated"</span>: <span class="c-str">"src/payments/**"</span> &#125;
+    ]
+  &#125;
+&#125;`}></pre>
+  </div>
+
+  <p>Each violation is reported with its <strong>source → target</strong> and a <code>file:line</code>, so it's actionable, not a vague "layering smell." Crucially the command <strong>exits non-zero</strong> when a rule is broken, which is what lets it gate CI. And a rule whose target matches nothing is reported as a config error rather than silently passing — a green check should mean "we checked," never "we found nothing to check."</p>
+
+  <div class="callout">
+    <div class="co-ic" style="background:color-mix(in srgb,#F2555A 16%,transparent);color:#F2555A"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
+    <div class="co-body"><strong>Your agent can run it too.</strong> Fitness is exposed as <code>specship_fitness</code>, so an agent can check its own change against the architecture rules before it ever asks you to merge — and fix the violation in the same turn.</div>
+  </div>
+
+  <h2>One gate, strictly opt-in</h2>
+  <p>Drift, fitness, maintainability, and a spec → test → verify behaviour check are useful on their own. <code>specship check</code> composes them into a single CI gate — but the design principle that makes it adoptable is restraint:</p>
+
+  <div class="pullquote">
+    <p>With no <code>enforce</code> config, it only advises and exits 0. Adding it to an existing repo never breaks the build.</p>
+    <cite>— the opt-in rule</cite>
+  </div>
+
+  <p>You turn on whichever checks you want to gate, one at a time, as your team agrees on them. A check you haven't opted into still <em>runs</em> and still <em>reports</em> — it just doesn't fail the build. That's the difference between a tool a team actually rolls out and one that gets disabled the first morning it blocks a hotfix.</p>
+
+  <div class="codeblock">
+    <div class="cb-bar"><div class="traffic"><i style="background:#F2555A"></i><i style="background:#E5A50A"></i><i style="background:#46C26B"></i></div><span class="fn">$ specship check</span></div>
+    <pre><span class="c-com"># gated (enforced):</span>
+<span class="c-fn">drift</span>        <span class="c-str">ok</span>   0 drifted links
+<span class="c-fn">fitness</span>     <span class="c-key">FAIL</span> src/ui/Cart.tsx:42 → src/db/pool.ts  (forbidden)
+<span class="c-com"># advisory (not gating):</span>
+<span class="c-fn">maintain</span>    <span class="c-str">warn</span> 2 god-files, 1 cycle
+<span class="c-fn">behaviour</span>   <span class="c-str">ok</span>   12/12 spec links verified
+
+exit 1</pre>
+  </div>
+
+  <h2>Why this belongs in the graph, not a linter</h2>
+  <p>A linter sees one file at a time and reasons about syntax. Every check here reasons about <em>relationships</em> across the whole repo — in-degree, reachability, layering, the path from a route to a database call. That's a graph question, and the graph is already built and already current. The harness isn't a bolt-on; it's the index, asked a different question.</p>
+  <p>Letting an agent write code is easy. The hard, valuable part is making sure that a year of agent-written code still has a shape a human can hold in their head. That's harness engineering — and it's the quiet half of what SpecShip does.</p>
+</Article>
