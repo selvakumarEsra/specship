@@ -2,18 +2,7 @@
 import Article from '../../layouts/Article.astro';
 ---
 <Article slug="memory-hierarchy">
-  <svg slot="figure" viewBox="0 0 980 440" preserveAspectRatio="xMidYMid slice">
-    <defs><radialGradient id="hm" cx="50%" cy="20%" r="70%"><stop offset="0" stop-color="rgba(165,134,245,0.18)"/><stop offset="1" stop-color="rgba(165,134,245,0)"/></radialGradient></defs>
-    <rect width="980" height="440" fill="url(#hm)"/>
-    <rect x="320" y="70" width="340" height="48" rx="9" fill="#A586F5" opacity="0.9"/>
-    <rect x="280" y="146" width="420" height="48" rx="9" fill="#5B93F2" opacity="0.62"/>
-    <rect x="240" y="222" width="500" height="48" rx="9" fill="#29D2BE" opacity="0.46"/>
-    <rect x="200" y="298" width="580" height="48" rx="9" fill="#46C26B" opacity="0.32"/>
-    <text x="490" y="100" text-anchor="middle" fill="#0B0D11" font-family="Geist Mono, monospace" font-size="15" font-weight="600">managed</text>
-    <text x="490" y="176" text-anchor="middle" fill="#0B0D11" font-family="Geist Mono, monospace" font-size="15">user</text>
-    <text x="490" y="252" text-anchor="middle" fill="#0B0D11" font-family="Geist Mono, monospace" font-size="15">project</text>
-    <text x="490" y="328" text-anchor="middle" fill="#0B0D11" font-family="Geist Mono, monospace" font-size="15">subdir</text>
-  </svg>
+  <img slot="figure" src="/blog/memory.png" alt="SpecShip Desktop — the Memory page: every level the agent remembers, with the project CLAUDE.md resolved" style="position:relative;width:100%;height:100%;object-fit:cover;object-position:center top;display:block" />
 
   <p>You ask the agent for something simple and it does something subtly off — uses a library you stopped using, follows a convention you abandoned, refuses a thing you never told it to refuse. The instinct is to blame the model. The answer is almost always a line of memory you forgot was in scope.</p>
 

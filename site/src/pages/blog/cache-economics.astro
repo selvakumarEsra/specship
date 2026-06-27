@@ -2,14 +2,7 @@
 import Article from '../../layouts/Article.astro';
 ---
 <Article slug="cache-economics">
-  <svg slot="figure" viewBox="0 0 980 440" preserveAspectRatio="xMidYMid slice">
-    <defs><radialGradient id="hc" cx="50%" cy="25%" r="65%"><stop offset="0" stop-color="rgba(70,194,107,0.18)"/><stop offset="1" stop-color="rgba(70,194,107,0)"/></radialGradient></defs>
-    <rect width="980" height="440" fill="url(#hc)"/>
-    <path d="M90 330 C260 330 290 130 470 130 C650 130 690 250 890 110" stroke="#46C26B" stroke-width="2.5" fill="none"/>
-    <path d="M90 330 C260 330 290 130 470 130 C650 130 690 250 890 110 L890 380 L90 380 Z" fill="rgba(70,194,107,0.14)"/>
-    <path d="M620 130 L620 380" stroke="rgba(229,165,10,0.7)" stroke-width="1.5" stroke-dasharray="6 6"/>
-    <text x="620" y="115" text-anchor="middle" fill="rgba(229,165,10,0.9)" font-family="Geist Mono, monospace" font-size="14">prompt drifts →</text>
-  </svg>
+  <img slot="figure" src="/blog/session-cost.png" alt="SpecShip Desktop — a session’s token mix: cache reads dominate, with cache effectiveness and per-prompt cost" style="position:relative;width:100%;height:100%;object-fit:cover;object-position:center top;display:block" />
 
   <p>If you only look at one number on a long agent session — total tokens — you'll badly misread the economics. The headline figure is enormous, but most of it isn't what it looks like. The interesting story is in the split, and the split is usually invisible.</p>
 

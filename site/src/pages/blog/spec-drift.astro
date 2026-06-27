@@ -2,16 +2,7 @@
 import Article from '../../layouts/Article.astro';
 ---
 <Article slug="spec-drift">
-  <svg slot="figure" viewBox="0 0 980 440" preserveAspectRatio="xMidYMid slice">
-    <defs><radialGradient id="hd" cx="55%" cy="25%" r="65%"><stop offset="0" stop-color="rgba(229,165,10,0.18)"/><stop offset="1" stop-color="rgba(229,165,10,0)"/></radialGradient></defs>
-    <rect width="980" height="440" fill="url(#hd)"/>
-    <g stroke="rgba(150,165,200,0.28)" stroke-width="1.5" fill="none"><path d="M230 150 L490 220"/><path d="M760 150 L490 220"/></g>
-    <path d="M490 220 L490 360" stroke="rgba(229,165,10,0.9)" stroke-width="2" stroke-dasharray="7 7" fill="none"/>
-    <circle cx="230" cy="150" r="14" fill="#5B93F2"/><circle cx="230" cy="150" r="6" fill="#12161E"/>
-    <circle cx="760" cy="150" r="12" fill="#A586F5"/>
-    <circle cx="490" cy="220" r="13" fill="#A586F5"/>
-    <circle cx="490" cy="360" r="17" fill="#E5A50A"/><circle cx="490" cy="360" r="7" fill="#12161E"/>
-  </svg>
+  <img slot="figure" src="/blog/drift-queue.png" alt="SpecShip Desktop — the drift review queue: drifted, broken, and orphaned spec→code links" style="position:relative;width:100%;height:100%;object-fit:cover;object-position:center top;display:block" />
 
   <p>Here's a failure mode every team with a spec eventually hits: a requirement says the right thing, a test passes, the dashboard shows a reassuring green "verified" — and the code underneath no longer does what the requirement claims. The words and the behaviour have drifted apart, and nothing told you.</p>
   <p>It usually starts with something innocent. Someone renames a field, splits a function, moves a handler to a new module. The refactor is correct. The test suite is green. But a requirement that pointed at the old symbol is now pointing at nothing — or worse, at something that looks similar and isn't.</p>
