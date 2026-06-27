@@ -71,6 +71,7 @@ import { GraphTraverser, GraphQueryManager } from './graph';
 import {
   computeMaintainability,
   resolveThresholds,
+  resolveExclude,
   MaintainabilityReport,
   MaintainabilityThresholds,
 } from './graph/maintainability';
@@ -155,7 +156,7 @@ export type {
   SweepResult,
 } from './reflect';
 // Maintainability harness (MAINT-DOC / REQ-MAINT-001).
-export { computeMaintainability, resolveThresholds, DEFAULT_THRESHOLDS, CONFIG_FILE_NAME } from './graph/maintainability';
+export { computeMaintainability, resolveThresholds, resolveExclude, DEFAULT_THRESHOLDS, DEFAULT_EXCLUDE, CONFIG_FILE_NAME } from './graph/maintainability';
 // Architecture-fitness harness (FITNESS-DOC / REQ-FITNESS-001…003).
 export { evaluateFitness, loadFitnessRules, FITNESS_CONFIG_FILE } from './fitness/fitness';
 // Enforcement mode (ENFORCE-DOC / REQ-ENFORCE-001…003).
@@ -331,7 +332,11 @@ export class SpecShip {
    * package.
    */
   getMaintainability(thresholds?: Partial<MaintainabilityThresholds>): MaintainabilityReport {
-    return computeMaintainability(this.queries, resolveThresholds(this.projectRoot, thresholds));
+    return computeMaintainability(
+      this.queries,
+      resolveThresholds(this.projectRoot, thresholds),
+      resolveExclude(this.projectRoot),
+    );
   }
 
   /**

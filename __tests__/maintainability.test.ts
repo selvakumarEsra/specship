@@ -11,7 +11,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { DatabaseConnection } from '../src/db';
 import { QueryBuilder } from '../src/db/queries';
-import { computeMaintainability, resolveThresholds, DEFAULT_THRESHOLDS, CONFIG_FILE_NAME } from '../src/graph/maintainability';
+import { computeMaintainability, resolveThresholds, resolveExclude, DEFAULT_THRESHOLDS, DEFAULT_EXCLUDE, CONFIG_FILE_NAME } from '../src/graph/maintainability';
 import type { Node, Edge } from '../src/types';
 
 let dir: string;
@@ -156,5 +156,33 @@ describe('maintainability — thresholds config (REQ-MAINT-002)', () => {
     expect(r.oversized.every((o) => !!o.reason)).toBe(true);
     expect(r.deadCode.every((d) => !!d.reason)).toBe(true);
     expect(r.coupling.find((c) => c.nodeId === 'hub')!.reason).toMatch(/threshold ≥ 20/);
+  });
+});
+
+describe('maintainability — exclude scope (index-noise filter)', () => {
+  it('drops generated/vendored files by default (.d.ts, bundled chunks)', () => {
+    fn('decl', 'src/types.d.ts'); // unexported → would be dead code, but .d.ts excluded
+    fn('chunk', 'packages/server/public/web/chunk-ABC.js'); // would be a coupling hub
+    for (let i = 0; i < 21; i++) { fn(`c${i}`, `c${i}.ts`, { exported: true }); edge(`c${i}`, 'chunk', 'calls'); }
+    const r = computeMaintainability(q); // default exclude
+    expect(r.deadCode.find((d) => d.nodeId === 'decl')).toBeUndefined();
+    expect(r.coupling.find((c) => c.nodeId === 'chunk')).toBeUndefined();
+    // callers' edges to the excluded chunk are not counted, so they aren't coupling either
+    expect(r.coupling.length).toBe(0);
+  });
+
+  it('includes the same files when exclude is disabled', () => {
+    fn('chunk', 'packages/server/public/web/chunk-ABC.js');
+    for (let i = 0; i < 21; i++) { fn(`c${i}`, `c${i}.ts`, { exported: true }); edge(`c${i}`, 'chunk', 'calls'); }
+    const r = computeMaintainability(q, DEFAULT_THRESHOLDS, []); // exclude off
+    expect(r.coupling.find((c) => c.nodeId === 'chunk')).toBeTruthy();
+  });
+
+  it('resolveExclude returns defaults plus config additions', () => {
+    expect(resolveExclude(dir)).toEqual(DEFAULT_EXCLUDE);
+    fs.writeFileSync(path.join(dir, CONFIG_FILE_NAME), JSON.stringify({ maintainability: { exclude: ['**/legacy/**'] } }));
+    const ex = resolveExclude(dir);
+    expect(ex).toContain('**/legacy/**');
+    expect(ex).toContain('**/*.d.ts'); // defaults retained
   });
 });
