@@ -11,8 +11,9 @@ interface Props {
   title: string;
   description?: string;
   variant?: 'index' | 'article';
+  ogImage?: string;
 }
-const { title, description = 'Field notes on shipping with AI coding agents — from the team building SpecShip.', variant = 'article' } = Astro.props;
+const { title, description = 'Field notes on shipping with AI coding agents — from the team building SpecShip.', variant = 'article', ogImage = 'https://specship.cc/og.png' } = Astro.props;
 
 const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 const repo = 'https://github.com/selvakumarEsra/specship';
@@ -33,13 +34,13 @@ const install = `${base}/getting-started/installation`;
   <meta property="og:description" content={description} />
   <meta property="og:type" content={variant === 'article' ? 'article' : 'website'} />
   <meta property="og:site_name" content="SpecShip" />
-  <meta property="og:image" content="https://specship.cc/og.png" />
+  <meta property="og:image" content={ogImage} />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content={title} />
   <meta name="twitter:description" content={description} />
-  <meta name="twitter:image" content="https://specship.cc/og.png" />
+  <meta name="twitter:image" content={ogImage} />
   <link rel="icon" href={`${base}/favicon.svg`} type="image/svg+xml" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
