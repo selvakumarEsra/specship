@@ -35,8 +35,13 @@ import { createHash } from 'crypto';
 import { ExtractionError, Spec, NodeKind, SpecLinkKind } from '../../types';
 import { SpecExtractionResult, SpecLinkCandidate } from './types';
 
-/** Pattern: <!-- id: SOMETHING --> (whitespace tolerant) */
-const ID_COMMENT = /<!--\s*id\s*:\s*([^\s-][^\s]*)\s*-->/;
+/**
+ * Pattern: <!-- id: SOMETHING --> (whitespace tolerant). Anchored to its own
+ * line so a literal `<!-- id: … -->` written *inside* a bullet's prose (e.g. a
+ * spec that documents the marker syntax) is not mistaken for a real marker —
+ * real markers always sit alone on a line above their heading/bullet.
+ */
+const ID_COMMENT = /^\s*<!--\s*id\s*:\s*([^\s-][^\s]*)\s*-->\s*$/;
 
 /** Pattern: heading line (# .. ###### ..) */
 const HEADING = /^(#{1,6})\s+(.+?)\s*$/;
@@ -44,8 +49,33 @@ const HEADING = /^(#{1,6})\s+(.+?)\s*$/;
 /** Pattern: implementation reference inside an `implementations:` block */
 const IMPL_REF = /^[-*]\s+([^\s:]+)\s*:\s*([A-Za-z0-9_$.]+)\s*$/;
 
+/** Pattern: a Markdown list bullet (`- foo` / `* foo`, indentation tolerant). */
+const BULLET = /^\s*[-*]\s+(.*\S)\s*$/;
+
 /** The four recognized domain-fact `type` values (REQ-DOMAIN-001). */
 const DOMAIN_TYPES = new Set(['term', 'rule', 'decision', 'constraint']);
+
+/**
+ * Derive an acceptance criterion's parent requirement from its id suffix
+ * (REQ-ACCEPTANCE-001.A2). The convention is `<REQ-ID>.A<N>` — `REQ-AUTH-001.A2`
+ * is owned by `REQ-AUTH-001`. Returns the parent id, or null when the id carries
+ * no `.A<N>` suffix (the caller then falls back to the enclosing requirement —
+ * REQ-ACCEPTANCE-001.A4).
+ */
+export function parseAcceptanceParentId(id: string): string | null {
+  const m = id.match(/^(.+)\.A\d+$/i);
+  return m && m[1] ? m[1] : null;
+}
+
+/**
+ * True when a heading is the canonical acceptance container — `## Acceptance`
+ * (case-insensitive), title-only, no id (REQ-ACCEPTANCE-002.A1). A container
+ * yields no spec node and, crucially, is exempt from the `spec_missing_id` error
+ * that every other id-less heading still raises (REQ-ACCEPTANCE-002.A2).
+ */
+export function isAcceptanceContainerHeading(title: string): boolean {
+  return title.trim().toLowerCase() === 'acceptance';
+}
 
 /**
  * Heuristic: guess the target node kind from a qualified name. Used only
@@ -109,9 +139,23 @@ export class MarkdownSpecExtractor {
       headingLineIdx: number; // 0-indexed into `lines`
     }
 
+    // An acceptance criterion authored as an id-marked bullet (the documented
+    // convention) rather than a heading (REQ-ACCEPTANCE-001).
+    interface AcceptanceBullet {
+      id: string;
+      text: string;               // bullet text incl. continuation lines
+      startLine: number;          // 1-indexed
+      endLine: number;            // 1-indexed (last continuation line)
+      enclosingRequirementId: string | null; // nearest preceding heading section
+    }
+
     const pendingSections: PendingSection[] = [];
+    const acceptanceBullets: AcceptanceBullet[] = [];
     let pendingId: string | null = null;
     let pendingIdLine = -1;
+    // The most recent heading section pushed — an acceptance bullet's enclosing
+    // requirement, used for the no-suffix fallback + the mismatch check.
+    let lastSectionId: string | null = null;
 
     for (let i = firstContentLine; i < lines.length; i++) {
       const line = lines[i];
@@ -120,7 +164,7 @@ export class MarkdownSpecExtractor {
       const idMatch = line.match(ID_COMMENT);
       if (idMatch) {
         if (pendingId !== null) {
-          // Two consecutive ID comments with no heading between them — the
+          // Two consecutive ID comments with no heading/bullet between them — the
           // earlier one is stranded. Surface it but don't fail extraction.
           errors.push({
             message: `Stranded <!-- id: ${pendingId} --> on line ${pendingIdLine + 1} (no heading followed)`,
@@ -141,7 +185,11 @@ export class MarkdownSpecExtractor {
         const title = headingMatch[2];
 
         if (pendingId === null) {
-          // A heading without an embedded ID — load-bearing error per v1.
+          // `## Acceptance` with no id is the canonical container — exempt from
+          // the missing-id error, and emits no node (REQ-ACCEPTANCE-002.A1).
+          if (isAcceptanceContainerHeading(title)) continue;
+          // Any other heading without an embedded ID — load-bearing error per v1
+          // (REQ-ACCEPTANCE-002.A2).
           errors.push({
             message: `Heading "${title}" lacks an embedded ID. Add <!-- id: REQ-X --> immediately above it.`,
             filePath: this.filePath,
@@ -159,8 +207,40 @@ export class MarkdownSpecExtractor {
           startLine: i + 1, // 1-indexed
           headingLineIdx: i,
         });
+        lastSectionId = pendingId;
         pendingId = null;
         pendingIdLine = -1;
+        continue;
+      }
+
+      // An id-marked BULLET is an acceptance criterion (REQ-ACCEPTANCE-001.A1):
+      // it consumes the pending id (so it no longer strands — A3) and becomes an
+      // `acceptance` node. Its body spans continuation lines up to the next id
+      // marker, heading, bullet, or blank line.
+      if (pendingId !== null) {
+        const bulletMatch = line.match(BULLET);
+        if (bulletMatch && bulletMatch[1]) {
+          const parts = [bulletMatch[1].trim()];
+          let endIdx = i;
+          for (let j = i + 1; j < lines.length; j++) {
+            const cont = lines[j];
+            if (cont === undefined || cont.trim() === '') break;
+            if (ID_COMMENT.test(cont) || HEADING.test(cont) || BULLET.test(cont)) break;
+            parts.push(cont.trim());
+            endIdx = j;
+          }
+          acceptanceBullets.push({
+            id: pendingId,
+            text: parts.join(' ').trim(),
+            startLine: i + 1,
+            endLine: endIdx + 1,
+            enclosingRequirementId: lastSectionId,
+          });
+          pendingId = null;
+          pendingIdLine = -1;
+          i = endIdx; // skip consumed continuation lines
+          continue;
+        }
       }
     }
 
@@ -302,6 +382,47 @@ export class MarkdownSpecExtractor {
       // Scan the body for `implementations:` blocks — bullet-list refs.
       const candidates = this.extractImplementationRefs(section.id, bodyLines);
       linkCandidates.push(...candidates);
+    }
+
+    // Acceptance criteria authored as id-marked bullets → `acceptance` nodes
+    // (REQ-ACCEPTANCE-001). Parent from the id suffix, falling back to the
+    // enclosing requirement when there's no `.A<N>` suffix (A2 / A4).
+    for (const ab of acceptanceBullets) {
+      const suffixParent = parseAcceptanceParentId(ab.id);
+      const parentId = suffixParent ?? ab.enclosingRequirementId ?? docId;
+
+      // The id names one requirement but the bullet sits under another — parent
+      // per the id, but flag the misplacement (REQ-ACCEPTANCE-003.A4).
+      if (
+        suffixParent &&
+        ab.enclosingRequirementId &&
+        suffixParent !== ab.enclosingRequirementId
+      ) {
+        errors.push({
+          message: `Acceptance criterion ${ab.id} is placed under ${ab.enclosingRequirementId} but its id names ${suffixParent} as its parent`,
+          filePath: this.filePath,
+          line: ab.startLine,
+          severity: 'warning',
+          code: 'spec_acceptance_parent_mismatch',
+        });
+      }
+
+      const title = ab.text.length > 120 ? `${ab.text.slice(0, 117)}…` : ab.text;
+      specs.push({
+        id: ab.id,
+        kind: 'acceptance',
+        title,
+        body: ab.text,
+        format: 'markdown',
+        sourcePath: this.filePath,
+        startLine: ab.startLine,
+        endLine: ab.endLine,
+        parentId,
+        contentHash: hash(ab.text),
+        version: 1,
+        createdAt: now,
+        updatedAt: now,
+      });
     }
 
     return {

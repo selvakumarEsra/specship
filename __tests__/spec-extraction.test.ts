@@ -466,3 +466,187 @@ describe.skipIf(!fts5Available)('domain spec DB projection (REQ-DOMAIN-001.A2)',
     expect(hits.some((r) => r.node.id === 'spec:DOM-PAY-001')).toBe(true);
   });
 });
+
+describe('MarkdownSpecExtractor — acceptance criteria as id-marked bullets (ACCEPTANCE-INDEX-DOC)', () => {
+  // REQ-ACCEPTANCE-001.A1 + .A2: bullet → acceptance node, parent from id suffix.
+  it('indexes an id-marked bullet as an acceptance node parented by its id suffix', () => {
+    const source = `---
+id: DOC
+---
+<!-- id: REQ-X-001 -->
+# A requirement MUST do something
+
+Body.
+
+## Acceptance
+<!-- id: REQ-X-001.A1 -->
+- The happy path returns 200.
+<!-- id: REQ-X-001.A2 -->
+- A bad request returns 400.
+`;
+    const result = new MarkdownSpecExtractor('specs/x.md', source).extract();
+    expect(result.errors.filter((e) => e.severity === 'error')).toEqual([]);
+
+    const a1 = result.specs.find((s) => s.id === 'REQ-X-001.A1');
+    const a2 = result.specs.find((s) => s.id === 'REQ-X-001.A2');
+    expect(a1).toBeDefined();
+    expect(a1!.kind).toBe('acceptance');
+    expect(a1!.parentId).toBe('REQ-X-001');
+    expect(a1!.body).toBe('The happy path returns 200.');
+    expect(a2!.parentId).toBe('REQ-X-001');
+  });
+
+  // REQ-ACCEPTANCE-001.A1: multi-line bullet body spans continuation lines.
+  it('captures a multi-line bullet body up to the next marker', () => {
+    const source = `---
+id: DOC
+---
+<!-- id: REQ-X-001 -->
+# Req
+
+## Acceptance
+<!-- id: REQ-X-001.A1 -->
+- A criterion that wraps
+  across two lines.
+<!-- id: REQ-X-001.A2 -->
+- Another.
+`;
+    const result = new MarkdownSpecExtractor('specs/x.md', source).extract();
+    const a1 = result.specs.find((s) => s.id === 'REQ-X-001.A1');
+    expect(a1!.body).toBe('A criterion that wraps across two lines.');
+  });
+
+  // REQ-ACCEPTANCE-001.A3: an id-marked bullet no longer strands.
+  it('does not raise spec_stranded_id for id-marked bullets', () => {
+    const source = `---
+id: DOC
+---
+<!-- id: REQ-X-001 -->
+# Req
+
+## Acceptance
+<!-- id: REQ-X-001.A1 -->
+- First.
+<!-- id: REQ-X-001.A2 -->
+- Second.
+`;
+    const result = new MarkdownSpecExtractor('specs/x.md', source).extract();
+    expect(result.errors.find((e) => e.code === 'spec_stranded_id')).toBeUndefined();
+  });
+
+  // REQ-ACCEPTANCE-001.A4: a bullet whose id has no .A<N> suffix falls back to
+  // the enclosing requirement.
+  it('falls back to the enclosing requirement when the id has no .A<N> suffix', () => {
+    const source = `---
+id: DOC
+---
+<!-- id: REQ-X-001 -->
+# Req
+
+<!-- id: REQ-EXTRA -->
+- A bullet with a non-suffixed id.
+`;
+    const result = new MarkdownSpecExtractor('specs/x.md', source).extract();
+    const extra = result.specs.find((s) => s.id === 'REQ-EXTRA');
+    expect(extra).toBeDefined();
+    expect(extra!.kind).toBe('acceptance');
+    expect(extra!.parentId).toBe('REQ-X-001');
+  });
+
+  // REQ-ACCEPTANCE-002.A1: `## Acceptance` with no id is a container, not an error.
+  it('treats a no-id "Acceptance" heading as a container — no node, no error', () => {
+    const source = `---
+id: DOC
+---
+<!-- id: REQ-X-001 -->
+# Req
+
+## Acceptance
+<!-- id: REQ-X-001.A1 -->
+- Crit.
+`;
+    const result = new MarkdownSpecExtractor('specs/x.md', source).extract();
+    expect(result.errors.filter((e) => e.severity === 'error')).toEqual([]);
+    expect(result.specs.find((s) => s.title === 'Acceptance')).toBeUndefined();
+  });
+
+  // REQ-ACCEPTANCE-002.A2: every other no-id heading still errors.
+  it('still errors on a non-Acceptance heading without an id', () => {
+    const source = `---
+id: DOC
+---
+<!-- id: REQ-X-001 -->
+# Req
+
+## Notes
+`;
+    const result = new MarkdownSpecExtractor('specs/x.md', source).extract();
+    const fatal = result.errors.filter((e) => e.code === 'spec_missing_id');
+    expect(fatal).toHaveLength(1);
+    expect(fatal[0]!.message).toContain('Notes');
+  });
+
+  // REQ-ACCEPTANCE-002.A3: bullets index without a `## Acceptance` container.
+  it('indexes id-marked bullets placed directly under a requirement (no container)', () => {
+    const source = `---
+id: DOC
+---
+<!-- id: REQ-X-001 -->
+# Req
+
+<!-- id: REQ-X-001.A1 -->
+- A criterion with no Acceptance heading above it.
+`;
+    const result = new MarkdownSpecExtractor('specs/x.md', source).extract();
+    const a1 = result.specs.find((s) => s.id === 'REQ-X-001.A1');
+    expect(a1).toBeDefined();
+    expect(a1!.kind).toBe('acceptance');
+    expect(a1!.parentId).toBe('REQ-X-001');
+  });
+
+  // REQ-ACCEPTANCE-003.A4: id-suffix parent ≠ enclosing section → warn, parent by suffix.
+  it('warns and parents by id suffix when the bullet is under a different requirement', () => {
+    const source = `---
+id: DOC
+---
+<!-- id: REQ-A-001 -->
+# Req A
+
+<!-- id: REQ-B-001 -->
+# Req B
+
+## Acceptance
+<!-- id: REQ-A-001.A1 -->
+- A criterion whose id names Req A but sits under Req B.
+`;
+    const result = new MarkdownSpecExtractor('specs/x.md', source).extract();
+    const a1 = result.specs.find((s) => s.id === 'REQ-A-001.A1');
+    expect(a1!.parentId).toBe('REQ-A-001'); // id suffix wins
+    const mismatch = result.errors.find((e) => e.code === 'spec_acceptance_parent_mismatch');
+    expect(mismatch).toBeDefined();
+    expect(mismatch!.severity).toBe('warning');
+  });
+
+  // The anchoring fix: a literal `<!-- id: ... -->` inside a bullet's prose is
+  // NOT mistaken for a real marker (a spec documenting the marker syntax).
+  it('does not treat an id-comment written inside bullet prose as a real marker', () => {
+    const source = `---
+id: DOC
+---
+<!-- id: REQ-X-001 -->
+# Req
+
+## Acceptance
+<!-- id: REQ-X-001.A1 -->
+- An \`<!-- id: REQ-X.A1 -->\` marker above a bullet produces a node.
+`;
+    const result = new MarkdownSpecExtractor('specs/x.md', source).extract();
+    expect(result.errors.filter((e) => e.severity === 'error')).toEqual([]);
+    expect(result.errors.find((e) => e.code === 'spec_stranded_id')).toBeUndefined();
+    const a1 = result.specs.find((s) => s.id === 'REQ-X-001.A1');
+    expect(a1).toBeDefined();
+    expect(a1!.body).toContain('marker above a bullet produces a node');
+    // The embedded REQ-X.A1 must NOT have become its own spec.
+    expect(result.specs.find((s) => s.id === 'REQ-X.A1')).toBeUndefined();
+  });
+});
