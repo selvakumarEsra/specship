@@ -15,6 +15,7 @@
 import type SpecShip from '../index';
 import type { SpecLink, SpecLinkState, SpecLinkKind, NodeKind } from '../types';
 import type { SpecQueries } from '../db/spec-queries';
+import { renderBehaviourSurface } from '../behaviour/behaviour-surface';
 import type { ToolDefinition, ToolResult } from './tools';
 import { summarizeBriefFunnel } from '../resolution/brief-link-resolver';
 import type { FunnelLookup } from '../resolution/brief-link-resolver';
@@ -68,6 +69,11 @@ export const specToolDefinitions: ToolDefinition[] = [
           type: 'string',
           description:
             'Free-text query to SEARCH specs (instead of fetching one by id). Returns scored, ranked candidate specs matched over the spec full-text index — use to find which existing spec a described change belongs to.',
+        },
+        behaviour_surface: {
+          type: 'boolean',
+          description:
+            "With a spec_id, return that requirement's BEHAVIOUR SURFACE instead of its detail: the code it links to plus the surrounding routes / components / handlers, grouped into a UI tier (Playwright targets) and a backend/batch tier (API/job targets). Use to author end-to-end tests for a requirement.",
         },
         projectPath: projectPathProperty,
       },
@@ -322,6 +328,15 @@ export async function handleSpecshipSpec(
   }
   if (typeof specId !== 'string') {
     return error('spec_id must be a string');
+  }
+
+  // Behaviour-surface mode (REQ-BEHAVIOUR-001): with `behaviour_surface: true`,
+  // return the requirement's linked code + the route/component/handler
+  // neighbourhood grouped UI vs backend — the flow map `/ss-behaviour` turns
+  // into end-to-end tests. A requirement that doesn't exist returns an explicit
+  // not-found result (A4), handled inside renderBehaviourSurface.
+  if (args.behaviour_surface === true) {
+    return text(renderBehaviourSurface(cg.getBehaviourSurface(specId)));
   }
   const spec = sq.getSpecById(specId);
   if (!spec) {

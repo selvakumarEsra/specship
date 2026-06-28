@@ -89,6 +89,7 @@ import {
   EnforceReport,
   RequirementVerification,
 } from './enforce/enforce';
+import { computeBehaviourSurface, BehaviourSurface } from './behaviour/behaviour-surface';
 import { ContextBuilder, createContextBuilder } from './context';
 import { Mutex, FileLock } from './utils';
 import { FileWatcher, WatchOptions, PendingFile, LockUnavailableError } from './sync';
@@ -162,6 +163,9 @@ export { computeMaintainability, resolveThresholds, resolveExclude, DEFAULT_THRE
 export { evaluateFitness, loadFitnessRules, FITNESS_CONFIG_FILE } from './fitness/fitness';
 // Enforcement mode (ENFORCE-DOC / REQ-ENFORCE-001…003).
 export { evaluateEnforcement, loadEnforceConfig, ENFORCE_CONFIG_FILE } from './enforce/enforce';
+// Behaviour surface (BEHAVIOUR-DOC / REQ-BEHAVIOUR-001).
+export { computeBehaviourSurface, renderBehaviourSurface, isUiNode } from './behaviour/behaviour-surface';
+export type { BehaviourSurface, BehaviourFlowElement, BehaviourSurfaceDeps } from './behaviour/behaviour-surface';
 export type {
   EnforceConfig,
   GateConfig,
@@ -376,6 +380,60 @@ export class SpecShip {
       { drift, fitness: this.getFitness(), maintainability: this.getMaintainability(), requirements },
       cfg,
     );
+  }
+
+  /**
+   * The behaviour surface for a requirement (REQ-BEHAVIOUR-001): its linked code
+   * plus the 1-hop route / component / handler neighbourhood, grouped UI vs
+   * backend, so the `/ss-behaviour` skill can author end-to-end tests from one
+   * call. Lives here as an instance method so the CLI / MCP / server drive it
+   * without runtime-importing the package. A requirement (or its acceptance
+   * children) supplies the linked nodes; their callers + callees supply the
+   * neighbourhood.
+   */
+  getBehaviourSurface(specId: string): BehaviourSurface {
+    const sq = this.specQueries;
+    const req = sq.getSpecById(specId);
+    if (!req) {
+      return computeBehaviourSurface({
+        requirementId: specId,
+        requirementExists: false,
+        linkedNodes: [],
+        neighbourNodes: [],
+      });
+    }
+
+    // Resolved nodes the requirement + its acceptance children link to.
+    const linkIds = new Set<string>();
+    const collect = (id: string): void => {
+      for (const l of sq.getLinksBySpec(id)) {
+        if (l.resolvedNodeId) linkIds.add(l.resolvedNodeId);
+      }
+    };
+    collect(req.id);
+    for (const child of sq.getSpecsByParent(req.id)) {
+      if (child.kind === 'acceptance') collect(child.id);
+    }
+
+    const linkedNodes: Node[] = [];
+    for (const id of linkIds) {
+      const node = this.queries.getNodeById(id);
+      if (node) linkedNodes.push(node);
+    }
+
+    // 1-hop caller/callee neighbourhood of the linked nodes.
+    const neighbourById = new Map<string, Node>();
+    for (const node of linkedNodes) {
+      for (const { node: n } of this.traverser.getCallers(node.id, 1)) neighbourById.set(n.id, n);
+      for (const { node: n } of this.traverser.getCallees(node.id, 1)) neighbourById.set(n.id, n);
+    }
+
+    return computeBehaviourSurface({
+      requirementId: req.id,
+      requirementExists: true,
+      linkedNodes,
+      neighbourNodes: [...neighbourById.values()],
+    });
   }
 
   // ===========================================================================
