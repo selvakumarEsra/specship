@@ -12,6 +12,9 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### New Features
 
 - **Show SpecShip status in your Claude Code status line.** A new `specship statusline` command reads Claude Code's status-line data and prints a single styled segment — index sync state (synced, or how many files are pending), drift-queue count, a warning when the database is on a slow non-WAL path, the number of specship lookups made this session, and the active workflow run. Pipe it into your own status-line script to keep it composable with whatever else you show. It reads only small cache files (never the database), so it stays fast enough to render on every keystroke, and honors `NO_COLOR`. It never shows a "tokens saved" figure — that would require a counterfactual that doesn't exist at runtime; the honest signal it shows instead is how many times specship was actually called. During `specship install` you can opt in to having the segment wired up for you (or pass `--statusline`) — and if you already have a status line, it's left untouched and you get the one-line snippet to add yourself.
+### Fixes
+
+- **Acceptance criteria are now indexed as their own spec entities.** Writing acceptance criteria the documented way — id-marked bullets under a `## Acceptance` heading — now produces a queryable, linkable spec node per criterion, so you can attach a test to a specific `.A<N>` criterion and the enforcement behaviour gate counts it. Previously the `## Acceptance` heading raised a spurious "missing id" error and the criteria were silently dropped; existing specs pick up their criteria automatically on the next index, with no edits needed. A criterion whose id names a different requirement than the one it's written under is flagged with a warning, and a literal `<!-- id: … -->` written inside a bullet's prose is no longer mistaken for a real marker.
 
 
 ## [0.10.0] - 2026-06-28
