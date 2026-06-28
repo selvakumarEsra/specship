@@ -143,6 +143,10 @@ export async function registerSpecRoutes(app: FastifyInstance): Promise<void> {
     const children = sq.getSpecsByParent(spec.id);
     const siblings = parent ? sq.getSpecsByParent(parent.id).filter((s) => s.id !== spec.id) : [];
     const links = sq.getLinksBySpec(spec.id);
+    // Per-child links so the detail page can show each acceptance criterion's
+    // met/unmet state and an "N / M met" rollup (DASH-SPECDETAIL-DOC, REQ-004).
+    const childLinks: Record<string, ReturnType<typeof sq.getLinksBySpec>> = {};
+    for (const c of children) childLinks[c.id] = sq.getLinksBySpec(c.id);
 
     // Read the raw source file so the dashboard's Monaco editor can edit
     // the whole document, not just the DB-parsed body fragment for this
@@ -160,7 +164,7 @@ export async function registerSpecRoutes(app: FastifyInstance): Promise<void> {
       // "source not available" hint without failing the whole fetch.
     }
 
-    return { spec, parent, siblings, children, links, source };
+    return { spec, parent, siblings, children, links, childLinks, source };
   });
 
   /**

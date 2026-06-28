@@ -1,0 +1,126 @@
+<div class="scroll-y spec-detail">
+
+  @if (loading()) {
+    <!-- Loading skeleton (REQ-001.A2) -->
+    <div class="sd-skel">
+      <div class="skel" style="height:16px;width:220px;border-radius:5px;"></div>
+      <div class="skel" style="height:34px;width:60%;border-radius:7px;margin-top:14px;"></div>
+      <div class="skel" style="height:20px;width:340px;border-radius:6px;margin-top:12px;"></div>
+      <div class="skel" style="height:120px;border-radius:10px;margin-top:22px;"></div>
+      <div class="skel" style="height:160px;border-radius:10px;margin-top:14px;"></div>
+    </div>
+  } @else if (notFound()) {
+    <!-- Not found (REQ-001.A3) -->
+    <app-empty icon="book" title="Spec not found" [body]="'No spec matches ' + specId() + '.'">
+      <a action class="btn btn-secondary btn-sm" routerLink="/specs">
+        <app-icon name="arrowRight" [size]="12" /> Back to Specs
+      </a>
+    </app-empty>
+  } @else if (spec(); as s) {
+
+    <!-- Breadcrumb (REQ-002) -->
+    <div class="sd-crumb">
+      <a routerLink="/specs" class="sd-back">
+        <app-icon name="chevronLeft" [size]="13" /> Specs
+      </a>
+      <span class="sd-sep">/</span>
+      <span class="mono sd-path">{{ s.sourcePath }}</span>
+      <span class="sd-sep">·</span>
+      <span class="mono sd-id">{{ s.id }}</span>
+      <app-copy-btn [text]="s.id" label="Copy spec id" />
+    </div>
+
+    <!-- Title -->
+    <h1 class="sd-title">{{ s.title }}</h1>
+
+    <!-- Meta row (REQ-002.A2/A3) — absent fields omitted -->
+    <div class="sd-meta">
+      <app-state-pill [state]="overallState()" [withDot]="true" />
+      @if (s.priority) {
+        <app-pill [color]="'var(--node-code)'" [bg]="'var(--node-code-soft)'">{{ s.priority }}</app-pill>
+      }
+      <span class="sd-meta-kind">{{ s.kind }}</span>
+      @if (s.owner) {
+        <span class="sd-meta-dim">owned by <span class="sd-meta-owner">{{ s.owner }}</span></span>
+      }
+      @if (verifiedAt(); as v) {
+        <span class="sd-meta-dim">verified {{ relTime(v) }}</span>
+      }
+    </div>
+
+    <!-- Requirement (REQ-003) -->
+    <section class="sd-section">
+      <div class="sd-eyebrow">Requirement</div>
+      <div class="sd-prose" [innerHTML]="bodyHtml()"></div>
+    </section>
+
+    <!-- Acceptance criteria (REQ-004) -->
+    @if (criteria().length > 0) {
+      <section class="sd-section">
+        <div class="sd-section-head">
+          <div class="sd-eyebrow">Acceptance criteria</div>
+          <div class="sd-rollup" [class.all-met]="metCount() === criteria().length">
+            {{ metCount() }} / {{ criteria().length }} met
+          </div>
+        </div>
+        <div class="sd-criteria">
+          @for (c of criteria(); track c.id; let i = $index) {
+            <div class="sd-crit" [class.met]="c.met">
+              <span class="sd-crit-check" [class.on]="c.met">
+                <app-icon [name]="c.met ? 'check' : 'circle'" [size]="12" />
+              </span>
+              <span class="sd-crit-id mono">A{{ i + 1 }}</span>
+              <span class="sd-crit-text">{{ c.title }}</span>
+            </div>
+          }
+        </div>
+      </section>
+    }
+
+    <!-- Linked code (REQ-005) -->
+    <section class="sd-section">
+      <div class="sd-section-head">
+        <div class="sd-eyebrow">Linked code</div>
+        @if (links().length > 0) {
+          <div class="sd-count">{{ links().length }} {{ links().length === 1 ? 'symbol' : 'symbols' }}</div>
+        }
+      </div>
+      @if (links().length === 0) {
+        <div class="sd-empty-row">No linked code yet — run <span class="mono">/ss-spec implement {{ spec()?.id }}</span> to link it.</div>
+      } @else {
+        <div class="sd-links">
+          @for (l of links(); track l.id) {
+            <div class="sd-link">
+              <span class="sd-link-state" [style.color]="stateColor(l.state)" [title]="stateLabel(l.state)">
+                <app-icon name="dot" [size]="10" />
+              </span>
+              <span class="mono sd-link-target">{{ linkTarget(l) }}</span>
+              <span class="grow"></span>
+              @if (l.provenance) { <span class="sd-prov">{{ l.provenance }}</span> }
+              <span class="sd-link-statelabel" [style.color]="stateColor(l.state)">{{ stateLabel(l.state) }}</span>
+            </div>
+          }
+        </div>
+      }
+    </section>
+
+    <!-- Action bar (REQ-006.A2) -->
+    <div class="sd-actions">
+      <button type="button" class="btn btn-primary btn-sm" (click)="onImplement()">
+        <app-icon name="play" [size]="12" />
+        {{ copied() === 'implement' ? 'Copied!' : 'Implement' }}
+      </button>
+      <button type="button" class="btn btn-secondary btn-sm" (click)="onVerify()">
+        <app-icon name="check" [size]="12" />
+        {{ copied() === 'verify' ? 'Copied!' : 'Verify' }}
+      </button>
+      <button type="button" class="btn btn-secondary btn-sm" (click)="onEdit()">
+        <app-icon name="book" [size]="12" /> Edit spec
+      </button>
+      <button type="button" class="btn btn-secondary btn-sm" (click)="onShowInGraph()">
+        <app-icon name="graph" [size]="12" /> Show in graph
+      </button>
+    </div>
+
+  }
+</div>

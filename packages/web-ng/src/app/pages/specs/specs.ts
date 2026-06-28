@@ -181,6 +181,11 @@ export class Specs {
     this.router.navigate(['/graph'], { queryParams: { focus: 'spec:' + specId } });
   }
 
+  /** Open a spec's dedicated detail route (DASH-SPECDETAIL-DOC, REQ-006.A1). */
+  protected open(specId: string): void {
+    this.router.navigate(['/specs', specId]);
+  }
+
   protected async onEditClick(): Promise<void> {
     const spec = this.selectedSpec();
     if (!spec) return;

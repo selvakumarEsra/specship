@@ -25,6 +25,11 @@ export const routes: Routes = [
     data: { nav: 'specs', title: 'Specs' },
   },
   {
+    path: 'specs/:id',
+    loadComponent: () => import('./pages/spec-detail/spec-detail').then((m) => m.SpecDetail),
+    data: { nav: 'specs', title: 'Spec' },
+  },
+  {
     path: 'drift',
     loadComponent: () => import('./pages/drift/drift').then((m) => m.Drift),
     data: { nav: 'drift', title: 'Drift queue' },

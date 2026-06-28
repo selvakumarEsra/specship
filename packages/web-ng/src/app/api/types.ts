@@ -304,6 +304,8 @@ export interface SpecDetailResponse {
   siblings: Spec[];
   children: Spec[];
   links: SpecLink[];
+  /** Links keyed by child spec id — drives the acceptance-criteria met rollup. */
+  childLinks?: Record<string, SpecLink[]>;
 }
 
 export interface SpecBriefResponse {

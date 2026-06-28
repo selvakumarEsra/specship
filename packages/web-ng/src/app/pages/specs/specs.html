@@ -67,7 +67,11 @@
               <div
                 class="req-row row gap-6"
                 [class.selected]="sel() === s.id"
-                (click)="select(s.id)"
+                role="button"
+                tabindex="0"
+                (click)="open(s.id)"
+                (keydown.enter)="open(s.id)"
+                (keydown.space)="open(s.id)"
               >
                 <span
                   class="pill-dot"
