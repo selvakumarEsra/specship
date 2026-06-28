@@ -186,6 +186,24 @@ const SPECSHIP_SDD_HOOKS = [
   },
 ] as const;
 
+/**
+ * The status-line entry the installer writes into `settings.json`
+ * (SHIP-STATUSLINE-DOC). `command` mirrors the MCP launcher (`specship` on
+ * PATH); Claude Code pipes the status-line JSON to it on stdin and renders its
+ * stdout. The `_specship` marker is how uninstall knows we own this entry — a
+ * status line the user authored has no marker and is never touched.
+ */
+const SPECSHIP_STATUSLINE = {
+  type: 'command',
+  command: 'specship statusline',
+  _specship: true,
+} as const;
+
+/** True when a `statusLine` object is one SpecShip wrote (carries our marker). */
+function isOurStatusLine(sl: unknown): boolean {
+  return !!sl && typeof sl === 'object' && (sl as { _specship?: unknown })._specship === true;
+}
+
 class ClaudeCodeTarget implements AgentTarget {
   readonly id = 'claude' as const;
   readonly displayName = 'Claude Code';
@@ -279,7 +297,24 @@ class ClaudeCodeTarget implements AgentTarget {
       files.push(writeSddHookEntry(loc));
     }
 
-    return { files };
+    // 6. Status-line segment (SHIP-STATUSLINE-DOC, REQ-STATUSLINE-006).
+    // Strictly opt-in — only when the caller set installStatusLine (the
+    // interactive prompt, or `--statusline`). Never clobbers a user's existing
+    // status line: writeStatusLineEntry returns 'kept' and we surface the
+    // composable snippet as a note so the user can wire it in themselves.
+    const notes: string[] = [];
+    if (opts.installStatusLine) {
+      const sl = writeStatusLineEntry(loc);
+      files.push(sl);
+      if (sl.action === 'kept') {
+        notes.push(
+          'A status line is already configured — left untouched. Add the SpecShip ' +
+          `segment to your own status-line script:\n    ${getStatusLineSnippet()}`,
+        );
+      }
+    }
+
+    return notes.length ? { files, notes } : { files };
   }
 
   uninstall(loc: Location): WriteResult {
@@ -358,6 +393,13 @@ class ClaudeCodeTarget implements AgentTarget {
     files.push(removeSddInstructionsEntry(loc));
     const sddHookCleanup = cleanupSddHooks(loc);
     if (sddHookCleanup.action === 'removed') files.push(sddHookCleanup);
+
+    // 6. Status-line segment — remove only the marked entry we wrote
+    // (REQ-STATUSLINE-007). A user-authored status line has no marker and is
+    // left untouched; absent entry is a no-op. Always runs so uninstall fully
+    // reverses an opt-in status-line install.
+    const slCleanup = removeStatusLineEntry(loc);
+    if (slCleanup.action === 'removed') files.push(slCleanup);
 
     return { files };
   }
@@ -559,6 +601,66 @@ export function writePermissionsEntry(loc: Location): WriteResult['files'][numbe
   }
   writeJsonFile(file, settings);
   return { path: file, action: created ? 'created' : 'updated' };
+}
+
+/**
+ * What status line is configured at this location, from SpecShip's point of
+ * view (REQ-STATUSLINE-006): `none` (free to write), `ours` (a marked entry we
+ * wrote — safe to re-assert), or `foreign` (a status line the user owns — must
+ * never be clobbered). Drives the installer's offer-vs-snippet decision.
+ */
+export function statusLineState(loc: Location): 'none' | 'ours' | 'foreign' {
+  const settings = readJsonFile(settingsJsonPath(loc));
+  if (!settings.statusLine) return 'none';
+  return isOurStatusLine(settings.statusLine) ? 'ours' : 'foreign';
+}
+
+/** The one-line snippet a user composes into their own status-line script. */
+export function getStatusLineSnippet(): string {
+  return 'specship statusline   # pipe Claude\'s status-line JSON in; append its output to your line';
+}
+
+/**
+ * Write SpecShip's status-line entry into `settings.json`
+ * (REQ-STATUSLINE-006). Refuses to overwrite a status line the user already
+ * configured: returns `kept` when a foreign `statusLine` is present, so the
+ * caller can surface the composable snippet instead. Idempotent — re-asserting
+ * our own marked entry byte-for-byte returns `unchanged`.
+ */
+export function writeStatusLineEntry(loc: Location): WriteResult['files'][number] {
+  const file = settingsJsonPath(loc);
+  const settings = readJsonFile(file);
+  const existing = settings.statusLine;
+
+  // Never clobber a user-authored status line.
+  if (existing && !isOurStatusLine(existing)) {
+    return { path: file, action: 'kept' };
+  }
+  if (isOurStatusLine(existing) && jsonDeepEqual(existing, SPECSHIP_STATUSLINE)) {
+    return { path: file, action: 'unchanged' };
+  }
+  const created = !fs.existsSync(file);
+  settings.statusLine = { ...SPECSHIP_STATUSLINE };
+  writeJsonFile(file, settings);
+  return { path: file, action: created ? 'created' : 'updated' };
+}
+
+/**
+ * Inverse of `writeStatusLineEntry`: remove the `statusLine` entry ONLY when
+ * it is the marked one we wrote (REQ-STATUSLINE-007). A user-authored status
+ * line (no marker) is left exactly as-is; an absent entry is a no-op.
+ */
+export function removeStatusLineEntry(loc: Location): WriteResult['files'][number] {
+  const file = settingsJsonPath(loc);
+  if (!fs.existsSync(file)) return { path: file, action: 'not-found' };
+  const settings = readJsonFile(file);
+  if (!isOurStatusLine(settings.statusLine)) {
+    // Either nothing there, or a user-owned status line — never touch it.
+    return { path: file, action: settings.statusLine ? 'kept' : 'not-found' };
+  }
+  delete settings.statusLine;
+  writeJsonFile(file, settings);
+  return { path: file, action: 'removed' };
 }
 
 /**

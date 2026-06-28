@@ -959,6 +959,33 @@ program
   });
 
 /**
+ * specship statusline
+ *
+ * Reads Claude Code's status-line JSON on stdin and prints ONE composable
+ * segment on stdout (sync state · backend health · session calls · active
+ * run). Resolves entirely from cache files — never opens the database — so it
+ * stays within the sub-second status-line render budget (SHIP-STATUSLINE-DOC).
+ * Append it to your own status-line script.
+ */
+program
+  .command('statusline')
+  .description('Print a SpecShip status-line segment (reads Claude Code JSON on stdin)')
+  .action(async () => {
+    const { buildSegment } = await import('../statusline/index');
+    let raw = '';
+    try {
+      const chunks: Buffer[] = [];
+      for await (const c of process.stdin) chunks.push(c as Buffer);
+      raw = Buffer.concat(chunks).toString('utf-8');
+    } catch {
+      /* no stdin — buildSegment falls back to cwd */
+    }
+    // buildSegment never throws; print the segment with no trailing newline so
+    // a composing script controls line layout.
+    process.stdout.write(buildSegment(raw));
+  });
+
+/**
  * specship query <search>
  */
 program
@@ -2073,6 +2100,8 @@ program
   .option('-y, --yes', 'Non-interactive: defaults to --location=local, auto-allow on')
   .option('--no-permissions', 'Skip writing the auto-allow permissions list')
   .option('--no-sdd', 'Skip the spec-driven-development steering (CLAUDE.md rule + spec-author nudge hook)')
+  .option('--statusline', 'Wire the SpecShip status-line segment into Claude (skips the prompt; never overwrites an existing status line)')
+  .option('--skip-statusline', 'Do not add the status-line segment (skips the prompt)')
   .option('--print-config', 'Print MCP config snippet for Claude Code and exit (no file writes)')
   // -t/--target is vestigial — kept so existing `--target claude` / `--target auto`
   // invocations (including our own offline-install scripts) keep working.
@@ -2083,6 +2112,8 @@ program
     yes?: boolean;
     permissions?: boolean;
     sdd?: boolean;
+    statusline?: boolean;
+    skipStatusline?: boolean;
     printConfig?: boolean;
   }) => {
     if (opts.printConfig) {
@@ -2111,6 +2142,16 @@ program
           ? true
           : undefined;
 
+      // Status-line opt-in: `--statusline` forces on, `--skip-statusline`
+      // forces off (both skip the prompt); neither ⇒ undefined ⇒ ask
+      // interactively (default no). Distinct flag names dodge commander's
+      // `--no-*` default-true coupling that would auto-install.
+      const statusLine: boolean | undefined = opts.statusline
+        ? true
+        : opts.skipStatusline
+          ? false
+          : undefined;
+
       // Commander's `--no-sdd` makes `opts.sdd === false`; omitting it leaves
       // it `true`. Spec-driven steering is on by default — forward `false`
       // only when the user explicitly opted out.
@@ -2119,6 +2160,7 @@ program
         location: opts.location as 'global' | 'local' | undefined,
         autoAllow,
         sdd: opts.sdd === false ? false : undefined,
+        statusLine,
         yes: opts.yes,
       });
     } catch (err) {
@@ -2530,7 +2572,7 @@ program
     try {
       const specQueries = cg.getSpecQueries();
       const worktrees = new WorktreeProvider(specQueries);
-      const executor = new WorkflowExecutor(specQueries, worktrees);
+      const executor = new WorkflowExecutor(specQueries, worktrees, projectRoot);
 
       switch (action) {
         case 'list': {

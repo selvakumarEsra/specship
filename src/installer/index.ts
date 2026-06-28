@@ -12,7 +12,7 @@
 import { execSync } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
-import { claudeTarget } from './targets/claude';
+import { claudeTarget, statusLineState, getStatusLineSnippet } from './targets/claude';
 import type { AgentTarget, Location, TargetId } from './targets/types';
 import { getGlyphs } from '../ui/glyphs';
 // Import the lightweight submodules directly (not the ../sync barrel, which
@@ -68,6 +68,13 @@ export interface RunInstallerOptions {
    * default; pass `false` (the `--no-sdd` flag) to skip. Undefined ⇒ on.
    */
   sdd?: boolean;
+  /**
+   * Wire SpecShip's status-line segment into Claude's status line
+   * (SHIP-STATUSLINE-DOC). Opt-in: undefined ⇒ ask interactively (default no);
+   * `true` (the `--statusline` flag) installs without asking; `false` skips.
+   * Never overwrites a status line the user already configured.
+   */
+  statusLine?: boolean;
   /**
    * Skip every confirm and use defaults: location=local,
    * autoAllow=true. For scripting / CI.
@@ -174,9 +181,33 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
     autoAllow = ans;
   }
 
+  // Step 3b: status-line segment (SHIP-STATUSLINE-DOC). Strictly opt-in. Only
+  // offered when no status line is configured; if one already exists we never
+  // touch it and instead show the composable snippet. `--statusline` /
+  // `--no-statusline` skip the prompt; `--yes` leaves it off (opt-in default).
+  let installStatusLine = false;
+  if (opts.statusLine !== undefined) {
+    installStatusLine = opts.statusLine;
+  } else if (!useDefaults) {
+    const state = statusLineState(location);
+    if (state === 'foreign') {
+      clack.note(getStatusLineSnippet(), 'You already have a status line — add SpecShip to it');
+    } else {
+      const ans = await clack.confirm({
+        message: 'Add a SpecShip status-line segment? (shows index sync state, drift, and calls this session)',
+        initialValue: false,
+      });
+      if (clack.isCancel(ans)) {
+        clack.cancel('Installation cancelled.');
+        process.exit(0);
+      }
+      installStatusLine = ans;
+    }
+  }
+
   // Step 4: write Claude config. Spec-driven steering is on by default;
   // only an explicit `sdd: false` (from `--no-sdd`) skips it.
-  const result = claudeTarget.install(location, { autoAllow, sdd: opts.sdd });
+  const result = claudeTarget.install(location, { autoAllow, sdd: opts.sdd, installStatusLine });
   for (const file of result.files) {
     const verb = file.action === 'unchanged'
       ? 'Unchanged'
