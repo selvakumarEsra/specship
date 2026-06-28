@@ -14,6 +14,7 @@
 
 import type SpecShip from '../index';
 import type { SpecLink, SpecLinkState, SpecLinkKind, NodeKind } from '../types';
+import type { SpecQueries } from '../db/spec-queries';
 import type { ToolDefinition, ToolResult } from './tools';
 import { summarizeBriefFunnel } from '../resolution/brief-link-resolver';
 import type { FunnelLookup } from '../resolution/brief-link-resolver';
@@ -55,13 +56,18 @@ export const specToolDefinitions: ToolDefinition[] = [
   {
     name: 'specship_spec',
     description:
-      'Fetch a spec/requirement by its ID. Call this FIRST whenever the user mentions a spec ID (e.g., REQ-AUTH-005) or a requirement. Returns the spec body, its parent doc and sibling requirements, and the code it currently links to with link state (verified / drifted / orphaned). Use this instead of Read-ing the spec file — it returns more (linked code + state) than the file alone. Called WITHOUT a spec_id, it returns the project\'s spec lifecycle funnel: brainstormed ideas → specs → implemented, with per-document rollups.',
+      'Fetch a spec/requirement by its ID. Call this FIRST whenever the user mentions a spec ID (e.g., REQ-AUTH-005) or a requirement. Returns the spec body, its parent doc and sibling requirements, and the code it currently links to with link state (verified / drifted / orphaned). Use this instead of Read-ing the spec file — it returns more (linked code + state) than the file alone. Called WITHOUT a spec_id, it returns the project\'s spec lifecycle funnel: brainstormed ideas → specs → implemented, with per-document rollups. Pass `query` instead to SEARCH specs by free text — call this FIRST when a user describes a change (a bug, an error, a one-line enhancement) and you need to find which existing spec it belongs to; it returns scored, ranked candidates (id, title, kind, snippet) over the spec full-text index.',
     inputSchema: {
       type: 'object',
       properties: {
         spec_id: {
           type: 'string',
           description: 'Embedded spec ID (e.g., "REQ-AUTH-005", "AUTH-DOC"). Omit to get the lifecycle funnel.',
+        },
+        query: {
+          type: 'string',
+          description:
+            'Free-text query to SEARCH specs (instead of fetching one by id). Returns scored, ranked candidate specs matched over the spec full-text index — use to find which existing spec a described change belongs to.',
         },
         projectPath: projectPathProperty,
       },
@@ -171,6 +177,43 @@ function formatLink(link: SpecLink): string {
 }
 
 /**
+ * Build the spec-search results markdown (REQ-TRIAGE-001): scored, ranked specs
+ * matched over the spec FTS index for a free-text `query`. Shown when
+ * `specship_spec` is called with a `query`. Each hit carries id, title, kind,
+ * score, and a body snippet — enough to act on without a follow-up fetch (A1).
+ * An empty / spec-less index returns an explicit "no specs to search" result,
+ * not an error (A3); a query that matches nothing returns a clear no-match note.
+ */
+function buildSpecSearch(sq: SpecQueries, query: string): string {
+  // Distinguish "nothing indexed" (A3) from "indexed, but no match" up front.
+  if (sq.getAllSpecs().length === 0) {
+    return `# Spec search — "${query}"\n\n_No specs to search — the index has no specs yet. Author one with /ss-spec-author or /ss-brainstorm._`;
+  }
+
+  const results = sq.searchSpecs(query);
+  const lines: string[] = [];
+  lines.push(`# Spec search — "${query}"`);
+  lines.push('');
+  if (results.length === 0) {
+    lines.push('_No matching specs. Try different terms, or author a new spec with /ss-spec-author._');
+    return lines.join('\n');
+  }
+
+  lines.push(`Found ${results.length} candidate${results.length === 1 ? '' : 's'}, best first:`);
+  lines.push('');
+  for (const { spec, score, snippet } of results) {
+    lines.push(`### ${spec.id} — ${spec.title}`);
+    lines.push(`*kind: ${spec.kind}* · *score: ${score.toFixed(2)}* · *source: ${spec.sourcePath}*`);
+    if (snippet && snippet.trim().length > 0) {
+      lines.push(`> ${snippet.replace(/\s+/g, ' ').trim()}`);
+    }
+    lines.push('');
+  }
+  lines.push('_Fetch any candidate by id (specship_spec) for its full body + linked code._');
+  return lines.join('\n');
+}
+
+/**
  * Build the spec lifecycle funnel markdown (REQ-FUNNEL-005): brainstormed ideas
  * → specs → implemented, with per-document rollups. Shown when `specship_spec`
  * is called without a spec_id.
@@ -261,6 +304,18 @@ export async function handleSpecshipSpec(
 ): Promise<ToolResult> {
   const specId = args.spec_id;
   const sq = cg.getSpecQueries();
+
+  // Query mode (REQ-TRIAGE-001): a free-text `query` returns scored, ranked
+  // specs over the spec FTS index. Takes precedence over the other modes when
+  // present; spec_id detail and the no-arg funnel are unchanged (A2).
+  const queryArg = args.query;
+  if (typeof queryArg === 'string' && queryArg.trim().length > 0) {
+    return text(buildSpecSearch(sq, queryArg));
+  }
+  if (queryArg !== undefined && queryArg !== null && typeof queryArg !== 'string') {
+    return error('query must be a string');
+  }
+
   // No id → the lifecycle funnel (REQ-FUNNEL-005). The id case below is unchanged.
   if (specId === undefined || specId === null || specId === '') {
     return text(buildFunnel(sq));
