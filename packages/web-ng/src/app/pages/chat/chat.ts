@@ -15,11 +15,12 @@ interface ChatMsg {
   model?: string;
 }
 
+// The three command doors (DASH-DOORS-DOC). Each routes a whole family of
+// flows; one slash command per door instead of the retired per-command set.
 const SLASH_COMMANDS = [
-  { cmd: '/cg-spec',      arg: 'REQ-ID',  desc: 'Look up a spec and its link state' },
-  { cmd: '/cg-implement', arg: 'REQ-ID',  desc: 'Kick off spec-implement workflow' },
-  { cmd: '/cg-explore',   arg: 'symbol',  desc: 'Structural neighborhood of a symbol' },
-  { cmd: '/cg-drift',     arg: '',        desc: 'Summarize the drift queue' },
+  { cmd: '/ss-spec',    arg: 'REQ-ID | new <desc>',  desc: 'Intent door — view, author, implement, or review a spec' },
+  { cmd: '/ss-explore', arg: 'symbols | from→to',    desc: 'Reads door — explore an area, trace a flow, or get impact' },
+  { cmd: '/ss-check',   arg: '(gate) | drifted | health', desc: 'Gate & health door — run the gate, review drift, or see health' },
 ];
 
 const MCP_TOOLS = ['specship_explore', 'specship_search', 'specship_spec', 'specship_link_verify'];
@@ -42,7 +43,7 @@ export class Chat {
   protected readonly messages = signal<ChatMsg[]>([
     {
       role: 'assistant', model: 'Opus 4',
-      text: 'Hi — ask anything about your specs, code, or recent Claude Code sessions.\n\nTry **/cg-spec REQ-AUTH-005** to inspect a requirement, or **/cg-explore validateSession** to walk its callers.',
+      text: 'Hi — ask anything about your specs, code, or recent Claude Code sessions.\n\nTry **/ss-spec REQ-AUTH-005** to inspect a requirement, or **/ss-explore validateSession** to walk its callers.',
     },
   ]);
   protected readonly draft = signal('');
@@ -92,12 +93,13 @@ export class Chat {
 
     setTimeout(() => {
       this.thinking.set(false);
-      const toolName = text.startsWith('/cg-implement') ? 'specship_spec' : 'specship_explore';
+      // Intent door (/ss-spec) routes to the spec tool; everything else reads.
+      const toolName = text.startsWith('/ss-spec') ? 'specship_spec' : 'specship_explore';
       const symbol = text.split(' ')[1] || 'validateSession';
       this.messages.update((m) => [...m, {
         role: 'assistant',
         model: 'Opus 4',
-        text: text.startsWith('/cg-spec')
+        text: text.startsWith('/ss-spec')
           ? 'Looking that up in the graph — the spec resolves to one link. See the **state** pill and linked code below for whether it\'s drifted.'
           : 'Got it. I\'ll use the specship tools to answer that with structural context rather than re-reading files. Here\'s what I found in the current project\'s graph.',
         tools: [{ name: toolName, input: symbol, output: '3 nodes · 2 edges returned', status: 'ok' }],

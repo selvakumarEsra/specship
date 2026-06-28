@@ -267,6 +267,36 @@ export class Dashboard {
     this.router.navigate(['/graph'], { queryParams: { focus: id } });
   }
 
+  /**
+   * The three command doors (DASH-DOORS-DOC, REQ-DASH-DOORS-001). SpecShip's
+   * agent-facing slash commands consolidated into these entry points; the card
+   * surfaces them so a user knows the whole command surface is three doors.
+   * `route` is the most-related dashboard page each door links to.
+   */
+  protected readonly doors: ReadonlyArray<{
+    id: string; label: string; cmd: string; icon: string;
+    color: string; blurb: string; subs: string[]; route: string;
+  }> = [
+    {
+      id: 'intent', label: 'Intent', cmd: '/ss-spec', icon: 'book',
+      color: 'var(--node-spec)', route: 'specs',
+      blurb: 'View, author, implement, review, or extend a spec — the whole lifecycle.',
+      subs: ['new', 'fast', 'implement', 'review', 'triage', 'behaviour', 'domain'],
+    },
+    {
+      id: 'reads', label: 'Reads', cmd: '/ss-explore', icon: 'search',
+      color: 'var(--accent)', route: 'graph',
+      blurb: 'Explore an area, trace a flow, or get a change’s blast radius.',
+      subs: ['explore', 'flow', 'impact'],
+    },
+    {
+      id: 'gate', label: 'Gate & health', cmd: '/ss-check', icon: 'check',
+      color: 'var(--warn)', route: 'drift',
+      blurb: 'Run the enforcement gate, review drift, repair links, or see code-health.',
+      subs: ['gate', 'drifted', 'fix', 'relink', 'health'],
+    },
+  ];
+
   // Actions ------------------------------------------------------------------
 
   protected setRange(r: string): void {
