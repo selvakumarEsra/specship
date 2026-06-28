@@ -31,6 +31,7 @@ import {
   validateDirectory,
   getSpecShipDir,
 } from './directory';
+import { writeStatuslineCache } from './statusline';
 import {
   ExtractionOrchestrator,
   IndexProgress,
@@ -682,11 +683,43 @@ export class SpecShip {
           result.edgesCreated = after.edges - before.edges;
         }
 
+        this.refreshStatuslineCache();
         return result;
       } finally {
         this.fileLock.release();
       }
     });
+  }
+
+  /**
+   * Refresh `.specship/statusline.json` so the `specship statusline` segment
+   * has current Tier-A data without ever opening the DB itself
+   * (REQ-STATUSLINE-003). Best-effort: a failure here must never break the
+   * index/sync operation that triggered it, so the producer swallows its own
+   * errors and this wrapper guards the data-gathering too.
+   */
+  private refreshStatuslineCache(): void {
+    try {
+      const stats = this.getStats();
+      const changes = this.getChangedFiles();
+      const drift = this.specQueries.getLinksByState(['drifted', 'broken', 'orphaned']).length;
+      writeStatuslineCache(this.projectRoot, {
+        initialized: true,
+        pending: {
+          added: changes.added.length,
+          modified: changes.modified.length,
+          removed: changes.removed.length,
+        },
+        drift,
+        backend: this.getBackend(),
+        degraded: this.getJournalMode() !== 'wal',
+        fileCount: stats.fileCount,
+        nodeCount: stats.nodeCount,
+        lastIndexed: this.getLastIndexedAt(),
+      });
+    } catch {
+      /* best-effort — never let a cache refresh affect indexing */
+    }
   }
 
   /**
@@ -1016,6 +1049,7 @@ export class SpecShip {
           this.db.runMaintenance();
         }
 
+        this.refreshStatuslineCache();
         return result;
       } finally {
         this.fileLock.release();

@@ -38,6 +38,7 @@ import {
 import { SpecQueries } from '../db/spec-queries';
 import { WorktreeProvider } from '../isolation/worktree';
 import { getSpecShipDir } from '../directory';
+import { writeActiveRun, clearActiveRun } from '../statusline';
 import {
   NodeOutput,
   substituteRefs,
@@ -76,10 +77,18 @@ export class WorkflowExecutor {
   private specQueries: SpecQueries;
   private worktrees: WorktreeProvider;
   private runners: Map<DagNode['kind'], NodeRunner>;
+  /**
+   * Project root this executor is bound to. Used to mirror the active run into
+   * the status-line marker (REQ-STATUSLINE-005.A4). Optional so existing
+   * callers/tests that don't pass it still construct; when absent the marker
+   * is simply not written.
+   */
+  private projectRoot?: string;
 
-  constructor(specQueries: SpecQueries, worktrees: WorktreeProvider) {
+  constructor(specQueries: SpecQueries, worktrees: WorktreeProvider, projectRoot?: string) {
     this.specQueries = specQueries;
     this.worktrees = worktrees;
+    this.projectRoot = projectRoot;
     this.runners = new Map<DagNode['kind'], NodeRunner>([
       ['prompt', new PromptRunner()],
       ['bash', new BashRunner()],
@@ -169,6 +178,7 @@ export class WorkflowExecutor {
       },
     };
     this.specQueries.insertWorkflowRun(run);
+    this.syncActiveRunMarker(run.status, run.inputs);
     this.event(runId, 'run_started', { workflowName: workflow.name, inputs: opts.inputs });
 
     return this.driveExecution(workflow, run, cwd, artifactsDir, logsDir, opts);
@@ -212,6 +222,7 @@ export class WorkflowExecutor {
       errorMessage: undefined,
     };
     this.specQueries.updateWorkflowRun(refreshed);
+    this.syncActiveRunMarker(refreshed.status, refreshed.inputs);
     this.event(runId, 'run_started', { resumed: true });
 
     return this.driveExecution(workflow, refreshed, cwd, artifactsDir, logsDir, opts);
@@ -235,6 +246,7 @@ export class WorkflowExecutor {
       lastActivityAt: now,
       errorMessage: reason,
     });
+    this.syncActiveRunMarker('cancelled', run.inputs);
     this.event(runId, 'run_cancelled', { reason });
 
     // Tear down the worktree if any.
@@ -287,6 +299,9 @@ export class WorkflowExecutor {
           approval: undefined,
         },
       });
+      // Archon's paused→failed-but-resumable convention: keep the run visible
+      // in the status line (resume drives it back to running).
+      this.syncActiveRunMarker('failed', run.inputs);
       this.event(runId, 'approval_granted', { nodeId: approval.nodeId, comment });
     }
   }
@@ -307,6 +322,7 @@ export class WorkflowExecutor {
       lastActivityAt: now,
       errorMessage: reason ?? 'rejected at approval gate',
     });
+    this.syncActiveRunMarker('cancelled', run.inputs);
     this.event(runId, 'approval_rejected', {
       nodeId: approval?.nodeId,
       reason: reason ?? null,
@@ -584,6 +600,24 @@ export class WorkflowExecutor {
     };
   }
 
+  /**
+   * Mirror a run's status into the status-line active-run marker
+   * (REQ-STATUSLINE-005.A4) so `specship statusline` can surface it without
+   * opening the workflow DB. A terminal end (completed / cancelled) clears the
+   * marker; any live state (running / paused / failed-but-resumable) writes it.
+   * Best-effort and fully guarded — marker bookkeeping never affects a run.
+   */
+  private syncActiveRunMarker(status: WorkflowRunStatus, inputs?: Record<string, string>): void {
+    if (!this.projectRoot) return;
+    try {
+      if (status === 'completed' || status === 'cancelled') {
+        clearActiveRun(this.projectRoot);
+      } else {
+        writeActiveRun(this.projectRoot, inputs?.SPEC_ID ?? null, status);
+      }
+    } catch { /* never let the status-line marker affect a workflow run */ }
+  }
+
   private async finalize(
     run: WorkflowRun,
     _workflow: WorkflowDefinition,
@@ -609,6 +643,7 @@ export class WorkflowExecutor {
       errorMessage,
       metadata: meta,
     });
+    this.syncActiveRunMarker(status, run.inputs);
 
     if (status === 'completed') {
       this.event(run.id, 'run_completed', { duration_ms: now - run.createdAt });

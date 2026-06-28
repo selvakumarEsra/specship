@@ -24,7 +24,14 @@ import * as path from 'path';
 import * as os from 'os';
 import { ALL_TARGETS, getTarget } from '../src/installer/targets/registry';
 import { uninstallTargets } from '../src/installer';
-import { claudeTarget, cleanupLegacyHooks, cleanupCurrentHooks } from '../src/installer/targets/claude';
+import {
+  claudeTarget,
+  cleanupLegacyHooks,
+  cleanupCurrentHooks,
+  writeStatusLineEntry,
+  removeStatusLineEntry,
+  statusLineState,
+} from '../src/installer/targets/claude';
 
 function mkTmpDir(label: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), `cg-targets-${label}-`));
@@ -620,5 +627,103 @@ describe('Installer targets — registry', () => {
     const reports = uninstallTargets([claudeTarget], 'global');
     expect(reports.length).toBe(1);
     expect(reports[0]?.status).toBe('not-configured');
+  });
+});
+
+/**
+ * Status-line opt-in (SHIP-STATUSLINE-DOC, REQ-STATUSLINE-006/007). The segment
+ * is wired only when the caller opts in, and NEVER clobbers a status line the
+ * user already configured.
+ */
+describe('Claude target — status-line opt-in', () => {
+  let tmpHome: string;
+  let tmpCwd: string;
+  let origCwd: string;
+  let homeRestore: { restore: () => void };
+
+  const settingsPath = () => path.join(tmpCwd, '.claude', 'settings.json');
+  const readSettings = () => JSON.parse(fs.readFileSync(settingsPath(), 'utf-8'));
+  const writeSettings = (obj: unknown) => {
+    fs.mkdirSync(path.dirname(settingsPath()), { recursive: true });
+    fs.writeFileSync(settingsPath(), JSON.stringify(obj, null, 2) + '\n');
+  };
+
+  beforeEach(() => {
+    tmpHome = mkTmpDir('home');
+    tmpCwd = mkTmpDir('cwd');
+    origCwd = process.cwd();
+    process.chdir(tmpCwd);
+    homeRestore = setHome(tmpHome);
+  });
+  afterEach(() => {
+    homeRestore.restore();
+    process.chdir(origCwd);
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+    fs.rmSync(tmpCwd, { recursive: true, force: true });
+  });
+
+  it('default install writes NO status line (opt-in only)', () => {
+    claudeTarget.install('local', { autoAllow: false });
+    const settings = readSettings();
+    expect(settings.statusLine).toBeUndefined();
+  });
+
+  it('opt-in install writes a marked statusLine invoking `specship statusline` (REQ-006.A1)', () => {
+    const result = claudeTarget.install('local', { autoAllow: false, installStatusLine: true });
+    const settings = readSettings();
+    expect(settings.statusLine).toBeDefined();
+    expect(settings.statusLine.type).toBe('command');
+    expect(settings.statusLine.command).toContain('specship statusline');
+    expect(settings.statusLine._specship).toBe(true);
+    // It is reported in the install file list.
+    expect(result.files.some((f) => f.path.replace(/\\/g, '/').endsWith('/.claude/settings.json'))).toBe(true);
+  });
+
+  it('opt-in install NEVER overwrites a user-authored status line, and surfaces the snippet (REQ-006.A2)', () => {
+    writeSettings({ statusLine: { type: 'command', command: 'my-own-statusline.sh' } });
+
+    const result = claudeTarget.install('local', { autoAllow: false, installStatusLine: true });
+
+    const settings = readSettings();
+    expect(settings.statusLine.command).toBe('my-own-statusline.sh');
+    expect(settings.statusLine._specship).toBeUndefined();
+    const slEntry = result.files.find((f) => f.action === 'kept');
+    expect(slEntry).toBeDefined();
+    expect((result.notes ?? []).join('\n')).toContain('specship statusline');
+  });
+
+  it('re-running opt-in install is idempotent for the status line (REQ-006.A4)', () => {
+    claudeTarget.install('local', { autoAllow: false, installStatusLine: true });
+    const second = writeStatusLineEntry('local');
+    expect(second.action).toBe('unchanged');
+  });
+
+  it('uninstall removes the marked status line we wrote (REQ-007.A1)', () => {
+    claudeTarget.install('local', { autoAllow: false, installStatusLine: true });
+    expect(readSettings().statusLine).toBeDefined();
+
+    claudeTarget.uninstall('local');
+    expect(readSettings().statusLine).toBeUndefined();
+  });
+
+  it('uninstall leaves a user-authored status line untouched (REQ-007.A2)', () => {
+    writeSettings({ statusLine: { type: 'command', command: 'my-own-statusline.sh' } });
+    claudeTarget.uninstall('local');
+    expect(readSettings().statusLine.command).toBe('my-own-statusline.sh');
+  });
+
+  it('statusLineState classifies none / ours / foreign', () => {
+    expect(statusLineState('local')).toBe('none');
+    writeSettings({ statusLine: { type: 'command', command: 'whatever' } });
+    expect(statusLineState('local')).toBe('foreign');
+    removeStatusLineEntry('local'); // no-op on a foreign line
+    expect(statusLineState('local')).toBe('foreign');
+    writeStatusLineEntry('local'); // refuses to clobber foreign → still foreign
+    expect(statusLineState('local')).toBe('foreign');
+  });
+
+  it('writeStatusLineEntry on a clean config yields ours', () => {
+    writeStatusLineEntry('local');
+    expect(statusLineState('local')).toBe('ours');
   });
 });

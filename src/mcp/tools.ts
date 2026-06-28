@@ -6,6 +6,7 @@
 
 import type SpecShip from '../index';
 import { findNearestSpecShipRoot } from '../directory';
+import { initSession, recordCall } from '../statusline';
 // Lazy-load the heavy SpecShip chain off the MCP startup path — see the same
 // helper in engine.ts. ToolHandler must load to answer tools/list (static
 // schemas), but it must NOT drag in sqlite/query layers before the daemon binds;
@@ -634,6 +635,9 @@ export class ToolHandler {
    */
   setDefaultSpecShip(cg: SpecShip): void {
     this.cg = cg;
+    // Reset the per-session call marker once, when this server process first
+    // attaches its code graph (REQ-STATUSLINE-004). Idempotent per process.
+    initSession(cg.getProjectRoot());
   }
 
   /**
@@ -1019,6 +1023,18 @@ export class ToolHandler {
       // running. The gate is cleared after first await — subsequent calls
       // pay nothing. Catch-up failures are logged by the engine; we
       // proceed regardless so a transient sync error never breaks tools.
+      // Record this lookup into the per-session status-line marker
+      // (REQ-STATUSLINE-004). Best-effort and only for specship_* tools. The
+      // ENTIRE block is guarded — including resolving the project root — so a
+      // marker step can never turn a real tool call into an error (A3); a mock
+      // or partially-initialized code graph must pass straight through.
+      if (toolName.startsWith('specship_') && this.cg) {
+        try {
+          const root = this.cg.getProjectRoot();
+          initSession(root);     // idempotent per process — fixes the session start
+          recordCall(root, toolName);
+        } catch { /* never let status-line bookkeeping affect the tool call */ }
+      }
       if (this.catchUpGate) {
         const gate = this.catchUpGate;
         this.catchUpGate = null;

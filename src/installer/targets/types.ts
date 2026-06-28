@@ -58,6 +58,14 @@ export interface InstallOptions {
    * callers default to on.
    */
   sdd?: boolean;
+  /**
+   * Whether to wire SpecShip's status-line segment into Claude's `settings.json`
+   * (SHIP-STATUSLINE-DOC, REQ-STATUSLINE-006). Opt-in — off unless the user
+   * explicitly accepts the install prompt or passes `--statusline`. The writer
+   * NEVER overwrites a status line the user already configured; it only writes
+   * when none exists (or when re-asserting its own).
+   */
+  installStatusLine?: boolean;
 }
 
 export interface AgentTarget {
