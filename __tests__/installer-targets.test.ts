@@ -516,7 +516,7 @@ describe('Claude target — specifics', () => {
   it('install copies the shipped slash commands and subagent', () => {
     claudeTarget.install('global', { autoAllow: false });
 
-    for (const name of ['ss-sync.md', 'ss-trace.md', 'ss-explore.md', 'ss-impact.md', 'ss-spec.md', 'ss-implement.md', 'ss-drifted.md', 'ss-fix.md', 'ss-relink.md', 'ss-spec-author.md', 'ss-spec-review.md', 'ss-design-implement.md', 'ss-brainstorm.md', 'ss-domain.md', 'ss-triage.md']) {
+    for (const name of ['ss-sync.md', 'ss-trace.md', 'ss-explore.md', 'ss-impact.md', 'ss-spec.md', 'ss-implement.md', 'ss-drifted.md', 'ss-fix.md', 'ss-relink.md', 'ss-spec-author.md', 'ss-spec-review.md', 'ss-design-implement.md', 'ss-brainstorm.md', 'ss-domain.md', 'ss-triage.md', 'ss-behaviour.md']) {
       expect(fs.existsSync(path.join(tmpHome, '.claude', 'commands', name))).toBe(true);
     }
     expect(fs.existsSync(path.join(tmpHome, '.claude', 'agents', 'specship-explorer.md'))).toBe(true);
@@ -570,7 +570,7 @@ describe('Claude target — specifics', () => {
 
     claudeTarget.uninstall('global');
 
-    for (const name of ['ss-sync.md', 'ss-trace.md', 'ss-explore.md', 'ss-impact.md', 'ss-spec.md', 'ss-implement.md', 'ss-drifted.md', 'ss-fix.md', 'ss-relink.md', 'ss-spec-author.md', 'ss-spec-review.md', 'ss-design-implement.md', 'ss-brainstorm.md', 'ss-domain.md', 'ss-triage.md']) {
+    for (const name of ['ss-sync.md', 'ss-trace.md', 'ss-explore.md', 'ss-impact.md', 'ss-spec.md', 'ss-implement.md', 'ss-drifted.md', 'ss-fix.md', 'ss-relink.md', 'ss-spec-author.md', 'ss-spec-review.md', 'ss-design-implement.md', 'ss-brainstorm.md', 'ss-domain.md', 'ss-triage.md', 'ss-behaviour.md']) {
       expect(fs.existsSync(path.join(tmpHome, '.claude', 'commands', name))).toBe(false);
     }
     expect(fs.existsSync(path.join(tmpHome, '.claude', 'agents', 'specship-explorer.md'))).toBe(false);

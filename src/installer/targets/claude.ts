@@ -127,6 +127,8 @@ const SHIPPED_COMMANDS = [
   'ss-domain.md',
   // Confirmation-gated triage: route a change to an existing spec and append to it:
   'ss-triage.md',
+  // Behaviour harness: author + run E2E tests from a requirement's acceptance criteria:
+  'ss-behaviour.md',
 ] as const;
 
 /**
