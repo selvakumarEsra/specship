@@ -19,7 +19,30 @@ export interface BlogPost {
 
 const grid = '<div class="thumb-grid"></div>';
 
+// Art-deco status-line motif: a row of gold parallelogram segments (filled →
+// dim) flanked by diamond ornaments — the same shapes the segment renders.
+const slBars = (() => {
+  let s = '';
+  for (let i = 0; i < 10; i++) {
+    const x = i * 18;
+    const fill = i < 6 ? '#E5A50A' : 'rgba(229,165,10,0.22)';
+    s += `<path d="M${x} 0 L${x + 11} 0 L${x + 5} 24 L${x - 6} 24 Z" fill="${fill}"/>`;
+  }
+  return s;
+})();
+const statuslineThumb = `<svg viewBox="0 0 360 200" preserveAspectRatio="xMidYMid slice"><rect width="360" height="200" fill="rgba(229,165,10,0.08)"/><path d="M70 100 L80 88 L90 100 L80 112 Z" fill="#E5A50A"/><path d="M286 100 L296 88 L306 100 L296 112 Z" fill="#E5A50A"/><g transform="translate(104,88)">${slBars}</g></svg>`;
+
 export const posts: BlogPost[] = [
+  {
+    slug: 'status-line',
+    cat: 'statusline', catLabel: 'Status Line', catColor: '#E5A50A',
+    title: 'A status line that refuses to lie about tokens saved',
+    dek: 'Your status line is prime real estate — so what earns a spot? SpecShip’s segment shows index sync state, drift, and how many times it was actually called. Not “tokens saved”: that number has no honest source at runtime, so we don’t fake it.',
+    date: 'Jun 28, 2026', read: '7 min', feat: true,
+    tags: ['#status-line', '#claude-code', '#observability', '#honesty'],
+    thumbBg: 'rgba(229,165,10,0.10)',
+    thumb: statuslineThumb,
+  },
   {
     slug: 'domain-knowledge',
     cat: 'domain', catLabel: 'Domain Knowledge', catColor: '#8B7BFF',
@@ -114,6 +137,7 @@ export const posts: BlogPost[] = [
 
 export const categories = [
   { key: 'all', label: 'All posts', color: '' },
+  { key: 'statusline', label: 'Status Line', color: '#E5A50A' },
   { key: 'graph', label: 'Knowledge Graph', color: 'var(--node-spec)' },
   { key: 'harness', label: 'Harness Engineering', color: '#F2555A' },
   { key: 'domain', label: 'Domain Knowledge', color: '#8B7BFF' },

@@ -1,0 +1,97 @@
+---
+import Article from '../../layouts/Article.astro';
+// Gold parallelogram deco bar — the same motif the real segment renders.
+const decoBars = Array.from({ length: 22 }, (_, i) => {
+  const x = i * 26;
+  const fill = i < 13 ? '#E5A50A' : 'rgba(229,165,10,0.20)';
+  return `<path d="M${x} 0 L${x + 13} 0 L${x + 6} 26 L${x - 7} 26 Z" fill="${fill}"/>`;
+}).join('');
+---
+<Article slug="status-line">
+  <svg slot="figure" viewBox="0 0 980 440" preserveAspectRatio="xMidYMid slice">
+    <defs><radialGradient id="hsl" cx="50%" cy="20%" r="72%"><stop offset="0" stop-color="rgba(229,165,10,0.15)"/><stop offset="1" stop-color="rgba(229,165,10,0)"/></radialGradient></defs>
+    <rect width="980" height="440" fill="url(#hsl)"/>
+    <rect x="120" y="150" width="740" height="150" rx="16" fill="rgba(10,12,16,0.62)" stroke="rgba(229,165,10,0.28)" stroke-width="1.4"/>
+    <g font-family="Geist Mono, monospace" font-size="21">
+      <text x="150" y="208" fill="#E5A50A">◈</text>
+      <text x="178" y="208" fill="rgba(170,185,220,0.82)">specship</text>
+      <text x="278" y="208" fill="rgba(120,135,160,0.55)">◆</text>
+      <text x="304" y="208" fill="#46C26B">✓ synced</text>
+      <text x="416" y="208" fill="rgba(120,135,160,0.55)">◆</text>
+      <text x="442" y="208" fill="#E5A50A">⚠ 2 drift</text>
+      <text x="566" y="208" fill="rgba(120,135,160,0.55)">◆</text>
+      <text x="592" y="208" fill="#E5A50A">7 calls</text>
+      <text x="688" y="208" fill="rgba(120,135,160,0.55)">◆</text>
+      <text x="714" y="208" fill="#5B93F2">REQ-014·running</text>
+    </g>
+    <g transform="translate(178,244)" set:html={decoBars} />
+  </svg>
+
+  <p>The status line is the one strip of the terminal an agent never scrolls away. One to three lines, always visible, sitting right above where you type. That makes it the most expensive real estate in the whole tool — and the question for any feature that wants a spot there is brutally simple: <em>is this worth a glance, every single render, forever?</em></p>
+  <p>SpecShip now ships a status-line segment for Claude Code. Building it turned out to be less about what to show and more about one thing we refused to show.</p>
+
+  <h2>The line we refused to write</h2>
+  <p>The obvious headline number for a code-intelligence tool is "tokens saved." It's the whole pitch: ask the graph instead of grepping and reading, and the agent burns far less context. A live counter ticking up — <code>saved 412k tokens</code> — would be the perfect flex in the corner of your screen.</p>
+  <p>We didn't build it, because it would be a lie.</p>
+  <p>"Tokens saved" is a <strong>counterfactual</strong>: it's the difference between what you spent and what you <em>would have</em> spent without SpecShip. That second number doesn't exist at runtime. There is no parallel session where the agent grepped and read its way to the same answer for us to subtract from. Our own benchmarks measure it by running both arms — with and without — across real repositories and comparing. That's a measurement you do in a lab, not a number you can mint live in a status bar. Any figure we printed would be a model multiplied by a guess, dressed up as telemetry.</p>
+
+  <div class="callout">
+    <div class="co-ic" style="background:color-mix(in srgb,#E5A50A 16%,transparent);color:#E5A50A"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><circle cx="12" cy="12" r="10"/></svg></div>
+    <div class="co-body"><strong>A fabricated metric is worse than no metric.</strong> The moment a number on screen is one you can't defend, every other number next to it inherits the doubt. We'd rather show less and have all of it be true.</div>
+  </div>
+
+  <p>So instead of an invented savings figure, the segment shows the honest thing right next to it: <strong>how many times specship was actually called this session.</strong> <code>7 calls</code> is a fact — it happened, we counted it. It carries the same signal a user actually wants ("is this tool earning its place in my loop?") without pretending to know the road not taken.</p>
+
+  <div class="pullquote">
+    <p>"Tokens saved" needs a universe where you didn't install SpecShip. "7 calls" just needs a counter. Only one of those is true.</p>
+  </div>
+
+  <h2>What does earn a spot</h2>
+  <p>With the vanity metric out, four things were left — each one a fact the graph already knows, each one something you'd otherwise have to run a command to check:</p>
+
+  <div class="art-stats">
+    <div class="as"><div class="v" style="color:#46C26B">✓ / ⟳ N</div><div class="k">sync state — in step with your code, or N files pending</div></div>
+    <div class="as"><div class="v" style="color:#E5A50A">⚠ N drift</div><div class="k">spec→code links that have drifted and need review</div></div>
+    <div class="as"><div class="v" style="color:#E5A50A">N calls</div><div class="k">specship lookups this session — the honest usage signal</div></div>
+    <div class="as"><div class="v" style="color:#5B93F2">REQ·state</div><div class="k">the active workflow run, with its spec and status</div></div>
+  </div>
+
+  <p>There's also a quiet fifth: a warning when the index is running on a degraded, non-WAL database path (a network mount, a WSL2 <code>/mnt</code> drive) where reads can block — the kind of thing that silently makes everything feel slow until someone notices. The status line notices for you.</p>
+
+  <h2>Composable, never a takeover</h2>
+  <p>Plenty of tools install a status line by <em>replacing</em> yours. That's a non-starter — your status line is yours, and you've probably already got a model name, a token meter, a git branch, maybe a cost readout in there. So the segment is exactly that: a <strong>segment</strong>. The command reads Claude Code's status-line JSON on stdin and prints one line. You append it to whatever you already run.</p>
+
+  <div class="codeblock">
+    <div class="cb-bar"><div class="traffic"><i style="background:#F2555A"></i><i style="background:#E5A50A"></i><i style="background:#46C26B"></i></div><span class="fn">your-statusline.sh</span></div>
+    <pre><span class="c-com"># your existing line(s) above…</span>
+specship_line=$(echo <span class="c-str">"$input"</span> | specship statusline)
+<span class="c-com"># …then append "$specship_line" to your final output.</span></pre>
+  </div>
+
+  <p>Prefer not to wire it by hand? <code>specship install</code> offers to do it for you — opt-in, off by default. And it will <strong>never overwrite a status line you already have</strong>: if one's configured, it leaves it untouched and just hands you the snippet above. <code>uninstall</code> removes only the entry it added, leaving yours exactly as it was.</p>
+
+  <div class="callout">
+    <div class="co-ic" style="background:color-mix(in srgb,#46C26B 16%,transparent);color:#46C26B"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div>
+    <div class="co-body"><strong>Honors <code>NO_COLOR</code>.</strong> The default look is gold art-deco bars and diamonds — but set <code>NO_COLOR</code> and you get clean, ANSI-free text that's safe in any terminal or log.</div>
+  </div>
+
+  <h2>Fast enough to render on every keystroke</h2>
+  <p>Here's the constraint that shaped the whole design: a status line re-renders constantly — sub-second, on basically every update. Whatever the command does, it does <em>that</em> often. So the one thing it must never do is the obvious thing: open the database.</p>
+  <p>SpecShip's index is a SQLite knowledge graph. Cracking it open, running queries, and closing it on every render would lag your prompt into uselessness. So the read path never touches it. The segment reads two tiny JSON cache files and prints — no database handle, no query, no subprocess. If the database is mid-write, locked, or absent entirely, the status line doesn't care; it just renders what the caches last knew.</p>
+
+  <p>Keeping those caches warm is the job of the <em>producers</em> — the parts of SpecShip that already have the database open anyway:</p>
+  <ul>
+    <li><strong>Index, sync, and the file watcher</strong> refresh the sync/drift/backend cache whenever the graph changes — so the moment you edit a file and it settles, the pending count is already current.</li>
+    <li><strong>The MCP server</strong> bumps a per-session counter each time the agent calls a specship tool. One Claude Code session spawns one server, so "calls since this server started" <em>is</em> your session's count.</li>
+    <li><strong>The workflow engine</strong> writes the active run's spec and status as it moves through plan → approve → implement, and clears it when the run ends.</li>
+  </ul>
+  <p>Every one of those writes is best-effort and atomic — a cache refresh can never break an index, and a half-written file can never reach the reader. The expensive work happens where the database is already open; the cheap work happens where you can see it.</p>
+
+  <div class="pullquote">
+    <p>The reader is dumb on purpose. All the intelligence lives in the producers, which run where the database is already warm — never on the render path.</p>
+  </div>
+
+  <h2>The shape of an honest dashboard</h2>
+  <p>A status line is a tiny thing. But it's a tiny thing you stare at thousands of times a day, and that makes it a surprisingly sharp test of a tool's values. Every pixel is a claim. Show a fabricated number and you've taught the user to discount the real ones. Replace their setup and you've decided your information matters more than theirs. Open the database on the hot path and you've made the whole tool feel slow.</p>
+  <p>We tried to fail none of those. The segment shows four true things and one honest stand-in for a number we can't actually compute, composes into whatever you already run, and stays out of the way of the database it reports on. <code>◈ specship ◆ ✓ synced ◆ 7 calls ◈</code> — small, fast, and every glyph of it earned.</p>
+</Article>
