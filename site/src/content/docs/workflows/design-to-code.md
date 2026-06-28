@@ -18,7 +18,7 @@ Imports a design **by URL** and runs the bundled `claude-design-implement` workf
 3. **Extracts design tokens** into `specs/<slug>/tokens.css`, mapped onto your project's existing token system.
 4. **Drafts a spec** at `specs/<slug>.md` covering the behavioural contract, accessibility, responsive, and interaction states — **no pixel values or hex colors** (those stay in the snapshot + tokens).
 5. **Pauses at an approval gate** so you can walk the `[needs review]` markers and answer the gap-fill questions.
-6. **Writes the spec**, syncs it into the graph, and hands off to `/ss-implement <first REQ ID>`.
+6. **Writes the spec**, syncs it into the graph, and hands off to `/ss-spec implement <first REQ ID>`.
 
 ### `/ss-design-loop` — taste the design first
 
@@ -27,7 +27,7 @@ The deeper companion: it runs the human-tasted design loop *before* it specs any
 - **Gate 1 (aesthetic).** You drive `claude.ai/design` through the `designer_*` tools while the human tastes the variants on the live surface, iterating until they say "that's it." Claude Design has the taste; the agent is translation + plumbing, and seeds the prompt with what the repo actually does (entities, operations, states, failure modes) pulled via `specship_explore`.
 - **Gate 2 (contract).** `designer_handoff` fetches the chosen bundle to disk, then the same `claude-design-implement` workflow runs against it (via its `HANDOFF_DIR` input — no re-fetch) and pauses so the human walks the spec's `[needs review]` markers.
 
-Then it hands off to `/ss-implement`.
+Then it hands off to `/ss-spec implement`.
 
 ## Why the four-file split
 

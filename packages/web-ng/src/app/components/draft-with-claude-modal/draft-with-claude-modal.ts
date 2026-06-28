@@ -38,9 +38,10 @@ export class DraftWithClaudeModal {
   protected readonly toast = signal<string | null>(null);
 
   protected readonly slashCommand = computed(() => {
+    // Intent door (DASH-DOORS-DOC): authoring a spec is `/ss-spec new`.
     const d = this.description().trim();
-    if (!d) return '/ss-spec-author';
-    return `/ss-spec-author "${d.replace(/"/g, '\\"')}"`;
+    if (!d) return '/ss-spec new';
+    return `/ss-spec new "${d.replace(/"/g, '\\"')}"`;
   });
 
   protected readonly canSubmit = computed(() => this.description().trim().length > 0);

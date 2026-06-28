@@ -227,6 +227,30 @@ function cmp(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 
+// =============================================================================
+// Report tiering (HEALTH-GATEWAY-DOC) — which finding classes are trustworthy
+// enough for the default human report, and which are lower-confidence opt-ins.
+// =============================================================================
+
+/** Finding classes shown by default — demonstrably precise (REQ-HEALTH-001). */
+export const HIGH_PRECISION_CLASSES = ['oversized', 'godFiles', 'cycles'] as const;
+
+/**
+ * Lower-confidence finding classes — hidden unless explicitly requested
+ * (REQ-HEALTH-002). Dead-code is high-volume/heuristic; coupling fan-in is
+ * inflated by method-name-collision artifacts.
+ */
+export const LOW_CONFIDENCE_CLASSES = ['coupling', 'deadCode'] as const;
+
+/**
+ * True when no high-precision finding crossed a threshold — the default gateway
+ * view is clean even if lower-confidence (dead-code/coupling) findings exist
+ * (REQ-HEALTH-001.A3).
+ */
+export function highPrecisionClean(r: MaintainabilityReport): boolean {
+  return r.oversized.length === 0 && r.godFiles.length === 0 && r.cycles.length === 0;
+}
+
 /**
  * Tarjan's strongly-connected-components over the file-import graph. Returns
  * every SCC of size > 1 (a genuine import cycle), each as a sorted file list,

@@ -1,12 +1,12 @@
 ---
-description: Run the full design→code loop — taste a claude.ai/design with the human via the designer MCP, then snapshot → spec → review → hand off to /ss-implement. Two human gates.
+description: Run the full design→code loop — taste a claude.ai/design with the human via the designer MCP, then snapshot → spec → review → hand off to /ss-spec implement. Two human gates.
 argument-hint: [intent — what you want to design]
 allowed-tools: Read, Write, Edit, Bash, mcp__specship__designer_session, mcp__specship__designer_prompt, mcp__specship__designer_ask, mcp__specship__designer_list, mcp__specship__designer_snapshot, mcp__specship__designer_handoff, mcp__specship__specship_explore, mcp__specship__specship_search, mcp__specship__specship_node, mcp__specship__specship_spec, mcp__specship__specship_files
 ---
 
 # SpecShip Design Loop: `$ARGUMENTS`
 
-One continuous pipeline: **intent → taste → design → handoff → spec → `/ss-implement`**.
+One continuous pipeline: **intent → taste → design → handoff → spec → `/ss-spec implement`**.
 You (the orchestrator) drive `claude.ai/design` through the `designer` MCP while the
 **human tastes** the variants, then promote the chosen design into a SpecShip spec via the
 bundled `claude-design-implement` workflow. Two human gates:
@@ -100,7 +100,7 @@ it to the human, and walk the `[needs review]` markers + gap-fill questions toge
 When the workflow completes it prints the bridge message. Relay it to the human:
 - the spec path `specs/<slug>.md` and its REQ IDs,
 - the reference files (`snapshot.html`, `tokens.css`, `source.md`),
-- the exact next step: **`/ss-implement <first REQ ID>`**.
+- the exact next step: **`/ss-spec implement <first REQ ID>`**.
 
 Remind them: the implementer reads `snapshot.html` for visual fidelity — the spec is
 contract-only.

@@ -88,6 +88,39 @@
 
   </div>
 
+  <!-- Command doors (DASH-DOORS-DOC) -------------------------------------- -->
+  <div class="card card-pad doors-card">
+    <div class="row doors-head">
+      <div class="row gap-8">
+        <app-icon name="command" [size]="14" style="color: var(--node-spec);" />
+        <span style="font-weight: 600; font-size: 12.5px;">Command doors</span>
+        <span class="muted" style="font-size: 11px;">· your whole SpecShip command surface, in Claude Code</span>
+      </div>
+    </div>
+    <div class="doors-grid">
+      @for (d of doors; track d.id) {
+        <button class="door-tile" type="button" (click)="go(d.route)"
+          [attr.aria-label]="d.label + ' door — ' + d.cmd + '. ' + d.blurb">
+          <div class="row door-top">
+            <span class="door-ic" [style.color]="d.color" [style.background]="'color-mix(in srgb, ' + d.color + ' 14%, transparent)'">
+              <app-icon [name]="d.icon" [size]="15" />
+            </span>
+            <div class="door-titles">
+              <div class="door-label">{{ d.label }} door</div>
+              <code class="mono door-cmd" [style.color]="d.color">{{ d.cmd }}</code>
+            </div>
+          </div>
+          <div class="door-blurb">{{ d.blurb }}</div>
+          <div class="door-subs">
+            @for (s of d.subs; track s) {
+              <span class="door-sub">{{ s }}</span>
+            }
+          </div>
+        </button>
+      }
+    </div>
+  </div>
+
   <!-- Center row: 2fr / 1fr ----------------------------------------------- -->
   <div class="center-grid">
 

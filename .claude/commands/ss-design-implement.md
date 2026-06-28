@@ -1,5 +1,5 @@
 ---
-description: Import a Claude Design (or Figma) file, snapshot it for zero-loss reference, draft a SpecShip spec, and hand off to /ss-implement.
+description: Import a Claude Design (or Figma) file, snapshot it for zero-loss reference, draft a SpecShip spec, and hand off to /ss-spec implement.
 argument-hint: <Claude-Design-URL> [SLUG]
 allowed-tools: Read, Write, Edit, Bash, mcp__specship__specship_explore, mcp__specship__specship_search, mcp__specship__specship_node, mcp__specship__specship_spec, mcp__specship__specship_files
 ---
@@ -19,7 +19,7 @@ Run the bundled `claude-design-implement` workflow against the Claude Design URL
 4. **Drafts a spec** at `specs/<slug>.md` covering behavioural contract, accessibility, responsive, interaction states, and data shape — **without** pixel values or hex colors (those stay in the snapshot + tokens).
 5. **Pauses at an approval gate** for you to walk the `[needs review]` markers and gap-fill questions.
 6. **Writes the spec** and `specship sync`s it into the graph.
-7. **Hands off** with the next command: `/ss-implement <first REQ ID>`.
+7. **Hands off** with the next command: `/ss-spec implement <first REQ ID>`.
 
 ## How to invoke
 
@@ -60,7 +60,7 @@ Specs that name pixel values flag drift on every theme tweak; specs that name to
 You get a hand-off message listing the REQs. Run:
 
 ```
-/ss-implement <REQ-XXX-001>
+/ss-spec implement <REQ-XXX-001>
 ```
 
 The implementation phase reads:

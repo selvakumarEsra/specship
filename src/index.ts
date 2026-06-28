@@ -158,7 +158,7 @@ export type {
   SweepResult,
 } from './reflect';
 // Maintainability harness (MAINT-DOC / REQ-MAINT-001).
-export { computeMaintainability, resolveThresholds, resolveExclude, DEFAULT_THRESHOLDS, DEFAULT_EXCLUDE, CONFIG_FILE_NAME } from './graph/maintainability';
+export { computeMaintainability, resolveThresholds, resolveExclude, DEFAULT_THRESHOLDS, DEFAULT_EXCLUDE, CONFIG_FILE_NAME, HIGH_PRECISION_CLASSES, LOW_CONFIDENCE_CLASSES, highPrecisionClean } from './graph/maintainability';
 // Architecture-fitness harness (FITNESS-DOC / REQ-FITNESS-001…003).
 export { evaluateFitness, loadFitnessRules, FITNESS_CONFIG_FILE } from './fitness/fitness';
 // Enforcement mode (ENFORCE-DOC / REQ-ENFORCE-001…003).
@@ -322,7 +322,7 @@ export class SpecShip {
    * The domain gap-seed (REQ-DOMAIN-003): the structural code entities and
    * non-domain specs that no domain fact yet covers, plus a coverage tally.
    * Read-only — computed from live state, writes nothing. Exposed on the
-   * instance so the `/ss-domain` command and the desktop server can drive it
+   * instance so the `/ss-spec domain` command and the desktop server can drive it
    * without runtime-importing the package.
    */
   getDomainGapSeed(): DomainGapSeed {

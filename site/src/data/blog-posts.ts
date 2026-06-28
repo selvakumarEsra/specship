@@ -34,6 +34,16 @@ const statuslineThumb = `<svg viewBox="0 0 360 200" preserveAspectRatio="xMidYMi
 
 export const posts: BlogPost[] = [
   {
+    slug: 'adoption-wedge',
+    cat: 'product', catLabel: 'Product', catColor: '#46C26B',
+    title: 'We made SpecShip smaller on purpose',
+    dek: 'A first install used to hand you 17 commands and a spec workflow you never asked for. Now it gives you just the wedge — the agent exploring the index instead of re-reading files — and the spec-driven depth is one opt-in flag away.',
+    date: 'Jun 28, 2026', read: '7 min', feat: true,
+    tags: ['#adoption', '#onboarding', '#retrieval', '#dx'],
+    thumbBg: 'rgba(70,194,107,0.10)',
+    thumb: `<svg viewBox="0 0 360 200" preserveAspectRatio="xMidYMid slice"><rect width="360" height="200" fill="rgba(70,194,107,0.09)"/><g><rect x="40" y="138" width="92" height="34" rx="9" fill="rgba(70,194,107,0.85)"/><rect x="134" y="98" width="92" height="34" rx="9" fill="rgba(91,147,242,0.7)"/><rect x="228" y="58" width="96" height="34" rx="9" fill="none" stroke="rgba(165,134,245,0.7)" stroke-width="1.6" stroke-dasharray="6 6"/></g><path d="M132 150 L134 118 M226 110 L228 78" stroke="rgba(150,165,200,0.32)" stroke-width="1.5" fill="none" stroke-dasharray="4 5"/></svg>`,
+  },
+  {
     slug: 'status-line',
     cat: 'statusline', catLabel: 'Status Line', catColor: '#E5A50A',
     title: 'A status line that refuses to lie about tokens saved',
