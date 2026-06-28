@@ -9,6 +9,9 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+
+## [0.10.0] - 2026-06-28
+
 ### New Features
 
 - **See where your codebase is getting risky — straight from the graph.** A new maintainability harness surfaces coupling hotspots (highly-depended-on symbols), oversized symbols and god-files, dependency cycles, and dead-code candidates — all derived from the index with no extra parse, each finding telling you why it flagged. Run `specship maintainability` in your terminal, open the **Maintainability** page in the dashboard, or let your agent call it. Tune the thresholds per project in `specship.config.json`.
@@ -24,7 +27,6 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Installs now steer claude.ai/design links to the design loop.** `specship install` writes a short rule into your project's `CLAUDE.md` so that when you share a `claude.ai/design` link, Claude recommends `/ss-design-loop` (taste the design → spec → review → implement) and confirms with you before proceeding — even mid spec-author. Skip it with `--no-sdd`; `specship uninstall` removes it.
 - **Search your specs by plain text to find where a change belongs.** `specship_spec` gains a `query` mode: give it a free-text description — a bug, an error, a one-line enhancement — and it returns the existing specs that best match, ranked with a relevance score and a matched snippet, so you can route a small change to the right requirement instead of spawning a new doc. Calling it with no argument (the lifecycle funnel) or with a spec id (the spec's detail) works exactly as before.
 - **New `/ss-triage` command routes a small change to the spec it belongs to.** Hand it a bug, an error log, or a one-line enhancement and it classifies the input, finds the existing spec it belongs to (prose via spec search; error logs by walking the failing code to the spec it implements), and — **only after you confirm the exact change** — appends a new requirement or acceptance criterion to that spec rather than spawning a new doc. When nothing fits, it says so and offers to author a new spec instead; it never creates one on its own.
-
 
 ## [0.6.0] - 2026-06-25
 
@@ -392,3 +394,4 @@ Thanks @andreinknv for the substantive draft this release was based on.
 [0.5.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.5.0
 [0.6.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.6.0
 [0.7.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.7.0
+[0.10.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.10.0
