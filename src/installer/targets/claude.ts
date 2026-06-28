@@ -102,44 +102,47 @@ function packageAssetPath(...segments: string[]): string {
   return path.join(__dirname, '..', '..', '..', ...segments);
 }
 
-/** Slash commands the installer copies into Claude's commands dir. */
-const SHIPPED_COMMANDS = [
-  'ss-sync.md',
-  'ss-trace.md',
-  'ss-explore.md',
-  'ss-impact.md',
-  // Spec-layer commands:
-  'ss-spec.md',
-  'ss-implement.md',
-  'ss-drifted.md',
-  'ss-fix.md',
-  'ss-relink.md',
-  // Spec-authoring commands (v0.2):
-  'ss-spec-author.md',
-  'ss-spec-review.md',
-  // Design-import workflow (v0.2):
+// Slash commands are a small set of progressive DOORS (WORKFLOW-DOORS-DOC),
+// split into two TIERS (INSTALL-WEDGE-DOC, REQ-WEDGE-001.A3). The retrieval door
+// is the adoption wedge — it ships on a default install with zero workflow
+// change. The governance doors (the spec lifecycle + the gate) are the deliberate
+// deep end and ship ONLY on an explicit opt-in (`--sdd`). Each door dispatches its
+// sub-actions internally, so a newcomer meets one obvious entry per phase instead
+// of a long flat list.
+
+/** Retrieval tier — the reads door. Shipped on every install. */
+const RETRIEVAL_TIER_COMMANDS = [
+  'ss-explore.md', // reads: explore / trace / impact
+] as const;
+
+/** Governance tier — the intent + gate doors, plus the design→code commands. Opt-in (`--sdd`). */
+const GOVERNANCE_TIER_COMMANDS = [
+  'ss-spec.md',  // intent loop: view / new / fast / implement / review / triage / behaviour / domain
+  'ss-check.md', // gate & health: check / drifted / fix / relink / health
+  // Design→code workflow (own surface; designer is slated for a separate cut, untouched here).
   'ss-design-implement.md',
-  // Full design→code loop (taste via merged designer tools → spec → implement):
   'ss-design-loop.md',
-  // Confirmation-gated brainstorm → brief → spec-author handoff:
-  'ss-brainstorm.md',
-  // Human-confirmed domain-fact capture (domain knowledge layer):
-  'ss-domain.md',
-  // Confirmation-gated triage: route a change to an existing spec and append to it:
-  'ss-triage.md',
 ] as const;
 
 /**
- * Slash commands the installer used to ship under the legacy `cg-`
- * prefix (historical from when SpecShip was called "code graph").
- * Renamed to `ss-` in v0.2 so the prefix clearly ties to SpecShip.
- *
- * Listed so the installer can self-heal on upgrade: install removes any
- * of these that an earlier installer wrote, so users don't end up with
- * both prefixes side-by-side cluttering their slash-command autocomplete.
- * Uninstall strips them too.
+ * Every command SpecShip ships, both tiers. Used by uninstall (which removes
+ * the whole surface regardless of which tier was installed) and the dry-run
+ * file list.
+ */
+const SHIPPED_COMMANDS = [...RETRIEVAL_TIER_COMMANDS, ...GOVERNANCE_TIER_COMMANDS] as const;
+
+/**
+ * Slash commands the installer used to ship but no longer does, so install can
+ * self-heal on upgrade (it removes any an earlier installer wrote, so the user's
+ * autocomplete doesn't carry stale duplicates) and uninstall strips them too.
+ * Two generations:
+ *   - the pre-v0.2 `cg-` prefix (from when SpecShip was "code graph");
+ *   - the flat per-action `ss-*` commands collapsed into the explore/spec/check
+ *     doors by WORKFLOW-DOORS-DOC (REQ-DOORS-003.A1). NOTE: the three surviving
+ *     doors — ss-explore, ss-spec, ss-check — are deliberately NOT listed here.
  */
 const LEGACY_SHIPPED_COMMANDS = [
+  // pre-v0.2 `cg-` prefix
   'cg-sync.md',
   'cg-trace.md',
   'cg-explore.md',
@@ -151,6 +154,20 @@ const LEGACY_SHIPPED_COMMANDS = [
   'cg-relink.md',
   'cg-spec-author.md',
   'cg-spec-review.md',
+  // per-action ss-* commands folded into the doors (WORKFLOW-DOORS-DOC)
+  'ss-sync.md',
+  'ss-trace.md',
+  'ss-impact.md',
+  'ss-implement.md',
+  'ss-spec-author.md',
+  'ss-spec-review.md',
+  'ss-brainstorm.md',
+  'ss-domain.md',
+  'ss-triage.md',
+  'ss-behaviour.md',
+  'ss-drifted.md',
+  'ss-fix.md',
+  'ss-relink.md',
 ] as const;
 
 /** Subagents the installer copies into Claude's agents dir. */
@@ -281,18 +298,21 @@ class ClaudeCodeTarget implements AgentTarget {
     // 4a. Strip any legacy `cg-*.md` slash commands the pre-v0.2
     // installer wrote. Self-heals on upgrade so the user's autocomplete
     // doesn't carry both prefixes side-by-side.
+    // Governance is opt-in (INSTALL-WEDGE-DOC, REQ-WEDGE-002): the spec /
+    // authoring / review / design commands AND the SDD steering ship together
+    // only when the user explicitly enables them with `--sdd`. A default install
+    // provisions the retrieval tier alone, protecting the wedge (REQ-WEDGE-001).
+    const includeGovernance = opts.sdd === true;
     for (const f of cleanupLegacyCommandsEntries(loc)) files.push(f);
-    for (const f of writeCommandsEntries(loc)) files.push(f);
+    for (const f of writeCommandsEntries(loc, includeGovernance)) files.push(f);
     for (const f of writeAgentsEntries(loc)) files.push(f);
 
-    // 5. Spec-driven-development steering (SDD-INSTALL-DOC). On by default;
-    // `--no-sdd` sets opts.sdd=false to skip. Writes a marker-delimited
-    // "invoke spec-author first" rule into the project CLAUDE.md and a
-    // UserPromptSubmit nudge hook, so feature/bug work is steered to
-    // spec-author before any brainstorming/planning skill. NOT gated on
-    // autoAllow — it's its own opt-out, and the CLAUDE.md rule executes
-    // nothing; the nudge hook only prints guidance.
-    if (opts.sdd !== false) {
+    // 5. Spec-driven-development steering (SDD-INSTALL-DOC, as superseded by
+    // INSTALL-WEDGE-DOC). Part of the governance tier — opt-in via `--sdd`.
+    // Writes a marker-delimited "invoke spec-author first" rule into the project
+    // CLAUDE.md and a UserPromptSubmit nudge hook. NOT gated on autoAllow — the
+    // CLAUDE.md rule executes nothing and the nudge hook only prints guidance.
+    if (includeGovernance) {
       files.push(writeSddInstructionsEntry(loc));
       files.push(writeSddHookEntry(loc));
     }
@@ -786,9 +806,16 @@ export function removeSddInstructionsEntry(loc: Location): WriteResult['files'][
  * locally). Per-file idempotent: a destination with identical bytes is
  * reported `unchanged`. Sibling user-written .md files in the same dir
  * are never touched.
+ *
+ * The retrieval tier is always written; the governance tier is written only
+ * when `includeGovernance` is set (INSTALL-WEDGE-DOC, REQ-WEDGE-001/002). A
+ * default install never touches the governance commands — neither writing them
+ * nor (since this only ever writes) removing any a prior opt-in left behind, so
+ * an existing governance install is preserved on upgrade (REQ-WEDGE-002.A4).
  */
-export function writeCommandsEntries(loc: Location): WriteResult['files'] {
-  return SHIPPED_COMMANDS.map((name) => copyAsset(packageAssetPath('commands', name), path.join(commandsDir(loc), name)));
+export function writeCommandsEntries(loc: Location, includeGovernance = false): WriteResult['files'] {
+  const cmds = includeGovernance ? SHIPPED_COMMANDS : RETRIEVAL_TIER_COMMANDS;
+  return cmds.map((name) => copyAsset(packageAssetPath('commands', name), path.join(commandsDir(loc), name)));
 }
 
 /**

@@ -25,11 +25,14 @@ bug work in the project it's installed into, via three reinforcing mechanisms:
    (they can lose to a high-salience skill); the gate is the deterministic
    backstop for when they do.
 
-All three are written **on by default** (with a shared opt-out flag), are
-idempotent, and are fully reversed by `specship uninstall`. Mechanisms 1–2 are
-non-blocking (work always proceeds); mechanism 3 is blocking by design — it is
-the only one that can stop a skill from running. This is Claude Code only — the
-fork's single supported target.
+All three are part of the **governance tier**, which — as of INSTALL-WEDGE-DOC —
+is **opt-in** via the `--sdd` flag (it was previously written on-by-default; the
+default install now provisions only the retrieval tier so the adoption wedge
+lands without an unrequested spec workflow). When the governance tier is
+installed they are idempotent and fully reversed by `specship uninstall`.
+Mechanisms 1–2 are non-blocking (work always proceeds); mechanism 3 is blocking
+by design — it is the only one that can stop a skill from running. This is Claude
+Code only — the fork's single supported target.
 
 Constraint carried from issue #529: the CLAUDE.md write here MUST stay a tiny
 ordering rule and MUST NOT re-introduce a duplicate of the MCP server's
@@ -39,7 +42,7 @@ tool-usage instructions (which remain the single source of truth in the MCP
 <!-- id: REQ-SDD-001 -->
 ## The installer MUST write a spec-author-first rule into the project CLAUDE.md
 
-On install (default-on), the installer MUST add a short, marker-delimited rule
+On a governance-tier (`--sdd`) install, the installer MUST add a short, marker-delimited rule
 to the project's CLAUDE.md stating that feature/bug work in this repo invokes
 spec-author to author a spec under `specs/` before any brainstorming or planning
 skill, and that spec-driven development is canonical here. The block MUST be
@@ -68,7 +71,7 @@ implementations:
 <!-- id: REQ-SDD-002 -->
 ## The installer MUST add a non-blocking UserPromptSubmit nudge hook
 
-On install (default-on), the installer MUST add a `UserPromptSubmit` hook to the
+On a governance-tier (`--sdd`) install, the installer MUST add a `UserPromptSubmit` hook to the
 project Claude Code `settings.json`. The hook is executed by the harness, not by
 the agent's judgment; when the submitted prompt expresses feature or bug-fix
 intent, it MUST surface guidance steering the agent to author the spec via
@@ -91,15 +94,16 @@ implementations:
 - A second install reports `settings.json` as `unchanged` when the hook entry already matches; sibling hooks and permissions are left untouched.
 
 <!-- id: REQ-SDD-003 -->
-## The steering MUST be on by default, opt-out, and fully reversible
+## The steering MUST be opt-in (governance tier) and fully reversible
 
-The CLAUDE.md rule (REQ-SDD-001), the nudge hook (REQ-SDD-002), and the
-PreToolUse gate (REQ-SDD-004) MUST all be written by a no-flag
-`specship install`, governed by a single documented opt-out flag (e.g.
-`--no-sdd`) that skips all three together. `specship uninstall` MUST remove all
-of them — the marked CLAUDE.md block, the nudge hook entry, and the gate hook
-entry — leaving no residue and preserving the user's other CLAUDE.md content,
-permissions, and sibling hooks.
+As of INSTALL-WEDGE-DOC the steering is **opt-in**: the CLAUDE.md rule
+(REQ-SDD-001), the nudge hook (REQ-SDD-002), and the PreToolUse gate
+(REQ-SDD-004) are written only by an explicit `--sdd` (governance-tier)
+`specship install`; a no-flag install writes none of them (it provisions the
+retrieval tier alone). The single `--sdd` flag toggles all three together.
+`specship uninstall` MUST remove all of them — the marked CLAUDE.md block, the
+nudge hook entry, and the gate hook entry — leaving no residue and preserving the
+user's other CLAUDE.md content, permissions, and sibling hooks.
 
 implementations:
   - src/installer/targets/claude.ts:install
@@ -107,9 +111,9 @@ implementations:
 
 ## Acceptance
 <!-- id: REQ-SDD-003.A1 -->
-- A no-flag `specship install` writes all three SDD steering artifacts: the CLAUDE.md rule, the nudge hook, and the gate hook.
+- A `--sdd` (governance-tier) `specship install` writes all three SDD steering artifacts: the CLAUDE.md rule, the nudge hook, and the gate hook.
 <!-- id: REQ-SDD-003.A2 -->
-- `specship install` with the opt-out flag writes none of the three and does not modify an existing CLAUDE.md or `settings.json` for these additions.
+- A no-flag `specship install` writes none of the three and does not modify an existing CLAUDE.md or `settings.json` for these additions.
 <!-- id: REQ-SDD-003.A3 -->
 - `specship uninstall` removes the SDD CLAUDE.md block (via its markers), the nudge hook entry, and the gate hook entry, reporting `removed`; a CLAUDE.md left empty afterward is deleted, and user content outside the markers is preserved.
 <!-- id: REQ-SDD-003.A4 -->
@@ -118,7 +122,7 @@ implementations:
 <!-- id: REQ-SDD-004 -->
 ## The installer MUST add a PreToolUse gate that blocks competing brainstorm/plan/spec skills for feature/bug work
 
-On install (default-on), the installer MUST add a harness-executed `PreToolUse`
+On a governance-tier (`--sdd`) install, the installer MUST add a harness-executed `PreToolUse`
 hook on skill invocation — in both the project `settings.json` and the shipped
 plugin hooks manifest, so the `specship install` path and the plugin path do not
 drift — that invokes a shipped gate command. When the agent invokes a skill

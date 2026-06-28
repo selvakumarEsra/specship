@@ -16,10 +16,11 @@ The installer will:
 - Ask whether to wire SpecShip into **just this project** (the default) or **all projects** (global).
 - Write the MCP server entry so Claude Code launches `specship serve --mcp`.
 - Add the read-only `specship_*` (and `designer_*`) tools to Claude Code's auto-allow list, so you aren't prompted on every query.
-- Install the bundled slash commands and the `specship-explorer` subagent as a Claude Code plugin.
+- Install the **`/ss-explore`** reads door and the `specship-explorer` subagent.
 - Add the auto-sync hooks (re-index after the agent edits files; catch up on session start).
-- Write a short spec-driven-development steering rule into the project's `CLAUDE.md` plus a prompt hook that nudges the agent to author a spec first for feature/bug work. Skip it with `--no-sdd`.
 - For a project-local install, initialize the current project and build its index.
+
+That's the **retrieval wedge** — everything you need for the agent to explore the index instead of re-reading files, with zero workflow change. The **spec-driven layer** (the `/ss-spec` and `/ss-check` doors plus the "author a spec first" steering) is **opt-in** — add it with `specship install --sdd` when you want it. An existing spec-driven install is preserved on upgrade; it's never silently downgraded.
 
 ## Project-local vs global
 
@@ -30,9 +31,9 @@ Pass `--location global` to write to `~/.claude.json` and `~/.claude/settings.js
 ## Non-interactive (scripting / CI)
 
 ```bash
-specship install --yes                       # project-local, auto-allow on
+specship install --yes                       # project-local, auto-allow on, retrieval only
 specship install --yes --location global      # all projects
-specship install --no-sdd                     # skip the spec-driven-development steering
+specship install --sdd                        # ALSO install the spec-driven layer (doors + steering)
 specship install --no-permissions             # skip the auto-allow list
 specship install --print-config               # print the MCP snippet, no file writes
 ```
@@ -41,7 +42,7 @@ specship install --print-config               # print the MCP snippet, no file w
 |---|---|---|
 | `--location` | `global`, `local` | prompt (highlights `local`) |
 | `--yes` | (boolean) non-interactive | prompt every step → `local` |
-| `--no-sdd` | (boolean) skip the SDD steering | steering on |
+| `--sdd` | (boolean) also install the spec-driven layer (`/ss-spec` + `/ss-check` doors + steering) | off (retrieval only) |
 | `--no-permissions` | (boolean) skip the auto-allow list | permissions on |
 | `--print-config` | print the MCP snippet and exit | — |
 

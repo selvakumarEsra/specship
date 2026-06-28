@@ -64,8 +64,9 @@ export interface RunInstallerOptions {
   /** Skip the auto-allow prompt; use this value directly. */
   autoAllow?: boolean;
   /**
-   * Spec-driven-development steering (CLAUDE.md rule + nudge hook). On by
-   * default; pass `false` (the `--no-sdd` flag) to skip. Undefined ⇒ on.
+   * Governance tier — spec/authoring/review/design commands + the SDD steering
+   * (CLAUDE.md rule + nudge hook). Opt-in (INSTALL-WEDGE-DOC): pass `true` (the
+   * `--sdd` flag) to install it. Undefined/false ⇒ retrieval-only.
    */
   sdd?: boolean;
   /**
@@ -205,8 +206,9 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
     }
   }
 
-  // Step 4: write Claude config. Spec-driven steering is on by default;
-  // only an explicit `sdd: false` (from `--no-sdd`) skips it.
+  // Step 4: write Claude config. The governance tier is opt-in
+  // (INSTALL-WEDGE-DOC): only an explicit `sdd: true` (from `--sdd`) installs it;
+  // a default install provisions the retrieval tier alone.
   const result = claudeTarget.install(location, { autoAllow, sdd: opts.sdd, installStatusLine });
   for (const file of result.files) {
     const verb = file.action === 'unchanged'

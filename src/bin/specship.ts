@@ -1338,8 +1338,9 @@ program
   .alias('maint')
   .description('Report graph-derived maintainability signals (coupling, size, cycles, dead code)')
   .option('-j, --json', 'Output as JSON')
+  .option('--deep', 'Also show lower-confidence findings (dead-code candidates, coupling). Hidden by default.')
   .option('--strict', 'Exit non-zero if any signal has findings (gating-ready; default advisory)')
-  .action(async (pathArg: string | undefined, options: { json?: boolean; strict?: boolean }) => {
+  .action(async (pathArg: string | undefined, options: { json?: boolean; deep?: boolean; strict?: boolean }) => {
     const projectPath = resolveProjectPath(pathArg);
     try {
       if (!isInitialized(projectPath)) {
@@ -1350,46 +1351,76 @@ program
       const cg = await SpecShip.open(projectPath);
       const r = cg.getMaintainability();
 
+      // The report is tiered (HEALTH-GATEWAY-DOC). The high-precision classes —
+      // oversized symbols, god files, dependency cycles — are demonstrably
+      // accurate and shown by default. Dead-code and coupling are lower-confidence
+      // (volume + name-collision artifacts) and surface only with --deep. `--json`
+      // always returns the full set, labelled by tier, so CI/tooling can choose
+      // what to gate on (REQ-HEALTH-001/002/003).
+      const { HIGH_PRECISION_CLASSES, LOW_CONFIDENCE_CLASSES, highPrecisionClean } = await import('../graph/maintainability');
+
       if (options.json) {
-        console.log(JSON.stringify(r, null, 2));
+        console.log(JSON.stringify({ ...r, precision: { highPrecision: HIGH_PRECISION_CLASSES, lowConfidence: LOW_CONFIDENCE_CLASSES } }, null, 2));
         cg.destroy();
         if (options.strict && !r.clean) process.exit(1);
         return;
       }
 
-      if (r.clean) {
-        success('Maintainability: clean — nothing past threshold.');
-        cg.destroy();
-        return;
-      }
+      const deep = options.deep === true;
+      const highClean = highPrecisionClean(r);
+      const lowCount = r.coupling.length + r.deadCode.length;
 
       const CAP = 10;
       const section = (title: string, count: number) => console.log(chalk.bold(`\n${title} (${count})`));
-      if (r.coupling.length) {
-        section('Coupling hotspots', r.coupling.length);
-        for (const c of r.coupling.slice(0, CAP)) console.log(chalk.dim('  ') + `${c.name} ${chalk.dim(`(${c.reason}) — ${c.filePath}`)}`);
-      }
+      const overflow = (n: number) => { if (n > CAP) console.log(chalk.dim(`  …and ${n - CAP} more`)); };
+
+      // High-precision tier — always shown (REQ-HEALTH-001).
       if (r.oversized.length) {
         section('Oversized symbols', r.oversized.length);
         for (const o of r.oversized.slice(0, CAP)) console.log(chalk.dim('  ') + `${o.name} ${chalk.dim(`(${o.reason}) — ${o.filePath}`)}`);
+        overflow(r.oversized.length);
       }
       if (r.godFiles.length) {
         section('God files', r.godFiles.length);
         for (const f of r.godFiles.slice(0, CAP)) console.log(chalk.dim('  ') + `${f.filePath} ${chalk.dim(`(${f.reason})`)}`);
+        overflow(r.godFiles.length);
       }
       if (r.cycles.length) {
         section('Dependency cycles', r.cycles.length);
         for (const c of r.cycles.slice(0, CAP)) console.log(chalk.dim('  ') + c.files.join(' → '));
+        overflow(r.cycles.length);
       }
-      if (r.deadCode.length) {
-        section('Dead-code candidates', r.deadCode.length);
-        for (const d of r.deadCode.slice(0, CAP)) console.log(chalk.dim('  ') + `${d.name} ${chalk.dim(`— ${d.filePath}:${d.startLine}`)}`);
-        if (r.deadCode.length > CAP) console.log(chalk.dim(`  …and ${r.deadCode.length - CAP} more (dead-code is heuristic; tune in ${'specship.config.json'})`));
+
+      if (highClean && !deep) {
+        success('Maintainability: clean — no high-precision findings past threshold.');
+        if (lowCount > 0) info(`${lowCount} lower-confidence finding(s) hidden (dead-code: ${r.deadCode.length}, coupling: ${r.coupling.length}) — run \`specship maintainability --deep\` to include them.`);
+        cg.destroy();
+        return;
       }
+
+      // Low-confidence tier — opt-in via --deep (REQ-HEALTH-002), each finding
+      // attributed to a single concrete definition (file + qualified symbol).
+      if (deep) {
+        if (r.coupling.length) {
+          section('Coupling hotspots (lower-confidence)', r.coupling.length);
+          for (const c of r.coupling.slice(0, CAP)) console.log(chalk.dim('  ') + `${c.qualifiedName} ${chalk.dim(`(${c.reason}) — ${c.filePath}`)}`);
+          overflow(r.coupling.length);
+        }
+        if (r.deadCode.length) {
+          section('Dead-code candidates (lower-confidence)', r.deadCode.length);
+          for (const d of r.deadCode.slice(0, CAP)) console.log(chalk.dim('  ') + `${d.qualifiedName} ${chalk.dim(`— ${d.filePath}:${d.startLine}`)}`);
+          overflow(r.deadCode.length);
+        }
+      } else if (lowCount > 0) {
+        console.log();
+        info(`${lowCount} lower-confidence finding(s) hidden (dead-code: ${r.deadCode.length}, coupling: ${r.coupling.length}) — run \`specship maintainability --deep\` to include them.`);
+      }
+
       console.log();
       info(`Thresholds: highDegree=${r.thresholds.highDegree} largeSymbolLines=${r.thresholds.largeSymbolLines} godFileSymbols=${r.thresholds.godFileSymbols} — override in specship.config.json`);
       cg.destroy();
-      if (options.strict) process.exit(1);
+      // --strict gates on what's shown: high-precision by default, the full set with --deep.
+      if (options.strict && (deep ? !r.clean : !highClean)) process.exit(1);
     } catch (err) {
       error(`maintainability failed: ${err instanceof Error ? err.message : String(err)}`);
       process.exit(1);
@@ -2099,7 +2130,7 @@ program
   .option('-l, --location <where>', 'Install location: "global" or "local". Default: prompt (local)')
   .option('-y, --yes', 'Non-interactive: defaults to --location=local, auto-allow on')
   .option('--no-permissions', 'Skip writing the auto-allow permissions list')
-  .option('--no-sdd', 'Skip the spec-driven-development steering (CLAUDE.md rule + spec-author nudge hook)')
+  .option('--sdd', 'Also install the spec-driven-development governance tier (spec/authoring/review/design commands + the spec-author nudge hook). Off by default — a plain install provisions only the retrieval tier.')
   .option('--statusline', 'Wire the SpecShip status-line segment into Claude (skips the prompt; never overwrites an existing status line)')
   .option('--skip-statusline', 'Do not add the status-line segment (skips the prompt)')
   .option('--print-config', 'Print MCP config snippet for Claude Code and exit (no file writes)')
@@ -2152,14 +2183,14 @@ program
           ? false
           : undefined;
 
-      // Commander's `--no-sdd` makes `opts.sdd === false`; omitting it leaves
-      // it `true`. Spec-driven steering is on by default — forward `false`
-      // only when the user explicitly opted out.
+      // The governance tier is opt-in (INSTALL-WEDGE-DOC): `--sdd` makes
+      // `opts.sdd === true`; omitting it leaves it undefined → retrieval-only.
+      // Forward `true` only when the user explicitly opted in.
       await runInstallerWithOptions({
         target: opts.target,
         location: opts.location as 'global' | 'local' | undefined,
         autoAllow,
-        sdd: opts.sdd === false ? false : undefined,
+        sdd: opts.sdd === true ? true : undefined,
         statusLine,
         yes: opts.yes,
       });
@@ -2212,7 +2243,7 @@ program
       const additionalContext =
         'This repo uses spec-driven development (SpecShip). Before any brainstorming or ' +
         'planning skill, FIRST invoke spec-author to author the spec under specs/ for this ' +
-        'work — the spec is the contract; implement from it with /ss-implement.';
+        'work — the spec is the contract; implement from it with /ss-spec implement.';
       process.stdout.write(
         JSON.stringify({ hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext } }) + '\n',
       );
@@ -2317,12 +2348,12 @@ program
 
 // @implements REQ-DOMAIN-003
 // Thin surface over the read-only gap-seed pass (SpecShip.getDomainGapSeed,
-// REQ-DOMAIN-003) so the `/ss-domain` capture command can cite the SAME real
+// REQ-DOMAIN-003) so the `/ss-spec domain` capture command can cite the SAME real
 // undocumented entities/specs the library computes (REQ-DOMAIN-004.A4) without a
 // new MCP tool (REQ-DOMAIN-005) or a runtime package import. Writes nothing.
 program
   .command('domain-gaps [path]')
-  .description('List code entities and specs not yet covered by a domain fact (the domain gap-seed). Feeds the /ss-domain capture interview.')
+  .description('List code entities and specs not yet covered by a domain fact (the domain gap-seed). Feeds the /ss-spec domain capture interview.')
   .option('-l, --limit <n>', 'max entities and specs to print in text mode (default: 50)')
   .option('--json', 'emit JSON')
   .action(async (pathArg: string | undefined, options: { limit?: string; json?: boolean }) => {
@@ -2364,7 +2395,7 @@ program
           }
           if (seed.specs.length > limit) console.log(`  … and ${seed.specs.length - limit} more`);
         }
-        console.log(`\nCapture a fact for any of these with \`/ss-domain\`.`);
+        console.log(`\nCapture a fact for any of these with \`/ss-spec domain\`.`);
       }
       /* eslint-enable no-console */
     } finally {
@@ -2484,7 +2515,7 @@ program
           console.log(JSON.stringify({ summary: { ideas: 0, specified: 0, conflicts: 0, documents: 0, requirements: 0 }, specs: [], briefs: [] }, null, 2));
         } else {
           // eslint-disable-next-line no-console
-          console.log('No specs or briefs found. Author one with /ss-spec-author or /ss-brainstorm.');
+          console.log('No specs or briefs found. Author one with /ss-spec new.');
         }
         return;
       }

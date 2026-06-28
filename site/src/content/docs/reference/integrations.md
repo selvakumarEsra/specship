@@ -60,26 +60,21 @@ This means Claude Code won't prompt you on every query — the read-only code-gr
 
 A `PostToolUse` hook (on `Edit|Write|MultiEdit`) and a `SessionStart` hook (on `startup|resume`) run `specship sync --quiet` so the index keeps up with the agent's own edits without waiting on the background watcher.
 
-### 4. The spec-driven-development steering
+### 4. The spec-driven-development steering (opt-in)
 
-On by default (skip with `--no-sdd`): a short SDD rule is added to the project's `CLAUDE.md`, and a `UserPromptSubmit` hook nudges the agent to author the spec under `specs/` (via the `spec-author` skill) before reaching for a brainstorming or planning skill when you describe feature or bug work. `specship uninstall` removes both.
+Part of the **spec-driven layer**, installed only with `specship install --sdd`: a short SDD rule is added to the project's `CLAUDE.md`, and a `UserPromptSubmit` hook nudges the agent to author the spec under `specs/` before reaching for a brainstorming or planning skill when you describe feature or bug work. `specship uninstall` removes both. A default install leaves these off so the retrieval wedge lands without an unrequested workflow.
 
 ### 5. The slash commands and subagent
 
-Slash commands and the `specship-explorer` subagent ship as a Claude Code plugin:
+The slash commands are a small set of **progressive doors** (sub-actions are selected inside a door, not as separate commands). A default install ships only the retrieval door; the spec-driven doors arrive with `--sdd`. The `specship-explorer` subagent ships alongside.
 
-| Command | What it runs |
-|---|---|
-| `/ss-spec <ID>` | Reads the spec via `specship_spec`. |
-| `/ss-implement <ID>` | Kicks off the `spec-implement` workflow. |
-| `/ss-fix <ID>` | Kicks off `spec-fix`. |
-| `/ss-relink <ID>` | Kicks off `spec-relink`. |
-| `/ss-drifted` | Lists everything in the drift queue. |
-| `/ss-brainstorm <requirement>` | Brainstorms a requirement with you — grounds it in code, explores approaches, and only on your explicit confirmation writes a design brief and hands off to `spec-author`. |
-| `/ss-spec-author <description>` | Drafts a new spec using the `spec-author` skill. |
-| `/ss-spec-review <ID-or-path>` | Reviews an existing spec against the quality rubric. |
-| `/ss-design-implement <url>` | Snapshots a Claude Design URL and drafts + implements a spec from it. |
-| `/ss-design-loop` | Runs the full human-tasted design→spec→code loop. |
+| Door | Tier | What it covers |
+|---|---|---|
+| `/ss-explore <symbols \| flow \| "impact of X">` | retrieval (default) | Reads: explore an area, trace a flow, or get a change's blast radius. |
+| `/ss-spec [<ID> \| new \| fast \| implement \| review \| triage \| behaviour \| domain]` | spec-driven (`--sdd`) | The intent loop: no arg = the funnel; `<ID>` = a spec's detail; `new`/`fast` author (full vs no-interview); `implement`/`review`; `triage` routes a change to an existing spec; `behaviour` generates E2E tests; `domain` captures a domain fact. |
+| `/ss-check [drifted \| fix <ID> \| relink <ID> \| health]` | spec-driven (`--sdd`) | The gate & health door: no arg = the enforcement gate; `drifted` = the review queue; `fix`/`relink` repair links; `health` = the maintainability report. |
+| `/ss-design-implement <url>` | spec-driven (`--sdd`) | Snapshots a Claude Design URL and drafts + implements a spec from it. |
+| `/ss-design-loop` | spec-driven (`--sdd`) | Runs the full human-tasted design→spec→code loop. |
 
 See [Design-to-code](/workflows/design-to-code/) for the design commands.
 
