@@ -1,5 +1,5 @@
 name: claude-design-implement
-description: Import a Claude Design (live URL or a designer handoff bundle) — snapshot + tokens + source record — draft the spec, gate at review, write the spec — ready to hand off to /ss-implement.
+description: Import a Claude Design (live URL or a designer handoff bundle) — snapshot + tokens + source record — draft the spec, gate at review, write the spec — ready to hand off to /ss-spec implement.
 tags: [spec, ui, claude-design, default]
 requires: [specship, git]
 
@@ -308,7 +308,7 @@ nodes:
 
       Output: the relative path of the file written + the first REQ
       ID (e.g. "REQ-DATA-FLOW-001") so the next step can hand it to
-      /ss-implement.
+      /ss-spec implement.
 
   - id: handoff
     kind: prompt
@@ -327,7 +327,7 @@ nodes:
              - specs/$INPUT.SLUG/tokens.css
              - specs/$INPUT.SLUG/source.md
         4. The exact next command:
-             /ss-implement <first REQ ID>
+             /ss-spec implement <first REQ ID>
         5. A one-line reminder that the implementation step should
            load the snapshot for visual fidelity — the spec covers
            contract only.

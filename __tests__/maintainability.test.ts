@@ -11,7 +11,8 @@ import * as path from 'path';
 import * as os from 'os';
 import { DatabaseConnection } from '../src/db';
 import { QueryBuilder } from '../src/db/queries';
-import { computeMaintainability, resolveThresholds, resolveExclude, DEFAULT_THRESHOLDS, DEFAULT_EXCLUDE, CONFIG_FILE_NAME } from '../src/graph/maintainability';
+import { computeMaintainability, resolveThresholds, resolveExclude, DEFAULT_THRESHOLDS, DEFAULT_EXCLUDE, CONFIG_FILE_NAME, HIGH_PRECISION_CLASSES, LOW_CONFIDENCE_CLASSES, highPrecisionClean } from '../src/graph/maintainability';
+import type { MaintainabilityReport } from '../src/graph/maintainability';
 import type { Node, Edge } from '../src/types';
 
 let dir: string;
@@ -184,5 +185,55 @@ describe('maintainability — exclude scope (index-noise filter)', () => {
     const ex = resolveExclude(dir);
     expect(ex).toContain('**/legacy/**');
     expect(ex).toContain('**/*.d.ts'); // defaults retained
+  });
+});
+
+describe('report tiering (HEALTH-GATEWAY-DOC)', () => {
+  const emptyReport = (): MaintainabilityReport => ({
+    thresholds: DEFAULT_THRESHOLDS,
+    coupling: [], oversized: [], godFiles: [], cycles: [], deadCode: [],
+    clean: true,
+  });
+
+  const couplingFinding = () => ({
+    nodeId: 'n', name: 'set', qualifiedName: 'src/x.ts::set', filePath: 'src/x.ts',
+    kind: 'method' as const, fanIn: 400, fanOut: 0, reason: 'fan-in 400',
+  });
+  const deadFinding = () => ({
+    nodeId: 'd', name: 'unused', qualifiedName: 'src/x.ts::unused', filePath: 'src/x.ts',
+    kind: 'function' as const, startLine: 1, reason: 'no incoming use-edges',
+  });
+  const godFinding = () => ({ filePath: 'src/big.ts', symbolCount: 80, reason: '80 symbols' });
+
+  // REQ-HEALTH-001/002: the two tiers partition the full finding-class set.
+  it('the high-precision and low-confidence tiers together cover every finding class', () => {
+    const all = [...HIGH_PRECISION_CLASSES, ...LOW_CONFIDENCE_CLASSES].sort();
+    expect(all).toEqual(['coupling', 'cycles', 'deadCode', 'godFiles', 'oversized']);
+    // No class appears in both tiers.
+    const overlap = HIGH_PRECISION_CLASSES.filter((c) => (LOW_CONFIDENCE_CLASSES as readonly string[]).includes(c));
+    expect(overlap).toEqual([]);
+  });
+
+  it('dead-code and coupling are the lower-confidence (opt-in) classes (REQ-HEALTH-002)', () => {
+    expect([...LOW_CONFIDENCE_CLASSES].sort()).toEqual(['coupling', 'deadCode']);
+  });
+
+  // REQ-HEALTH-001.A3: a repo with ONLY low-confidence findings is high-precision-clean.
+  it('highPrecisionClean is true when only dead-code / coupling findings exist', () => {
+    const r = emptyReport();
+    r.coupling = [couplingFinding()];
+    r.deadCode = [deadFinding()];
+    r.clean = false; // overall report is not clean…
+    expect(highPrecisionClean(r)).toBe(true); // …but the gateway view is.
+  });
+
+  it('highPrecisionClean is false when a god file / oversized / cycle exists', () => {
+    const r = emptyReport();
+    r.godFiles = [godFinding()];
+    expect(highPrecisionClean(r)).toBe(false);
+  });
+
+  it('a fully empty report is high-precision-clean', () => {
+    expect(highPrecisionClean(emptyReport())).toBe(true);
   });
 });

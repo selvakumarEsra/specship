@@ -203,7 +203,9 @@ describe('Claude target — specifics', () => {
   });
 
   it('install does NOT write the legacy #529 MCP-playbook block into .claude/CLAUDE.md', () => {
-    claudeTarget.install('local', { autoAllow: false });
+    // --sdd so the project CLAUDE.md SDD rule is written, to assert it is the
+    // ordering rule and NOT the #529 MCP playbook.
+    claudeTarget.install('local', { autoAllow: false, sdd: true });
     // The legacy instructions path is never created…
     expect(fs.existsSync(path.join(tmpCwd, '.claude', 'CLAUDE.md'))).toBe(false);
     // …and the SDD rule that IS written (project-root CLAUDE.md) is the
@@ -229,8 +231,8 @@ describe('Claude target — specifics', () => {
     expect(result.files.find((f) => f.path.replace(/\\/g, '/').endsWith('/.claude/CLAUDE.md'))?.action).toBe('removed');
   });
 
-  it('default install writes the SDD rule into the project CLAUDE.md + a UserPromptSubmit nudge hook (REQ-SDD-001/002)', () => {
-    const result = claudeTarget.install('local', { autoAllow: false });
+  it('install --sdd writes the SDD rule into the project CLAUDE.md + a UserPromptSubmit nudge hook (REQ-SDD-001/002, opt-in per INSTALL-WEDGE-DOC)', () => {
+    const result = claudeTarget.install('local', { autoAllow: false, sdd: true });
 
     const claudeMd = path.join(tmpCwd, 'CLAUDE.md');
     expect(fs.existsSync(claudeMd)).toBe(true);
@@ -247,6 +249,44 @@ describe('Claude target — specifics', () => {
     expect(cmds).toContain('specship spec-nudge');
   });
 
+  it('default install provisions ONLY the retrieval tier — no governance commands, no SDD (REQ-WEDGE-001)', () => {
+    claudeTarget.install('local', { autoAllow: false });
+    const cmds = path.join(tmpCwd, '.claude', 'commands');
+    // Retrieval tier present — the reads door.
+    expect(fs.existsSync(path.join(cmds, 'ss-explore.md'))).toBe(true);
+    // Governance tier absent (REQ-WEDGE-001.A2) — the intent + gate doors.
+    for (const name of ['ss-spec.md', 'ss-check.md']) {
+      expect(fs.existsSync(path.join(cmds, name))).toBe(false);
+    }
+    // SDD steering absent: no project CLAUDE.md, no spec-nudge hook.
+    expect(fs.existsSync(path.join(tmpCwd, 'CLAUDE.md'))).toBe(false);
+    const settingsPath = path.join(tmpCwd, '.claude', 'settings.json');
+    if (fs.existsSync(settingsPath)) {
+      const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
+      const hookCmds = (settings.hooks?.UserPromptSubmit ?? []).flatMap((g: any) => (g.hooks ?? []).map((h: any) => h.command));
+      expect(hookCmds).not.toContain('specship spec-nudge');
+    }
+  });
+
+  it('install --sdd adds the governance tier on top of retrieval (REQ-WEDGE-002.A1)', () => {
+    claudeTarget.install('local', { autoAllow: false, sdd: true });
+    const cmds = path.join(tmpCwd, '.claude', 'commands');
+    for (const name of ['ss-explore.md', 'ss-spec.md', 'ss-check.md']) {
+      expect(fs.existsSync(path.join(cmds, name))).toBe(true);
+    }
+    expect(fs.readFileSync(path.join(tmpCwd, 'CLAUDE.md'), 'utf-8')).toContain('SPECSHIP_SDD_START');
+  });
+
+  it('a default install AFTER a governance opt-in preserves the governance tier (REQ-WEDGE-002.A4)', () => {
+    claudeTarget.install('local', { autoAllow: false, sdd: true });
+    const govCmd = path.join(tmpCwd, '.claude', 'commands', 'ss-spec.md');
+    expect(fs.existsSync(govCmd)).toBe(true);
+    // A later plain install must not silently downgrade / strip governance.
+    claudeTarget.install('local', { autoAllow: false });
+    expect(fs.existsSync(govCmd)).toBe(true);
+    expect(fs.readFileSync(path.join(tmpCwd, 'CLAUDE.md'), 'utf-8')).toContain('SPECSHIP_SDD_START');
+  });
+
   it('install with sdd:false writes neither the CLAUDE.md rule nor the nudge hook (REQ-SDD-003)', () => {
     claudeTarget.install('local', { autoAllow: false, sdd: false });
     expect(fs.existsSync(path.join(tmpCwd, 'CLAUDE.md'))).toBe(false);
@@ -259,13 +299,13 @@ describe('Claude target — specifics', () => {
   });
 
   it('SDD install is idempotent — CLAUDE.md rule unchanged on re-run (REQ-SDD-001.A3)', () => {
-    claudeTarget.install('local', { autoAllow: true });
-    const second = claudeTarget.install('local', { autoAllow: true });
+    claudeTarget.install('local', { autoAllow: true, sdd: true });
+    const second = claudeTarget.install('local', { autoAllow: true, sdd: true });
     expect(second.files.find((f) => /\/CLAUDE\.md$/.test(f.path.replace(/\\/g, '/')) && !f.path.includes('.claude'))?.action).toBe('unchanged');
   });
 
   it('uninstall removes the SDD rule block and the nudge hook (REQ-SDD-003.A3)', () => {
-    claudeTarget.install('local', { autoAllow: true });
+    claudeTarget.install('local', { autoAllow: true, sdd: true });
     const claudeMd = path.join(tmpCwd, 'CLAUDE.md');
     expect(fs.existsSync(claudeMd)).toBe(true);
 
@@ -513,10 +553,10 @@ describe('Claude target — specifics', () => {
     }
   });
 
-  it('install copies the shipped slash commands and subagent', () => {
-    claudeTarget.install('global', { autoAllow: false });
+  it('install --sdd copies the full shipped door set and subagent', () => {
+    claudeTarget.install('global', { autoAllow: false, sdd: true });
 
-    for (const name of ['ss-sync.md', 'ss-trace.md', 'ss-explore.md', 'ss-impact.md', 'ss-spec.md', 'ss-implement.md', 'ss-drifted.md', 'ss-fix.md', 'ss-relink.md', 'ss-spec-author.md', 'ss-spec-review.md', 'ss-design-implement.md', 'ss-brainstorm.md', 'ss-domain.md', 'ss-triage.md', 'ss-behaviour.md']) {
+    for (const name of ['ss-explore.md', 'ss-spec.md', 'ss-check.md']) {
       expect(fs.existsSync(path.join(tmpHome, '.claude', 'commands', name))).toBe(true);
     }
     expect(fs.existsSync(path.join(tmpHome, '.claude', 'agents', 'specship-explorer.md'))).toBe(true);
@@ -535,42 +575,44 @@ describe('Claude target — specifics', () => {
     claudeTarget.install('global', { autoAllow: false });
 
     expect(fs.readFileSync(userCmd, 'utf-8')).toBe('---\ndescription: mine\n---\nHello\n');
-    expect(fs.existsSync(path.join(tmpHome, '.claude', 'commands', 'ss-trace.md'))).toBe(true);
+    expect(fs.existsSync(path.join(tmpHome, '.claude', 'commands', 'ss-explore.md'))).toBe(true);
   });
 
-  it('install removes legacy cg-*.md commands from a pre-v0.2 install', () => {
-    // Simulate a pre-v0.2 install: write the legacy cg-* command set to
-    // the user's commands dir alongside an unrelated user file.
+  it('install removes superseded commands (legacy cg-* and the per-action ss-* folded into doors)', () => {
+    // Simulate an older install: the pre-v0.2 cg-* set AND the per-action ss-*
+    // commands that WORKFLOW-DOORS-DOC folded into the explore/spec/check doors,
+    // alongside an unrelated user file.
     const cmdsDir = path.join(tmpHome, '.claude', 'commands');
     fs.mkdirSync(cmdsDir, { recursive: true });
-    const legacyNames = ['cg-sync.md', 'cg-trace.md', 'cg-spec.md', 'cg-implement.md', 'cg-relink.md'];
-    for (const name of legacyNames) {
-      fs.writeFileSync(path.join(cmdsDir, name), '# legacy from pre-v0.2 installer\n');
+    const supersededNames = ['cg-sync.md', 'cg-trace.md', 'ss-trace.md', 'ss-implement.md', 'ss-brainstorm.md', 'ss-triage.md', 'ss-fix.md'];
+    for (const name of supersededNames) {
+      fs.writeFileSync(path.join(cmdsDir, name), '# from an older installer\n');
     }
     const siblingUser = path.join(cmdsDir, 'my-helper.md');
     fs.writeFileSync(siblingUser, '# user file');
 
-    claudeTarget.install('global', { autoAllow: false });
+    claudeTarget.install('global', { autoAllow: false, sdd: true });
 
-    // All legacy `cg-*` shipped files are gone — self-healed on upgrade.
-    for (const name of legacyNames) {
+    // Every superseded shipped file is gone — self-healed on upgrade (REQ-DOORS-003.A1).
+    for (const name of supersededNames) {
       expect(fs.existsSync(path.join(cmdsDir, name))).toBe(false);
     }
-    // Current `ss-*` files exist.
-    expect(fs.existsSync(path.join(cmdsDir, 'ss-trace.md'))).toBe(true);
+    // The surviving doors exist.
+    expect(fs.existsSync(path.join(cmdsDir, 'ss-explore.md'))).toBe(true);
     expect(fs.existsSync(path.join(cmdsDir, 'ss-spec.md'))).toBe(true);
+    expect(fs.existsSync(path.join(cmdsDir, 'ss-check.md'))).toBe(true);
     // The user's own file is untouched.
     expect(fs.readFileSync(siblingUser, 'utf-8')).toBe('# user file');
   });
 
-  it('uninstall removes the shipped commands + subagent + current-release hooks', () => {
-    claudeTarget.install('global', { autoAllow: true });
-    expect(fs.existsSync(path.join(tmpHome, '.claude', 'commands', 'ss-trace.md'))).toBe(true);
+  it('uninstall removes the shipped doors + subagent + current-release hooks', () => {
+    claudeTarget.install('global', { autoAllow: true, sdd: true });
+    expect(fs.existsSync(path.join(tmpHome, '.claude', 'commands', 'ss-explore.md'))).toBe(true);
     expect(fs.existsSync(path.join(tmpHome, '.claude', 'agents', 'specship-explorer.md'))).toBe(true);
 
     claudeTarget.uninstall('global');
 
-    for (const name of ['ss-sync.md', 'ss-trace.md', 'ss-explore.md', 'ss-impact.md', 'ss-spec.md', 'ss-implement.md', 'ss-drifted.md', 'ss-fix.md', 'ss-relink.md', 'ss-spec-author.md', 'ss-spec-review.md', 'ss-design-implement.md', 'ss-brainstorm.md', 'ss-domain.md', 'ss-triage.md', 'ss-behaviour.md']) {
+    for (const name of ['ss-explore.md', 'ss-spec.md', 'ss-check.md']) {
       expect(fs.existsSync(path.join(tmpHome, '.claude', 'commands', name))).toBe(false);
     }
     expect(fs.existsSync(path.join(tmpHome, '.claude', 'agents', 'specship-explorer.md'))).toBe(false);
@@ -664,7 +706,9 @@ describe('Claude target — status-line opt-in', () => {
 
   it('default install writes NO status line (opt-in only)', () => {
     claudeTarget.install('local', { autoAllow: false });
-    const settings = readSettings();
+    // A retrieval-only default install (no autoAllow, no --sdd) may write no
+    // settings.json at all; a status line is absent either way.
+    const settings = fs.existsSync(settingsPath()) ? readSettings() : {};
     expect(settings.statusLine).toBeUndefined();
   });
 

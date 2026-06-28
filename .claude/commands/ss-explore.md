@@ -1,13 +1,35 @@
 ---
-description: Explore a region of the codebase by naming the symbols you care about. Use for "how does X work" or "what's in this area" questions.
-argument-hint: <symbol-bag>
-allowed-tools: mcp__specship__specship_explore, mcp__specship__specship_node
+description: Reads door — explore a codebase region, trace a flow, or get a change's blast radius. Name the symbols you care about; for a flow name both ends; for impact ask "what breaks if I change X".
+argument-hint: <symbols | flow from→to | "impact of X">
+allowed-tools: mcp__specship__specship_explore, mcp__specship__specship_node, mcp__specship__specship_search, mcp__specship__specship_callers, mcp__specship__specship_callees, mcp__specship__specship_impact
 ---
 
 # SpecShip Explore: `$ARGUMENTS`
 
-Call `mcp__specship__specship_explore` with `$ARGUMENTS` as a bag of symbol names (include `Class.method` qualified forms when given). The tool returns the relevant symbols' source grouped by file, plus any flow it can synthesize between them.
+The **reads door** — one entry for every "understand the code" question. Pick the
+behaviour from what `$ARGUMENTS` describes; you do not need a separate command.
 
-Treat the returned source as already Read — do NOT re-Read files. If the response truncates a god-file, run `specship_explore` again with a tighter symbol bag rather than reaching for Read.
+## Explore an area / "how does X work" (default)
 
-If a specific overload's full body is needed, call `mcp__specship__specship_node` on the symbol name — the response returns every overload in one call.
+Call `mcp__specship__specship_explore` with `$ARGUMENTS` as a bag of symbol names
+(include `Class.method` qualified forms when given). It returns the relevant
+symbols' source grouped by file, plus any flow it can synthesize between them.
+Treat the returned source as already Read — do NOT re-Read files. If a god-file
+truncates, run `specship_explore` again with a tighter symbol bag rather than
+reaching for Read. For one symbol's full body (or an overloaded name), call
+`mcp__specship__specship_node` — it returns every overload in one call.
+
+## Trace a flow — "how does X reach Y / the path from X to Y"
+
+Call `specship_explore` naming the symbols that span the flow (e.g.
+`mutateElement renderScene`). It surfaces the call path among them, riding
+dynamic-dispatch hops (callbacks, React re-render, JSX children) that grep can't
+follow. Use `specship_search` first if you only have a partial name.
+
+## Blast radius — "what breaks if I change X"
+
+`mcp__specship__specship_impact` on the symbol for the transitive dependents;
+`specship_callers` / `specship_callees` for one hop in either direction.
+
+The index is kept fresh automatically; force a re-index with the `specship sync`
+CLI if a recent edit isn't reflected yet.

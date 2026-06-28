@@ -193,7 +193,7 @@ function formatLink(link: SpecLink): string {
 function buildSpecSearch(sq: SpecQueries, query: string): string {
   // Distinguish "nothing indexed" (A3) from "indexed, but no match" up front.
   if (sq.getAllSpecs().length === 0) {
-    return `# Spec search — "${query}"\n\n_No specs to search — the index has no specs yet. Author one with /ss-spec-author or /ss-brainstorm._`;
+    return `# Spec search — "${query}"\n\n_No specs to search — the index has no specs yet. Author one with /ss-spec new._`;
   }
 
   const results = sq.searchSpecs(query);
@@ -201,7 +201,7 @@ function buildSpecSearch(sq: SpecQueries, query: string): string {
   lines.push(`# Spec search — "${query}"`);
   lines.push('');
   if (results.length === 0) {
-    lines.push('_No matching specs. Try different terms, or author a new spec with /ss-spec-author._');
+    lines.push('_No matching specs. Try different terms, or author a new spec with /ss-spec new._');
     return lines.join('\n');
   }
 
@@ -227,7 +227,7 @@ function buildSpecSearch(sq: SpecQueries, query: string): string {
 function buildFunnel(sq: FunnelLookup): string {
   const all = sq.getAllSpecs();
   if (all.length === 0) {
-    return '# Spec lifecycle funnel\n\n_No specs or briefs found. Author one with /ss-spec-author or /ss-brainstorm._';
+    return '# Spec lifecycle funnel\n\n_No specs or briefs found. Author one with /ss-spec new._';
   }
 
   const briefs = all.filter((s) => s.kind === 'brief');

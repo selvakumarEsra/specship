@@ -51,11 +51,14 @@ export interface InstallOptions {
    */
   autoAllow: boolean;
   /**
-   * Whether to write the spec-driven-development steering — a marker-delimited
-   * "invoke spec-author first" rule in the project CLAUDE.md plus a
-   * UserPromptSubmit nudge hook (SDD-INSTALL-DOC). On by default; only an
-   * explicit `false` (the `--no-sdd` flag) skips it. Optional so existing
-   * callers default to on.
+   * Whether to install the GOVERNANCE TIER — the spec / authoring / review /
+   * design slash commands plus the spec-driven-development steering (a
+   * marker-delimited "invoke spec-author first" rule in the project CLAUDE.md
+   * and a UserPromptSubmit nudge hook). Opt-in (INSTALL-WEDGE-DOC, superseding
+   * SDD-INSTALL-DOC's old on-by-default): off unless explicitly `true` (the
+   * `--sdd` flag). A default install provisions only the retrieval tier so the
+   * adoption wedge lands clean (REQ-WEDGE-001). Optional; absent/false means
+   * retrieval-only.
    */
   sdd?: boolean;
   /**
