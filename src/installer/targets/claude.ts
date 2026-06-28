@@ -125,6 +125,8 @@ const SHIPPED_COMMANDS = [
   'ss-brainstorm.md',
   // Human-confirmed domain-fact capture (domain knowledge layer):
   'ss-domain.md',
+  // Confirmation-gated triage: route a change to an existing spec and append to it:
+  'ss-triage.md',
 ] as const;
 
 /**

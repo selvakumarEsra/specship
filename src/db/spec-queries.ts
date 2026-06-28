@@ -121,6 +121,23 @@ interface IsolationEnvRow {
 }
 
 // =============================================================================
+// Public result types
+// =============================================================================
+
+/**
+ * One ranked hit from {@link SpecQueries.searchSpecs}. Carries enough to act on
+ * without a follow-up fetch (REQ-TRIAGE-001.A1): the spec, a relevance score,
+ * and a matched snippet from the body.
+ */
+export interface SpecSearchResult {
+  spec: Spec;
+  /** Relevance score (higher = better; bm25 magnitude, normalized positive). */
+  score: number;
+  /** A short matched excerpt from the body, with `…` ellipses around the hit. */
+  snippet: string;
+}
+
+// =============================================================================
 // Row → object converters
 // =============================================================================
 
@@ -445,6 +462,61 @@ export class SpecQueries {
     }
     const rows = this.stmts.getAllSpecs.all() as SpecRow[];
     return rows.map(rowToSpec);
+  }
+
+  /**
+   * Full-text search over specs (REQ-TRIAGE-001). Returns scored, ranked specs
+   * matched against `specs_fts` (id/title/body), each with a body snippet.
+   *
+   * Mirrors `QueryBuilder.searchNodes`: term sanitization strips FTS5 special
+   * chars + boolean operators, prefix-matches each term, and OR-joins them.
+   * `title` is weighted heavily so a name match outranks an incidental body
+   * mention. On any FTS failure (or an all-noise query) it returns `[]` rather
+   * than throwing — callers distinguish "no specs indexed" from "no match" via
+   * {@link getAllSpecs}.
+   */
+  searchSpecs(query: string, limit = 10): SpecSearchResult[] {
+    const ftsQuery = query
+      .replace(/::/g, ' ') // qualifier separator
+      .replace(/['"*():^]/g, '') // remove FTS5 special chars
+      .split(/\s+/)
+      .filter((term) => term.length > 0)
+      // Strip FTS5 boolean operators to prevent query manipulation
+      .filter((term) => !/^(AND|OR|NOT|NEAR)$/i.test(term))
+      .map((term) => `"${term}"*`) // prefix-match each term
+      .join(' OR ');
+
+    if (!ftsQuery) {
+      return [];
+    }
+
+    // BM25 column weights: id=0, title=10, body=1. Heavy title weight ensures a
+    // requirement whose heading matches ranks above one that merely mentions the
+    // terms in its prose. snippet() column index 2 = body.
+    const sql = `
+      SELECT specs.*,
+        bm25(specs_fts, 0, 10, 1) as score,
+        snippet(specs_fts, 2, '', '', '…', 12) as snippet
+      FROM specs_fts
+      JOIN specs ON specs_fts.id = specs.id
+      WHERE specs_fts MATCH ?
+      ORDER BY score
+      LIMIT ?
+    `;
+
+    try {
+      const rows = this.db
+        .prepare(sql)
+        .all(ftsQuery, limit) as (SpecRow & { score: number; snippet: string })[];
+      return rows.map((row) => ({
+        spec: rowToSpec(row),
+        score: Math.abs(row.score), // bm25 returns negative scores
+        snippet: row.snippet ?? '',
+      }));
+    } catch {
+      // FTS query failed (malformed match expression, etc.) — return empty.
+      return [];
+    }
   }
 
   // ===========================================================================
