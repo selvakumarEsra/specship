@@ -3,7 +3,7 @@
  * Claude Code analytics routes.
  *
  * All queries hit specship's SQLite directly. The ingest worker
- * (`@selvakumaresra/specship-ingest`) writes to claude_* tables; this layer
+ * (`@specship/specship-ingest`) writes to claude_* tables; this layer
  * just rolls up.
  *
  * Endpoints:

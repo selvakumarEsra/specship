@@ -6,7 +6,7 @@ description: Use SpecShip as a TypeScript library.
 SpecShip ships a TypeScript API. The public surface is the `SpecShip` class.
 
 ```typescript
-import SpecShip from '@selvakumaresra/specship';
+import SpecShip from '@specship/specship';
 
 const cg = await SpecShip.init('/path/to/project');
 // Or open an existing index:

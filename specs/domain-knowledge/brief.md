@@ -97,7 +97,7 @@ markdown, links to spec(s).
   `{severity,title,why,evidence,fix,saving}`, a useful precedent for later
   suggestion work).
 - **Constraint (MEMORY):** `packages/server` must **never** runtime-`import`
-  from the bare `@selvakumaresra/specship` package — it silently serves a stale
+  from the bare `@specship/specship` package — it silently serves a stale
   build. Use server-local modules / the dynamic loader (`getSpecFunnel` is the
   pattern).
 
@@ -195,4 +195,4 @@ is deferred until enough human-confirmed content exists to bootstrap it safely.
    in the drift queue and as a **Review** affordance on the Domain page.
 7. No regression to existing spec parsing, sync, drift, or the specs/drift pages;
    `packages/server` adds the `/api/domain` route **without** bare-importing the
-   `@selvakumaresra/specship` package.
+   `@specship/specship` package.

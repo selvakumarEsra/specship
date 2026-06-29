@@ -15,7 +15,7 @@ Check that `node_modules` and other large directories are excluded (they are, if
 
 Current builds shouldn't: SpecShip bundles its own Node runtime and uses Node's built-in `node:sqlite` in WAL mode, where concurrent reads never block on a writer. If you still see it:
 
-- **You're on an old (pre-0.9) install.** Reinstall to get the bundled runtime — `curl -fsSL https://raw.githubusercontent.com/selvakumarEsra/specship/main/install.sh | sh` (macOS/Linux), `irm https://raw.githubusercontent.com/selvakumarEsra/specship/main/install.ps1 | iex` (Windows), or `npm i -g @selvakumaresra/specship@latest`.
+- **You're on an old (pre-0.9) install.** Reinstall to get the bundled runtime — `curl -fsSL https://raw.githubusercontent.com/selvakumarEsra/specship/main/install.sh | sh` (macOS/Linux), `irm https://raw.githubusercontent.com/selvakumarEsra/specship/main/install.ps1 | iex` (Windows), or `npm i -g @specship/specship@latest`.
 - **`specship status` shows `Journal:` other than `wal`** — WAL couldn't be enabled on this filesystem (common on network shares and WSL2 `/mnt`), so reads can block on writes. Move the project (with its `.specship/` folder) onto a local disk.
 
 ## MCP server not connecting

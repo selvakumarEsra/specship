@@ -79,7 +79,7 @@ jobs:
         with: { fetch-depth: 0 }
       - uses: actions/setup-node@v4
         with: { node-version: '22' }
-      - run: npm i -g @selvakumaresra/specship
+      - run: npm i -g @specship/specship
       - run: specship init -i           # build the graph on the clean clone
       - name: Run spec-verify
         run: specship workflow run spec-verify --background

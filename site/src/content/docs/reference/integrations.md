@@ -83,7 +83,7 @@ See [Design-to-code](/workflows/design-to-code/) for the design commands.
 If you don't want to run `specship install`:
 
 ```bash
-npm i -g @selvakumaresra/specship
+npm i -g @specship/specship
 ```
 
 Then add the `mcpServers.specship` entry and the `permissions.allow` block above to your Claude Code config files by hand.

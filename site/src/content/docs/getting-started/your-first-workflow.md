@@ -14,7 +14,7 @@ This walkthrough takes you from a fresh install to a passing `spec-implement` ru
 ## 1. Install SpecShip
 
 ```bash
-npm i -g @selvakumaresra/specship
+npm i -g @specship/specship
 ```
 
 Verify:

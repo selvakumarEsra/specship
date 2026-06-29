@@ -59,7 +59,7 @@ the restyle.
 ## Acceptance
 <!-- id: REQ-LANDING-002.A1 -->
 - The install command shown matches the published package install
-  (`npm i -g @selvakumaresra/specship`).
+  (`npm i -g @specship/specship`).
 <!-- id: REQ-LANDING-002.A2 -->
 - Headline capabilities each map to a shipped feature: the workflow engine,
   the knowledge graph + MCP server, Claude Code analytics / SpecShip Impact, and

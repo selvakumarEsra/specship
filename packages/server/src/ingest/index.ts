@@ -1,5 +1,5 @@
 /**
- * Server-local JSONL ingest. Lives inside @selvakumaresra/specship-server
+ * Server-local JSONL ingest. Lives inside @specship/specship-server
  * so the HTTP API has a single deploy unit — no separate package, no
  * dependency wiring.
  *

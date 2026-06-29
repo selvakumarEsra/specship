@@ -3,10 +3,10 @@
 
 /**
  * `specship` — thin shim that delegates to the scoped
- * `@selvakumaresra/specship` package.
+ * `@specship/specship` package.
  *
  * Exists so users can type `npx specship install` instead of
- * `npx @selvakumaresra/specship install` and have it Just Work.
+ * `npx @specship/specship install` and have it Just Work.
  *
  * Implementation: resolve the scoped package via require.resolve (respects
  * any npm install layout, hoisted or not), then spawn its real bin with the
@@ -19,11 +19,11 @@ const { spawn } = require('node:child_process');
 function resolveRealBin() {
   let pkgPath;
   try {
-    pkgPath = require.resolve('@selvakumaresra/specship/package.json');
+    pkgPath = require.resolve('@specship/specship/package.json');
   } catch (err) {
     process.stderr.write(
-      'specship: cannot find @selvakumaresra/specship in the install tree.\n' +
-        '         Try a clean install: npm i -g @selvakumaresra/specship\n' +
+      'specship: cannot find @specship/specship in the install tree.\n' +
+        '         Try a clean install: npm i -g @specship/specship\n' +
         (err && err.message ? '         (resolve error: ' + err.message + ')\n' : ''),
     );
     process.exit(1);
@@ -34,7 +34,7 @@ function resolveRealBin() {
   if (typeof bin === 'string') rel = bin;
   else if (bin && typeof bin.specship === 'string') rel = bin.specship;
   else {
-    process.stderr.write('specship: @selvakumaresra/specship has no `specship` bin entry.\n');
+    process.stderr.write('specship: @specship/specship has no `specship` bin entry.\n');
     process.exit(1);
   }
   return path.resolve(path.dirname(pkgPath), rel);

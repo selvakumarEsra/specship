@@ -1,6 +1,6 @@
-# `specship-cli` — unscoped shim for `@selvakumaresra/specship`
+# `specship-cli` — unscoped shim for `@specship/specship`
 
-This is the **unscoped shim** for [`@selvakumaresra/specship`](https://www.npmjs.com/package/@selvakumaresra/specship). It exists so you can type:
+This is the **unscoped shim** for [`@specship/specship`](https://www.npmjs.com/package/@specship/specship). It exists so you can type:
 
 ```bash
 npx specship-cli install
@@ -9,10 +9,10 @@ npx specship-cli install
 …instead of remembering the full scoped name:
 
 ```bash
-npx @selvakumaresra/specship install
+npx @specship/specship install
 ```
 
-The shim has one file (a `bin` script that delegates to the real CLI) and one dependency: the actual `@selvakumaresra/specship` package. Installing either one gives you the full thing. The binary on `PATH` is always called `specship` — that part doesn't change.
+The shim has one file (a `bin` script that delegates to the real CLI) and one dependency: the actual `@specship/specship` package. Installing either one gives you the full thing. The binary on `PATH` is always called `specship` — that part doesn't change.
 
 > npm doesn't allow brand-new single-word unscoped names (anti-typosquat policy), so we use the `-cli` suffix here. Same product underneath.
 
@@ -34,5 +34,5 @@ A local-first **workflow engine for AI coding agents**. Define multi-step develo
 
 - **Docs**: https://selvakumarEsra.github.io/specship/
 - **GitHub**: https://github.com/selvakumarEsra/specship
-- **Real package**: [`@selvakumaresra/specship`](https://www.npmjs.com/package/@selvakumaresra/specship)
+- **Real package**: [`@specship/specship`](https://www.npmjs.com/package/@specship/specship)
 - **License**: MIT

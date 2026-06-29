@@ -92,7 +92,7 @@ Re-attach an `orphaned` link. Orphans happen when a target file or symbol was re
 You can override any bundled workflow by writing a file with the same name in your project's `.specship/workflows/`:
 
 ```bash
-cp $(npm root -g)/@selvakumaresra/specship/dist/workflows/defaults/spec-implement.yaml \
+cp $(npm root -g)/@specship/specship/dist/workflows/defaults/spec-implement.yaml \
    .specship/workflows/spec-implement.yaml
 # edit to taste; project tier always wins
 ```

@@ -11,7 +11,7 @@
     "declaration": true,
     "outDir": "dist",
     "rootDir": "src",
-    // Resolve the @selvakumaresra/specship type imports against the repo's
+    // Resolve the @specship/specship type imports against the repo's
     // freshly-built dist/ (the root `tsc` runs before build:server in
     // `npm run build`). Compile-time only — emitted JS keeps the bare
     // specifiers, resolved at runtime by the dynamic loader / installed
@@ -20,8 +20,8 @@
     // only resolved on the maintainer's box via a global install.
     "baseUrl": ".",
     "paths": {
-      "@selvakumaresra/specship": ["../../dist/index.d.ts"],
-      "@selvakumaresra/specship/*": ["../../*"]
+      "@specship/specship": ["../../dist/index.d.ts"],
+      "@specship/specship/*": ["../../*"]
     }
   },
   "include": ["src/**/*"]

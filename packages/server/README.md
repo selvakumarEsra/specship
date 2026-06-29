@@ -1,4 +1,4 @@
-# `@selvakumaresra/specship-server`
+# `@specship/specship-server`
 
 Single-process desktop app for SpecShip / SpecShip: Fastify API + the
 Angular UI ship in one Node process. No Docker, no Electron, no separate

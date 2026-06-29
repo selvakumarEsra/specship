@@ -18,8 +18,8 @@ irm https://raw.githubusercontent.com/selvakumarEsra/specship/main/install.ps1 |
 ## Already have Node? Use npm instead (works on any version)
 
 ```bash
-npx @selvakumaresra/specship        # zero-install, or:
-npm i -g @selvakumaresra/specship
+npx @specship/specship        # zero-install, or:
+npm i -g @specship/specship
 ```
 
 SpecShip bundles its own runtime — nothing to compile, no native build, works the same everywhere. SpecShip is **Claude Code only**; run `specship install` to wire it in (project-local by default).

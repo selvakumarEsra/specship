@@ -46,9 +46,9 @@ linux/amd64`).
    Releases, symlinks `specship` onto PATH. Re-run to upgrade; `--uninstall` to
    remove.
 2. **npm** ([`scripts/npm-shim.js`](scripts/npm-shim.js)) — preserves
-   `npm i -g @selvakumaresra/specship@0.5.0`. The main package is a tiny shim; the
+   `npm i -g @specship/specship@0.5.0`. The main package is a tiny shim; the
    bundles ship as per-platform `optionalDependencies`
-   (`@selvakumaresra/specship-<target>` with `os`/`cpu`), so npm installs only the
+   (`@specship/specship-<target>` with `os`/`cpu`), so npm installs only the
    matching one. The shim — run by the user's Node — execs the bundle, so the
    real work runs on the bundled Node 24. Works even on old Node. On Windows it
    invokes the bundled `node.exe` against the app entry directly (not the `.cmd`

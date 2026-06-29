@@ -509,10 +509,10 @@ describe('Claude target — specifics', () => {
     const file = seedSettings('local', {
       hooks: {
         PostToolUse: [
-          { matcher: 'Edit|Write', hooks: [{ type: 'command', command: 'npx @selvakumaresra/specship mark-dirty', async: true }] },
+          { matcher: 'Edit|Write', hooks: [{ type: 'command', command: 'npx @specship/specship mark-dirty', async: true }] },
         ],
         Stop: [
-          { hooks: [{ type: 'command', command: 'npx @selvakumaresra/specship sync-if-dirty' }] },
+          { hooks: [{ type: 'command', command: 'npx @specship/specship sync-if-dirty' }] },
         ],
       },
     });

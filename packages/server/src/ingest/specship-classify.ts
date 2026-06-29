@@ -3,7 +3,7 @@
  *
  * SERVER-LOCAL COPY. The lib has the canonical version at
  * `src/analytics/specship-impact.ts`; this file is duplicated here on purpose
- * so the server never carries a runtime `import … from '@selvakumaresra/specship'`
+ * so the server never carries a runtime `import … from '@specship/specship'`
  * — a bare-package value import does NOT resolve in bundled / different-cwd
  * mode and silently drops the server back to a stale build (the same failure
  * mode `server.ts`/`workflow.ts` already guard against). These functions are
