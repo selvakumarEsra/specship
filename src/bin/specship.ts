@@ -451,11 +451,39 @@ async function buildProjectIndex(projectRoot: string): Promise<void> {
   const { default: SpecShip } = await loadSpecShip();
   const cg = await SpecShip.init(projectRoot, { index: false });
   const progress = createShimmerProgress();
+  let stopped = false;
+  const stop = async () => {
+    if (!stopped) {
+      stopped = true;
+      await progress.stop();
+    }
+  };
   try {
     await cg.indexAll({ onProgress: progress.onProgress });
+    await stop();
+    await printStarterPrompt(cg);
   } finally {
-    await progress.stop();
+    await stop();
     cg.destroy();
+  }
+}
+
+/**
+ * Print the manufactured first-run flow/impact prompt (REQ-ACTIVATION-002.A1):
+ * the closing line of `init` / the install index step. No-op when the graph
+ * yields no confidently-good prompt.
+ */
+async function printStarterPrompt(cg: import('../index').SpecShip): Promise<void> {
+  try {
+    const { generateStarterPrompt } = await import('../activation/starter-prompt');
+    const sp = generateStarterPrompt(cg);
+    if (!sp) return;
+    console.log();
+    console.log(chalk.bold('Try this first — ask Claude:'));
+    console.log('  ' + chalk.cyan(sp.prompt));
+    console.log(chalk.dim("  (it'll explore the index instead of reading files)"));
+  } catch {
+    /* best effort — never block init on the suggestion */
   }
 }
 
@@ -649,6 +677,9 @@ program
         const { offerWatchFallback } = await import('../installer');
         await offerWatchFallback(clack, projectPath);
       } catch { /* non-fatal */ }
+
+      // Manufactured first-run moment (REQ-ACTIVATION-002.A1).
+      await printStarterPrompt(cg);
 
       clack.outro('Done');
       cg.destroy();
@@ -2311,6 +2342,52 @@ program
       error(`Usage-blocking checks failed: ${result.blockingFailures.map((i) => i.id).join(', ')}`);
     }
     process.exit(code);
+  });
+
+/**
+ * specship starter-prompt — print the manufactured first-run flow/impact prompt
+ * (ACTIVATION-DOC). The single delivery mechanism for the bare `/ss-explore`
+ * door: it self-gates (prints nothing if the index can't be queried —
+ * REQ-ACTIVATION-004) and self-retires (prints nothing once a real specship
+ * lookup has been recorded this session — REQ-ACTIVATION-003).
+ */
+program
+  .command('starter-prompt [path]')
+  .description('Print a suggested first flow/impact prompt for this project (used by the /ss-explore door).')
+  .option('-j, --json', 'Output as JSON')
+  .action(async (pathArg: string | undefined, options: { json?: boolean }) => {
+    const projectRoot = path.resolve(pathArg ?? process.cwd());
+    // Not indexed → nothing (REQ-ACTIVATION-004.A2: the door shows its own guidance).
+    if (!isInitialized(projectRoot)) return;
+
+    // Retire once the agent has actually used retrieval this session
+    // (REQ-ACTIVATION-003) — the per-session marker counts specship lookups.
+    try {
+      const { readSessionMarker } = await import('../statusline/session-marker');
+      const marker = readSessionMarker(projectRoot);
+      if (marker && marker.calls > 0) return;
+    } catch {
+      /* no marker yet → not retired */
+    }
+
+    try {
+      const { default: SpecShip } = await loadSpecShip();
+      const cg = await SpecShip.open(projectRoot);
+      try {
+        const { generateStarterPrompt } = await import('../activation/starter-prompt');
+        const sp = generateStarterPrompt(cg);
+        if (!sp) return; // can't generate (unqueryable index / empty graph) → nothing (REQ-ACTIVATION-004)
+        if (options.json) {
+          console.log(JSON.stringify(sp));
+        } else {
+          console.log(sp.prompt);
+        }
+      } finally {
+        cg.destroy();
+      }
+    } catch {
+      // Index unreadable / FTS5 missing → print nothing (REQ-ACTIVATION-004.A1).
+    }
   });
 
 /**

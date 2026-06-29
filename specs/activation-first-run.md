@@ -50,8 +50,8 @@ the one in A2 — endpoints verified to connect end-to-end, crossing at least tw
 files — not any specific hop number.
 
 implementations:
-  - src/graph/maintainability.ts:findGodFiles
-  - src/graph/traverser.ts:GraphTraverser
+  - src/activation/starter-prompt.ts:selectStarterPrompt
+  - src/activation/starter-prompt.ts:generateStarterPrompt
 
 ## Acceptance
 <!-- id: REQ-ACTIVATION-001.A1 -->
@@ -79,9 +79,9 @@ the bare reads-door invocation inside Claude Code, so the moment survives the
 handoff from terminal to agent. A developer who just installed a *retrieval* tool
 naturally invokes the reads door to see what it does; the prompt MUST live there.
 
-implementations:
-  - src/bin/specship.ts:init
-  - .claude/commands/ss-explore.md
+(Delivery is CLI wiring + a markdown door — the `init`/install closing line and
+the `specship starter-prompt` command surfaced by the `/ss-explore` door — so
+there is no single exported symbol to link; verified by the surfaces' behaviour.)
 
 ## Acceptance
 <!-- id: REQ-ACTIVATION-002.A1 -->
@@ -107,9 +107,10 @@ implementations:
 
 ## Acceptance
 <!-- id: REQ-ACTIVATION-003.A1 -->
-- After at least one `specship_explore` call has been recorded in the current
-  session marker, a bare `/ss-explore` invocation reverts to plain usage guidance
-  with no starter-prompt lead.
+- After at least one real specship lookup has been recorded in the current
+  session marker (the marker counts specship tool calls, `specship_explore`
+  chief among them), a bare `/ss-explore` invocation reverts to plain usage
+  guidance with no starter-prompt lead.
 <!-- id: REQ-ACTIVATION-003.A2 -->
 - Retirement is driven by the existing per-session call marker
   (`REQ-STATUSLINE-004`); no additional persistent counter is added.
