@@ -18,7 +18,7 @@ gitignored (re-fetchable from the source below).
 - `../src/pages/_landing-body.html` — the design body, with the designer
   instrumentation (`data-om-id`, the omelette injector) stripped and the design's
   placeholder / aspirational copy rewritten to shipped-product truth
-  (REQ-LANDING-002): real `npm i -g @selvakumaresra/specship` install, real
+  (REQ-LANDING-002): real `npm i -g @specship/specship` install, real
   repo/docs links, live star-count placeholder, the reflection-engine beat, a
   light/dark toggle. Dynamic values stay as `__PLACEHOLDERS__` that `index.astro`
   fills at build.

@@ -10,7 +10,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import type { SpecLinkKind, NodeKind, SpecLinkState } from '@selvakumaresra/specship';
+import type { SpecLinkKind, NodeKind, SpecLinkState } from '@specship/specship';
 import type { SpecShipInstance } from '../project-registry.js';
 
 interface ProjectQuery { project?: string }
@@ -102,7 +102,7 @@ export function parseBriefField(source: string): string | null {
 /**
  * Atomic file write: tmp + rename. Mirrors `atomicWriteFileSync` in
  * `src/installer/targets/shared.ts` — kept local here to avoid the
- * @selvakumaresra/specship deep-import dance for a 10-line helper.
+ * @specship/specship deep-import dance for a 10-line helper.
  */
 function atomicWriteFile(targetPath: string, content: string): void {
   const dir = path.dirname(targetPath);

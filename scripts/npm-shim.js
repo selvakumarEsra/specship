@@ -4,7 +4,7 @@
 // npm thin-installer launcher for SpecShip.
 //
 // The heavy artifact (a vendored Node runtime + the app) ships as a per-platform
-// optionalDependency: @selvakumaresra/specship-<platform>-<arch>. npm installs
+// optionalDependency: @specship/specship-<platform>-<arch>. npm installs
 // only the one matching the host, via each package's `os`/`cpu` fields (the
 // esbuild pattern). This shim — run by the user's OWN Node — locates that bundle
 // and execs its launcher, so the real work always runs on the bundled Node 24
@@ -32,7 +32,7 @@ var os = require('os');
 var path = require('path');
 
 var target = process.platform + '-' + process.arch; // e.g. darwin-arm64, linux-x64
-var pkg = '@selvakumaresra/specship-' + target;
+var pkg = '@specship/specship-' + target;
 var isWindows = process.platform === 'win32';
 var REPO = 'selvakumarEsra/specship';
 
@@ -238,7 +238,7 @@ function fail(reason) {
     'A registry mirror (e.g. npmmirror/cnpm) that did not mirror the per-platform\n' +
     'package is the usual cause. Fixes:\n' +
     '  - install from the official registry:\n' +
-    '      npm i -g @selvakumaresra/specship --registry=https://registry.npmjs.org\n' +
+    '      npm i -g @specship/specship --registry=https://registry.npmjs.org\n' +
     '  - or use the standalone installer (no Node required):\n' +
     '      curl -fsSL https://raw.githubusercontent.com/' + REPO + '/main/install.sh | sh\n'
   );

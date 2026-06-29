@@ -1,15 +1,15 @@
 'use strict';
 //
-// Programmatic / embedded SDK entry for @selvakumaresra/specship (issue #354).
+// Programmatic / embedded SDK entry for @specship/specship (issue #354).
 //
 // The CLI/MCP `bin` (npm-shim.js) execs the per-platform bundle's OWN Node 24 so
 // the tool never depends on the user's runtime. Embedded library consumers are
 // the opposite case: they already run their own Node and just want the compiled
-// API — `require("@selvakumaresra/specship")` returning the SpecShip class et al.
+// API — `require("@specship/specship")` returning the SpecShip class et al.
 //
 // The compiled library + its production dependencies (web-tree-sitter,
 // tree-sitter-wasms, …) ship INSIDE the per-platform bundle, at
-//   @selvakumaresra/specship-<platform>-<arch>/lib/dist/index.js
+//   @specship/specship-<platform>-<arch>/lib/dist/index.js
 // (with the deps in the sibling lib/node_modules). Re-exporting that bundle keeps
 // the main package thin — no second 50 MB copy of the grammars — while making the
 // SDK work in the consumer's process. Types are a separate concern: the main
@@ -28,7 +28,7 @@ var os = require('os');
 var fs = require('fs');
 
 var target = process.platform + '-' + process.arch; // e.g. darwin-arm64, linux-x64
-var pkg = '@selvakumaresra/specship-' + target;
+var pkg = '@specship/specship-' + target;
 
 module.exports = require(resolveLibrary());
 
@@ -56,8 +56,8 @@ function resolveLibrary() {
     'The compiled library ships inside that per-platform optional dependency.\n' +
     'Fixes:\n' +
     '  - install from the official npm registry so the matching bundle is fetched:\n' +
-    '      npm i @selvakumaresra/specship --registry=https://registry.npmjs.org\n' +
-    '  - or run the CLI once (e.g. `npx @selvakumaresra/specship status`) to\n' +
+    '      npm i @specship/specship --registry=https://registry.npmjs.org\n' +
+    '  - or run the CLI once (e.g. `npx @specship/specship status`) to\n' +
     '    self-heal the bundle into ~/.specship, then require() will find it.'
   );
 }

@@ -73,15 +73,15 @@ async function buildTestApp(cg: SpecShip | null): Promise<FastifyInstance> {
 // A2: static source scan — no runtime import of the bare package.
 // ---------------------------------------------------------------------------
 describe('domain route source (REQ-DOMAIN-007.A2)', () => {
-  it('contains no runtime import from @selvakumaresra/specship', () => {
+  it('contains no runtime import from @specship/specship', () => {
     const source = fs.readFileSync(
       path.join(__dirname, '..', 'packages', 'server', 'src', 'routes', 'domain.ts'),
       'utf-8',
     );
-    // A value import would be `import { x } from '@selvakumaresra/specship'`.
+    // A value import would be `import { x } from '@specship/specship'`.
     // A2 forbids that; a type-only import (erased at compile) would not, but the
     // route uses neither — so assert the package name never appears in an import.
-    expect(source).not.toMatch(/from\s+['"]@selvakumaresra\/specship['"]/);
+    expect(source).not.toMatch(/from\s+['"]@specship\/specship['"]/);
   });
 });
 

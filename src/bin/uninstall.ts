@@ -2,7 +2,7 @@
 /**
  * SpecShip preuninstall cleanup script
  *
- * Runs automatically when `npm uninstall -g @selvakumaresra/specship`
+ * Runs automatically when `npm uninstall -g @specship/specship`
  * is called. Sweeps Claude Code's global config (the only location
  * we own at npm-uninstall time — local-location entries live inside
  * project working trees and aren't ours to nuke).

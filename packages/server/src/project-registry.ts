@@ -17,7 +17,7 @@
 
 import { decodeProjectSlug } from './ingest/ingestor.js';
 
-type SpecShipInstance = Awaited<ReturnType<typeof import('@selvakumaresra/specship').SpecShip.open>>;
+type SpecShipInstance = Awaited<ReturnType<typeof import('@specship/specship').SpecShip.open>>;
 
 interface CacheEntry {
   cg: SpecShipInstance;
@@ -31,7 +31,7 @@ export interface ProjectRegistryOptions {
   verbose?: boolean;
   /**
    * Injected loader (so tests can mock SpecShip.open). Defaults to the
-   * real `@selvakumaresra/specship` import resolved the same way the
+   * real `@specship/specship` import resolved the same way the
    * server itself resolves it.
    */
   openImpl?: (projectPath: string) => Promise<SpecShipInstance>;

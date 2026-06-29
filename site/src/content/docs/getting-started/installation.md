@@ -8,7 +8,7 @@ SpecShip is **Claude Code only** — the installer configures one agent on purpo
 ## 1. Run the installer
 
 ```bash
-npx @selvakumaresra/specship install
+npx @specship/specship install
 ```
 
 The installer will:

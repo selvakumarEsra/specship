@@ -8,7 +8,7 @@ SpecShip is a local-first code intelligence library + CLI + MCP server. It parse
 
 **SpecShip is Claude Code only.** The installer and tests cover one agent — don't add other agent targets without an explicit ask.
 
-Distributed as `@selvakumaresra/specship` on npm; same binary serves as installer, indexer, and MCP server.
+Distributed as `@specship/specship` on npm; same binary serves as installer, indexer, and MCP server.
 
 ## Build, Test, Run
 

@@ -21,7 +21,7 @@ HARNESS="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$HARNESS/../.." && pwd)"     # specship repo root
 CORPUS="${CORPUS:-/tmp/specship-corpus}"
 REPO="$CORPUS/$NAME"
-PKG="@selvakumaresra/specship"
+PKG="@specship/specship"
 
 echo "==================== SpecShip audit ===================="
 echo "version=$VERSION  repo=$NAME  mode=$MODE  corpus=$CORPUS"

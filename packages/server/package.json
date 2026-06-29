@@ -1,5 +1,5 @@
 {
-  "name": "@selvakumaresra/specship-server",
+  "name": "@specship/specship-server",
   "version": "0.0.0",
   "private": true,
   "description": "Fastify HTTP API + bundled SpecShip Desktop UI around specship core, the spec graph, workflow engine, and Claude Code transcript analytics.",
@@ -24,7 +24,7 @@
   },
   "dependencies": {
     "@fastify/cors": "^9.0.1",
-    "@selvakumaresra/specship": "file:../..",
+    "@specship/specship": "file:../..",
     "fastify": "^4.28.1"
   },
   "devDependencies": {

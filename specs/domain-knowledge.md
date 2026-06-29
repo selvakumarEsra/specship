@@ -203,7 +203,7 @@ implementations:
 
 The dashboard server MUST add a `GET /api/domain` route returning domain facts
 grouped by type plus the coverage rollup. The handler MUST NOT runtime-import the
-bare `@selvakumaresra/specship` package (which silently serves a stale build);
+bare `@specship/specship` package (which silently serves a stale build);
 it MUST use server-local modules or the dynamic loader. Existing routes MUST keep
 working.
 
@@ -215,7 +215,7 @@ implementations:
 - `GET /api/domain` returns `200` with a payload of facts grouped by type and a
   `{documented, gaps}` coverage rollup.
 <!-- id: REQ-DOMAIN-007.A2 -->
-- The route module contains no `import … from '@selvakumaresra/specship'`
+- The route module contains no `import … from '@specship/specship'`
   runtime import.
 <!-- id: REQ-DOMAIN-007.A3 -->
 - Existing `/api/specs` and `/api/claude/tips` responses are unchanged

@@ -1,5 +1,5 @@
 /**
- * @selvakumaresra/specship-server — public API.
+ * @specship/specship-server — public API.
  *
  * Fastify-based HTTP layer that mirrors specship's MCP tools as REST so the
  * SpecShip Desktop UI (and any other client) can drive the graph + spec

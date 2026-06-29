@@ -35,7 +35,7 @@ const subs = [
   // hero install command: real npm global install, not "npx specship init -i"
   [/data-copy="npx specship init -i"/g, 'data-copy="__INSTALL__"'],
   [/<span class="cmd-accent">npx<\/span> specship init <span style="color:var\(--text-muted\)">-i<\/span>/g,
-   '<span class="cmd-accent">npm</span> i -g @selvakumaresra/specship'],
+   '<span class="cmd-accent">npm</span> i -g @specship/specship'],
   // CTA labels: no macOS app ships
   [/Download for macOS/g, 'Get started'],
   // GitHub chip → real repo + live star count
@@ -49,7 +49,7 @@ const subs = [
   // final CTA: no brew cask ships — real npm install
   [/data-copy="brew install --cask specship"/g, 'data-copy="__INSTALL__"'],
   [/<span class="cmd-accent">brew<\/span> install --cask specship/g,
-   '<span class="cmd-accent">npm</span> i -g @selvakumaresra/specship'],
+   '<span class="cmd-accent">npm</span> i -g @specship/specship'],
   // final CTA primary → quickstart; secondary "live app" → docs
   [/<a class="btn btn-primary btn-lg" href="#">/g, '<a class="btn btn-primary btn-lg" href="__BASE__/getting-started/quickstart">'],
   [/<a class="btn btn-secondary btn-lg" href="SpecShip\.html">Explore the live app<\/a>/g,

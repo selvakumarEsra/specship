@@ -47,13 +47,13 @@ export async function registerWorkflowRoutes(app: FastifyInstance): Promise<void
   //      `dist/`, so the core workflow modules live at `../../workflows/*.js`
   //      and `../../isolation/*.js`. We try this relative path first because
   //      the bundled tarball stages the specship core without a resolvable
-  //      `@selvakumaresra/specship` package on Node's module graph (offline
+  //      `@specship/specship` package on Node's module graph (offline
   //      installs hit this — see scripts/offline-install.sh).
   //   2. **Workspace / dev** — the `file:../..` workspace dep resolves the
   //      named import via Node's normal package resolution.
-  let discovery: typeof import('@selvakumaresra/specship/dist/workflows/discovery.js');
-  let executorMod: typeof import('@selvakumaresra/specship/dist/workflows/executor.js');
-  let worktreeMod: typeof import('@selvakumaresra/specship/dist/isolation/worktree.js');
+  let discovery: typeof import('@specship/specship/dist/workflows/discovery.js');
+  let executorMod: typeof import('@specship/specship/dist/workflows/executor.js');
+  let worktreeMod: typeof import('@specship/specship/dist/isolation/worktree.js');
   const here = path.dirname(fileURLToPath(import.meta.url));
   const bundledDiscovery = path.resolve(here, '..', '..', 'workflows', 'discovery.js');
   if (existsSync(bundledDiscovery)) {
@@ -61,9 +61,9 @@ export async function registerWorkflowRoutes(app: FastifyInstance): Promise<void
     executorMod = await import(pathToFileURL(path.resolve(here, '..', '..', 'workflows', 'executor.js')).href);
     worktreeMod = await import(pathToFileURL(path.resolve(here, '..', '..', 'isolation', 'worktree.js')).href);
   } else {
-    discovery = await import('@selvakumaresra/specship/dist/workflows/discovery.js');
-    executorMod = await import('@selvakumaresra/specship/dist/workflows/executor.js');
-    worktreeMod = await import('@selvakumaresra/specship/dist/isolation/worktree.js');
+    discovery = await import('@specship/specship/dist/workflows/discovery.js');
+    executorMod = await import('@specship/specship/dist/workflows/executor.js');
+    worktreeMod = await import('@specship/specship/dist/isolation/worktree.js');
   }
   const { discoverWorkflows, loadWorkflowByName } = discovery;
   const { WorkflowExecutor } = executorMod;

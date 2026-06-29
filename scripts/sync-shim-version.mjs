@@ -2,11 +2,11 @@
 /**
  * Sync `packages/specship-shim/package.json` against the root version.
  *
- * The unscoped `specship-cli` shim has one dependency — `@selvakumaresra/specship`
+ * The unscoped `specship-cli` shim has one dependency — `@specship/specship`
  * pinned to a specific version (NOT a range, because the shim's whole job is
  * to deliver THE matching CLI). So every root release needs the shim's:
  *   - `version`                              → the root's new version
- *   - `dependencies["@selvakumaresra/specship"]` → exact match, same pin
+ *   - `dependencies["@specship/specship"]` → exact match, same pin
  *
  * Wired into the root package's `version` lifecycle, this runs automatically
  * when `npm version <bump>` mutates the root. After it runs, the modified
@@ -32,7 +32,7 @@ function writeJson(p, obj) { writeFileSync(p, JSON.stringify(obj, null, 2) + '\n
 
 const rootPkg = readJson(rootPkgPath);
 const shimPkg = readJson(shimPkgPath);
-const rootName = rootPkg.name; // e.g. @selvakumaresra/specship
+const rootName = rootPkg.name; // e.g. @specship/specship
 const target = rootPkg.version;
 
 const changes = [];

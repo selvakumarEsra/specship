@@ -92,28 +92,28 @@ export interface ServerHandle {
  *      server out at `<bundle>/lib/dist/server/server.js` and the specship
  *      core at `<bundle>/lib/dist/index.js`. We try this relative path
  *      first so the bundled mode never depends on Node's package
- *      resolution finding `@selvakumaresra/specship` (it won't, the
- *      bundle stages a single package by name `@selvakumaresra/specship`).
+ *      resolution finding `@specship/specship` (it won't, the
+ *      bundle stages a single package by name `@specship/specship`).
  *
  *   2. **Workspace / dev** — `packages/server/dist/server.js` imports via
  *      the workspace `file:../..` dep. Falls through to the named import.
  *
  * The function caches the resolved module so the lookup only runs once.
  */
-let cachedSpecShip: typeof import('@selvakumaresra/specship') | null = null;
-async function loadSpecShip(): Promise<typeof import('@selvakumaresra/specship')> {
+let cachedSpecShip: typeof import('@specship/specship') | null = null;
+async function loadSpecShip(): Promise<typeof import('@specship/specship')> {
   if (cachedSpecShip) return cachedSpecShip;
   // Bundled mode: dist/server/server.js → ../index.js (root dist/index.js).
   try {
     const here = path.dirname(fileURLToPath(import.meta.url));
     const candidate = path.resolve(here, '..', 'index.js');
     if (existsSync(candidate)) {
-      cachedSpecShip = (await import(pathToFileURL(candidate).href)) as typeof import('@selvakumaresra/specship');
+      cachedSpecShip = (await import(pathToFileURL(candidate).href)) as typeof import('@specship/specship');
       return cachedSpecShip;
     }
   } catch { /* fall through */ }
   // Workspace/dev: resolve via the named dep.
-  cachedSpecShip = await import('@selvakumaresra/specship');
+  cachedSpecShip = await import('@specship/specship');
   return cachedSpecShip;
 }
 

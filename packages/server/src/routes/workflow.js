@@ -47,9 +47,9 @@ exports.registerWorkflowRoutes = registerWorkflowRoutes;
 async function registerWorkflowRoutes(app) {
     // Lazy import — keeps the server bootable even if the workflow engine
     // is disabled in the current build profile.
-    const { discoverWorkflows, loadWorkflowByName } = await Promise.resolve().then(() => __importStar(require('@selvakumaresra/specship/dist/workflows/discovery.js')));
-    const { WorkflowExecutor } = await Promise.resolve().then(() => __importStar(require('@selvakumaresra/specship/dist/workflows/executor.js')));
-    const { WorktreeProvider } = await Promise.resolve().then(() => __importStar(require('@selvakumaresra/specship/dist/isolation/worktree.js')));
+    const { discoverWorkflows, loadWorkflowByName } = await Promise.resolve().then(() => __importStar(require('@specship/specship/dist/workflows/discovery.js')));
+    const { WorkflowExecutor } = await Promise.resolve().then(() => __importStar(require('@specship/specship/dist/workflows/executor.js')));
+    const { WorktreeProvider } = await Promise.resolve().then(() => __importStar(require('@specship/specship/dist/isolation/worktree.js')));
     const sq = app.cg.getSpecQueries();
     const projectRoot = app.cg.getProjectRoot ? app.cg.getProjectRoot() : process.cwd();
     const worktrees = new WorktreeProvider(sq);

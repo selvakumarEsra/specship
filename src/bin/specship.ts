@@ -43,14 +43,14 @@ async function loadSpecShip(): Promise<typeof import('../index')> {
     console.error(`\x1b[31m${getGlyphs().err}\x1b[0m Failed to load SpecShip modules.`);
     console.error(`\n  Node: ${process.version}  Platform: ${process.platform} ${process.arch}`);
     console.error(`\n  Error: ${msg}`);
-    console.error('\n  Try reinstalling with: npm install -g @selvakumaresra/specship\n');
+    console.error('\n  Try reinstalling with: npm install -g @specship/specship\n');
     process.exit(1);
   }
 }
 
 /**
  * Lazy-load the HTTP server package. Tries (in order):
- *   1. Installed npm dependency `@selvakumaresra/specship-server`
+ *   1. Installed npm dependency `@specship/specship-server`
  *   2. Dev sibling at `<repoRoot>/packages/server/dist/index.js`
  *
  * Errors are surfaced with a hint about which install/build step is missing.
@@ -73,17 +73,17 @@ interface ServerPackage {
 async function loadServerPackage(): Promise<ServerPackage> {
   // Resolution order:
   //   1. Bundled mode — `dist/server/index.js` next to this CLI. This is
-  //      what every `npm i -g @selvakumaresra/specship` install hits, since
+  //      what every `npm i -g @specship/specship` install hits, since
   //      the publish pipeline copies the compiled server into the root's
   //      `dist/`.
-  //   2. npm dep `@selvakumaresra/specship-server` if some downstream
+  //   2. npm dep `@specship/specship-server` if some downstream
   //      consumer ever wires it as a separate package (kept for forward
   //      compatibility — not the shipped path).
   //   3. Dev/workspace sibling: `packages/server/dist/index.js` for
   //      running from a checkout without a prior `npm run build`.
   const candidates: string[] = [
     path.resolve(__dirname, '..', 'server', 'index.js'),
-    '@selvakumaresra/specship-server',
+    '@specship/specship-server',
     path.resolve(__dirname, '..', '..', 'packages', 'server', 'dist', 'index.js'),
     path.resolve(__dirname, '..', '..', '..', 'packages', 'server', 'dist', 'index.js'),
   ];
@@ -99,7 +99,7 @@ async function loadServerPackage(): Promise<ServerPackage> {
 }
 
 /**
- * The JSONL ingest watcher now ships inside `@selvakumaresra/specship-server`
+ * The JSONL ingest watcher now ships inside `@specship/specship-server`
  * itself — `createServer({ ingest: true })` starts it. No separate package.
  */
 
@@ -162,13 +162,13 @@ function locateWebDir(explicit: string | null): string | null {
   if (envDir) candidates.push(path.resolve(envDir));
 
   // 1. Bundled mode — `dist/web/` next to this CLI. This is what every
-  //    `npm i -g @selvakumaresra/specship` install hits.
+  //    `npm i -g @specship/specship` install hits.
   candidates.push(path.resolve(__dirname, '..', 'web'));
 
-  // 2. Legacy / forward-compat: the old `@selvakumaresra/specship-server`
+  // 2. Legacy / forward-compat: the old `@specship/specship-server`
   //    used to ship the SPA at <pkg>/public/web.
   try {
-    const pkgJson = require.resolve('@selvakumaresra/specship-server/package.json');
+    const pkgJson = require.resolve('@specship/specship-server/package.json');
     candidates.push(path.resolve(path.dirname(pkgJson), 'public', 'web'));
   } catch { /* not installed as separate package — fall through */ }
 
@@ -1663,7 +1663,7 @@ program
 
         // Lazy-load the server package via dist path. The npm bin is
         // packaged with the server already built under
-        // node_modules/@selvakumaresra/specship-server, OR (dev) the
+        // node_modules/@specship/specship-server, OR (dev) the
         // sibling packages/server/dist directory.
         const { createServer } = await loadServerPackage();
 

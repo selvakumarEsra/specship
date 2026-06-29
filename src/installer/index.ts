@@ -127,11 +127,11 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
       const s = clack.spinner();
       s.start('Installing specship CLI...');
       try {
-        execSync('npm install -g @selvakumaresra/specship', { stdio: 'pipe', windowsHide: true });
+        execSync('npm install -g @specship/specship', { stdio: 'pipe', windowsHide: true });
         s.stop('Installed specship CLI on PATH');
       } catch {
         s.stop('Could not install (permission denied)');
-        clack.log.warn('Try: sudo npm install -g @selvakumaresra/specship');
+        clack.log.warn('Try: sudo npm install -g @specship/specship');
       }
     } else {
       clack.log.info('Skipped CLI install — Claude Code will not be able to launch the MCP server without it');

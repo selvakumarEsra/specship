@@ -1,6 +1,6 @@
 name: Smoke (published npx)
 
-# Validates the PUBLISHED @selvakumaresra/specship tarball on a real user's
+# Validates the PUBLISHED @specship/specship tarball on a real user's
 # happy path: `npx … install` → `init` → `index` → `query`. The point is to
 # exercise the SQLite FTS5 codepath on every Node version inside engines.node
 # so a regression that only shows up without `better-sqlite3` installed (i.e.
@@ -118,7 +118,7 @@ jobs:
           set -euo pipefail
           # Force a fresh npx fetch each run; a cached older 0.1.x in
           # ~/.npm/_npx would mask a fix landing in latest.
-          npx --yes @selvakumaresra/specship@latest install --yes
+          npx --yes @specship/specship@latest install --yes
           # Confirm the binary is now on PATH.
           which specship || command -v specship
           specship --version

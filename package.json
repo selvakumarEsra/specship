@@ -1,5 +1,5 @@
 {
-  "name": "@selvakumaresra/specship",
+  "name": "@specship/specship",
   "version": "0.11.0",
   "description": "Supercharge Claude Code with semantic code intelligence. 94% fewer tool calls • 77% faster exploration • 100% local.",
   "main": "dist/index.js",
@@ -41,6 +41,9 @@
   ],
   "author": "",
   "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
   "dependencies": {
     "@clack/prompts": "^1.3.0",
     "@fastify/cors": "^9.0.1",

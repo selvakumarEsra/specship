@@ -5,7 +5,7 @@
 # Produces, under release/npm/:
 #   specship-<target>/   one per built bundle — the vendored Node + app, tagged
 #                         with os/cpu so npm installs only the matching one.
-#   main/                 the @selvakumaresra/specship shim package: a tiny bin
+#   main/                 the @specship/specship shim package: a tiny bin
 #                         that execs the matching platform bundle, with every
 #                         platform package in optionalDependencies.
 #
@@ -19,7 +19,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 VERSION="${1:-$(node -p "require('$ROOT/package.json').version")}"
-SCOPE="@selvakumaresra"
+SCOPE="@specship"
 REL="$ROOT/release"
 NPM="$REL/npm"
 

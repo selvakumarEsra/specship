@@ -64,7 +64,7 @@ const status_js_1 = require("./routes/status.js");
  * the parent root at runtime — same module the CLI uses.
  */
 async function loadSpecShip() {
-    return Promise.resolve().then(() => __importStar(require('@selvakumaresra/specship')));
+    return Promise.resolve().then(() => __importStar(require('@specship/specship')));
 }
 async function createServer(options) {
     const host = options.host ?? '127.0.0.1';

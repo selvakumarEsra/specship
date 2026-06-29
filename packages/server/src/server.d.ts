@@ -12,7 +12,7 @@
  * registration code tidy.
  */
 import { FastifyInstance } from 'fastify';
-import type { WatcherHandle } from '@selvakumaresra/specship-ingest';
+import type { WatcherHandle } from '@specship/specship-ingest';
 export interface ServerOptions {
     /** Path to the project root (passed to SpecShip.open). */
     projectRoot: string;
@@ -37,7 +37,7 @@ export interface ServerHandle {
 export declare function createServer(options: ServerOptions): Promise<ServerHandle>;
 declare module 'fastify' {
     interface FastifyInstance {
-        cg: Awaited<ReturnType<typeof import('@selvakumaresra/specship').SpecShip.open>>;
+        cg: Awaited<ReturnType<typeof import('@specship/specship').SpecShip.open>>;
         watcher: WatcherHandle | null;
     }
 }
