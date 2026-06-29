@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import Database from 'better-sqlite3';
+import { openMemoryDb } from './helpers/memory-db';
 import { ingestAll } from '../packages/server/src/ingest/ingestor';
 import SpecShip from '../src/index';
 
@@ -222,7 +222,7 @@ describe('ingestAll + classifyToolCall integration', () => {
     writeTranscript(claudeRoot, sessionId, promptId);
 
     // 3. Build a minimal DB with the required schema.
-    const db = new Database(':memory:');
+    const db = openMemoryDb();
     buildSchema(db);
 
     // 4. Run ingestAll with the graph resolver.
@@ -276,7 +276,7 @@ describe('ingestAll + classifyToolCall integration', () => {
     const promptId = 'prompt-integration-02';
     writeTranscript(claudeRoot, sessionId, promptId);
 
-    const db = new Database(':memory:');
+    const db = openMemoryDb();
     buildSchema(db);
 
     // Pass null graph → should classify as unresolved.
@@ -322,7 +322,7 @@ describe('ingestAll + classifyToolCall integration', () => {
     // The transcript requests 'alpha', which doesn't exist in this project.
     writeTranscript(claudeRoot, sessionId, promptId);
 
-    const db = new Database(':memory:');
+    const db = openMemoryDb();
     buildSchema(db);
 
     ingestAll(db as any, {

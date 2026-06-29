@@ -13,7 +13,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import Database from 'better-sqlite3';
+import { openMemoryDb } from './helpers/memory-db';
 import type { GraphLike } from '../src/analytics/specship-impact';
 import { backfillDisplaced } from '../packages/server/src/ingest/impact-backfill';
 
@@ -111,7 +111,7 @@ function insertToolCall(
 
 describe('backfillDisplaced', () => {
   it('fills resolution+displaced_files for null-resolution specship rows', () => {
-    const db = new Database(':memory:');
+    const db = openMemoryDb();
     buildSchema(db);
 
     const PROJECT_PATH = '/proj/alpha-project';
@@ -210,7 +210,7 @@ describe('backfillDisplaced', () => {
   });
 
   it('is idempotent — second call is a no-op', () => {
-    const db = new Database(':memory:');
+    const db = openMemoryDb();
     buildSchema(db);
 
     insertSession(db, 'sess-02', '/proj/beta');
@@ -256,7 +256,7 @@ describe('backfillDisplaced', () => {
   });
 
   it("retries a previously-'unresolved' row and upgrades it to resolved", () => {
-    const db = new Database(':memory:');
+    const db = openMemoryDb();
     buildSchema(db);
     insertSession(db, 'sess-re', '/proj/retry');
     insertPrompt(db, 'prompt-re', 'sess-re');
@@ -284,7 +284,7 @@ describe('backfillDisplaced', () => {
   });
 
   it('handles resolveGraph returning null gracefully (classifies as unresolved)', () => {
-    const db = new Database(':memory:');
+    const db = openMemoryDb();
     buildSchema(db);
 
     insertSession(db, 'sess-03', '/proj/no-graph');
@@ -310,7 +310,7 @@ describe('backfillDisplaced', () => {
   });
 
   it('handles resolveGraph throwing without crashing', () => {
-    const db = new Database(':memory:');
+    const db = openMemoryDb();
     buildSchema(db);
 
     insertSession(db, 'sess-04', '/proj/throws');
