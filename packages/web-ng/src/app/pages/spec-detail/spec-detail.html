@@ -63,11 +63,23 @@
             {{ metCount() }} / {{ criteria().length }} met
           </div>
         </div>
+        <!-- per-criterion progress segments -->
+        <div class="sd-crit-bars">
+          @for (c of criteria(); track c.id) {
+            <span class="sd-crit-seg" [class.pending]="c.state === 'pending'"
+              [style.background]="critColor(c.state)" [title]="c.id + ' · ' + stateLabel(c.state)"></span>
+          }
+        </div>
         <div class="sd-criteria">
           @for (c of criteria(); track c.id; let i = $index) {
-            <div class="sd-crit" [class.met]="c.met">
-              <span class="sd-crit-check" [class.on]="c.met">
-                <app-icon [name]="c.met ? 'check' : 'circle'" [size]="12" />
+            <div class="sd-crit">
+              <span class="sd-crit-mark" [style.background]="critBg(c.state)" [style.color]="critColor(c.state)"
+                [title]="stateLabel(c.state)">
+                @if (critIcon(c.state); as ic) {
+                  <app-icon [name]="ic" [size]="12" />
+                } @else {
+                  <span class="sd-crit-dot" [style.border-color]="critColor(c.state)"></span>
+                }
               </span>
               <span class="sd-crit-id mono">A{{ i + 1 }}</span>
               <span class="sd-crit-text">{{ c.title }}</span>
@@ -91,13 +103,13 @@
         <div class="sd-links">
           @for (l of links(); track l.id) {
             <div class="sd-link">
-              <span class="sd-link-state" [style.color]="stateColor(l.state)" [title]="stateLabel(l.state)">
-                <app-icon name="dot" [size]="10" />
-              </span>
+              <app-state-pill [state]="l.state" />
               <span class="mono sd-link-target">{{ linkTarget(l) }}</span>
               <span class="grow"></span>
-              @if (l.provenance) { <span class="sd-prov">{{ l.provenance }}</span> }
-              <span class="sd-link-statelabel" [style.color]="stateColor(l.state)">{{ stateLabel(l.state) }}</span>
+              @if (l.provenance) { <app-pill>{{ l.provenance }}</app-pill> }
+              <button type="button" class="btn btn-ghost btn-xs" (click)="revealLink(l)" [attr.aria-label]="'Reveal ' + linkTarget(l)">
+                <app-icon name="reveal" [size]="12" /> Reveal
+              </button>
             </div>
           }
         </div>

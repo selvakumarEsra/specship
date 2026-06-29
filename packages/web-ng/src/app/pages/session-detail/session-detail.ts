@@ -9,7 +9,7 @@ import {
   inject,
   signal,
 } from '@angular/core';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { DomSanitizer, type SafeHtml } from '@angular/platform-browser';
 import { ApiService } from '../../api/api';
@@ -18,8 +18,10 @@ import { RefreshService } from '../../api/refresh';
 import { Icon } from '../../shell/icon/icon';
 import { Pill } from '../../ui/pill';
 import { Bar } from '../../ui/bar';
+import { CopyBtn } from '../../ui/copy-btn';
 import { HBars, type HBarItem } from '../../charts/h-bars/h-bars';
 import { renderMd } from '../../util/render-md';
+import { promptQuality, qualityReviewText, type QualityResult } from '../../util/prompt-quality';
 import type {
   ClaudePrompt,
   ClaudeToolCall,
@@ -87,7 +89,7 @@ function parseDisplacedFiles(raw: string | null | undefined): Array<[string, num
 
 @Component({
   selector: 'app-session-detail',
-  imports: [DecimalPipe, RouterLink, Icon, Pill, Bar, HBars],
+  imports: [DecimalPipe, RouterLink, Icon, Pill, Bar, CopyBtn, HBars],
   templateUrl: './session-detail.html',
   styleUrl: './session-detail.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -95,6 +97,7 @@ function parseDisplacedFiles(raw: string | null | undefined): Array<[string, num
 export class SessionDetail {
   private readonly api = inject(ApiService);
   private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
   private readonly sanitizer = inject(DomSanitizer);
   private readonly destroyRef = inject(DestroyRef);
   protected readonly refresh = inject(RefreshService);
@@ -232,6 +235,83 @@ export class SessionDetail {
   });
 
   protected readonly totalToolCalls = computed(() => this.toolCalls().length);
+
+  // ── PromptPage (dedicated per-prompt view) ─────────────────────────────────
+  // Driven by a `?prompt=<id>` query param so it stays in-page (the SSE live
+  // tail is keyed on the session id and must not tear down) and is deep-linkable.
+  private readonly queryMap = toSignal(this.route.queryParamMap, { initialValue: this.route.snapshot.queryParamMap });
+  protected readonly selectedPromptId = computed(() => this.queryMap().get('prompt'));
+
+  /** Index of the selected prompt within groups(), or -1. */
+  protected readonly selectedIndex = computed(() => {
+    const id = this.selectedPromptId();
+    if (!id) return -1;
+    return this.groups().findIndex((g) => g.prompt.id === id);
+  });
+  protected readonly selectedGroup = computed<PromptGroup | null>(() => {
+    const i = this.selectedIndex();
+    return i >= 0 ? this.groups()[i] : null;
+  });
+
+  /** Deterministic prompt-quality review for the selected prompt. */
+  protected readonly quality = computed<QualityResult | null>(() => {
+    const g = this.selectedGroup();
+    return g ? promptQuality(g.prompt, g.tools) : null;
+  });
+  protected readonly qualityShareText = computed(() => {
+    const q = this.quality();
+    return q ? qualityReviewText(q) : '';
+  });
+
+  protected readonly hasPrevPrompt = computed(() => this.selectedIndex() > 0);
+  protected readonly hasNextPrompt = computed(() => {
+    const i = this.selectedIndex();
+    return i >= 0 && i < this.groups().length - 1;
+  });
+
+  /** Per-prompt cache read rate (for the collapsed-row quality dot + page). */
+  protected promptCacheRate(p: ClaudePrompt): number {
+    const total = (p.input_tokens || 0) + (p.cache_creation_tokens || 0) + (p.cache_read_tokens || 0);
+    return total > 0 ? (p.cache_read_tokens || 0) / total : 0;
+  }
+
+  /** Quality colour for a prompt's collapsed-row dot (replaces the cache proxy). */
+  protected promptQualityColor(g: PromptGroup): string {
+    return promptQuality(g.prompt, g.tools).color;
+  }
+
+  protected openPrompt(promptId: string): void {
+    this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { prompt: promptId },
+      queryParamsHandling: 'merge',
+    });
+  }
+  protected closePrompt(): void {
+    this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { prompt: null },
+      queryParamsHandling: 'merge',
+    });
+  }
+  protected stepPrompt(delta: number): void {
+    const i = this.selectedIndex();
+    const next = this.groups()[i + delta];
+    if (next) this.openPrompt(next.prompt.id);
+  }
+
+  /** Per-token-kind value for the selected prompt's breakdown bar. */
+  protected promptTok(p: ClaudePrompt, kind: 'input' | 'output' | 'cacheWrite' | 'cacheRead'): number {
+    return kind === 'input' ? (p.input_tokens || 0)
+      : kind === 'output' ? (p.output_tokens || 0)
+      : kind === 'cacheWrite' ? (p.cache_creation_tokens || 0)
+      : (p.cache_read_tokens || 0);
+  }
+  protected promptTokPct(p: ClaudePrompt, kind: 'input' | 'output' | 'cacheWrite' | 'cacheRead'): number {
+    const total = (p.input_tokens || 0) + (p.output_tokens || 0)
+      + (p.cache_creation_tokens || 0) + (p.cache_read_tokens || 0) || 1;
+    return (this.promptTok(p, kind) / total) * 100;
+  }
 
   /** Total tokens across all token types — used for rail percentage bars. */
   private readonly totalTokens = computed<number>(() => {

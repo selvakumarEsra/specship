@@ -16,15 +16,19 @@ import {
   OnDestroy,
   OnInit,
   computed,
+  effect,
   inject,
   signal,
 } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
+import { DomSanitizer, type SafeHtml } from '@angular/platform-browser';
 import { ApiService } from '../../api/api';
 import { ProjectsService } from '../../api/projects';
 import { StatePill } from '../../ui/state-pill';
+import { CopyBtn } from '../../ui/copy-btn';
 import { Icon } from '../../shell/icon/icon';
-import type { RunDetailResponse, WorkflowEvent, WorkflowRun } from '../../api/types';
+import { renderMd } from '../../util/render-md';
+import type { RunArtifact, RunArtifactsResponse, RunDetailResponse, WorkflowEvent, WorkflowRun } from '../../api/types';
 
 type RunStatus = WorkflowRun['status'];
 
@@ -68,7 +72,7 @@ const EV_COLOR: Record<string, string> = {
 
 @Component({
   selector: 'app-run-detail',
-  imports: [StatePill, Icon],
+  imports: [StatePill, CopyBtn, Icon],
   templateUrl: './run-detail.html',
   styleUrl: './run-detail.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -79,6 +83,18 @@ export class RunDetail implements OnInit, OnDestroy {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly sanitizer = inject(DomSanitizer);
+
+  constructor() {
+    // Lazily load artifacts the first time the Artifacts tab is opened, and
+    // reload after each newly-completed step so a live run fills in over time.
+    effect(() => {
+      const completed = this.events().filter((e) => e.eventType === 'step_completed').length;
+      if (this.activeTab() === 'artifacts' && this.runId() && completed !== this.artifactsFor()) {
+        void this.loadArtifacts(completed);
+      }
+    });
+  }
 
   // ── Core signals (backend wiring preserved) ──────────────────────────────
   protected readonly runId = signal<string>('');
@@ -112,6 +128,57 @@ export class RunDetail implements OnInit, OnDestroy {
     { id: 'cost', label: 'Cost' },
   ];
   protected readonly activeTab = signal<string>('events');
+
+  // ── Artifacts (lazy-loaded read of on-disk node outputs) ─────────────────
+  protected readonly artifacts = signal<RunArtifact[]>([]);
+  protected readonly artifactsLoading = signal(false);
+  protected readonly artifactsError = signal<string | null>(null);
+  /** Completed-step count the loaded artifacts reflect (-1 = never loaded). */
+  private readonly artifactsFor = signal<number>(-1);
+  protected readonly selectedArtifactId = signal<string>('');
+
+  protected readonly selectedArtifact = computed<RunArtifact | null>(() => {
+    const list = this.artifacts();
+    if (!list.length) return null;
+    return list.find((a) => a.nodeId === this.selectedArtifactId()) ?? list[0];
+  });
+
+  protected readonly artifactBodyHtml = computed<SafeHtml>(() => {
+    const a = this.selectedArtifact();
+    return this.sanitizer.bypassSecurityTrustHtml(renderMd(a?.body ?? ''));
+  });
+
+  private async loadArtifacts(completedCount: number): Promise<void> {
+    const id = this.runId();
+    if (!id) return;
+    this.artifactsFor.set(completedCount); // guard against re-entry while in flight
+    this.artifactsLoading.set(true);
+    this.artifactsError.set(null);
+    try {
+      const data = await this.api.get<RunArtifactsResponse>(
+        `/api/workflows/runs/${encodeURIComponent(id)}/artifacts${this.projects.projectQuery()}`,
+      );
+      this.artifacts.set(data.artifacts ?? []);
+      if (!this.selectedArtifactId() && data.artifacts?.length) {
+        this.selectedArtifactId.set(data.artifacts[0].nodeId);
+      }
+    } catch (err) {
+      this.artifactsError.set(err instanceof Error ? err.message : String(err));
+      this.artifactsFor.set(-1); // allow retry
+    } finally {
+      this.artifactsLoading.set(false);
+    }
+  }
+
+  protected selectArtifact(nodeId: string): void {
+    this.selectedArtifactId.set(nodeId);
+  }
+
+  protected fmtArtifactBytes(n: number): string {
+    if (n < 1024) return `${n} B`;
+    if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} kB`;
+    return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+  }
 
   // ── DAG layout constants ─────────────────────────────────────────────────
   readonly DAG_W = 920;

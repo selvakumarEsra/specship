@@ -15,6 +15,28 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
+  cursor: pointer;
+  transition: background 100ms, border-color 100ms;
+
+  &:hover {
+    background: var(--bg-panel-2);
+    border-color: var(--border-strong);
+  }
+  &:hover .wf-run-hint { opacity: 1; }
+  &:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+}
+
+.wf-run-hint {
+  align-items: center;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--accent);
+  opacity: 0;
+  transition: opacity 100ms;
+  flex-shrink: 0;
 }
 
 .wf-name {

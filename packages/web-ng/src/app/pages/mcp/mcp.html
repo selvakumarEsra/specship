@@ -1,0 +1,116 @@
+<div class="scroll-y mcp-list">
+
+  <!-- Header ---------------------------------------------------------------- -->
+  <app-page-head icon="plug" title="MCP servers"
+    sub="Model Context Protocol servers configured at the global and project level">
+    <div actions class="row gap-6">
+      <button type="button" class="btn btn-ghost btn-sm" (click)="onReload()">
+        <app-icon name="refresh" [size]="13" /> Reload
+      </button>
+      <button type="button" class="btn btn-secondary btn-sm">
+        <app-icon name="plus" [size]="13" /> Add server
+      </button>
+    </div>
+  </app-page-head>
+
+  @if (isSeed()) {
+    <div class="mcp-seed-note row gap-8">
+      <app-icon name="circle" [size]="12" />
+      <span>
+        {{ errored() ? 'Couldn’t reach the MCP endpoint — showing' : 'No live MCP data yet — showing' }}
+        seed servers (illustrative).
+      </span>
+    </div>
+  }
+
+  <!-- Summary tiles --------------------------------------------------------- -->
+  <div class="mcp-tile-grid">
+    <div class="card mcp-tile">
+      <div class="row gap-6 tile-eyebrow"><app-icon name="plug" [size]="12" style="color: var(--accent);" /><span class="eyebrow">Servers</span></div>
+      <div class="mono tabular tile-value">{{ total() }}</div>
+      <div class="mono muted tile-sub">global + project</div>
+    </div>
+    <div class="card mcp-tile">
+      <div class="row gap-6 tile-eyebrow"><app-icon name="circle" [size]="12" style="color: var(--success);" /><span class="eyebrow">Running</span></div>
+      <div class="mono tabular tile-value">{{ running() }} / {{ total() }}</div>
+      <div class="mono muted tile-sub">connected now</div>
+    </div>
+    <div class="card mcp-tile">
+      <div class="row gap-6 tile-eyebrow"><app-icon name="wrench" [size]="12" style="color: var(--node-code);" /><span class="eyebrow">Tools</span></div>
+      <div class="mono tabular tile-value">{{ totalTools() }}</div>
+      <div class="mono muted tile-sub">exposed to agents</div>
+    </div>
+    <div class="card mcp-tile">
+      <div class="row gap-6 tile-eyebrow"><app-icon name="drift" [size]="12" style="color: var(--error);" /><span class="eyebrow">Needs attention</span></div>
+      <div class="mono tabular tile-value">{{ needsAttention() }}</div>
+      <div class="mono muted tile-sub">auth / connection</div>
+    </div>
+  </div>
+
+  <!-- Server groups --------------------------------------------------------- -->
+  @if (loading()) {
+    <div class="col gap-8 mcp-group">
+      @for (i of [0,1,2,3]; track i) {
+        <div class="skel" style="height: 62px; border-radius: 10px;"></div>
+      }
+    </div>
+  } @else {
+    @for (g of groups(); track g.key) {
+      <div class="mcp-group">
+        <div class="row gap-8 group-head">
+          <app-icon [name]="g.meta.icon" [size]="13" [style.color]="g.meta.color" />
+          <span class="eyebrow">{{ g.meta.label }}</span>
+          <span class="mono muted group-hint">{{ g.meta.hint }}</span>
+          <span class="muted group-count">· {{ g.servers.length }}</span>
+        </div>
+
+        <div class="col gap-8">
+          @for (srv of g.servers; track srv.id) {
+            <a class="card server-row" [routerLink]="['/mcp', srv.id]"
+              [attr.aria-label]="srv.name + ' — ' + stateMeta(srv.state).label + ', ' + scopeMeta(srv.scope).label">
+
+              <!-- avatar + status dot -->
+              <span class="server-avatar" [style.background]="mix(srv.color)" [style.color]="srv.color">
+                <app-icon [name]="srv.icon" [size]="18" />
+                <span class="server-dot"
+                  [class.dot-glow]="srv.state === 'running'"
+                  [style.background]="stateMeta(srv.state).color"></span>
+              </span>
+
+              <!-- name + scope + command -->
+              <span class="grow server-main">
+                <span class="row gap-8 server-name-row">
+                  <span class="mono server-name">{{ srv.name }}</span>
+                  <app-pill [color]="scopeMeta(srv.scope).color" [bg]="mix(scopeMeta(srv.scope).color)">
+                    <app-icon [name]="scopeMeta(srv.scope).icon" [size]="10" /> {{ scopeMeta(srv.scope).label }}
+                  </app-pill>
+                </span>
+                <span class="mono muted server-command">{{ srv.command }}</span>
+              </span>
+
+              <!-- tools + state + chevron -->
+              <span class="row gap-16 server-meta">
+                <span class="server-toolcount">
+                  <span class="mono tabular count-n" [class.cold]="srv.tools.length === 0">{{ srv.tools.length }}</span>
+                  <span class="muted count-label">{{ toolLabel(srv.tools.length) }}</span>
+                </span>
+                <span class="pill state-pill"
+                  [class.pulse]="srv.state === 'running'"
+                  [style.color]="stateMeta(srv.state).color"
+                  [style.background]="mix(stateMeta(srv.state).color)">
+                  @if (stateMeta(srv.state).dot) {
+                    <span class="pill-dot" [style.background]="stateMeta(srv.state).color"></span>
+                  }
+                  {{ stateMeta(srv.state).label }}
+                </span>
+                <app-icon name="chevronRight" [size]="15" style="color: var(--text-muted);" />
+              </span>
+            </a>
+          }
+        </div>
+      </div>
+    }
+  }
+
+  <div style="height: 20px;"></div>
+</div>

@@ -230,4 +230,47 @@ export async function registerGraphRoutes(app: FastifyInstance): Promise<void> {
 
     return { linkHealth, edgeKinds: edgeKindMap, hubs };
   });
+
+  /**
+   * Full-graph overview for the Graph page's whole-repo view. The graph can be
+   * huge (10k+ nodes) and the canvas + client-side force layout are O(n²), so
+   * we return the top-N most-connected nodes (by total degree) plus the edges
+   * among them. Isolated (degree-0) nodes are omitted — an overview shows the
+   * connected core. `total` reports the full node count so the UI can say
+   * "showing N of M".
+   */
+  app.get('/api/graph/full', async (req: FastifyRequest<{ Querystring: ProjectQuery & { limit?: string } }>, reply) => {
+    const cg = await resolveCg(app, req, reply); if (!cg) return;
+    const db = getDb(cg);
+
+    const limit = Math.min(Math.max(parseInt(req.query.limit ?? '250', 10) || 250, 1), 400);
+
+    const nodeRows = db.prepare(`
+      SELECT n.id, n.name, n.kind, n.file_path as filePath, deg.degree
+      FROM (
+        SELECT node, COUNT(*) as degree FROM (
+          SELECT source as node FROM edges
+          UNION ALL
+          SELECT target as node FROM edges
+        ) GROUP BY node ORDER BY degree DESC LIMIT ?
+      ) deg
+      JOIN nodes n ON n.id = deg.node
+      ORDER BY deg.degree DESC
+    `).all(limit) as Array<{ id: string; name: string; kind: string; filePath: string; degree: number }>;
+
+    const keep = new Set(nodeRows.map((n) => n.id));
+    const allEdges = db.prepare(
+      `SELECT source as "from", target as "to", kind, provenance FROM edges`,
+    ).all() as Array<{ from: string; to: string; kind: string; provenance: string }>;
+    const edges = allEdges.filter((e) => keep.has(e.from) && keep.has(e.to));
+
+    const totalRow = db.prepare(`SELECT COUNT(*) as c FROM nodes`).get() as { c: number };
+
+    return {
+      nodes: nodeRows.map((n) => ({ id: n.id, name: n.name, kind: n.kind, filePath: n.filePath, degree: n.degree })),
+      edges,
+      total: totalRow.c ?? nodeRows.length,
+      shown: nodeRows.length,
+    };
+  });
 }

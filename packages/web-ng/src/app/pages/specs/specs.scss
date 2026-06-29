@@ -159,6 +159,61 @@ details[open] > .brief-summary::before {
   padding: 10px 12px;
 }
 
+/* ── Acceptance criteria ──────────────────────────────────────────────────── */
+.crit-head {
+  margin-bottom: 8px;
+  gap: 10px;
+  align-items: center;
+}
+.crit-rollup { font-size: 11px; }
+
+.crit-bars {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+.crit-seg {
+  flex: 1;
+  height: 4px;
+  border-radius: 999px;
+  opacity: 0.9;
+
+  &.pending { opacity: 0.25; }
+}
+
+.crit-card {
+  overflow: hidden;
+  margin-bottom: 22px;
+}
+.crit-row { padding: 10px 12px; align-items: center; }
+.crit-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  flex-shrink: 0;
+}
+.crit-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: 1.6px solid currentColor;
+  box-sizing: border-box;
+}
+.crit-id {
+  font-size: 10px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  width: 22px;
+}
+.crit-text {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+
 .link-target {
   font-size: 12px;
   overflow: hidden;

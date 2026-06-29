@@ -67,6 +67,7 @@ export class Sidebar {
         { id: 'specship-impact', label: 'SpecShip Impact', icon: 'graph' },
         { id: 'compare', label: 'Compare projects', icon: 'compare' },
         { id: 'memory', label: 'Memory', icon: 'memory' },
+        { id: 'mcp', label: 'MCP', icon: 'plug' },
         {
           id: 'tips',
           label: 'Tips',

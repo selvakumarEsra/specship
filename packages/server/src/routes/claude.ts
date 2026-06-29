@@ -799,8 +799,16 @@ export async function registerClaudeRoutes(app: FastifyInstance): Promise<void> 
       toolsByPath.set(r.path, arr);
     }
 
+    // Drifted-link count is only knowable for the PRIMARY project's indexed
+    // graph (compare rows are Claude-cost projects keyed by cwd; only one has a
+    // spec graph loaded here). Attach the real count to the matching project
+    // row and 0 to the rest, rather than fabricating per-project drift.
+    const driftCount = cg.getSpecQueries().getLinksByState(['drifted', 'broken', 'orphaned']).length;
+    const primaryRoot = (cg.getProjectRoot ? cg.getProjectRoot() : '').replace(/\/+$/, '');
+
     const projects = rows.map((p) => ({
       ...p,
+      drift: p.path.replace(/\/+$/, '') === primaryRoot ? driftCount : 0,
       byModel: (byModelByPath.get(p.path) ?? []).sort((a, b) => b.cost - a.cost),
       topTools: (toolsByPath.get(p.path) ?? [])
         .sort((a, b) => b.calls - a.calls)

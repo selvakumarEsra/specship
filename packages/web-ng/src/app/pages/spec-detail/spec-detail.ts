@@ -22,7 +22,23 @@ function stripSpecMarkers(s: string): string {
 /** Worst-first ordering so the meta pill reflects the spec's least-healthy link. */
 const STATE_RANK = ['broken', 'orphaned', 'drifted', 'drafted', 'implementing', 'implemented', 'verified'];
 
-interface Criterion { id: string; title: string; met: boolean; hasLinks: boolean; }
+/** Per-criterion CritMark icon by state (mirrors the design's CRIT_ICON). */
+const CRIT_ICON: Record<string, string> = {
+  verified: 'check', implemented: 'check', completed: 'check',
+  drifted: 'drift', broken: 'cancel', orphaned: 'cancel', failed: 'cancel',
+};
+
+/** Collapse a criterion's links into a single worst-first state. */
+function critState(ls: SpecLink[]): string {
+  if (!ls.length) return 'pending';
+  if (ls.some((l) => l.state === 'broken')) return 'broken';
+  if (ls.some((l) => l.state === 'orphaned')) return 'orphaned';
+  if (ls.some((l) => l.state === 'drifted')) return 'drifted';
+  if (ls.every((l) => l.state === 'verified')) return 'verified';
+  return 'implemented';
+}
+
+interface Criterion { id: string; title: string; state: string; met: boolean; hasLinks: boolean; }
 
 /**
  * Spec detail page (DASH-SPECDETAIL-DOC) — the right-hand pane of the
@@ -85,10 +101,22 @@ export class SpecDetail {
       .filter((c) => c.kind === 'acceptance')
       .map((c) => {
         const ls = cl[c.id] ?? [];
-        return { id: c.id, title: stripSpecMarkers(c.title).trim(), hasLinks: ls.length > 0, met: ls.length > 0 && ls.every((l) => l.state === 'verified') };
+        const state = critState(ls);
+        return { id: c.id, title: stripSpecMarkers(c.title).trim(), state, hasLinks: ls.length > 0, met: state === 'verified' };
       });
   });
   protected readonly metCount = computed(() => this.criteria().filter((c) => c.met).length);
+
+  /** CritMark presentation for an acceptance criterion's collapsed state. */
+  protected critIcon(state: string): string | null {
+    return CRIT_ICON[state] ?? null;
+  }
+  protected critColor(state: string): string {
+    return STATE[state]?.color ?? 'var(--text-muted)';
+  }
+  protected critBg(state: string): string {
+    return STATE[state]?.bg ?? 'rgba(255,255,255,0.05)';
+  }
 
   protected readonly bodyHtml = computed<SafeHtml>(() =>
     this.sanitizer.bypassSecurityTrustHtml(renderMd(stripSpecMarkers(this.spec()?.body ?? ''))),
@@ -144,5 +172,10 @@ export class SpecDetail {
   protected onShowInGraph(): void {
     const id = this.spec()?.id;
     this.router.navigate(['/graph'], { queryParams: id ? { focus: 'spec:' + id } : {} });
+  }
+
+  /** Reveal a linked symbol — focus it in the graph. */
+  protected revealLink(l: SpecLink): void {
+    this.router.navigate(['/graph'], { queryParams: { focus: this.linkTarget(l) } });
   }
 }

@@ -6,8 +6,12 @@
 
   <div class="wf-grid">
     @for (e of entries(); track e.workflow.name) {
-      <div class="card card-pad wf-card">
-        <!-- header row: name + scope pill -->
+      <div class="card card-pad wf-card" role="button" tabindex="0"
+        [attr.aria-label]="'Launch workflow ' + e.workflow.name"
+        (click)="openRun(e.workflow)"
+        (keydown.enter)="openRun(e.workflow)"
+        (keydown.space)="$event.preventDefault(); openRun(e.workflow)">
+        <!-- header row: name + scope pill + run affordance -->
         <div class="row gap-8">
           <span class="mono wf-name">{{ e.workflow.name }}</span>
           <app-pill
@@ -15,6 +19,7 @@
             [bg]="scopeBg[e.scope]"
           >{{ e.scope }}</app-pill>
           <span class="grow"></span>
+          <span class="wf-run-hint row gap-4"><app-icon name="play" [size]="11" /> Run</span>
         </div>
 
         <!-- description -->
@@ -36,5 +41,9 @@
       </div>
     }
   </div>
+
+  @if (runTarget(); as wf) {
+    <app-run-modal [workflow]="wf" (close)="closeRun()" />
+  }
 </div>
 }

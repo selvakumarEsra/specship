@@ -22,7 +22,7 @@
       <div class="grow">
         <span style="font-weight: 600; font-size: 13px;">Most efficient: </span>
         <span class="mono" style="color: var(--success);">{{ best()!.name }}</span>
-        <span class="secondary" style="font-size: 12.5px;"> — {{ (best()!.cacheHit * 100) | number:'1.0-0' }}% cache hit, {{ fmt$(best()!.avgCost) }} avg/session</span>
+        <span class="secondary" style="font-size: 12.5px;"> — {{ (best()!.cacheHit * 100) | number:'1.0-0' }}% cache hit, {{ fmt$(best()!.avgCost) }} avg/session@if (best()!.drift > 0) {, just {{ best()!.drift }} drifted links}</span>
       </div>
       <button class="btn btn-secondary btn-sm">
         <app-icon name="external" [size]="12" />Export report
@@ -48,8 +48,9 @@
         <span class="mono tabular num">{{ p.sessions }}</span>
         <span class="mono tabular num">{{ fmt$(p.avgCost) }}</span>
         <span class="mono tabular num" [style.color]="cacheColor(p.cacheHit)">{{ (p.cacheHit * 100) | number:'1.0-0' }}%</span>
-        <!-- Drift: not in CompareResponse — show '—' -->
-        <span class="mono tabular" style="width: 60px; text-align: right; font-size: 12px; color: var(--text-secondary);">—</span>
+        <!-- Drift: drifted/broken/orphaned link count (real for the primary project, 0 elsewhere) -->
+        <span class="mono tabular" style="width: 60px; text-align: right; font-size: 12px;"
+          [style.color]="p.drift > 10 ? 'var(--warn)' : 'var(--text-secondary)'">{{ p.drift }}</span>
         <!-- Top tools: real data from topTools[] -->
         <span class="row gap-4" style="width: 150px; justify-content: flex-end; flex-wrap: wrap;">
           @if (p.topTools.length > 0) {

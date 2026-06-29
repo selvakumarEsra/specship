@@ -48,6 +48,7 @@ interface Row {
   avgCost: number;
   cacheHit: number;
   prompts: number;
+  drift: number;
   byModel: Array<{ model: string; cost: number }>;
   topTools: string[];
 }
@@ -73,6 +74,7 @@ export class Compare {
       avgCost: p.avgCost || 0,
       cacheHit: p.cacheHit || 0,
       prompts: p.prompts || 0,
+      drift: p.drift ?? 0,
       byModel: p.byModel ?? [],
       topTools: p.topTools ?? [],
     }));

@@ -83,24 +83,33 @@
   font-family: ui-monospace, monospace;
 }
 .sd-rollup.all-met { color: var(--success); }
+/* per-criterion progress segments (mirrors the design's thin state bars) */
+.sd-crit-bars { display: flex; gap: 4px; margin-bottom: 12px; }
+.sd-crit-seg {
+  flex: 1; height: 4px; border-radius: 999px; opacity: 0.9;
+}
+.sd-crit-seg.pending { opacity: 0.25; }
+
 .sd-criteria { display: flex; flex-direction: column; gap: 6px; }
 .sd-crit {
   display: flex; align-items: center; gap: 10px;
   padding: 10px 12px; border-radius: 8px;
   background: var(--bg-panel); border: 1px solid var(--border-subtle);
 }
-.sd-crit-check {
+/* CritMark chip — coloured by the criterion's collapsed link state */
+.sd-crit-mark {
   display: inline-flex; align-items: center; justify-content: center;
-  width: 18px; height: 18px; border-radius: 50%; flex-shrink: 0;
-  color: var(--text-faint); background: var(--bg-hover);
+  width: 18px; height: 18px; border-radius: 5px; flex-shrink: 0;
 }
-.sd-crit-check.on { color: var(--success); background: var(--success-soft); }
+.sd-crit-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  border: 1.6px solid currentColor; box-sizing: border-box;
+}
 .sd-crit-id {
   font-size: 10px; color: var(--text-muted); flex-shrink: 0;
   width: 22px;
 }
 .sd-crit-text { font-size: 13px; color: var(--text-secondary); line-height: 1.45; }
-.sd-crit.met .sd-crit-text { color: var(--text-primary); }
 
 /* ── Linked code ──────────────────────────────────────────────────────────── */
 .sd-count { font-size: 11px; color: var(--text-muted); font-family: ui-monospace, monospace; }

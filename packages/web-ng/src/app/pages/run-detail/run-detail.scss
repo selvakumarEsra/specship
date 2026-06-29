@@ -223,9 +223,69 @@
 .rd-artifacts {
   flex: 1;
   min-height: 0;
+  display: flex;
 }
 
-.rd-no-artifacts {
+.rd-art-empty {
+  margin: auto;
   padding: 40px;
   text-align: center;
+  font-size: 12.5px;
 }
+
+.rd-art-list {
+  width: 180px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--border-subtle);
+  padding: 8px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.rd-art-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 9px;
+  border-radius: 6px;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+
+  &:hover { background: var(--bg-hover); }
+  &.active { background: var(--bg-hover); }
+  &:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+}
+.rd-art-meta { min-width: 0; display: flex; flex-direction: column; }
+.rd-art-name { font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rd-art-node { font-size: 9.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.rd-art-body { flex: 1; min-width: 0; padding: 14px 16px; }
+.rd-art-bodyhead { align-items: center; margin-bottom: 10px; }
+.rd-art-bodyname { font-size: 12.5px; font-weight: 600; }
+.rd-art-kind {
+  font-size: 10px;
+  color: var(--text-secondary);
+  background: var(--bg-canvas);
+  border: 1px solid var(--border-subtle);
+}
+.rd-art-bytes { font-size: 10.5px; }
+.rd-art-md { font-size: 12.5px; line-height: 1.65; }
+
+// ── Cost tab (honest empty state) ─────────────────────────────────────────
+.rd-cost-wrap { flex: 1; min-height: 0; display: flex; padding: 16px; }
+.rd-cost-empty {
+  margin: auto;
+  max-width: 420px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.rd-cost-empty-title { font-size: 13px; font-weight: 600; }
+.rd-cost-empty-body { font-size: 12px; line-height: 1.55; }

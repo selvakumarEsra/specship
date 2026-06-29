@@ -115,6 +115,16 @@ export const routes: Routes = [
     data: { nav: 'design', title: 'Design system' },
   },
   {
+    path: 'mcp',
+    loadComponent: () => import('./pages/mcp/mcp').then((m) => m.Mcp),
+    data: { nav: 'mcp', title: 'MCP servers' },
+  },
+  {
+    path: 'mcp/:id',
+    loadComponent: () => import('./pages/mcp/mcp-detail').then((m) => m.McpDetail),
+    data: { nav: 'mcp', title: 'MCP server' },
+  },
+  {
     path: 'settings',
     loadComponent: () => import('./pages/settings/settings').then((m) => m.Settings),
     data: { nav: 'settings', title: 'Settings' },

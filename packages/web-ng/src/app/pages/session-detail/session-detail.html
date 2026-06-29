@@ -52,6 +52,133 @@
     </div>
   } @else if (session(); as s) {
 
+    @if (selectedGroup(); as sg) {
+      <!-- ===== PromptPage: dedicated per-prompt view ===== -->
+      <div class="scroll-y pp-page">
+        <div class="row gap-10 pp-head">
+          <button type="button" class="btn btn-ghost btn-sm" (click)="closePrompt()">
+            <app-icon name="chevronLeft" [size]="14" /> Timeline
+          </button>
+          <span class="mono muted pp-time">{{ fmtClock(sg.prompt.ts) }}</span>
+          @if (sg.slashCommand) {
+            <app-pill color="var(--node-code)" bg="var(--node-code-soft)"><app-icon name="command" [size]="10" />{{ sg.slashCommand }}</app-pill>
+          }
+          @if (sg.prompt.is_sidechain === 1) {
+            <app-pill color="var(--node-route)" bg="var(--node-route-soft)"><app-icon name="bot" [size]="10" />subagent</app-pill>
+          }
+          <span class="grow"></span>
+          <button type="button" class="btn btn-ghost btn-sm" [disabled]="!hasPrevPrompt()" (click)="stepPrompt(-1)"><app-icon name="chevronLeft" [size]="13" /> Prev</button>
+          <button type="button" class="btn btn-ghost btn-sm" [disabled]="!hasNextPrompt()" (click)="stepPrompt(1)">Next <app-icon name="chevronRight" [size]="13" /></button>
+        </div>
+
+        <!-- meta chips -->
+        <div class="row gap-6 pp-meta">
+          <span class="pp-chip mono">{{ fmtTokens(sg.totalTokens) }} tok</span>
+          <span class="pp-chip mono" [style.color]="sg.prompt.cost_usd > 2.5 ? 'var(--error)' : 'var(--text-primary)'">${{ sg.prompt.cost_usd.toFixed(2) }}</span>
+          @if (sg.prompt.model) { <span class="pp-chip mono">{{ sg.prompt.model }}</span> }
+          <span class="pp-chip mono"><app-icon name="wrench" [size]="10" /> {{ sg.tools.length }} tools</span>
+          @if (sg.prompt.durationMs) { <span class="pp-chip mono">{{ fmtDurationMs(sg.prompt.durationMs) }}</span> }
+        </div>
+
+        <!-- Prompt quality (deterministic, rule-based) -->
+        @if (quality(); as q) {
+          <div class="pp-quality"
+            [style.border-color]="'color-mix(in srgb, ' + q.color + ' 32%, transparent)'"
+            [style.background]="'color-mix(in srgb, ' + q.color + ' 6%, var(--bg-canvas))'">
+            <div class="row gap-8 pp-q-head">
+              <app-icon name="sparkles" [size]="14" [style.color]="q.color" />
+              <span class="pp-q-title">Prompt quality</span>
+              <span class="grow"></span>
+              <span class="pill pp-q-grade" [style.color]="q.color"
+                [style.background]="'color-mix(in srgb, ' + q.color + ' 15%, transparent)'">{{ q.label }} · <span class="tabular">{{ q.score }}/100</span></span>
+              <app-copy-btn [text]="qualityShareText()" label="Share" />
+            </div>
+            <div class="pp-q-bar"><app-bar [frac]="q.score / 100" [color]="q.color" [height]="6" /></div>
+            <div class="pp-q-factors">
+              @for (f of q.factors; track f.label) {
+                <div class="row gap-6">
+                  <app-icon [name]="f.ok ? 'check' : 'minus'" [size]="13" [style.color]="f.ok ? 'var(--success)' : 'var(--warn)'" />
+                  <span class="pp-q-factor" [class.bad]="!f.ok">{{ f.label }}</span>
+                </div>
+              }
+            </div>
+            <div class="eyebrow pp-q-sub">How to improve</div>
+            <div class="col gap-8">
+              @for (sug of q.suggestions; track $index) {
+                <div class="row gap-8 pp-sug">
+                  <span class="pp-sug-dot" [style.background]="sug.sev === 'error' ? 'var(--error)' : sug.sev === 'warn' ? 'var(--warn)' : 'var(--success)'"></span>
+                  <div class="grow">
+                    <div class="pp-sug-text">{{ sug.text }}</div>
+                    @if (sug.fix) {
+                      <div class="row gap-6 pp-sug-fix"><code class="mono">{{ sug.fix }}</code><app-copy-btn [text]="sug.fix" /></div>
+                    }
+                  </div>
+                </div>
+              }
+            </div>
+            @if (q.rewrite) {
+              <div class="eyebrow pp-q-sub">Suggested rewrite</div>
+              <div class="row gap-8 pp-rewrite"><span class="grow pp-rewrite-text">{{ q.rewrite }}</span><app-copy-btn [text]="q.rewrite" /></div>
+            }
+          </div>
+        }
+
+        <!-- token breakdown -->
+        <div class="eyebrow pp-sec-lbl">Token breakdown</div>
+        <div class="tok-bar pp-tokbar">
+          <div class="tok-seg" [style.width.%]="promptTokPct(sg.prompt,'input')" style="background: var(--node-spec);" [title]="'Input: ' + fmtTokens(sg.prompt.input_tokens)"></div>
+          <div class="tok-seg" [style.width.%]="promptTokPct(sg.prompt,'output')" style="background: var(--node-code);" [title]="'Output: ' + fmtTokens(sg.prompt.output_tokens)"></div>
+          <div class="tok-seg" [style.width.%]="promptTokPct(sg.prompt,'cacheWrite')" style="background: var(--warn);" [title]="'Cache write: ' + fmtTokens(sg.prompt.cache_creation_tokens)"></div>
+          <div class="tok-seg" [style.width.%]="promptTokPct(sg.prompt,'cacheRead')" style="background: var(--node-route);" [title]="'Cache read: ' + fmtTokens(sg.prompt.cache_read_tokens)"></div>
+        </div>
+        <div class="row gap-12 pp-tok-legend">
+          <span class="pp-tok-li"><span class="dot" style="background:var(--node-spec)"></span>Input {{ fmtTokens(sg.prompt.input_tokens) }}</span>
+          <span class="pp-tok-li"><span class="dot" style="background:var(--node-code)"></span>Output {{ fmtTokens(sg.prompt.output_tokens) }}</span>
+          <span class="pp-tok-li"><span class="dot" style="background:var(--warn)"></span>Cache write {{ fmtTokens(sg.prompt.cache_creation_tokens) }}</span>
+          <span class="pp-tok-li"><span class="dot" style="background:var(--node-route)"></span>Cache read {{ fmtTokens(sg.prompt.cache_read_tokens) }}</span>
+        </div>
+
+        <!-- BigIO: Input / Output -->
+        <div class="pp-io">
+          <div class="pp-io-col">
+            <div class="row gap-6 pp-io-head"><span class="eyebrow">Input</span><span class="grow"></span>@if (sg.prompt.text) { <app-copy-btn [text]="sg.prompt.text" /> }</div>
+            <pre class="pp-io-body mono">{{ sg.prompt.text || '(assistant-only turn)' }}</pre>
+          </div>
+          <div class="pp-io-col">
+            <div class="row gap-6 pp-io-head"><span class="eyebrow">Output</span></div>
+            @if (sg.prompt.assistant_text) {
+              <div class="pp-io-body md-content" [innerHTML]="renderAssistant(sg.prompt.assistant_text)"></div>
+            } @else {
+              <div class="pp-io-body muted">No assistant text captured for this turn.</div>
+            }
+          </div>
+        </div>
+
+        @if (sg.prompt.thinking_text) {
+          <details class="pp-thinking">
+            <summary class="eyebrow pp-thinking-sum">Extended thinking</summary>
+            <div class="md-content pp-thinking-body" [innerHTML]="renderAssistant(sg.prompt.thinking_text)"></div>
+          </details>
+        }
+
+        @if (sg.tools.length) {
+          <div class="eyebrow pp-sec-lbl">Tools · {{ sg.tools.length }} · returned {{ fmtBytes(sg.toolBytes) }}</div>
+          <div class="col gap-4 pp-tools">
+            @for (t of sg.tools; track t.id) {
+              <div class="row gap-8 pp-tool">
+                <span class="mono pp-tool-name" [style.color]="toolColor(t.tool_name)">{{ t.tool_name }}</span>
+                @if (t.input_summary) { <span class="mono muted pp-tool-input">{{ t.input_summary }}</span> }
+                <span class="grow"></span>
+                @if (t.result_length) { <span class="mono muted pp-tool-bytes">{{ fmtBytes(t.result_length) }}</span> }
+              </div>
+            }
+          </div>
+        }
+
+        <div style="height: 24px;"></div>
+      </div>
+    } @else {
+
     <!-- Main + rail layout -->
     <div class="sd-body">
 
@@ -99,20 +226,23 @@
         <div class="col gap-6" style="padding-bottom: 16px;">
           @for (g of groups(); track g.prompt.id) {
             <div class="prompt card">
-              <button
-                type="button"
+              <div
                 class="prompt-head row gap-10"
+                role="button"
+                tabindex="0"
                 [class.expanded]="isExpanded(g.prompt.id)"
                 [attr.aria-expanded]="isExpanded(g.prompt.id)"
                 (click)="toggleExpand(g.prompt.id)"
+                (keydown.enter)="toggleExpand(g.prompt.id)"
+                (keydown.space)="$event.preventDefault(); toggleExpand(g.prompt.id)"
               >
                 <!-- time -->
                 <span class="mono muted" style="font-size: 10.5px; width: 52px; flex-shrink: 0;">{{ fmtClock(g.prompt.ts) }}</span>
-                <!-- quality dot placeholder — color by cache as proxy -->
+                <!-- prompt-quality dot (rule-based) -->
                 <span
                   style="width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;"
-                  [style.background]="cacheColor(g.prompt.cache_read_tokens > 0 ? (g.prompt.cache_read_tokens / (g.prompt.input_tokens + g.prompt.cache_creation_tokens + g.prompt.cache_read_tokens || 1)) : 0)"
-                  [title]="'Cache: ' + (g.prompt.cache_read_tokens | number)"></span>
+                  [style.background]="promptQualityColor(g)"
+                  title="Prompt quality"></span>
                 <!-- subagent pill -->
                 @if (g.prompt.is_sidechain === 1) {
                   <app-pill [color]="'var(--node-route)'" [bg]="'var(--node-route-soft)'" style="flex-shrink: 0;">
@@ -155,8 +285,12 @@
                 <!-- cost -->
                 <span class="mono tabular" style="font-size: 13px; font-weight: 600; width: 54px; text-align: right; flex-shrink: 0;"
                   [style.color]="g.prompt.cost_usd > 2.5 ? 'var(--error)' : 'var(--text-primary)'">${{ g.prompt.cost_usd.toFixed(2) }}</span>
+                <button type="button" class="pp-open-btn" title="Open full view" aria-label="Open full prompt view"
+                  (click)="$event.stopPropagation(); openPrompt(g.prompt.id)">
+                  <app-icon name="maximize" [size]="12" />
+                </button>
                 <app-icon name="chevronRight" [size]="14" style="color: var(--text-muted); flex-shrink: 0;" />
-              </button>
+              </div>
 
               @if (isExpanded(g.prompt.id)) {
                 <div class="prompt-body">
@@ -385,6 +519,7 @@
         }
       </div>
     </div>
+    }
 
   } @else {
     <div class="empty">Session not found.</div>
