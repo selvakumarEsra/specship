@@ -9,6 +9,9 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+
+## [0.11.0] - 2026-06-29
+
 ### Breaking Changes
 
 - **SpecShip now publishes under a new npm name: `@specship/specship` (was `@selvakumaresra/specship`).** The package moved to the `specship` organization. Existing global installs keep working but won't see new releases — switch over with `npm uninstall -g @selvakumaresra/specship && npm install -g @specship/specship` (and update any `npx @selvakumaresra/specship …` invocations or MCP-server entries to `@specship/specship`). The CLI, the `specship` binary, and every command are otherwise unchanged. The old package is deprecated with a pointer to the new one.
@@ -29,7 +32,6 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Fixes
 
 - **Acceptance criteria are now indexed as their own spec entities.** Writing acceptance criteria the documented way — id-marked bullets under a `## Acceptance` heading — now produces a queryable, linkable spec node per criterion, so you can attach a test to a specific `.A<N>` criterion and the enforcement behaviour gate counts it. Previously the `## Acceptance` heading raised a spurious "missing id" error and the criteria were silently dropped; existing specs pick up their criteria automatically on the next index, with no edits needed. A criterion whose id names a different requirement than the one it's written under is flagged with a warning, and a literal `<!-- id: … -->` written inside a bullet's prose is no longer mistaken for a real marker.
-
 
 ## [0.10.0] - 2026-06-28
 
@@ -416,3 +418,4 @@ Thanks @andreinknv for the substantive draft this release was based on.
 [0.6.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.6.0
 [0.7.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.7.0
 [0.10.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.10.0
+[0.11.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.11.0
