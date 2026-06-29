@@ -425,6 +425,24 @@ function warn(message: string): void {
   console.log(chalk.yellow(getGlyphs().warn) + ' ' + message);
 }
 
+/**
+ * Render a smoke-check result (INSTALL-HANDSHAKE-DOC) as ✓/✗ lines with
+ * remediation. A failing blocking item is red; a failing non-blocking item is a
+ * yellow bullet. Shared by `install` (advisory) and `doctor` (gating).
+ */
+function renderSmokeCheck(result: import('../health/smoke-check').SmokeCheckResult): void {
+  const g = getGlyphs();
+  for (const item of result.items) {
+    const mark = item.ok
+      ? chalk.green(g.ok)
+      : item.blocking
+        ? chalk.red(g.err)
+        : chalk.yellow(g.warn);
+    console.log(`  ${mark} ${item.label.padEnd(26)} ${chalk.dim(item.detail)}`);
+    if (!item.ok && item.remediation) console.log(chalk.dim(`        ${item.remediation}`));
+  }
+}
+
 type IndexResult = {
   success: boolean;
   filesIndexed: number;
@@ -2194,10 +2212,57 @@ program
         statusLine,
         yes: opts.yes,
       });
+
+      // Post-install smoke check (REQ-HANDSHAKE-002). Advisory: report failing
+      // items but never exit non-zero (REQ-HANDSHAKE-002.A4), so a provisioning
+      // script is never broken by it — the gating equivalent is `specship doctor`.
+      const { runSmokeCheck } = await import('../health/smoke-check');
+      const smoke = await runSmokeCheck({ projectRoot: process.cwd() });
+      console.log('\n' + chalk.bold('Install check'));
+      renderSmokeCheck(smoke);
+      if (!smoke.ok) {
+        console.log(chalk.dim('  (advisory — diagnose anytime with `specship doctor`)'));
+      }
+
+      // Restart reminder (REQ-HANDSHAKE-001): an MCP server added to the config
+      // is NOT visible to a Claude Code session that was already open.
+      console.log();
+      info('Restart Claude Code (or run `/mcp`) to load the SpecShip server — it is not visible in a session that is already open.');
     } catch (err) {
       error(err instanceof Error ? err.message : String(err));
       process.exit(1);
     }
+  });
+
+/**
+ * specship doctor — diagnose an install (REQ-HANDSHAKE-003). Read-only: runs the
+ * same checks as the post-install smoke check and writes nothing. Exits non-zero
+ * on a usage-blocking failure so it can gate a script or CI step.
+ */
+program
+  .command('doctor [path]')
+  .description('Diagnose a SpecShip install (runtime · FTS5 · MCP boot · index). Exits non-zero on a usage-blocking failure.')
+  .option('-j, --json', 'Output as JSON')
+  .action(async (pathArg: string | undefined, options: { json?: boolean }) => {
+    const projectRoot = path.resolve(pathArg ?? process.cwd());
+    const { runSmokeCheck, doctorExitCode } = await import('../health/smoke-check');
+    const result = await runSmokeCheck({ projectRoot });
+    const code = doctorExitCode(result);
+
+    if (options.json) {
+      console.log(JSON.stringify(result, null, 2));
+      process.exit(code);
+    }
+
+    console.log(chalk.bold('\nSpecShip doctor\n'));
+    renderSmokeCheck(result);
+    console.log();
+    if (code === 0) {
+      success('No usage-blocking problems detected.');
+    } else {
+      error(`Usage-blocking checks failed: ${result.blockingFailures.map((i) => i.id).join(', ')}`);
+    }
+    process.exit(code);
   });
 
 /**

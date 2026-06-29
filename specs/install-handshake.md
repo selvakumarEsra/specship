@@ -49,7 +49,8 @@ broken runtime, missing full-text search, or unqueryable index surfaces at insta
 time rather than later as a cryptic agent failure.
 
 implementations:
-  - src/bin/specship.ts:install
+  - src/health/smoke-check.ts:runSmokeCheck
+  - src/health/smoke-check.ts:probeFts5
 
 ## Acceptance
 <!-- id: REQ-HANDSHAKE-002.A1 -->
@@ -76,7 +77,8 @@ post-install smoke check at any time, so a developer (or support) can diagnose a
 broken install without reinstalling. It MUST be read-only.
 
 implementations:
-  - src/bin/specship.ts:doctor
+  - src/health/smoke-check.ts:runSmokeCheck
+  - src/health/smoke-check.ts:doctorExitCode
 
 ## Acceptance
 <!-- id: REQ-HANDSHAKE-003.A1 -->
