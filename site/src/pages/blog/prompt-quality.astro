@@ -1,0 +1,52 @@
+---
+import Article from '../../layouts/Article.astro';
+---
+<Article slug="prompt-quality">
+  <svg slot="figure" viewBox="0 0 360 200" preserveAspectRatio="xMidYMid slice" style="width:100%;height:100%;display:block">
+    <rect width="360" height="200" fill="rgba(91,147,242,0.09)"/>
+    <g stroke-width="2.2" fill="none">
+      <g stroke="#46C26B"><circle cx="96" cy="70" r="11" fill="rgba(70,194,107,0.18)"/><polyline points="91 70 95 74 102 66" stroke-linecap="round" stroke-linejoin="round"/></g>
+      <g stroke="#46C26B"><circle cx="156" cy="70" r="11" fill="rgba(70,194,107,0.18)"/><polyline points="151 70 155 74 162 66" stroke-linecap="round" stroke-linejoin="round"/></g>
+      <g stroke="#46C26B"><circle cx="216" cy="70" r="11" fill="rgba(70,194,107,0.18)"/><polyline points="211 70 215 74 222 66" stroke-linecap="round" stroke-linejoin="round"/></g>
+      <g stroke="#E5A50A"><circle cx="276" cy="70" r="11" fill="rgba(229,165,10,0.14)"/><line x1="271" y1="70" x2="281" y2="70" stroke-linecap="round"/></g>
+    </g>
+    <rect x="72" y="126" width="216" height="13" rx="6.5" fill="rgba(150,165,200,0.2)"/>
+    <rect x="72" y="126" width="168" height="13" rx="6.5" fill="#5B93F2"/>
+  </svg>
+
+  <p>Two engineers ask the agent for the same change. One types <em>"why is login slow"</em>; the other types <em>"trace the call path from <code>authenticate</code> to the DB query and tell me where the N+1 is."</em> Same intent, wildly different bills — the first sends the agent fanning out across files; the second hands it a target it can resolve in one structural hop. The gap between those two prompts is the single biggest lever you have over what a session costs, and until now nothing measured it.</p>
+
+  <p>Open any session's <a href="/claude-code/sessions/">prompt timeline</a> and each prompt now carries a small quality dot. Open a prompt's page and you get the whole read: a <strong>0–100 score</strong>, the factors behind it, and the one-line fix.</p>
+
+  <h2>Four factors, no model</h2>
+  <p>The score is deterministic — pure rules over the prompt text and the turn's tool calls. No second LLM grading your first one, no temperature, no surprise bill. It weighs four things:</p>
+
+  <div class="art-stats">
+    <div class="as"><div class="v c-route">Target</div><div class="k">names a symbol, file, or REQ-id the agent can resolve</div></div>
+    <div class="as"><div class="v c-route">Scope</div><div class="k">a concrete ask, not "explain / look / why…"</div></div>
+    <div class="as"><div class="v c-route">Cache</div><div class="k">the prompt's cache-read rate was healthy</div></div>
+    <div class="as"><div class="v c-route">Structural</div><div class="k">leaned on a query, not a wall of Read/grep</div></div>
+  </div>
+
+  <p>Each factor nudges a base score up or down; the total grades out as <strong>Excellent</strong>, <strong>Good</strong>, <strong>Fair</strong>, or <strong>Needs work</strong>. The dot on the timeline takes its color from the same number, so you can scan a hundred-prompt session and spot the three turns worth tightening without reading any of them.</p>
+
+  <h2>It tells you what to change</h2>
+  <p>A score on its own is a scold. The useful part is the <em>How to improve</em> list underneath — concrete, and where it can be, copyable. If a turn leaned on a big <code>grep</code>, the card doesn't just say "be more structural"; it hands you the replacement:</p>
+
+  <div class="codeblock">
+    <div class="cb-bar"><div class="traffic"><i style="background:#F2555A"></i><i style="background:#E5A50A"></i><i style="background:#46C26B"></i></div><span class="fn">suggested fix · copy</span></div>
+    <pre>specship_explore --symbol validateSession --depth 2</pre>
+  </div>
+
+  <p>And for a low-scoring prompt it goes one step further with a <strong>suggested rewrite</strong> — your vague opener, re-cast to name the target and pick the structural path. A <em>Share</em> button copies the whole review as plain text, so a quick "here's how to phrase these" lands in a teammate's DM without a screenshot.</p>
+
+  <div class="pullquote">
+    <p>The cheapest token is the file the agent never had to read because you told it where to look.</p>
+  </div>
+
+  <h2>It won't lie to fill a column</h2>
+  <p>One factor wants to know whether a turn went brute-force — and the honest signal for that is a tool's <em>runtime</em>, which Claude Code's transcript doesn't record. So we don't pretend to have it. The score uses what the transcript <em>does</em> carry — a tool's result size stands in for "this Read pulled a lot of weight" — and where a number can't be measured, the factor leans on the measurable proxy rather than inventing one. It's the same line the <a href="/claude-code/specship-impact/">SpecShip Impact</a> page draws between <em>spend</em> (measured) and <em>saved</em> (estimated, marked <code>est.</code>): show the real thing, flag the estimate, never fake the gap.</p>
+
+  <h2>Why a score, not a lecture</h2>
+  <p>Nobody changes how they prompt because a doc told them to. They change because they watched one prompt cost 60% of a session, saw the four-word reason, copied the rewrite, and felt the next one come back in three turns instead of thirty. The quality card is a feedback loop on the one habit that moves the needle — and it sits right next to the cost it's explaining, so the lesson and the bill are never more than a glance apart.</p>
+</Article>

@@ -45,7 +45,7 @@ A panel between the stat strip and the prompt list that rolls up what the sessio
 
 ### Prompt timeline
 
-Each prompt is a row with the user text, a token micro-bar (input / output / cache-write / cache-read), per-prompt cost, an end-to-end **duration** (millisecond-aware, so a 400 ms tool round-trip doesn't collapse to "0s"), a **slash-command pill** when one was used (e.g. `/ss-spec`), and an inline **tool-mix chip strip** for that turn (`Bash×3 Read×2 Edit×1`) so you can scan hundreds of prompts and tell heavy code work from heavy thinking.
+Each prompt is a row with the user text, a token micro-bar (input / output / cache-write / cache-read), per-prompt cost, an end-to-end **duration** (millisecond-aware, so a 400 ms tool round-trip doesn't collapse to "0s"), a **slash-command pill** when one was used (e.g. `/ss-spec`), an inline **tool-mix chip strip** for that turn (`Bash×3 Read×2 Edit×1`) so you can scan hundreds of prompts and tell heavy code work from heavy thinking, and a small **quality dot** colored by the prompt's rule-based quality score (see below).
 
 Click a row → it expands inline:
 
@@ -56,6 +56,30 @@ Click a row → it expands inline:
 - **Every unique file** the prompt touched.
 
 Prompts have Expand-all / Collapse-all controls, and subagent (sidechain) prompts are tagged so you can see which work the main agent delegated.
+
+### The prompt page &amp; quality review
+
+The inline expander is the quick look; the **open-full-view** control on a row (it appears on hover) takes you to that prompt's own page — a deep-linkable view (`/sessions/:id?prompt=<id>`) that keeps the live stream connected and adds **Prev / Next** to walk the conversation. It shows:
+
+- a meta strip — tokens, cost, model, tool count, duration;
+- a side-by-side **Input / Output** view (your prompt verbatim; the assistant's reply rendered), each independently scrollable and copyable;
+- a **token-breakdown** bar (the real input / output / cache-write / cache-read split for that one prompt);
+- the turn's tool calls.
+
+#### Prompt quality
+
+Above all that sits a **prompt-quality** card — a deterministic, rule-based read of how well that prompt was framed (no LLM, no guessing). It scores the prompt out of 100 across four factors:
+
+| Factor | What it checks |
+|---|---|
+| **Names a concrete target** | Does the prompt name a symbol, file, or `REQ-id` the agent can resolve directly? |
+| **Scoped &amp; specific** | Is it a concrete ask rather than an open-ended "explain / look / why…"? |
+| **Cache-friendly** | Was the prompt's cache-read rate healthy? |
+| **Structural over brute-force** | Did the turn lean on a structural query, or did it pull a lot of tokens through Read/grep? |
+
+The card grades the score (Excellent / Good / Fair / Needs work), lists **how to improve** with copyable fix commands (e.g. swap a grep for `specship_search`), and — for a low-scoring prompt — offers a **suggested rewrite**. A **Share** button copies the whole review as plain text. The same score drives the quality dot on the timeline row, so you can scan a session for the prompts worth tightening.
+
+The factors that depend on tool runtime use the data the transcript actually records (a tool's result size stands in for "heavy") — it never invents a number it can't measure.
 
 ### Live capture
 
@@ -80,4 +104,4 @@ SpecShip sums `cost_usd` separately for `is_sidechain: true` vs `false`. The sub
 
 For **per-subagent-name** attribution (which specific subagent type ate the budget), SpecShip looks up the parent prompt's Task call and reads its `subagent_type` field, joining back to the sidechain prompt rows. This shows up in the Heatmap → Subagents lane.
 
-→ Next: [Memory](/claude-code/memory/) — the CLAUDE.md hierarchy.
+→ Next: [MCP servers](/claude-code/mcp/) — every tool your agent can reach.
