@@ -34,6 +34,16 @@ const statuslineThumb = `<svg viewBox="0 0 360 200" preserveAspectRatio="xMidYMi
 
 export const posts: BlogPost[] = [
   {
+    slug: 'prompt-quality',
+    cat: 'claude-code', catLabel: 'Claude Code', catColor: '#5B93F2',
+    title: 'A quality score for the way you prompt your agent',
+    dek: 'Two prompts asking for the same change can cost 10× apart. SpecShip now grades every prompt in a session — does it name a concrete target, is it scoped, is it cache-friendly, did it go structural or brute-force — and hands you the one-line fix. Rule-based, no LLM, and it never invents a number it can’t measure.',
+    date: 'Jun 30, 2026', read: '6 min', feat: true,
+    tags: ['#claude-code', '#observability', '#prompting', '#honesty'],
+    thumbBg: 'rgba(91,147,242,0.10)',
+    thumb: `<svg viewBox="0 0 360 200" preserveAspectRatio="xMidYMid slice"><rect width="360" height="200" fill="rgba(91,147,242,0.09)"/><g><circle cx="96" cy="78" r="10" fill="#46C26B"/><circle cx="156" cy="78" r="10" fill="#46C26B"/><circle cx="216" cy="78" r="10" fill="#46C26B"/><circle cx="276" cy="78" r="10" fill="none" stroke="#E5A50A" stroke-width="2.2"/></g><rect x="72" y="128" width="216" height="12" rx="6" fill="rgba(150,165,200,0.2)"/><rect x="72" y="128" width="168" height="12" rx="6" fill="#5B93F2"/></svg>`,
+  },
+  {
     slug: 'adoption-wedge',
     cat: 'product', catLabel: 'Product', catColor: '#46C26B',
     title: 'We made SpecShip smaller on purpose',

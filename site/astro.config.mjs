@@ -105,6 +105,7 @@ export default defineConfig({
 					items: [
 						{ label: 'Overview', slug: 'claude-code/overview' },
 						{ label: 'Sessions', slug: 'claude-code/sessions' },
+						{ label: 'MCP servers', slug: 'claude-code/mcp' },
 						{ label: 'Memory', slug: 'claude-code/memory' },
 						{ label: 'Heatmap', slug: 'claude-code/heatmap' },
 						{ label: 'Costs & cache', slug: 'claude-code/costs' },
