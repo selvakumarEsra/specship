@@ -443,6 +443,22 @@ function renderSmokeCheck(result: import('../health/smoke-check').SmokeCheckResu
   }
 }
 
+/**
+ * Initialize + build the index for a project (REQ-HANDSHAKE-004 offer). Mirrors
+ * the `init` command's default-index behaviour with the shimmer progress.
+ */
+async function buildProjectIndex(projectRoot: string): Promise<void> {
+  const { default: SpecShip } = await loadSpecShip();
+  const cg = await SpecShip.init(projectRoot, { index: false });
+  const progress = createShimmerProgress();
+  try {
+    await cg.indexAll({ onProgress: progress.onProgress });
+  } finally {
+    await progress.stop();
+    cg.destroy();
+  }
+}
+
 type IndexResult = {
   success: boolean;
   filesIndexed: number;
@@ -2151,6 +2167,7 @@ program
   .option('--sdd', 'Also install the spec-driven-development governance tier (spec/authoring/review/design commands + the spec-author nudge hook). Off by default — a plain install provisions only the retrieval tier.')
   .option('--statusline', 'Wire the SpecShip status-line segment into Claude (skips the prompt; never overwrites an existing status line)')
   .option('--skip-statusline', 'Do not add the status-line segment (skips the prompt)')
+  .option('--skip-index', 'Do not offer to index the current project (an explicit opt-out for automation)')
   .option('--print-config', 'Print MCP config snippet for Claude Code and exit (no file writes)')
   // -t/--target is vestigial — kept so existing `--target claude` / `--target auto`
   // invocations (including our own offline-install scripts) keep working.
@@ -2163,6 +2180,7 @@ program
     sdd?: boolean;
     statusline?: boolean;
     skipStatusline?: boolean;
+    skipIndex?: boolean;
     printConfig?: boolean;
   }) => {
     if (opts.printConfig) {
@@ -2212,6 +2230,36 @@ program
         statusLine,
         yes: opts.yes,
       });
+
+      // Offer to index the current project (REQ-HANDSHAKE-004) before the smoke
+      // check, so an accepted index is reflected by the index-queryable item.
+      const cwd = process.cwd();
+      const { decideInstallInit } = await import('../installer/init-offer');
+      const { isGitRepo } = await import('../sync/git-hooks');
+      const initDecision = decideInstallInit({
+        isGitRepo: isGitRepo(cwd),
+        isInitialized: isInitialized(cwd),
+        yes: opts.yes === true,
+        skipIndex: opts.skipIndex === true,
+      });
+      let doIndex = initDecision === 'auto-index';
+      if (initDecision === 'offer') {
+        const clack = await importESM('@clack/prompts');
+        const ans = await clack.confirm({
+          message: `Index this project (${cwd}) now, so Claude can explore it?`,
+        });
+        doIndex = ans === true; // a cancel (symbol) or "no" both decline (REQ-HANDSHAKE-004.A2)
+      }
+      if (doIndex) {
+        console.log();
+        info(`Indexing ${cwd} …`);
+        try {
+          await buildProjectIndex(cwd);
+          success('Project indexed.');
+        } catch (e) {
+          warn(`Indexing failed (run \`specship init -i\` later): ${e instanceof Error ? e.message : String(e)}`);
+        }
+      }
 
       // Post-install smoke check (REQ-HANDSHAKE-002). Advisory: report failing
       // items but never exit non-zero (REQ-HANDSHAKE-002.A4), so a provisioning

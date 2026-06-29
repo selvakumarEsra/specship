@@ -100,7 +100,7 @@ activated without a separate, forgettable `init` step. Run outside a project it
 MUST NOT prompt to index. SpecShip MUST NOT silently auto-index.
 
 implementations:
-  - src/bin/specship.ts:install
+  - src/installer/init-offer.ts:decideInstallInit
 
 ## Acceptance
 <!-- id: REQ-HANDSHAKE-004.A1 -->
@@ -128,8 +128,7 @@ promise: the normal install bundles its own runtime and needs no particular host
 Node version. The host-Node requirement applies only to the programmatic-SDK and
 from-source paths and MUST be stated only in that scoped context.
 
-implementations:
-  - README.md:runtime
+(Documentation-only requirement — verified by reading `README.md`, no code link.)
 
 ## Acceptance
 <!-- id: REQ-HANDSHAKE-005.A1 -->
