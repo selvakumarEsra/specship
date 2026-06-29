@@ -9,6 +9,10 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixes
+
+- **0.11.1 ships the proper bundled build.** 0.11.0 briefly went out as a plain (non-bundled) package; 0.11.1 is the per-platform bundled distribution — it carries its own Node runtime and a prebuilt SQLite, so `npm i -g @specship/specship` installs and runs on any supported Node with no native compile step. Same features as 0.11.0. Upgrade with `npm i -g @specship/specship@latest`.
+
 
 ## [0.11.0] - 2026-06-29
 
