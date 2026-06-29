@@ -24,10 +24,27 @@ import { DomSanitizer, type SafeHtml } from '@angular/platform-browser';
 import { renderMd } from '../../util/render-md';
 
 interface Group { path: string; title: string; specs: Spec[]; }
+interface Criterion { id: string; title: string; state: string; met: boolean; }
 
 /** Strip embedded `<!-- id: REQ-X -->` markers — structural noise, not prose. */
 function stripSpecMarkers(s: string): string {
   return s.replace(/<!--[\s\S]*?-->/g, '');
+}
+
+/** Per-criterion CritMark icon by state (mirrors the design's CRIT_ICON). */
+const CRIT_ICON: Record<string, string> = {
+  verified: 'check', implemented: 'check', completed: 'check',
+  drifted: 'drift', broken: 'cancel', orphaned: 'cancel', failed: 'cancel',
+};
+
+/** Collapse a criterion's links into a single worst-first state. */
+function critState(ls: SpecLink[]): string {
+  if (!ls.length) return 'pending';
+  if (ls.some((l) => l.state === 'broken')) return 'broken';
+  if (ls.some((l) => l.state === 'orphaned')) return 'orphaned';
+  if (ls.some((l) => l.state === 'drifted')) return 'drifted';
+  if (ls.every((l) => l.state === 'verified')) return 'verified';
+  return 'implemented';
 }
 
 @Component({
@@ -129,6 +146,33 @@ export class Specs {
   protected readonly selectedLinks = computed<SpecLink[]>(
     () => this.detailResource.state().data?.links ?? [],
   );
+
+  /** Acceptance-kind children of the selected spec, with a collapsed per-criterion state. */
+  protected readonly criteria = computed<Criterion[]>(() => {
+    const data = this.detailResource.state().data;
+    const cl = data?.childLinks ?? {};
+    return (data?.children ?? [])
+      .filter((c) => c.kind === 'acceptance')
+      .map((c) => {
+        const state = critState(cl[c.id] ?? []);
+        return { id: c.id, title: stripSpecMarkers(c.title).trim(), state, met: state === 'verified' };
+      });
+  });
+  protected readonly metCount = computed(() => this.criteria().filter((c) => c.met).length);
+
+  /** CritMark presentation for an acceptance criterion's collapsed state. */
+  protected critIcon(state: string): string | null {
+    return CRIT_ICON[state] ?? null;
+  }
+  protected critColor(state: string): string {
+    return STATE[state]?.color ?? 'var(--text-muted)';
+  }
+  protected critBg(state: string): string {
+    return STATE[state]?.bg ?? 'rgba(255,255,255,0.05)';
+  }
+  protected stateLabel(state: string): string {
+    return STATE[state]?.label ?? state;
+  }
 
   protected readonly selectedSiblings = computed<Spec[]>(() => {
     const cur = this.selectedSpec();

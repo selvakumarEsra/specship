@@ -3,6 +3,7 @@ import { DomSanitizer, type SafeHtml } from '@angular/platform-browser';
 import { Icon } from '../../shell/icon/icon';
 import { Pill } from '../../ui/pill';
 import { Segmented } from '../../ui/segmented';
+import { LogoMark } from '../../shell/logo-mark/logo-mark';
 import { ApiService } from '../../api/api';
 
 interface ToolCall { name: string; input: string; output: string; status: 'ok' | 'error'; open?: boolean; }
@@ -29,7 +30,7 @@ type ToolAccess = 'ask' | 'safe' | 'all';
 
 @Component({
   selector: 'app-chat',
-  imports: [Icon, Pill, Segmented],
+  imports: [Icon, Pill, Segmented, LogoMark],
   templateUrl: './chat.html',
   styleUrl: './chat.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

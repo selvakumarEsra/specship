@@ -15,7 +15,7 @@
  */
 
 import path from 'node:path';
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import type { SpecShipInstance } from '../project-registry.js';
@@ -127,6 +127,39 @@ export async function registerWorkflowRoutes(app: FastifyInstance): Promise<void
     if (!run) return reply.code(404).send({ error: 'run not found' });
     const events = sq.getEventsByRun(req.params.id, 500);
     return { run, events };
+  });
+
+  /**
+   * Read-only artifacts for a run. The executor writes each completed node's
+   * output to `<.specship>/artifacts/runs/<id>/nodes/<nodeId>.{md,meta.json}`;
+   * this lists + returns them (body inline — a run has a handful of nodes). No
+   * execution-path change: it only reads what's already on disk.
+   */
+  app.get('/api/workflows/runs/:id/artifacts', async (req: FastifyRequest<{ Params: { id: string }; Querystring: ProjectQuery }>, reply) => {
+    const cg = await resolveCg(app, req, reply); if (!cg) return;
+    const { projectRoot } = executorFor(cg);
+    const dir = path.join(projectRoot, '.specship', 'artifacts', 'runs', req.params.id, 'nodes');
+    const artifacts: Array<{ nodeId: string; name: string; kind?: string; outputType?: string; length: number; body: string }> = [];
+    if (existsSync(dir)) {
+      try {
+        for (const file of readdirSync(dir).filter((f) => f.endsWith('.md')).sort()) {
+          const stem = file.slice(0, -3);
+          let meta: { nodeId?: string; kind?: string; outputType?: string; length?: number } = {};
+          try { meta = JSON.parse(readFileSync(path.join(dir, `${stem}.meta.json`), 'utf8')); } catch { /* no/invalid meta */ }
+          let body = '';
+          try { body = readFileSync(path.join(dir, file), 'utf8'); } catch { /* unreadable */ }
+          artifacts.push({
+            nodeId: meta.nodeId ?? stem,
+            name: file,
+            kind: meta.kind,
+            outputType: meta.outputType,
+            length: meta.length ?? body.length,
+            body,
+          });
+        }
+      } catch { /* dir vanished mid-read — return what we have */ }
+    }
+    return { artifacts };
   });
 
   /**

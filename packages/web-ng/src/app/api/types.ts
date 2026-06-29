@@ -191,6 +191,12 @@ export interface CompareResponse {
     avgCost: number;
     prompts: number;
     cacheHit: number;
+    /**
+     * Drifted/broken/orphaned spec-link count. Only the primary project's
+     * indexed graph is loaded server-side, so this is the real count for that
+     * project and 0 for the rest (not per-project drift across all projects).
+     */
+    drift: number;
     /** Per-model cost split for the stacked bars. */
     byModel: Array<{ model: string; cost: number }>;
     /** Top tools by call count (up to 4). */
@@ -580,4 +586,135 @@ export interface DomainResponse {
   factsByType: Record<DomainFactType, DomainFact[]>;
   /** Coverage rollup from the domain gap-seed. `documented + gaps` = universe. */
   coverage: { documented: number; gaps: number };
+}
+
+// --- Full graph overview (GET /api/graph/full) ---
+
+export interface FullGraphNode {
+  id: string;
+  name: string;
+  kind: string;
+  filePath: string | null;
+  degree: number;
+}
+
+export interface FullGraphEdge {
+  from: string;
+  to: string;
+  kind: string;
+  provenance: string;
+}
+
+export interface FullGraphResponse {
+  nodes: FullGraphNode[];
+  edges: FullGraphEdge[];
+  /** Total node count in the graph (the view shows the top-`shown` by degree). */
+  total: number;
+  shown: number;
+}
+
+// --- Workflow run artifacts (GET /api/workflows/runs/:id/artifacts) ---
+
+/** One node's persisted output, read from `<.specship>/artifacts/runs/<id>/nodes/`. */
+export interface RunArtifact {
+  nodeId: string;
+  /** On-disk filename, e.g. `plan.md`. */
+  name: string;
+  /** Node kind (agent / bash / …), from the artifact's meta sidecar. */
+  kind?: string;
+  /** Declared output type, from the meta sidecar. */
+  outputType?: string;
+  length: number;
+  /** The artifact body (markdown / text). */
+  body: string;
+}
+
+export interface RunArtifactsResponse {
+  artifacts: RunArtifact[];
+}
+
+// --- MCP servers layer (MCP-PAGE-DOC) ---
+
+/** A configured MCP server's run state. */
+export type McpServerState = 'running' | 'error' | 'disabled';
+
+/** Where a server is configured: global (`~/.claude.json`) or project (`.mcp.json`). */
+export type McpServerScope = 'global' | 'project';
+
+/** Connection state of a client referencing a server. */
+export type McpClientState = 'active' | 'connected' | 'idle';
+
+/**
+ * One input parameter of an MCP tool: name, type, whether it's required, and an
+ * optional default/enum hint. Mirrors the `[name, type, required, default]`
+ * tuples in the design's `screens-mcp.jsx`.
+ */
+export interface McpToolParam {
+  name: string;
+  type: string;
+  required: boolean;
+  /** Default value or enum hint, shown after the required/optional marker. */
+  hint?: string;
+}
+
+/** Per-tool weekly usage. `[needs review]`: live data once a usage source exists. */
+export interface McpToolStat {
+  calls: number;
+  tokens: number;
+}
+
+/** One tool exposed by an MCP server. */
+export interface McpTool {
+  name: string;
+  icon: string;
+  /** CSS colour token, e.g. `var(--node-code)`. */
+  color: string;
+  desc: string;
+  params: McpToolParam[];
+  example: string;
+  stat: McpToolStat;
+  /** When true, the expanded tool offers a "View usage in heatmap" action. */
+  drill?: boolean;
+}
+
+/** A client (Claude Code / Desktop / …) that references a server. */
+export interface McpClient {
+  name: string;
+  host: string;
+  state: McpClientState;
+  /** Human last-seen string, e.g. "active now", "12m ago". */
+  last: string;
+}
+
+/** One configured MCP server with its tools, clients, and raw config. */
+export interface McpServer {
+  id: string;
+  name: string;
+  scope: McpServerScope;
+  icon: string;
+  /** CSS colour token for the server's avatar tile. */
+  color: string;
+  state: McpServerState;
+  /** Server version string, or "remote" for hosted servers. */
+  version: string;
+  /** Negotiated protocol revision, or "—" when not connected. */
+  protocol: string;
+  /** Uptime string, or "—" when not running. */
+  uptime: string;
+  /** Transport, e.g. "stdio" or "http (sse)". */
+  transport: string;
+  /** The launch command or remote URL. */
+  command: string;
+  desc: string;
+  /** Present only in the error state — the connection failure message. */
+  error?: string;
+  tools: McpTool[];
+  usedBy: McpClient[];
+  /** Pretty-printed JSON the user would put in their config file. */
+  config: string;
+}
+
+/** GET /api/mcp/servers. */
+export interface McpServersResponse {
+  servers: McpServer[];
 }

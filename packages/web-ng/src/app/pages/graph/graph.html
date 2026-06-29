@@ -73,13 +73,30 @@
     <!-- Canvas area -->
     <div class="gp-canvas-wrap">
       @if (!selectedSymbol()) {
-        <div class="gp-empty">
-          <h3>Explore the graph</h3>
-          <p>Search for a function, method or class to start. The graph renders the symbol with its callers, callees and any linked specs.</p>
-          @if (status.state().data; as s) {
-            <p class="gp-stats">{{ s.nodeCount.toLocaleString() }} nodes · {{ s.edgeCount.toLocaleString() }} edges · {{ s.fileCount.toLocaleString() }} files</p>
-          }
-        </div>
+        @if (fullGraphActive()) {
+          <app-graph-canvas
+            [nodes]="visibleNodes()"
+            [edges]="visibleEdges()"
+            [selectedId]="''"
+            [fitKey]="fitKey()"
+            [hiddenIds]="hiddenIds()"
+            (nodeClick)="pickFromCanvas($event)"
+          />
+          <!-- overview hint: how much of the graph is shown -->
+          <div class="gp-overview-note">
+            Showing the {{ fullGraphCounts().shown }} most-connected of {{ fullGraphCounts().total.toLocaleString() }} nodes · search or click a node to drill in
+          </div>
+        } @else if (fullGraphLoading()) {
+          <div class="gp-empty"><p>Loading graph…</p></div>
+        } @else {
+          <div class="gp-empty">
+            <h3>Explore the graph</h3>
+            <p>Search for a function, method or class to start. The graph renders the symbol with its callers, callees and any linked specs.</p>
+            @if (status.state().data; as s) {
+              <p class="gp-stats">{{ s.nodeCount.toLocaleString() }} nodes · {{ s.edgeCount.toLocaleString() }} edges · {{ s.fileCount.toLocaleString() }} files</p>
+            }
+          </div>
+        }
       } @else if (nodeDetail.state().loading) {
         <div class="gp-empty"><p>Loading…</p></div>
       } @else if (nodeDetail.state().error) {

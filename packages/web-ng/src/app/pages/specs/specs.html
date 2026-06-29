@@ -197,6 +197,40 @@
           </details>
         }
 
+        <!-- Acceptance criteria -->
+        @if (criteria().length > 0) {
+          <div class="row crit-head">
+            <span class="eyebrow">Acceptance criteria</span>
+            <span class="grow"></span>
+            <span class="mono tabular crit-rollup"
+              [style.color]="metCount() === criteria().length ? 'var(--success)' : 'var(--text-muted)'">
+              {{ metCount() }} / {{ criteria().length }} met
+            </span>
+          </div>
+          <div class="crit-bars">
+            @for (c of criteria(); track c.id) {
+              <span class="crit-seg" [class.pending]="c.state === 'pending'"
+                [style.background]="critColor(c.state)" [title]="c.id + ' · ' + stateLabel(c.state)"></span>
+            }
+          </div>
+          <div class="card crit-card">
+            @for (c of criteria(); track c.id; let i = $index) {
+              <div class="row gap-10 crit-row" [style.border-top]="i > 0 ? '1px solid var(--border-subtle)' : 'none'">
+                <span class="crit-mark" [style.background]="critBg(c.state)" [style.color]="critColor(c.state)"
+                  [title]="stateLabel(c.state)">
+                  @if (critIcon(c.state); as ic) {
+                    <app-icon [name]="ic" [size]="12" />
+                  } @else {
+                    <span class="crit-dot" [style.border-color]="critColor(c.state)"></span>
+                  }
+                </span>
+                <span class="mono crit-id">A{{ i + 1 }}</span>
+                <span class="crit-text">{{ c.title }}</span>
+              </div>
+            }
+          </div>
+        }
+
         <!-- Linked code -->
         <div class="eyebrow" style="margin-bottom:8px">Linked code</div>
         @if (detailResource.state().loading) {

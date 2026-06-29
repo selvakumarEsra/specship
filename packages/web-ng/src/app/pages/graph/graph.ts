@@ -22,9 +22,11 @@ import type {
   GraphNodeDetail,
   GraphNode,
   GraphHealthResponse,
+  FullGraphResponse,
   StatusResponse,
 } from '../../api/types';
 import { CanvasEdge, CanvasNode, GraphCanvas } from '../../charts/graph-canvas/graph-canvas';
+import { layoutGraph } from '../../charts/graph-canvas/layout';
 import { Icon } from '../../shell/icon/icon';
 import { Segmented, type SegmentedOption } from '../../ui/segmented';
 import { StatePill } from '../../ui/state-pill';
@@ -47,6 +49,8 @@ export class Graph {
 
   protected readonly status = apiResource<StatusResponse>(this.api, () => `/api/status${this.projects.projectQuery()}`);
   protected readonly health = apiResource<GraphHealthResponse>(this.api, () => `/api/graph/health${this.projects.projectQuery()}`);
+  /** Whole-repo overview (top-N most-connected nodes), shown when nothing is selected. */
+  protected readonly fullGraph = apiResource<FullGraphResponse>(this.api, () => `/api/graph/full?limit=250${this.projects.projectQuery('&')}`);
 
   // Layout mode
   protected readonly layoutMode = signal<LayoutMode>('hierarchical');
@@ -93,7 +97,7 @@ export class Graph {
 
   protected readonly canvasData = computed<{ nodes: CanvasNode[]; edges: CanvasEdge[] }>(() => {
     const detail = this.selectedDetail();
-    if (!detail) return { nodes: [], edges: [] };
+    if (!detail) return this.fullGraphData();
 
     const f = this.filters();
     const visible = (kind: string) => {
@@ -148,6 +152,53 @@ export class Graph {
     });
 
     return { nodes, edges };
+  });
+
+  /**
+   * Whole-repo overview: the top-N nodes from /api/graph/full, filtered by kind,
+   * positioned by the active layout mode. Recomputes when the layout toggle, the
+   * kind filters, or the fetched graph change.
+   */
+  private fullGraphData(): { nodes: CanvasNode[]; edges: CanvasEdge[] } {
+    const data = this.fullGraph.state().data;
+    if (!data?.nodes?.length) return { nodes: [], edges: [] };
+
+    const f = this.filters();
+    const fnodes = data.nodes.filter((n) => f[kindOf(n.kind)]);
+    const keep = new Set(fnodes.map((n) => n.id));
+    const fedges = data.edges.filter((e) => keep.has(e.from) && keep.has(e.to));
+    const kindById = new Map(fnodes.map((n) => [n.id, n.kind] as const));
+
+    const pos = layoutGraph(
+      this.layoutMode(),
+      fnodes.map((n) => ({ id: n.id, kind: n.kind })),
+      fedges.map((e) => ({ from: e.from, to: e.to })),
+    );
+
+    const nodes: CanvasNode[] = fnodes.map((n) => ({
+      id: n.id,
+      label: n.name,
+      sub: shortPath(n.filePath),
+      kind: n.kind,
+      x: pos.get(n.id)?.x ?? 0,
+      y: pos.get(n.id)?.y ?? 0,
+    }));
+    const edges: CanvasEdge[] = fedges.map((e) => ({
+      from: e.from,
+      to: e.to,
+      kind: e.provenance === 'heuristic' ? 'synth'
+        : (kindById.get(e.from) === 'spec' || kindById.get(e.to) === 'spec') ? 'implements'
+        : 'calls',
+    }));
+    return { nodes, edges };
+  }
+
+  /** True when the canvas is showing the whole-repo overview (nothing selected). */
+  protected readonly fullGraphActive = computed(() => !this.selectedSymbol() && this.fullGraphData().nodes.length > 0);
+  protected readonly fullGraphLoading = computed(() => !this.selectedSymbol() && this.fullGraph.state().loading);
+  protected readonly fullGraphCounts = computed(() => {
+    const d = this.fullGraph.state().data;
+    return d ? { shown: d.shown, total: d.total } : { shown: 0, total: 0 };
   });
 
   protected readonly visibleNodes = computed(() => this.canvasData().nodes);
@@ -220,7 +271,15 @@ export class Graph {
 
   protected pickFromCanvas(id: string): void {
     const detail = this.selectedDetail();
-    if (!detail) return;
+    if (!detail) {
+      // Whole-repo overview: clicking a node drills into its neighborhood.
+      const node = this.fullGraph.state().data?.nodes.find((n) => n.id === id);
+      if (node) {
+        this.selectedSymbol.set(node.name);
+        this.fitKey.update((k) => k + 1);
+      }
+      return;
+    }
     if (id === detail.id) return;
     const all = [...(detail.callers ?? []), ...(detail.callees ?? [])];
     const hit = all.find((n) => n.id === id);

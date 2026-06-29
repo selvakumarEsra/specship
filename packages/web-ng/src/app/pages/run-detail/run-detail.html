@@ -182,19 +182,58 @@
       </div>
     }
 
-    <!-- Artifacts tab (no backend data — show empty state) -->
+    <!-- Artifacts tab — master-detail over the run's on-disk node outputs -->
     @if (activeTab() === 'artifacts') {
-      <div class="rd-artifacts row">
-        <div class="muted rd-no-artifacts" style="margin:auto;font-size:12.5px">
-          No artifacts available from the API.
+      @if (artifactsLoading() && artifacts().length === 0) {
+        <div class="rd-artifacts"><div class="muted rd-art-empty">Loading artifacts…</div></div>
+      } @else if (artifactsError()) {
+        <div class="rd-artifacts"><div class="muted rd-art-empty">Couldn’t load artifacts: {{ artifactsError() }}</div></div>
+      } @else if (artifacts().length === 0) {
+        <div class="rd-artifacts"><div class="muted rd-art-empty">No artifacts yet — nodes write their output here as they complete.</div></div>
+      } @else {
+        <div class="rd-artifacts">
+          <!-- file list -->
+          <div class="rd-art-list">
+            @for (a of artifacts(); track a.nodeId) {
+              <button type="button" class="rd-art-item" [class.active]="selectedArtifact()?.nodeId === a.nodeId"
+                (click)="selectArtifact(a.nodeId)">
+                <app-icon name="box" [size]="13" style="color: var(--node-route); flex-shrink: 0;" />
+                <span class="rd-art-meta">
+                  <span class="mono rd-art-name">{{ a.name }}</span>
+                  <span class="muted rd-art-node">{{ a.nodeId }}</span>
+                </span>
+              </button>
+            }
+          </div>
+          <!-- body viewer -->
+          <div class="rd-art-body scroll-y">
+            @if (selectedArtifact(); as a) {
+              <div class="row gap-8 rd-art-bodyhead">
+                <span class="mono rd-art-bodyname">{{ a.name }}</span>
+                @if (a.kind) { <span class="pill rd-art-kind">{{ a.kind }}</span> }
+                <span class="grow"></span>
+                <span class="mono muted rd-art-bytes">{{ fmtArtifactBytes(a.length) }}</span>
+                <app-copy-btn [text]="a.body" />
+              </div>
+              <div class="md-content rd-art-md" [innerHTML]="artifactBodyHtml()"></div>
+            }
+          </div>
         </div>
-      </div>
+      }
     }
 
-    <!-- Cost tab (no cost data in API — show empty state) -->
+    <!-- Cost tab — per-node/per-run cost isn't captured for workflow runs yet -->
     @if (activeTab() === 'cost') {
-      <div class="rd-cost-wrap" style="padding:16px">
-        <div class="muted" style="font-size:12.5px">Cost data is not available from the API.</div>
+      <div class="rd-cost-wrap">
+        <div class="rd-cost-empty">
+          <app-icon name="dollar" [size]="18" style="color: var(--text-muted);" />
+          <div class="rd-cost-empty-title">Cost isn’t tracked for workflow runs yet</div>
+          <div class="muted rd-cost-empty-body">
+            Per-node and per-run cost require capturing model token-usage as each node executes —
+            that instrumentation isn’t wired into the workflow engine. The Claude-analytics pages
+            (Sessions, Costs) track cost for interactive sessions today.
+          </div>
+        </div>
       </div>
     }
   </div>
