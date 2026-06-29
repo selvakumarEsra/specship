@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import Database from 'better-sqlite3';
+import { openMemoryDb } from './helpers/memory-db';
 import { runMigrations, CURRENT_SCHEMA_VERSION } from '../src/db/migrations';
 
 describe('v9 specship-impact migration', () => {
   it('adds columns and backfills is_specship from tool_name', () => {
-    const db = new Database(':memory:');
+    const db = openMemoryDb();
     // minimal prerequisite tables (schema_versions is required — runMigrations -> recordMigration INSERTs into it)
     // unresolved_refs + edges: required by migration v2 (ALTER TABLE ... ADD COLUMN)
     // claude_sessions: required by migration v8 (UPDATE claude_sessions SET prompt_count = ...)

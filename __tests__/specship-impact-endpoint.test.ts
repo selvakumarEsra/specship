@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import Database from 'better-sqlite3';
+import { openMemoryDb } from './helpers/memory-db';
 import { computeSpecshipImpact } from '../packages/server/src/ingest/impact-query';
 
 // ---------------------------------------------------------------------------
@@ -116,7 +116,7 @@ function insertToolCall(
 
 describe('computeSpecshipImpact', () => {
   it('returns zeros for empty DB', () => {
-    const db = new Database(':memory:');
+    const db = openMemoryDb();
     buildSchema(db);
     const result = computeSpecshipImpact(db as any, { since: 0 });
     expect(result.spendTokens).toBe(0);
@@ -130,7 +130,7 @@ describe('computeSpecshipImpact', () => {
   });
 
   it('computes spendTokens from result_length of is_specship=1 rows', () => {
-    const db = new Database(':memory:');
+    const db = openMemoryDb();
     buildSchema(db);
     const sessId = insertSession(db, { project_path: '/proj/a' });
     // result_length=400 chars → 100 tokens (4 chars/token)
@@ -147,7 +147,7 @@ describe('computeSpecshipImpact', () => {
   });
 
   it('ignores is_specship=0 rows in spend', () => {
-    const db = new Database(':memory:');
+    const db = openMemoryDb();
     buildSchema(db);
     const sessId = insertSession(db, { project_path: '/proj/b' });
     // Non-specship call with large result — should NOT count toward spend
@@ -165,7 +165,7 @@ describe('computeSpecshipImpact', () => {
   });
 
   it('savedTokens: single resolved call with displaced_files', () => {
-    const db = new Database(':memory:');
+    const db = openMemoryDb();
     buildSchema(db);
     const sessId = insertSession(db, { project_path: '/proj/c' });
     const pid = 'prompt-save-1';
@@ -185,7 +185,7 @@ describe('computeSpecshipImpact', () => {
   });
 
   it('savedTokens: per-prompt dedup — shared file counts only once per prompt', () => {
-    const db = new Database(':memory:');
+    const db = openMemoryDb();
     buildSchema(db);
     const sessId = insertSession(db, { project_path: '/proj/d' });
     const pid = 'prompt-dedup-1';
@@ -221,7 +221,7 @@ describe('computeSpecshipImpact', () => {
   });
 
   it('savedTokens: two prompts, same file — dedup within each prompt, sum across prompts', () => {
-    const db = new Database(':memory:');
+    const db = openMemoryDb();
     buildSchema(db);
     const sessId = insertSession(db, { project_path: '/proj/e' });
     // Prompt 1: single resolved call, file 1000 bytes, spend 200 chars
@@ -252,7 +252,7 @@ describe('computeSpecshipImpact', () => {
   });
 
   it('unresolvedCalls counts resolution=unresolved rows', () => {
-    const db = new Database(':memory:');
+    const db = openMemoryDb();
     buildSchema(db);
     const sessId = insertSession(db, { project_path: '/proj/f' });
     insertToolCall(db, {
@@ -282,7 +282,7 @@ describe('computeSpecshipImpact', () => {
   });
 
   it('netTokens = savedTokens - spendTokens - overheadTokens', () => {
-    const db = new Database(':memory:');
+    const db = openMemoryDb();
     buildSchema(db);
     const sessId = insertSession(db, { project_path: '/proj/g' });
     const pid = 'prompt-net-1';
@@ -305,7 +305,7 @@ describe('computeSpecshipImpact', () => {
   });
 
   it('byTool groups spend and savedTokens per tool name (best-effort)', () => {
-    const db = new Database(':memory:');
+    const db = openMemoryDb();
     buildSchema(db);
     const sessId = insertSession(db, { project_path: '/proj/h' });
     insertToolCall(db, {
@@ -342,7 +342,7 @@ describe('computeSpecshipImpact', () => {
   });
 
   it('byProject present when no project filter, absent when project is specified', () => {
-    const db = new Database(':memory:');
+    const db = openMemoryDb();
     buildSchema(db);
     const sess1 = insertSession(db, { project_path: '/proj/i1' });
     const sess2 = insertSession(db, { project_path: '/proj/i2' });
@@ -371,7 +371,7 @@ describe('computeSpecshipImpact', () => {
   });
 
   it('project filter scopes spend/saved to single project', () => {
-    const db = new Database(':memory:');
+    const db = openMemoryDb();
     buildSchema(db);
     const sess1 = insertSession(db, { project_path: '/proj/j1' });
     const sess2 = insertSession(db, { project_path: '/proj/j2' });
@@ -400,7 +400,7 @@ describe('computeSpecshipImpact', () => {
   });
 
   it('trend: daily buckets have spendTokens and savedTokens', () => {
-    const db = new Database(':memory:');
+    const db = openMemoryDb();
     buildSchema(db);
     const sessId = insertSession(db, { project_path: '/proj/k' });
     const dayMs = 24 * 60 * 60 * 1000;
@@ -443,7 +443,7 @@ describe('computeSpecshipImpact', () => {
   });
 
   it('since filter excludes old rows', () => {
-    const db = new Database(':memory:');
+    const db = openMemoryDb();
     buildSchema(db);
     const sessId = insertSession(db, { project_path: '/proj/l' });
     const dayMs = 24 * 60 * 60 * 1000;
@@ -465,7 +465,7 @@ describe('computeSpecshipImpact', () => {
   });
 
   it('costUsd: >=0 always; 0 when no pricing rows present', () => {
-    const db = new Database(':memory:');
+    const db = openMemoryDb();
     buildSchema(db);
     const sessId = insertSession(db, { project_path: '/proj/m', last_model: 'claude-sonnet-4' });
     insertToolCall(db, {
@@ -484,7 +484,7 @@ describe('computeSpecshipImpact', () => {
   });
 
   it('costUsd: positive when pricing rows are seeded', () => {
-    const db = new Database(':memory:');
+    const db = openMemoryDb();
     buildSchema(db);
     // Seed pricing
     db.prepare(`
@@ -512,7 +512,7 @@ describe('computeSpecshipImpact', () => {
   });
 
   it('overheadTokens: ceil(TOOLDEF_CHARS/4) * distinct_sessions_with_specship_calls', () => {
-    const db = new Database(':memory:');
+    const db = openMemoryDb();
     buildSchema(db);
     // Two sessions, both with specship calls
     const sess1 = insertSession(db, { project_path: '/proj/o1' });
@@ -533,7 +533,7 @@ describe('computeSpecshipImpact', () => {
   // ---------------------------------------------------------------------------
 
   it('sessionId filter scopes spend/saved to a single session, ignoring other sessions', () => {
-    const db = new Database(':memory:');
+    const db = openMemoryDb();
     buildSchema(db);
 
     // Two sessions with different specship activity
@@ -582,7 +582,7 @@ describe('computeSpecshipImpact', () => {
   });
 
   it('sessionId filter: session with no specship calls returns zeros', () => {
-    const db = new Database(':memory:');
+    const db = openMemoryDb();
     buildSchema(db);
 
     const sess = insertSession(db, { id: 'task7-empty', project_path: '/proj/t7b' });
@@ -604,7 +604,7 @@ describe('computeSpecshipImpact', () => {
   });
 
   it('sessionId filter does not leak rows from other sessions', () => {
-    const db = new Database(':memory:');
+    const db = openMemoryDb();
     buildSchema(db);
 
     // Three sessions; we query only the middle one
