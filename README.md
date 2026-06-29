@@ -21,7 +21,7 @@
 
 ### 1. Install the CLI
 
-Requires Node.js 22.5+ (Node 24.x recommended — its bundled SQLite has FTS5, which SpecShip needs):
+No particular Node.js version to manage — the published install bundles its own runtime (Node 24 with FTS5, which SpecShip needs) and runs the same regardless of your system Node. You just need `npm` to fetch it:
 
 ```bash
 npm i -g @selvakumaresra/specship@latest

@@ -425,6 +425,68 @@ function warn(message: string): void {
   console.log(chalk.yellow(getGlyphs().warn) + ' ' + message);
 }
 
+/**
+ * Render a smoke-check result (INSTALL-HANDSHAKE-DOC) as ✓/✗ lines with
+ * remediation. A failing blocking item is red; a failing non-blocking item is a
+ * yellow bullet. Shared by `install` (advisory) and `doctor` (gating).
+ */
+function renderSmokeCheck(result: import('../health/smoke-check').SmokeCheckResult): void {
+  const g = getGlyphs();
+  for (const item of result.items) {
+    const mark = item.ok
+      ? chalk.green(g.ok)
+      : item.blocking
+        ? chalk.red(g.err)
+        : chalk.yellow(g.warn);
+    console.log(`  ${mark} ${item.label.padEnd(26)} ${chalk.dim(item.detail)}`);
+    if (!item.ok && item.remediation) console.log(chalk.dim(`        ${item.remediation}`));
+  }
+}
+
+/**
+ * Initialize + build the index for a project (REQ-HANDSHAKE-004 offer). Mirrors
+ * the `init` command's default-index behaviour with the shimmer progress.
+ */
+async function buildProjectIndex(projectRoot: string): Promise<void> {
+  const { default: SpecShip } = await loadSpecShip();
+  const cg = await SpecShip.init(projectRoot, { index: false });
+  const progress = createShimmerProgress();
+  let stopped = false;
+  const stop = async () => {
+    if (!stopped) {
+      stopped = true;
+      await progress.stop();
+    }
+  };
+  try {
+    await cg.indexAll({ onProgress: progress.onProgress });
+    await stop();
+    await printStarterPrompt(cg);
+  } finally {
+    await stop();
+    cg.destroy();
+  }
+}
+
+/**
+ * Print the manufactured first-run flow/impact prompt (REQ-ACTIVATION-002.A1):
+ * the closing line of `init` / the install index step. No-op when the graph
+ * yields no confidently-good prompt.
+ */
+async function printStarterPrompt(cg: import('../index').SpecShip): Promise<void> {
+  try {
+    const { generateStarterPrompt } = await import('../activation/starter-prompt');
+    const sp = generateStarterPrompt(cg);
+    if (!sp) return;
+    console.log();
+    console.log(chalk.bold('Try this first — ask Claude:'));
+    console.log('  ' + chalk.cyan(sp.prompt));
+    console.log(chalk.dim("  (it'll explore the index instead of reading files)"));
+  } catch {
+    /* best effort — never block init on the suggestion */
+  }
+}
+
 type IndexResult = {
   success: boolean;
   filesIndexed: number;
@@ -615,6 +677,9 @@ program
         const { offerWatchFallback } = await import('../installer');
         await offerWatchFallback(clack, projectPath);
       } catch { /* non-fatal */ }
+
+      // Manufactured first-run moment (REQ-ACTIVATION-002.A1).
+      await printStarterPrompt(cg);
 
       clack.outro('Done');
       cg.destroy();
@@ -2133,6 +2198,7 @@ program
   .option('--sdd', 'Also install the spec-driven-development governance tier (spec/authoring/review/design commands + the spec-author nudge hook). Off by default — a plain install provisions only the retrieval tier.')
   .option('--statusline', 'Wire the SpecShip status-line segment into Claude (skips the prompt; never overwrites an existing status line)')
   .option('--skip-statusline', 'Do not add the status-line segment (skips the prompt)')
+  .option('--skip-index', 'Do not offer to index the current project (an explicit opt-out for automation)')
   .option('--print-config', 'Print MCP config snippet for Claude Code and exit (no file writes)')
   // -t/--target is vestigial — kept so existing `--target claude` / `--target auto`
   // invocations (including our own offline-install scripts) keep working.
@@ -2145,6 +2211,7 @@ program
     sdd?: boolean;
     statusline?: boolean;
     skipStatusline?: boolean;
+    skipIndex?: boolean;
     printConfig?: boolean;
   }) => {
     if (opts.printConfig) {
@@ -2194,9 +2261,132 @@ program
         statusLine,
         yes: opts.yes,
       });
+
+      // Offer to index the current project (REQ-HANDSHAKE-004) before the smoke
+      // check, so an accepted index is reflected by the index-queryable item.
+      const cwd = process.cwd();
+      const { decideInstallInit } = await import('../installer/init-offer');
+      const { isGitRepo } = await import('../sync/git-hooks');
+      const initDecision = decideInstallInit({
+        isGitRepo: isGitRepo(cwd),
+        isInitialized: isInitialized(cwd),
+        yes: opts.yes === true,
+        skipIndex: opts.skipIndex === true,
+      });
+      let doIndex = initDecision === 'auto-index';
+      if (initDecision === 'offer') {
+        const clack = await importESM('@clack/prompts');
+        const ans = await clack.confirm({
+          message: `Index this project (${cwd}) now, so Claude can explore it?`,
+        });
+        doIndex = ans === true; // a cancel (symbol) or "no" both decline (REQ-HANDSHAKE-004.A2)
+      }
+      if (doIndex) {
+        console.log();
+        info(`Indexing ${cwd} …`);
+        try {
+          await buildProjectIndex(cwd);
+          success('Project indexed.');
+        } catch (e) {
+          warn(`Indexing failed (run \`specship init -i\` later): ${e instanceof Error ? e.message : String(e)}`);
+        }
+      }
+
+      // Post-install smoke check (REQ-HANDSHAKE-002). Advisory: report failing
+      // items but never exit non-zero (REQ-HANDSHAKE-002.A4), so a provisioning
+      // script is never broken by it — the gating equivalent is `specship doctor`.
+      const { runSmokeCheck } = await import('../health/smoke-check');
+      const smoke = await runSmokeCheck({ projectRoot: process.cwd() });
+      console.log('\n' + chalk.bold('Install check'));
+      renderSmokeCheck(smoke);
+      if (!smoke.ok) {
+        console.log(chalk.dim('  (advisory — diagnose anytime with `specship doctor`)'));
+      }
+
+      // Restart reminder (REQ-HANDSHAKE-001): an MCP server added to the config
+      // is NOT visible to a Claude Code session that was already open.
+      console.log();
+      info('Restart Claude Code (or run `/mcp`) to load the SpecShip server — it is not visible in a session that is already open.');
     } catch (err) {
       error(err instanceof Error ? err.message : String(err));
       process.exit(1);
+    }
+  });
+
+/**
+ * specship doctor — diagnose an install (REQ-HANDSHAKE-003). Read-only: runs the
+ * same checks as the post-install smoke check and writes nothing. Exits non-zero
+ * on a usage-blocking failure so it can gate a script or CI step.
+ */
+program
+  .command('doctor [path]')
+  .description('Diagnose a SpecShip install (runtime · FTS5 · MCP boot · index). Exits non-zero on a usage-blocking failure.')
+  .option('-j, --json', 'Output as JSON')
+  .action(async (pathArg: string | undefined, options: { json?: boolean }) => {
+    const projectRoot = path.resolve(pathArg ?? process.cwd());
+    const { runSmokeCheck, doctorExitCode } = await import('../health/smoke-check');
+    const result = await runSmokeCheck({ projectRoot });
+    const code = doctorExitCode(result);
+
+    if (options.json) {
+      console.log(JSON.stringify(result, null, 2));
+      process.exit(code);
+    }
+
+    console.log(chalk.bold('\nSpecShip doctor\n'));
+    renderSmokeCheck(result);
+    console.log();
+    if (code === 0) {
+      success('No usage-blocking problems detected.');
+    } else {
+      error(`Usage-blocking checks failed: ${result.blockingFailures.map((i) => i.id).join(', ')}`);
+    }
+    process.exit(code);
+  });
+
+/**
+ * specship starter-prompt — print the manufactured first-run flow/impact prompt
+ * (ACTIVATION-DOC). The single delivery mechanism for the bare `/ss-explore`
+ * door: it self-gates (prints nothing if the index can't be queried —
+ * REQ-ACTIVATION-004) and self-retires (prints nothing once a real specship
+ * lookup has been recorded this session — REQ-ACTIVATION-003).
+ */
+program
+  .command('starter-prompt [path]')
+  .description('Print a suggested first flow/impact prompt for this project (used by the /ss-explore door).')
+  .option('-j, --json', 'Output as JSON')
+  .action(async (pathArg: string | undefined, options: { json?: boolean }) => {
+    const projectRoot = path.resolve(pathArg ?? process.cwd());
+    // Not indexed → nothing (REQ-ACTIVATION-004.A2: the door shows its own guidance).
+    if (!isInitialized(projectRoot)) return;
+
+    // Retire once the agent has actually used retrieval this session
+    // (REQ-ACTIVATION-003) — the per-session marker counts specship lookups.
+    try {
+      const { readSessionMarker } = await import('../statusline/session-marker');
+      const marker = readSessionMarker(projectRoot);
+      if (marker && marker.calls > 0) return;
+    } catch {
+      /* no marker yet → not retired */
+    }
+
+    try {
+      const { default: SpecShip } = await loadSpecShip();
+      const cg = await SpecShip.open(projectRoot);
+      try {
+        const { generateStarterPrompt } = await import('../activation/starter-prompt');
+        const sp = generateStarterPrompt(cg);
+        if (!sp) return; // can't generate (unqueryable index / empty graph) → nothing (REQ-ACTIVATION-004)
+        if (options.json) {
+          console.log(JSON.stringify(sp));
+        } else {
+          console.log(sp.prompt);
+        }
+      } finally {
+        cg.destroy();
+      }
+    } catch {
+      // Index unreadable / FTS5 missing → print nothing (REQ-ACTIVATION-004.A1).
     }
   });
 

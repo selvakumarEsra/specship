@@ -9,6 +9,14 @@ allowed-tools: mcp__specship__specship_explore, mcp__specship__specship_node, mc
 The **reads door** — one entry for every "understand the code" question. Pick the
 behaviour from what `$ARGUMENTS` describes; you do not need a separate command.
 
+## With no arguments — a flow worth trying first
+
+When `$ARGUMENTS` is empty, first run `specship starter-prompt`. If it prints a
+line, surface it to the user as **"A flow worth trying in this repo: `<line>`"** —
+a concrete starter question they can ask to see retrieval in action — then show
+the guidance below. If it prints nothing, just show the guidance below. (It
+deliberately prints nothing once you've already used retrieval this session.)
+
 ## Explore an area / "how does X work" (default)
 
 Call `mcp__specship__specship_explore` with `$ARGUMENTS` as a bag of symbol names
