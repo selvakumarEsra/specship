@@ -1,6 +1,6 @@
 {
   "name": "@specship/specship",
-  "version": "0.11.2",
+  "version": "0.11.3",
   "description": "Supercharge Claude Code with semantic code intelligence. 94% fewer tool calls • 77% faster exploration • 100% local.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -22,7 +22,7 @@
     "build:server": "node scripts/build-server-bundle.mjs",
     "build:web": "node scripts/build-web-bundle.mjs",
     "preuninstall": "node dist/bin/uninstall.js",
-    "copy-assets": "node -e \"const fs=require('fs');fs.mkdirSync('dist/db',{recursive:true});fs.copyFileSync('src/db/schema.sql','dist/db/schema.sql');fs.mkdirSync('dist/extraction/wasm',{recursive:true});fs.readdirSync('src/extraction/wasm').filter(f=>f.endsWith('.wasm')).forEach(f=>fs.copyFileSync('src/extraction/wasm/'+f,'dist/extraction/wasm/'+f));try{fs.mkdirSync('dist/workflows/defaults',{recursive:true});fs.readdirSync('src/workflows/defaults').filter(f=>/\\.ya?ml$/i.test(f)).forEach(f=>fs.copyFileSync('src/workflows/defaults/'+f,'dist/workflows/defaults/'+f))}catch(e){}\"",
+    "copy-assets": "node -e \"const fs=require('fs');fs.mkdirSync('dist/db',{recursive:true});fs.copyFileSync('src/db/schema.sql','dist/db/schema.sql');fs.mkdirSync('dist/extraction/wasm',{recursive:true});fs.readdirSync('src/extraction/wasm').filter(f=>f.endsWith('.wasm')).forEach(f=>fs.copyFileSync('src/extraction/wasm/'+f,'dist/extraction/wasm/'+f));try{fs.mkdirSync('dist/workflows/defaults',{recursive:true});fs.readdirSync('src/workflows/defaults').filter(f=>/\\.ya?ml$/i.test(f)).forEach(f=>fs.copyFileSync('src/workflows/defaults/'+f,'dist/workflows/defaults/'+f))}catch(e){};['commands','agents','hooks','.claude-plugin'].forEach(d=>{try{fs.cpSync(d,'dist/'+d,{recursive:true})}catch(e){}})\"",
     "dev": "tsc --watch",
     "cli": "npm run build && node dist/bin/specship.js",
     "test": "vitest run",

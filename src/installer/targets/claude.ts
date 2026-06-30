@@ -93,13 +93,21 @@ function agentsDir(loc: Location): string {
 }
 
 /**
- * Plugin-asset source dir at the package root — same `commands/`,
- * `agents/`, `hooks/` directories that ship the plugin manifest path.
- * Resolves identically from `src/installer/targets/claude.ts` (dev /
- * test) and `dist/installer/targets/claude.js` (installed npm package).
+ * Resolve a plugin-asset path (`commands/`, `agents/`, …) the installer copies.
+ *
+ * In the **bundled** distribution only `dist/` ships, so `copy-assets` stages
+ * the asset dirs under `dist/` and we resolve `dist/<seg>` first — `__dirname`
+ * is `dist/installer/targets/` in the installed package, so `../../<seg>` →
+ * `dist/<seg>`. We fall back to the package/repo **root** (`../../../<seg>`) for
+ * the non-bundled package and for dev/test runs, where this file executes from
+ * `src/installer/targets/` and the assets live at the repo root. Without the
+ * dist-first lookup, a bundled install hits `ENOENT … /commands/ss-explore.md`
+ * (INSTALL-BUNDLE-ASSETS-DOC).
  */
 function packageAssetPath(...segments: string[]): string {
-  return path.join(__dirname, '..', '..', '..', ...segments);
+  const fromDist = path.join(__dirname, '..', '..', ...segments);
+  const fromRoot = path.join(__dirname, '..', '..', '..', ...segments);
+  return fs.existsSync(fromDist) ? fromDist : fromRoot;
 }
 
 // Slash commands are a small set of progressive DOORS (WORKFLOW-DOORS-DOC),
