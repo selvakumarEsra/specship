@@ -122,6 +122,12 @@ jobs:
           # Confirm the binary is now on PATH.
           which specship || command -v specship
           specship --version
+          # Assert install actually WROTE its plugin assets, not just exited 0
+          # (INSTALL-BUNDLE-ASSETS REQ-002). The bundled package only ships
+          # `dist/`; a build that omits the installer's commands/ + agents/
+          # from the bundle ENOENTs here — the 0.11.2 regression this guards.
+          test -f "$HOME/.claude/commands/ss-explore.md"
+          test -f "$HOME/.claude/agents/specship-explorer.md"
 
       - name: init + index (FTS5 trip-wire)
         # `specship index` is where v0.1.2 crashed with `no such module: fts5`.

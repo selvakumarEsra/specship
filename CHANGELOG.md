@@ -9,6 +9,10 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixes
+
+- **`specship install` works again on the bundled package.** The first bundled release (0.11.2) shipped only its runtime, dropping the slash-command and subagent files the installer copies — so a fresh `specship install` failed with `ENOENT … /commands/ss-explore.md`. The build now ships those assets inside the bundle and the installer finds them, on both the bundled and the plain package. Upgrade with `npm i -g @specship/specship@latest` and re-run `specship install`. (Affected anyone who installed 0.11.2.)
+
 
 ## [0.11.2] - 2026-06-29
 

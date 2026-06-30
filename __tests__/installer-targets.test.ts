@@ -268,6 +268,18 @@ describe('Claude target — specifics', () => {
     }
   });
 
+  it('install copies the specship-explorer subagent asset (INSTALL-BUNDLE-ASSETS REQ-001.A2)', () => {
+    // The slash commands (asserted above) and this subagent are both copied via
+    // packageAssetPath. In the bundled package only `dist/` ships, so the
+    // resolver looks under `dist/` first (copy-assets stages the asset dirs
+    // there) and falls back to the package/repo root. If the asset is missing
+    // from where the resolver looks — the bundled-0.11.2 regression — the file
+    // is never written and this fails (mirrors the install-time ENOENT).
+    claudeTarget.install('local', { autoAllow: false });
+    const agent = path.join(tmpCwd, '.claude', 'agents', 'specship-explorer.md');
+    expect(fs.existsSync(agent)).toBe(true);
+  });
+
   it('install --sdd adds the governance tier on top of retrieval (REQ-WEDGE-002.A1)', () => {
     claudeTarget.install('local', { autoAllow: false, sdd: true });
     const cmds = path.join(tmpCwd, '.claude', 'commands');
