@@ -9,6 +9,9 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+
+## [0.11.4] - 2026-07-01
+
 ### New Features
 
 - **Offline installs no longer need npm or a compiler.** Every release bundle is now self-installing on an air-gapped machine: extract the `specship-<target>` archive and run the `install.sh` (`install.ps1` on Windows) baked inside it — it puts `specship` on your `PATH` and wires Claude Code using only the bundled Node runtime, with nothing compiled or downloaded on the target. Pass `--skip-claude` to install onto `PATH` only, or `--uninstall` to reverse it. `scripts/offline-install.sh` now installs from a pre-built bundle instead of building from source, so it works where there's no toolchain.
@@ -17,7 +20,6 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Fixes
 
 - **Release bundles always contain the latest UI and code.** Building a bundle from a checkout could ship a stale or missing dashboard UI (the dashboard is a separate package whose dependencies the top-level install doesn't fetch), and stale compiled files from renamed/deleted source could linger in the build. Now the dashboard build installs its own dependencies when they're missing, and `scripts/build-bundle.sh` wipes the previous build before recompiling — so every bundle is assembled from a wholly fresh build of the current source, even on a clean checkout.
-
 
 ## [0.11.3] - 2026-06-30
 
@@ -449,3 +451,4 @@ Thanks @andreinknv for the substantive draft this release was based on.
 [0.11.1]: https://github.com/selvakumarEsra/specship/releases/tag/v0.11.1
 [0.11.2]: https://github.com/selvakumarEsra/specship/releases/tag/v0.11.2
 [0.11.3]: https://github.com/selvakumarEsra/specship/releases/tag/v0.11.3
+[0.11.4]: https://github.com/selvakumarEsra/specship/releases/tag/v0.11.4
