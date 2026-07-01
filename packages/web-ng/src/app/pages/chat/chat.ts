@@ -11,9 +11,6 @@ interface ChatMsg {
   role: 'user' | 'assistant';
   text: string;
   tools?: ToolCall[];
-  cost?: number;
-  tokens?: number;
-  model?: string;
 }
 
 // The three command doors (DASH-DOORS-DOC). Each routes a whole family of
@@ -190,10 +187,6 @@ export class Chat implements OnDestroy {
   protected toggleToolCall(m: ChatMsg, tc: ToolCall): void {
     tc.open = !tc.open;
     this.messages.update((msgs) => [...msgs]); // trigger CD
-  }
-
-  protected fmtK(n: number): string {
-    return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : `${n}`;
   }
 
   protected renderMd(s: string): SafeHtml {
