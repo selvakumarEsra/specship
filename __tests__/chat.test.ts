@@ -21,7 +21,7 @@ import Fastify from 'fastify';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import SpecShip from '../src/index';
 import { registerChatRoutes } from '../packages/server/src/routes/chat';
-import { answerFromKnowledgeBase, answerForIntent, extractSubject } from '../packages/server/src/routes/chat-answer';
+import { answerFromKnowledgeBase, answerForIntent, extractSubject, chunkAnswer } from '../packages/server/src/routes/chat-answer';
 import { classifyIntent } from '../packages/server/src/chat/classify';
 
 // ---------------------------------------------------------------------------
@@ -156,6 +156,52 @@ describe('extractSubject (pure)', () => {
     const a = extractSubject('what is a Ledger');
     const b = extractSubject('what is a Ledger');
     expect(a).toEqual(b);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// chunkAnswer — pure presentation chunker for faux-streaming (REQ-DASH-CHAT-003).
+// The one hard invariant: chunks.join('') === answer (A2/A3), so pacing never
+// alters content. Deterministic and I/O-free, unit-testable in isolation.
+// ---------------------------------------------------------------------------
+describe('chunkAnswer (pure)', () => {
+  const samples = [
+    '',
+    'x',
+    'Hi.',
+    'Found 3 symbols matching “recordEntry”: `recordEntry`, `post`, `LedgerService`.',
+    'Related specs: REQ-LEDGER-001 — The ledger records entries.\n\nRelated domain facts: Ledger — an append-only record.',
+    'A'.repeat(500),
+    'word '.repeat(200),
+    'No spaces or punctuation at all just one very long uninterrupted token stringstringstring',
+    'Line one\nLine two\nLine three',
+  ];
+
+  it('reassembles to the original answer for every sample (A2/A3 invariant)', () => {
+    for (const s of samples) {
+      expect(chunkAnswer(s).join('')).toBe(s);
+    }
+  });
+
+  it('returns no chunks for an empty answer', () => {
+    expect(chunkAnswer('')).toEqual([]);
+  });
+
+  it('every chunk is non-empty', () => {
+    for (const s of samples) {
+      for (const c of chunkAnswer(s)) expect(c.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('splits a multi-sentence answer into more than one chunk (progressive reveal)', () => {
+    const long = samples[3];
+    expect(chunkAnswer(long).length).toBeGreaterThan(1);
+  });
+
+  it('is deterministic — identical input yields identical chunks', () => {
+    for (const s of samples) {
+      expect(chunkAnswer(s)).toEqual(chunkAnswer(s));
+    }
   });
 });
 

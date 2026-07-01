@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, ElementRef, computed, signal, inject, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, OnDestroy, computed, signal, inject, viewChild } from '@angular/core';
 import { DomSanitizer, type SafeHtml } from '@angular/platform-browser';
 import { Icon } from '../../shell/icon/icon';
 import { Pill } from '../../ui/pill';
@@ -35,15 +35,18 @@ type ToolAccess = 'ask' | 'safe' | 'all';
   styleUrl: './chat.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class Chat {
+export class Chat implements OnDestroy {
   private readonly sanitizer = inject(DomSanitizer);
   protected readonly api = inject(ApiService);
 
   protected readonly listEl = viewChild<ElementRef<HTMLDivElement>>('listEl');
 
+  /** Teardown for the in-flight faux-stream, if any (called on done/error/destroy). */
+  private closeStream?: () => void;
+
   protected readonly messages = signal<ChatMsg[]>([
     {
-      role: 'assistant', model: 'Opus 4',
+      role: 'assistant',
       text: 'Hi — ask anything about your specs, code, or recent Claude Code sessions.\n\nTry **/ss-spec REQ-AUTH-005** to inspect a requirement, or **/ss-explore validateSession** to walk its callers.',
     },
   ]);
@@ -84,6 +87,15 @@ export class Chat {
     }
   }
 
+  /**
+   * Send the drafted question and faux-stream the deterministic reply.
+   *
+   * Opens the server SSE stream (REQ-DASH-CHAT-003) and grows a placeholder
+   * assistant message as events arrive: `tool` appends the real tool-call card,
+   * `result_summary` fills its truthful output, `chunk` appends answer text, and
+   * `done` closes the stream. No model name, cost, or token count is ever set
+   * (REQ-DASH-CHAT-004) — those would imply an LLM that never ran.
+   */
   protected send(): void {
     const text = this.draft().trim();
     if (!text) return;
@@ -92,23 +104,71 @@ export class Chat {
     this.thinking.set(true);
     this.scrollToBottom();
 
-    setTimeout(() => {
-      this.thinking.set(false);
-      // Intent door (/ss-spec) routes to the spec tool; everything else reads.
-      const toolName = text.startsWith('/ss-spec') ? 'specship_spec' : 'specship_explore';
-      const symbol = text.split(' ')[1] || 'validateSession';
-      this.messages.update((m) => [...m, {
-        role: 'assistant',
-        model: 'Opus 4',
-        text: text.startsWith('/ss-spec')
-          ? 'Looking that up in the graph — the spec resolves to one link. See the **state** pill and linked code below for whether it\'s drifted.'
-          : 'Got it. I\'ll use the specship tools to answer that with structural context rather than re-reading files. Here\'s what I found in the current project\'s graph.',
-        tools: [{ name: toolName, input: symbol, output: '3 nodes · 2 edges returned', status: 'ok' }],
-        cost: +(Math.random() * 0.3 + 0.15).toFixed(2),
-        tokens: Math.round(Math.random() * 8000 + 6000),
-      }]);
-      this.scrollToBottom();
-    }, 1100);
+    // Placeholder assistant message we grow in place as chunks stream in.
+    const idx = this.messages().length;
+    this.messages.update((m) => [...m, { role: 'assistant', text: '', tools: [] }]);
+
+    this.closeStream?.();
+    const path = '/api/chat/stream?question=' + encodeURIComponent(text);
+    this.closeStream = this.api.openEventStream(
+      path,
+      (type, data) => this.onStreamEvent(idx, type, data),
+      () => this.endStream(),
+      ['thinking', 'tool', 'result_summary', 'chunk', 'done'],
+    );
+  }
+
+  /** Apply one streamed event to the assistant message at `idx`. */
+  private onStreamEvent(idx: number, type: string, data: unknown): void {
+    switch (type) {
+      case 'tool': {
+        const d = (data ?? {}) as { name?: string; input?: string };
+        this.patchMsg(idx, (m) => ({
+          ...m,
+          tools: [...(m.tools ?? []), { name: d.name ?? '', input: d.input ?? '', output: '', status: 'ok' }],
+        }));
+        break;
+      }
+      case 'result_summary': {
+        const d = (data ?? {}) as { found?: boolean; sourceCount?: number };
+        const n = d.sourceCount ?? 0;
+        const summary = d.found ? `${n} source${n === 1 ? '' : 's'} returned` : 'no matches in the index';
+        this.patchMsg(idx, (m) => {
+          const tools = m.tools ?? [];
+          if (tools.length === 0) return m;
+          return { ...m, tools: tools.map((t, i) => (i === tools.length - 1 ? { ...t, output: summary } : t)) };
+        });
+        break;
+      }
+      case 'chunk': {
+        const d = (data ?? {}) as { text?: string };
+        const piece = d.text ?? '';
+        this.patchMsg(idx, (m) => ({ ...m, text: m.text + piece }));
+        this.scrollToBottom();
+        break;
+      }
+      case 'done':
+        this.endStream();
+        break;
+    }
+  }
+
+  /** Immutably replace the message at `idx` (signals never mutate in place). */
+  private patchMsg(idx: number, fn: (m: ChatMsg) => ChatMsg): void {
+    this.messages.update((msgs) => msgs.map((m, i) => (i === idx ? fn(m) : m)));
+  }
+
+  /** Stop the thinking indicator and tear down the stream (idempotent). */
+  private endStream(): void {
+    this.thinking.set(false);
+    this.closeStream?.();
+    this.closeStream = undefined;
+    this.scrollToBottom();
+  }
+
+  ngOnDestroy(): void {
+    this.closeStream?.();
+    this.closeStream = undefined;
   }
 
   protected pickSlash(cmd: string): void {

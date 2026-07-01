@@ -198,6 +198,63 @@ export function answerFromKnowledgeBase(cg: SpecShipInstance, question: string):
 }
 
 // =============================================================================
+// Faux-streaming chunker (REQ-DASH-CHAT-003)
+// =============================================================================
+
+/**
+ * Longest slice `chunkAnswer` emits. Sized to a word-group (not a whole
+ * sentence) so even a one-sentence answer streams in several chunks — the
+ * progressive-reveal "typing" effect (REQ-DASH-CHAT-003.A2) rather than one
+ * atomic drop.
+ */
+const MAX_CHUNK_CHARS = 48;
+
+/**
+ * Split a fully-composed answer into ordered presentation chunks.
+ *
+ * The stream route computes the whole answer first, then paces these chunks so
+ * the reply renders progressively like a model typing — but pacing is cosmetics
+ * only, so the **one invariant is `chunkAnswer(answer).join('') === answer`**
+ * (REQ-DASH-CHAT-003.A2/A3): chunk boundaries never add, drop, or reorder a
+ * character. Boundaries prefer a sentence end (`.`/`!`/`?`/`;` before a space or
+ * newline), then a newline, then any space, and finally a hard cut at
+ * `MAX_CHUNK_CHARS` so an unbroken token still streams. Pure and deterministic —
+ * same input always yields the same chunks, no `Date.now()`/`Math.random()`.
+ */
+export function chunkAnswer(answer: string): string[] {
+  const chunks: string[] = [];
+  const n = answer.length;
+  let i = 0;
+  while (i < n) {
+    const hardEnd = Math.min(i + MAX_CHUNK_CHARS, n);
+    if (hardEnd >= n) {
+      chunks.push(answer.slice(i));
+      break;
+    }
+    // Scan the window (i, hardEnd) for the best break, preferring a sentence
+    // end, then a newline, then any space. Each candidate is the index just
+    // AFTER the boundary char so the separator rides the current chunk.
+    let sentenceBreak = -1;
+    let spaceBreak = -1;
+    for (let j = i; j < hardEnd; j++) {
+      const c = answer[j];
+      const next = answer[j + 1];
+      if ((c === '.' || c === '!' || c === '?' || c === ';') && (next === ' ' || next === '\n')) {
+        sentenceBreak = j + 1;
+      } else if (c === '\n') {
+        sentenceBreak = j + 1;
+      } else if (c === ' ') {
+        spaceBreak = j + 1;
+      }
+    }
+    const end = sentenceBreak > i ? sentenceBreak : spaceBreak > i ? spaceBreak : hardEnd;
+    chunks.push(answer.slice(i, end));
+    i = end;
+  }
+  return chunks;
+}
+
+// =============================================================================
 // Intent dispatcher (REQ-DASH-CHAT-002)
 // =============================================================================
 
