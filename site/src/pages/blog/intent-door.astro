@@ -1,0 +1,59 @@
+---
+import Article from '../../layouts/Article.astro';
+---
+<Article slug="intent-door">
+  <svg slot="figure" viewBox="0 0 980 440" preserveAspectRatio="xMidYMid slice">
+    <defs><radialGradient id="id" cx="50%" cy="18%" r="72%"><stop offset="0" stop-color="rgba(165,134,245,0.15)"/><stop offset="1" stop-color="rgba(165,134,245,0)"/></radialGradient></defs>
+    <rect width="980" height="440" fill="url(#id)"/>
+    <path d="M360 400 V190 A130 130 0 0 1 620 190 V400" fill="rgba(10,12,16,0.55)" stroke="rgba(165,134,245,0.4)" stroke-width="2"/>
+    <!-- spec doc -->
+    <rect x="442" y="210" width="96" height="120" rx="10" fill="rgba(165,134,245,0.9)"/>
+    <g stroke="#0A0C10" stroke-width="3.5" stroke-linecap="round"><path d="M462 240 h56"/><path d="M462 262 h56"/><path d="M462 284 h36"/></g>
+    <!-- link to code -->
+    <path d="M538 300 L640 320" stroke="rgba(70,194,107,0.7)" stroke-width="2" stroke-dasharray="5 5"/>
+    <circle cx="648" cy="322" r="12" fill="#46C26B"/>
+    <g font-family="Geist Mono, monospace" font-size="15" fill="rgba(170,185,220,0.75)">
+      <text x="150" y="150">funnel</text><text x="150" y="192">new · fast</text><text x="150" y="234">implement</text>
+      <text x="730" y="150">review</text><text x="730" y="192">triage</text><text x="730" y="234">behaviour · domain</text>
+    </g>
+  </svg>
+
+  <p>Most tools treat what you <em>want</em> as ephemeral — a sentence in a chat that scrolls away the moment the code lands. The requirement lived in your head, briefly in the prompt, and then only in the diff, where the “why” is already lost. SpecShip treats intent as a durable, addressable artifact: a spec, with edges to the exact code that satisfies it. The intent door is where that artifact is born, grows, gets built, and stays honest.</p>
+  <p><code>/ss-spec</code> is one door over the whole lifecycle. It routes on the first word of what you type, so a single command covers browsing, authoring, implementing, reviewing, triaging, testing, and capturing domain knowledge.</p>
+
+  <h2>The funnel behind the door</h2>
+  <p>Open it with no argument and you get the <strong>spec lifecycle funnel</strong>: brainstormed ideas → written specs → implemented-and-linked requirements, with a rollup per document. It's the one screen that answers “where does intent stand in this repo?” — what's been captured, what's been built, what's still just an idea. Under the hood that's <code>specship_spec</code> called with no ID; it reads the spec layer of the graph directly.</p>
+  <p>Hand it a specific ID (<code>/ss-spec REQ-AUTH-005</code>) and it opens that spec: the requirement body, its parent document and sibling requirements, and — the part a plain file can't give you — <strong>the code it links to, with each link's state</strong>: verified, drifted, orphaned. You read the intent and its real implementation side by side, before touching a file.</p>
+
+  <h2>Authoring, at two speeds</h2>
+  <p>A requirement enters the graph one of two ways, and the door offers both because the right one depends on how settled the design is.</p>
+  <div class="art-stats">
+    <div class="as"><div class="v" style="color:#A586F5">new</div><div class="k">the gated authoring loop — scope, ground in the actual code, diverge on 2–3 approaches, gap-fill the questions the graph can’t answer, then write. For when the design isn’t settled.</div></div>
+    <div class="as"><div class="v" style="color:#5B93F2">fast</div><div class="k">the fast-path — ground briefly, pick sensible defaults, and write a clean, well-formed spec without the interview. For a solo dev who wants to record intent and move.</div></div>
+  </div>
+  <p>Both produce the same thing: a spec that indexes cleanly, carries RFC-2119 keywords and independently-checkable acceptance criteria, and is ready to implement. <code>fast</code> trades the interview for speed, not correctness.</p>
+
+  <h2>Implement — plan, gate, build, link</h2>
+  <p><code>/ss-spec implement REQ-X</code> runs the bundled <code>spec-implement</code> workflow in an <strong>isolated git worktree</strong>: it fetches the spec, writes a concrete plan, pauses at an approval gate, implements, verifies, and links the resulting code back to the spec. The isolation means a failed run never touches your working tree; the gate means a non-coding spec author can review the plan before any code is written.</p>
+  <div class="callout">
+    <div class="co-ic" style="background:color-mix(in srgb,#A586F5 16%,transparent);color:#A586F5"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/></svg></div>
+    <div class="co-body"><strong>The link is the contract closing.</strong> After editing code for a spec, the door calls <code>specship_link_assert</code> — declaring “this symbol implements REQ-X.” That edge is what later lets drift detection notice when the code moves out from under the requirement. A spec’s <code>implementations:</code> block is the backstop: it re-asserts the link on every index even if the agent forgets.</div>
+  </div>
+
+  <h2>Review, triage, behaviour, domain</h2>
+  <p>The same door carries the rest of the loop, each as a first-word sub-action:</p>
+  <ul>
+    <li><strong>review</strong> — a read-only rubric pass over a spec: are the embedded IDs and frontmatter valid, are the acceptance criteria testable, is there exactly one concern per requirement, does any <code>implementations:</code> path actually exist? It reports findings and changes nothing.</li>
+    <li><strong>triage</strong> — you paste a bug, an error log, or a one-line enhancement, and it finds the <em>existing spec it belongs to</em> (an error's <code>file:line</code> resolves through the graph to the owning requirement). Then it previews the exact diff — a new acceptance criterion for a regression, a new requirement for a new concern — and only writes on your confirmation.</li>
+    <li><strong>behaviour</strong> — turns a requirement's acceptance criteria into real end-to-end tests (Playwright when there's a UI, a backend test otherwise), links them at the <code>.A&lt;n&gt;</code> criterion, runs them, and reports each result through <code>specship_link_verify</code> so a passing test moves the link to <em>verified</em>.</li>
+    <li><strong>domain</strong> — captures a human-confirmed domain fact (a term, a rule, a decision, a constraint) and links it to the specs and code it governs, so the “why” lives next to the “what.”</li>
+  </ul>
+
+  <div class="pullquote">
+    <p>A chat message says what you want once. A spec says it durably, points at the code that satisfies it, and files a review the day that code quietly changes.</p>
+  </div>
+
+  <h2>Why one door for all of it</h2>
+  <p>Because it's all the same object at different stages of its life. A funnel view, a spec you're reading, a draft you're authoring, a requirement you're building, a bug you're routing back to its source — every one of those is a spec node and its edges to code. Splitting them into seven commands would make you remember which verb lives where; folding them into the intent door means you name the stage and step through.</p>
+  <p>The payoff is traceability that survives the session. Long after the diff merges and the chat is gone, the requirement is still in the graph, still pointing at its code — and the moment someone renames that code, the link goes to <em>drifted</em> and lands in a queue. That queue is the next door.</p>
+</Article>
