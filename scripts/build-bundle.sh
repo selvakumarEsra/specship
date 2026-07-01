@@ -56,8 +56,11 @@ fi
 [ -f "$NODE_BIN" ] || { echo "[bundle] error: node binary not found ($NODE_BIN)" >&2; exit 1; }
 
 # 2. Build the app (compiled JS + copied wasm/schema assets).
+#    `npm run clean` first: `npm run build` overwrites but never deletes, so a
+#    renamed/deleted source file's stale compiled `.js` would otherwise linger in
+#    dist/ and ride into the bundle. Cleaning guarantees a wholly fresh dist/.
 echo "[bundle] building app"
-( cd "$ROOT" && npm run build >/dev/null )
+( cd "$ROOT" && npm run clean >/dev/null && npm run build >/dev/null )
 
 # 3. Stage: app + production-only deps (pure JS/wasm → portable across platforms).
 STAGE="$WORK/specship-${TARGET}"
@@ -83,6 +86,8 @@ if [ "$OSFAM" = "win32" ]; then
   cp "$NODE_BIN" "$STAGE/node.exe"
   printf '@"%%~dp0..\\node.exe" --liftoff-only "%%~dp0..\\lib\\dist\\bin\\specship.js" %%*\r\n' \
     > "$STAGE/bin/specship.cmd"
+  # Self-installing offline installer at the archive root (no npm, no compile).
+  cp "$ROOT/scripts/bundle-install.ps1" "$STAGE/install.ps1"
 else
   cp "$NODE_BIN" "$STAGE/node"
   cat > "$STAGE/bin/specship" <<'LAUNCH'
@@ -102,6 +107,9 @@ DIR="$(cd "$(dirname "$SELF")/.." && pwd)"
 exec "$DIR/node" --liftoff-only "$DIR/lib/dist/bin/specship.js" "$@"
 LAUNCH
   chmod +x "$STAGE/bin/specship"
+  # Self-installing offline installer at the archive root (no npm, no compile).
+  cp "$ROOT/scripts/bundle-install.sh" "$STAGE/install.sh"
+  chmod +x "$STAGE/install.sh"
 fi
 
 # 5. Archive (.zip for Windows, .tar.gz otherwise).
