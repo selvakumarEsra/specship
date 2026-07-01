@@ -4,7 +4,7 @@
     <!-- Thread -->
     <div class="thread scroll-y" #listEl>
       <div class="thread-inner">
-        @for (m of messages(); track $index) {
+        @for (m of messages(); track $index; let i = $index) {
           @if (m.role === 'user') {
             <div class="msg-user">
               <div class="bubble-user" [innerHTML]="renderMd(m.text)"></div>
@@ -43,6 +43,83 @@
                       }
                     </div>
                   }
+                }
+
+                <!--
+                  Full retrieved detail per match (REQ-DASH-CHAT-005.A5): the
+                  concise answer stays above; each match's verbatim graph detail
+                  is one expandable section below it, so depth is one click away.
+                -->
+                @if (m.sources?.length) {
+                  <div class="detail-list">
+                    <div class="eyebrow" style="margin:4px 0 2px;">Retrieved detail · {{ m.sources!.length }}</div>
+                    @for (src of m.sources!; track $index; let j = $index) {
+                      <div class="source-detail">
+                        <button
+                          class="detail-header row gap-8"
+                          type="button"
+                          [attr.aria-expanded]="isDetailOpen(i, j)"
+                          (click)="toggleDetail(i, j)"
+                        >
+                          <app-icon [name]="isDetailOpen(i, j) ? 'chevronDown' : 'chevronRight'" [size]="12" style="color:var(--text-muted);" />
+                          <span class="mono grow" style="font-size:11.5px;">
+                            {{ src.label }}<span class="muted">
+                              @if (src.filePath) { · {{ src.filePath }}@if (src.line) {:{{ src.line }}} }
+                              @else { · {{ src.ref }} }
+                            </span>
+                          </span>
+                          <span class="pill" style="font-size:9.5px;color:var(--text-muted);background:var(--bg-canvas);">{{ src.kind }}</span>
+                        </button>
+                        @if (isDetailOpen(i, j)) {
+                          <div class="detail-body">
+                            @if (src.kind === 'symbol') {
+                              @if (src.detail?.signature) {
+                                <div class="mono detail-sig">{{ src.detail!.signature }}</div>
+                              }
+                              @if (src.detail?.body) {
+                                <pre class="mono detail-src">{{ src.detail!.body }}</pre>
+                              }
+                              @if (src.detail?.callers?.length) {
+                                <div class="detail-rel">
+                                  <div class="mono muted detail-rel-label">callers</div>
+                                  @for (c of src.detail!.callers!; track c.qualifiedName) {
+                                    <div class="mono detail-rel-item">{{ c.name }} <span class="muted">{{ c.filePath }}:{{ c.line }}</span></div>
+                                  }
+                                </div>
+                              }
+                              @if (src.detail?.callees?.length) {
+                                <div class="detail-rel">
+                                  <div class="mono muted detail-rel-label">callees</div>
+                                  @for (c of src.detail!.callees!; track c.qualifiedName) {
+                                    <div class="mono detail-rel-item">{{ c.name }} <span class="muted">{{ c.filePath }}:{{ c.line }}</span></div>
+                                  }
+                                </div>
+                              }
+                            } @else if (src.kind === 'spec') {
+                              @if (src.detail?.body) {
+                                <pre class="mono detail-src">{{ src.detail!.body }}</pre>
+                              }
+                              @if (src.detail?.links?.length) {
+                                <div class="detail-rel">
+                                  <div class="mono muted detail-rel-label">links</div>
+                                  @for (l of src.detail!.links!; track l.target) {
+                                    <div class="row gap-8 detail-rel-item">
+                                      <span class="mono grow">{{ l.target }}</span>
+                                      <app-state-pill [state]="l.state" />
+                                    </div>
+                                  }
+                                </div>
+                              }
+                            } @else {
+                              @if (src.detail?.body) {
+                                <pre class="mono detail-src">{{ src.detail!.body }}</pre>
+                              }
+                            }
+                          </div>
+                        }
+                      </div>
+                    }
+                  </div>
                 }
               </div>
             </div>

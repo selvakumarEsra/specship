@@ -13,7 +13,15 @@ import { ApiService } from '../../api/api';
  *   - `thinking` toggles and the stream close-fn fires on `done` and on destroy.
  */
 
-interface ChatMsgView { role: string; text: string; tools?: { name: string; input: string; output: string }[]; model?: string; cost?: number; tokens?: number; }
+interface ChatSourceView {
+  kind: 'symbol' | 'spec' | 'domain';
+  ref: string;
+  label: string;
+  filePath?: string;
+  line?: number;
+  detail?: { signature?: string; body?: string; callers?: { name: string; qualifiedName: string; filePath: string; line: number }[]; callees?: { name: string; qualifiedName: string; filePath: string; line: number }[]; links?: { target: string; state: string }[] };
+}
+interface ChatMsgView { role: string; text: string; tools?: { name: string; input: string; output: string }[]; sources?: ChatSourceView[]; model?: string; cost?: number; tokens?: number; }
 
 class MockApiService {
   path?: string;
@@ -59,6 +67,7 @@ function makeComponent() {
     messages: { (): ChatMsgView[] };
     send(): void;
     ngOnDestroy(): void;
+    toggleDetail(msgIndex: number, sourceIndex: number): void;
   };
   return { fixture, api, comp };
 }
@@ -139,6 +148,55 @@ describe('Chat', () => {
 
     const last = comp.messages()[comp.messages().length - 1];
     expect(last.tools![0].output).toBe('no matches in the index');
+  });
+
+  it('renders each match detail in an expandable section below the answer, answer preserved (A5)', () => {
+    const { fixture, api, comp } = makeComponent();
+    comp.draft.set('how does recordEntry work');
+    comp.send();
+    const feed = api.onEvent!;
+    feed('tool', { name: 'specship_explore', input: 'recordEntry' });
+    feed('result_summary', { found: true, sourceCount: 1 });
+    feed('chunk', { text: 'Found 1 symbol matching recordEntry.' });
+    feed('done', {
+      found: true,
+      sources: [
+        {
+          kind: 'symbol',
+          ref: 'src/ledger.ts::recordEntry',
+          label: 'recordEntry',
+          filePath: 'src/ledger.ts',
+          line: 2,
+          detail: {
+            signature: 'recordEntry(amount: number): void',
+            body: 'export function recordEntry(amount: number): void {}',
+            callers: [{ name: 'post', qualifiedName: 'src/ledger.ts::LedgerService.post', filePath: 'src/ledger.ts', line: 6 }],
+            callees: [],
+          },
+        },
+      ],
+    });
+    fixture.detectChanges();
+
+    const last = comp.messages()[comp.messages().length - 1];
+    // The composed answer text is untouched — detail is additive, not a replacement (A5).
+    expect(last.text).toBe('Found 1 symbol matching recordEntry.');
+    expect(last.sources?.length).toBe(1);
+
+    const host = fixture.nativeElement as HTMLElement;
+    const header = host.querySelector('.detail-header');
+    const bubble = host.querySelector('.bubble-asst');
+    expect(header).toBeTruthy();
+    expect(bubble).toBeTruthy();
+    // The expandable section is rendered BELOW the answer bubble.
+    expect(bubble!.compareDocumentPosition(header!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    // Collapsed by default; expanding reveals the verbatim body and callers.
+    expect(host.querySelector('.detail-body')).toBeNull();
+    comp.toggleDetail(comp.messages().length - 1, 0);
+    fixture.detectChanges();
+    expect(host.querySelector('.detail-src')?.textContent).toContain('export function recordEntry');
+    expect(host.querySelector('.detail-rel')?.textContent).toContain('post');
   });
 
   it('tears down an in-flight stream on destroy', () => {
