@@ -19,6 +19,19 @@ export default defineConfig({
      * there, so the variable is a no-op.
      */
     env: { SPECSHIP_ALLOW_UNSAFE_NODE: '1' },
+    /**
+     * Run test files in child-process forks and put `--liftoff-only` on each
+     * fork's command line. Compiling tree-sitter's large WASM grammars on V8's
+     * turboshaft optimizing tier OOMs the process (`Fatal … Zone`) on Node >= 22,
+     * even with tens of GB free (see src/extraction/wasm-runtime-flags.ts, #293/#298).
+     * The CLI self-relaunches with this flag; the test runner can't, so the full
+     * suite crashed 3 grammar-heavy files on Node 24. `--liftoff-only` can't ride
+     * `NODE_OPTIONS` or a worker_thread's `execArgv` (both reject it) — but a
+     * child-process fork's `execArgv` accepts it, and a fork governs the WASM
+     * compilation of any parse-worker it spawns. So flagging the forks fixes it.
+     */
+    pool: 'forks',
+    poolOptions: { forks: { execArgv: ['--liftoff-only'] } },
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
