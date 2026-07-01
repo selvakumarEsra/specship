@@ -14,9 +14,6 @@
               <div class="row gap-8 asst-meta">
                 <app-logo-mark [size]="22" [glow]="false" aria-hidden="true" />
                 <span style="font-size:12px;font-weight:600;">specship</span>
-                @if (m.model) {
-                  <span class="mono muted" style="font-size:10.5px;">{{ m.model }}</span>
-                }
               </div>
               <div class="asst-body">
                 <div class="bubble-asst" [innerHTML]="renderMd(m.text)"></div>
@@ -46,14 +43,6 @@
                       }
                     </div>
                   }
-                }
-                @if (m.cost != null) {
-                  <div class="row gap-8 muted" style="margin-top:10px;font-size:10.5px;font-family:var(--font-mono);">
-                    <app-icon name="coins" [size]="11" />
-                    ${{ m.cost!.toFixed(2) }}
-                    <span>·</span>
-                    {{ fmtK(m.tokens!) }} tokens
-                  </div>
                 }
               </div>
             </div>
