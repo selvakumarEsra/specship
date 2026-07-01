@@ -42,6 +42,40 @@ export function usageFromStatuslineInput(raw: string): UsageLimits | null {
   return { session, weekly };
 }
 
+/**
+ * Parse Claude Code's status-line stdin JSON for context-window usage
+ * (REQ-STATUSLINE-009). Returns `context_window.used_percentage` (0-100) or null
+ * when it's absent, null (early session), or unparseable.
+ */
+export function contextFromStatuslineInput(raw: string): number | null {
+  let json: Record<string, unknown>;
+  try {
+    json = JSON.parse(raw) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+  const cw = json.context_window;
+  if (!cw || typeof cw !== 'object') return null;
+  const used = (cw as Record<string, unknown>).used_percentage;
+  if (typeof used !== 'number' || !Number.isFinite(used)) return null;
+  return Math.max(0, Math.min(100, used));
+}
+
+/** Default context-usage warning threshold (percent). */
+const DEFAULT_CTX_WARN_PCT = 80;
+
+/**
+ * Resolve the context-usage warning threshold from `SPECSHIP_CTX_WARN_PCT`
+ * (REQ-STATUSLINE-009), falling back to the default when unset, non-numeric, or
+ * out of the 0-100 range.
+ */
+export function resolveCtxWarnPct(raw: string | undefined = process.env.SPECSHIP_CTX_WARN_PCT): number {
+  if (raw == null || raw.trim() === '') return DEFAULT_CTX_WARN_PCT;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 0 || n > 100) return DEFAULT_CTX_WARN_PCT;
+  return n;
+}
+
 /** One `rate_limits.{five_hour,seven_day}` entry → a remaining-capacity window. */
 function windowFromRateLimit(w: unknown): UsageWindow | null {
   if (!w || typeof w !== 'object') return null;

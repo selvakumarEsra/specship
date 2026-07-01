@@ -9,6 +9,10 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### New Features
+
+- **The status line warns before your context fills up.** When Claude Code reports how much of the context window is in use, the `specship statusline` segment now shows a `CTX` bar with the percentage used, and escalates to a `⚠ compact` hint once it crosses a threshold (default 80%, set `SPECSHIP_CTX_WARN_PCT` to change it) — a heads-up to compact before the conversation gets inefficient. It's advisory only: SpecShip surfaces the real number Claude provides but can't compact for you (the host handles that, and already auto-compacts near the limit).
+
 
 ## [0.11.4] - 2026-07-01
 

@@ -14,7 +14,7 @@ import { SPECSHIP_DIR } from '../directory';
 import { readStatuslineCache } from './cache';
 import { readSessionMarker } from './session-marker';
 import { readActiveRun } from './active-run';
-import { readUsageLimits, usageFromStatuslineInput } from './usage-limits';
+import { readUsageLimits, usageFromStatuslineInput, contextFromStatuslineInput, resolveCtxWarnPct } from './usage-limits';
 import { renderSegment } from './render';
 
 export * from './types';
@@ -76,10 +76,13 @@ export function buildSegment(rawStdin: string, noColor = !!process.env.NO_COLOR)
   // formats reset times in local time.
   const usage = usageFromStatuslineInput(rawStdin) ?? readUsageLimits();
   const now = Date.now();
+  // Context-usage element (REQ-STATUSLINE-009) — from the same stdin.
+  const context = contextFromStatuslineInput(rawStdin);
+  const ctxWarnPct = resolveCtxWarnPct();
 
   if (!root) {
     // No SpecShip project here — render the idle degraded line.
-    return renderSegment({ cache: null, marker: null, run: null, usage, now, noColor });
+    return renderSegment({ cache: null, marker: null, run: null, usage, now, context, ctxWarnPct, noColor });
   }
 
   return renderSegment({
@@ -88,6 +91,8 @@ export function buildSegment(rawStdin: string, noColor = !!process.env.NO_COLOR)
     run: readActiveRun(root),
     usage,
     now,
+    context,
+    ctxWarnPct,
     noColor,
   });
 }

@@ -27,6 +27,13 @@ export interface RenderInput {
    * time; keeps this function pure (no clock). Required when `usage` is present.
    */
   now?: number;
+  /**
+   * Claude's `context_window.used_percentage` (0-100) from stdin, or null/undefined
+   * to omit the CTX element (REQ-STATUSLINE-009). SpecShip never fabricates it.
+   */
+  context?: number | null;
+  /** Context-usage warning threshold (percent); CTX escalates at/above it. */
+  ctxWarnPct?: number;
   /** When true, emit no ANSI escapes. */
   noColor: boolean;
 }
@@ -81,7 +88,7 @@ function paint(noColor: boolean, code: number, s: string): string {
  * a minimal `◈ specship … ◈` when caches are absent rather than erroring.
  */
 export function renderSegment(input: RenderInput): string {
-  const { cache, marker, run, usage, now, noColor } = input;
+  const { cache, marker, run, usage, now, context, ctxWarnPct, noColor } = input;
   const c = (code: number, s: string) => paint(noColor, code, s);
 
   const orn = c(COLOR.orn, '◈');
@@ -116,6 +123,16 @@ export function renderSegment(input: RenderInput): string {
   if (run) {
     const label = run.specId ? `${run.specId}·${run.status}` : run.status;
     parts.push(c(COLOR.run, label));
+  }
+
+  // Context-usage element (REQ-STATUSLINE-009) — Claude's real context %, with
+  // an escalating compaction warning past the threshold. Advisory only;
+  // SpecShip cannot compact. Omitted when no real percentage is available.
+  if (context != null && Number.isFinite(context)) {
+    const warn = context >= (ctxWarnPct ?? 80);
+    const color = warn ? COLOR.pending : COLOR.calls; // amber when high, else gold
+    const hint = warn ? ' ⚠ compact' : '';
+    parts.push(c(color, `CTX ${bar(context)} ${Math.round(context)}%${hint}`));
   }
 
   // Usage-limit sub-segment (REQ-STATUSLINE-008) — ONLY for windows with real
