@@ -1,0 +1,86 @@
+---
+import Article from '../../layouts/Article.astro';
+---
+<Article slug="reads-door">
+  <svg slot="figure" viewBox="0 0 980 440" preserveAspectRatio="xMidYMid slice">
+    <defs><radialGradient id="rd" cx="50%" cy="18%" r="72%"><stop offset="0" stop-color="rgba(41,210,190,0.15)"/><stop offset="1" stop-color="rgba(41,210,190,0)"/></radialGradient></defs>
+    <rect width="980" height="440" fill="url(#rd)"/>
+    <!-- the door -->
+    <path d="M360 400 V190 A130 130 0 0 1 620 190 V400" fill="rgba(10,12,16,0.55)" stroke="rgba(41,210,190,0.4)" stroke-width="2"/>
+    <!-- the flow behind it -->
+    <g stroke="rgba(150,165,200,0.35)" stroke-width="2" fill="none">
+      <path d="M430 330 L490 240 L560 300"/>
+    </g>
+    <circle cx="430" cy="330" r="13" fill="#5B93F2"/>
+    <circle cx="490" cy="240" r="16" fill="#29D2BE"/><circle cx="490" cy="240" r="6" fill="#0A0C10"/>
+    <circle cx="560" cy="300" r="13" fill="#46C26B"/>
+    <g font-family="Geist Mono, monospace" font-size="16" fill="rgba(170,185,220,0.75)">
+      <text x="150" y="150">explore</text>
+      <text x="150" y="196">node</text>
+      <text x="150" y="242">search</text>
+      <text x="720" y="150">callers</text>
+      <text x="720" y="196">callees</text>
+      <text x="720" y="242">impact</text>
+    </g>
+  </svg>
+
+  <p>An agent working in an unfamiliar codebase spends most of its budget on one thing: <em>figuring out what the code does</em>. Grep for a name, read the file, follow an import, read that file, grep again. Each hop is a tool call and a few thousand tokens of source pasted into the context, and most of it gets read once and never used. That loop is where sessions go slow and expensive.</p>
+  <p>SpecShip collapses that whole loop into a single door. Type <code>/ss-explore</code>, describe what you want to understand, and the graph answers — no grep, no Read, no file-hopping. This is the post about that door and the six tools behind it.</p>
+
+  <h2>One door, not six commands</h2>
+  <p>The temptation with a code-intelligence tool is to expose a command per capability: one for callers, one for callees, one for impact, one for tracing, one for search. That's honest to the internals and useless to the agent — now it has to <em>choose</em> the right tool before it even understands the problem, and choosing wrong means a wasted round-trip.</p>
+  <p>So the reads door takes intent, not tool names. You say what you're trying to understand; the door picks the behaviour from the shape of the request:</p>
+  <div class="art-stats">
+    <div class="as"><div class="v" style="color:#29D2BE">an area</div><div class="k">“how does X work” → explore that region</div></div>
+    <div class="as"><div class="v" style="color:#5B93F2">a flow</div><div class="k">“how does X reach Y” → trace the path between them</div></div>
+    <div class="as"><div class="v" style="color:#F2555A">a change</div><div class="k">“what breaks if I touch X” → the blast radius</div></div>
+  </div>
+  <p>Same door, three questions. The agent never has to know which underlying tool serves which — it describes the goal and walks through.</p>
+
+  <h2>The default: “how does X work”</h2>
+  <p>Most reads are this one, and they resolve through <code>specship_explore</code> — the primary tool of the door. You hand it a <strong>bag of symbol names</strong> (include qualified <code>Class.method</code> forms when you have them), and it returns the verbatim source of those symbols, grouped by file, plus any call path it can synthesize between them. One capped call, Read-equivalent.</p>
+  <p>The rule that makes it work is a discipline the door enforces on the agent:</p>
+  <div class="callout">
+    <div class="co-ic" style="background:color-mix(in srgb,#29D2BE 16%,transparent);color:#29D2BE"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div>
+    <div class="co-body"><strong>Treat the returned source as already Read.</strong> Explore hands back the real code, so re-Reading the same file is pure waste. If a giant “god file” truncates the output, the answer isn’t to Read it — it’s to call explore again with a tighter bag of symbols. The door steers there deliberately, because the instant an agent falls back to Read, the whole economy collapses.</div>
+  </div>
+  <p>When you need <em>one</em> symbol in full — its complete body, its signature, and its caller/callee trail — that's <code>specship_node</code>, the door's secondary tool. Its quiet superpower is overloads: ask for an ambiguous name and it returns <strong>every matching definition's body in a single call</strong>, so the agent never Reads a file just to find the right one.</p>
+
+  <h2>Trace a flow — across the hops grep can’t follow</h2>
+  <p>“How does updating an element re-render the canvas?” isn't a search — it's a <em>path</em>. You call <code>specship_explore</code> and name the symbols that span the flow, both ends (<code>mutateElement renderScene</code>), and it surfaces the call path among them.</p>
+  <p>The part grep structurally cannot do: SpecShip rides <strong>dynamic-dispatch hops</strong>. Callbacks, EventEmitter wiring, a React <code>setState</code>→render, a JSX child mounting — these are edges no text search will ever find, because the call target is computed at runtime, not written next to the caller. SpecShip synthesizes those edges into the graph, so a trace connects end-to-end even where the source has a gap. If you only have half a name to start from, <code>specship_search</code> locates the symbol first, then you hand it to explore.</p>
+  <div class="pullquote">
+    <p>Grep finds the lines that mention a name. The reads door finds the path a value actually travels — including the three hops where the code never mentions the next function at all.</p>
+  </div>
+
+  <h2>Blast radius — “what breaks if I change this”</h2>
+  <p>Before you touch a symbol, you want the dependents. <code>specship_impact</code> returns the <strong>transitive</strong> set — everything that would feel the change, however many hops away. When you want just one hop in either direction, <code>specship_callers</code> (who calls this) and <code>specship_callees</code> (what this calls) answer instantly. It's the difference between “is this safe to rename?” and a half-hour of manual dependency archaeology.</p>
+
+  <h2>The tools behind the door</h2>
+  <div class="art-stats">
+    <div class="as"><div class="v" style="color:#29D2BE">explore</div><div class="k">primary — a bag of symbols → their source, grouped by file, plus the synthesized flow. Usually the only call you need.</div></div>
+    <div class="as"><div class="v" style="color:#5B93F2">node</div><div class="k">one symbol in full — body, signature, trail; every overload in a single call.</div></div>
+    <div class="as"><div class="v" style="color:#A586F5">search</div><div class="k">locate a symbol by (partial) name when you don’t have the exact one.</div></div>
+    <div class="as"><div class="v" style="color:#46C26B">callers / callees</div><div class="k">one hop in or out — who calls this, what this calls.</div></div>
+    <div class="as"><div class="v" style="color:#F2555A">impact</div><div class="k">the transitive blast radius of changing a symbol.</div></div>
+  </div>
+
+  <h2>A flow worth trying, on your first run</h2>
+  <p>Open the door with no argument and it does something small but deliberate: it prints <em>a concrete question worth asking in your repo</em> — a real flow it has verified actually connects, like <code>How does GET /api/orders reach OrderService.create?</code> — so your very first move can be watching the agent answer a genuine cross-file question by exploring the index instead of reading files. It bows out on its own once you've started using retrieval this session; it's a nudge, not a nag.</p>
+
+  <div class="codeblock">
+    <div class="cb-bar"><div class="traffic"><i style="background:#F2555A"></i><i style="background:#E5A50A"></i><i style="background:#46C26B"></i></div><span class="fn">the reads door, three ways</span></div>
+    <pre><span class="c-com"># understand an area</span>
+/ss-explore <span class="c-str">AuthService.login rate-limit enforce</span>
+
+<span class="c-com"># trace a flow (name both ends)</span>
+/ss-explore <span class="c-str">mutateElement renderScene</span>
+
+<span class="c-com"># blast radius</span>
+/ss-explore <span class="c-str">impact of SessionToken.rotate</span></pre>
+  </div>
+
+  <h2>Why it’s a door and not a menu</h2>
+  <p>The index is kept fresh automatically — edit a file, and once it settles the graph already reflects it (force it with <code>specship sync</code> if you're impatient). So the door is always answering from current code, and it's answering the one question the agent actually has: <em>what does this do, and what touches it?</em> It gathers that in one to a few fast calls with zero Reads, where the grep-and-read version would be dozens of turns over an ever-growing pile of pasted source.</p>
+  <p>That's the whole point of a door. You don't stand in front of it choosing between six handles. You say where you're going, and it opens.</p>
+</Article>

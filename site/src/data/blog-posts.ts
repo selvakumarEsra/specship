@@ -32,7 +32,42 @@ const slBars = (() => {
 })();
 const statuslineThumb = `<svg viewBox="0 0 360 200" preserveAspectRatio="xMidYMid slice"><rect width="360" height="200" fill="rgba(229,165,10,0.08)"/><path d="M70 100 L80 88 L90 100 L80 112 Z" fill="#E5A50A"/><path d="M286 100 L296 88 L306 100 L296 112 Z" fill="#E5A50A"/><g transform="translate(104,88)">${slBars}</g></svg>`;
 
+// Door-arch motif: a rounded archway (the "door") with the tools behind it,
+// tinted to the door's accent. Shared shape, different contents per door.
+const doorArch = (stroke: string) =>
+  `<path d="M120 172 V96 A60 60 0 0 1 240 96 V172" fill="none" stroke="${stroke}" stroke-width="2"/>`;
+
 export const posts: BlogPost[] = [
+  {
+    slug: 'reads-door',
+    cat: 'doors', catLabel: 'Doors', catColor: '#29D2BE',
+    title: 'The reads door: one entrance for every “understand the code” question',
+    dek: 'Explore an area, trace a flow across dynamic-dispatch hops grep can’t follow, or get a change’s blast radius — through a single door. You name the symbols; the graph hands back their source, already Read. Six tools, one entrance, and the agent never has to pick.',
+    date: 'Jul 1, 2026', read: '9 min', feat: true,
+    tags: ['#doors', '#retrieval', '#explore', '#impact'],
+    thumbBg: 'rgba(41,210,190,0.10)',
+    thumb: `<svg viewBox="0 0 360 200" preserveAspectRatio="xMidYMid slice"><rect width="360" height="200" fill="rgba(41,210,190,0.09)"/>${doorArch('rgba(41,210,190,0.55)')}<g stroke="rgba(150,165,200,0.35)" stroke-width="1.4" fill="none"><path d="M150 150 L180 110 L210 140"/></g><circle cx="150" cy="150" r="7" fill="#5B93F2"/><circle cx="180" cy="110" r="8" fill="#29D2BE"/><circle cx="210" cy="140" r="7" fill="#46C26B"/></svg>`,
+  },
+  {
+    slug: 'intent-door',
+    cat: 'doors', catLabel: 'Doors', catColor: '#A586F5',
+    title: 'The intent door: from a one-line idea to shipped, linked code',
+    dek: 'Browse the spec funnel, author or fast-path a requirement, implement it in an isolated worktree, review it against a rubric, triage a bug to the spec it belongs to, or capture a domain fact — all behind one door. Intent becomes a first-class artifact, and the spec is the contract.',
+    date: 'Jul 1, 2026', read: '10 min', feat: true,
+    tags: ['#doors', '#specs', '#workflows', '#requirements'],
+    thumbBg: 'rgba(165,134,245,0.10)',
+    thumb: `<svg viewBox="0 0 360 200" preserveAspectRatio="xMidYMid slice"><rect width="360" height="200" fill="rgba(165,134,245,0.09)"/>${doorArch('rgba(165,134,245,0.55)')}<rect x="158" y="104" width="44" height="54" rx="6" fill="rgba(165,134,245,0.85)"/><path d="M166 118 h28 M166 128 h28 M166 138 h18" stroke="#12161E" stroke-width="2" stroke-linecap="round"/></svg>`,
+  },
+  {
+    slug: 'gate-door',
+    cat: 'doors', catLabel: 'Doors', catColor: '#F2555A',
+    title: 'The gate door: the checkpoint your agent has to pass',
+    dek: 'Run the enforcement gate, work the drift queue, repair a broken spec↔code link, and read graph-derived code health — one door that keeps intent and code honest. Drift is a signal, not a failure, and the gate only bites when you ask it to.',
+    date: 'Jul 1, 2026', read: '9 min',
+    tags: ['#doors', '#drift', '#maintainability', '#ci'],
+    thumbBg: 'rgba(242,85,90,0.10)',
+    thumb: `<svg viewBox="0 0 360 200" preserveAspectRatio="xMidYMid slice"><rect width="360" height="200" fill="rgba(242,85,90,0.08)"/>${doorArch('rgba(242,85,90,0.5)')}<path d="M180 100 L206 110 V134 C206 152 194 160 180 166 C166 160 154 152 154 134 V110 Z" fill="none" stroke="rgba(150,165,200,0.4)" stroke-width="1.6"/><path d="M168 132 L177 142 L194 120" fill="none" stroke="#46C26B" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  },
   {
     slug: 'prompt-quality',
     cat: 'claude-code', catLabel: 'Claude Code', catColor: '#5B93F2',
@@ -157,6 +192,7 @@ export const posts: BlogPost[] = [
 
 export const categories = [
   { key: 'all', label: 'All posts', color: '' },
+  { key: 'doors', label: 'Doors', color: '#29D2BE' },
   { key: 'statusline', label: 'Status Line', color: '#E5A50A' },
   { key: 'graph', label: 'Knowledge Graph', color: 'var(--node-spec)' },
   { key: 'harness', label: 'Harness Engineering', color: '#F2555A' },
