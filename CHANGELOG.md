@@ -9,6 +9,15 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### New Features
+
+- **Offline installs no longer need npm or a compiler.** Every release bundle is now self-installing on an air-gapped machine: extract the `specship-<target>` archive and run the `install.sh` (`install.ps1` on Windows) baked inside it — it puts `specship` on your `PATH` and wires Claude Code using only the bundled Node runtime, with nothing compiled or downloaded on the target. Pass `--skip-claude` to install onto `PATH` only, or `--uninstall` to reverse it. `scripts/offline-install.sh` now installs from a pre-built bundle instead of building from source, so it works where there's no toolchain.
+- **The status line can now show your Claude usage limits.** On Pro/Max, the `specship statusline` segment reads Claude Code's own 5-hour and weekly rate-limit data (provided on the status-line input) and shows how much of each window you've used as bars with reset times in your local timezone — e.g. `5h ❮▰▰▰▱▱❯ 58% (4pm) ◆ 7d ❮▰▱▱▱▱❯ 27% (6/29, 2pm)`. No extra tooling needed. SpecShip only displays the real numbers Claude provides; a window with no data (free tier, or before the first response of a session) is simply hidden — never estimated. An optional `SPECSHIP_USAGE_FILE` (`~/.specship/usage-limits.json`) can supply the numbers for setups that don't get them on stdin.
+
+### Fixes
+
+- **Release bundles always contain the latest UI and code.** Building a bundle from a checkout could ship a stale or missing dashboard UI (the dashboard is a separate package whose dependencies the top-level install doesn't fetch), and stale compiled files from renamed/deleted source could linger in the build. Now the dashboard build installs its own dependencies when they're missing, and `scripts/build-bundle.sh` wipes the previous build before recompiling — so every bundle is assembled from a wholly fresh build of the current source, even on a clean checkout.
+
 
 ## [0.11.3] - 2026-06-30
 

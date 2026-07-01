@@ -3,7 +3,7 @@ id: SHIP-STATUSLINE-DOC
 title: SpecShip status-line segment
 owner: core
 priority: medium
-version: 1
+version: 2
 ---
 
 <!-- id: SHIP-STATUSLINE-DOC -->
@@ -14,7 +14,11 @@ statusline` subcommand that reads Claude Code's status-line JSON on stdin and
 prints a single styled line to stdout, which the user appends to their own
 status-line script (the same way other status-line producers compose in). The
 segment surfaces, at a glance: index sync state, SQLite backend health, the
-number of specship lookups made this session, and the active workflow run.
+number of specship lookups made this session, and the active workflow run. It
+can ALSO surface an optional Claude Code usage-limit sub-segment (5h session and
+weekly capacity used, with reset times) — sourced from Claude Code's own
+status-line `rate_limits` (or an optional override file), never computed or
+estimated by SpecShip itself (REQ-STATUSLINE-008).
 
 Two hard design constraints shape every requirement below:
 
@@ -208,3 +212,71 @@ implementations:
 - A user-authored `statusLine.command` that install left in place is unchanged after uninstall.
 <!-- id: REQ-STATUSLINE-007.A3 -->
 - Uninstall on a `settings.json` that has no SpecShip-marked `statusLine` block makes no change to the `statusLine` key.
+
+<!-- id: REQ-STATUSLINE-008 -->
+## The segment MUST render a usage-limit sub-segment from Claude's stdin rate_limits (or an optional override file), and MUST omit any window whose data is absent or not real
+
+Claude Code itself supplies the real usage data on the status-line stdin JSON:
+a `rate_limits` object with a `five_hour` and a `seven_day` window, each carrying
+`used_percentage` (0–100) and `resets_at` (Unix epoch seconds). It is present
+only for Pro/Max subscribers, only after the first API response of the session,
+and each window may be **independently absent**. This stdin `rate_limits` object
+is the PRIMARY source; SpecShip MUST NOT estimate or fabricate any of it (the
+honesty constraint, REQ-STATUSLINE-005) — it only reflects what Claude provides.
+
+As an OPTIONAL override for setups where the stdin `rate_limits` are not present,
+the reader MAY also read an account-wide file (default
+`~/.specship/usage-limits.json`, overridable via `SPECSHIP_USAGE_FILE`) that an
+external tool writes, with this schema (a window with `pctRemaining` 0–100 and an
+ISO-8601 `resetAt`, plus an ISO-8601 `updatedAt` used for a freshness window —
+default 15 minutes `[needs review]`):
+
+```
+{
+  "updatedAt": "<ISO-8601>",
+  "session":   { "pctUsed": <0-100>, "resetAt": "<ISO-8601>" },
+  "weekly":    { "pctUsed": <0-100>, "resetAt": "<ISO-8601>" }
+}
+```
+
+For each window that has real data, the segment appends a bar in the project's
+art-deco style (`❮▰▱❯`): a `5h` bar for the 5-hour window and a `7d` bar for the
+weekly window. Each shows the percentage **used** (for the stdin source, the
+`used_percentage` value directly) and the reset time rendered in the **machine's
+local timezone** — time-only when the reset is later the same local day (e.g.
+`5h ❮▰▰▱❯ 42% (4pm)`), and date + time when it falls on another day (e.g.
+`7d ❮▰▱▱❯ 73% (6/29, 2pm)`). The bar depicts capacity *used* (fuller = closer to
+the limit). The
+sub-segment reflects the source values exactly and never shows a savings figure
+(it is a limit indicator, not REQ-STATUSLINE-005's call-count savings stand-in).
+
+The reader path obeys REQ-STATUSLINE-002's performance rule: parsing stdin and at
+most one bounded file read, with no database, subprocess, or network I/O.
+Whenever a window's data is not real — `rate_limits` (or that window) is absent
+on stdin and no valid override file applies, the file is unreadable / not valid
+JSON / missing the field / stale beyond the freshness window — that window's bar
+is omitted **entirely**: no bar, no placeholder, no estimated number. When
+neither window has data, the whole sub-segment is omitted and the rest of the
+segment (sync state, calls, run) renders unchanged.
+
+implementations:
+  - src/statusline/usage-limits.ts:usageFromStatuslineInput
+  - src/statusline/usage-limits.ts:readUsageLimits
+  - src/statusline/render.ts:renderSegment
+  - src/statusline/index.ts:buildSegment
+
+## Acceptance
+<!-- id: REQ-STATUSLINE-008.A1 -->
+- Given a stdin `rate_limits` with both windows, the segment includes a `5h` bar showing `five_hour.used_percentage` and a `7d` bar showing `seven_day.used_percentage`, each followed by its reset time derived from `resets_at`.
+<!-- id: REQ-STATUSLINE-008.A2 -->
+- Reset times are formatted in the machine's local timezone: a reset later the same local day shows time only (e.g. `(4pm)`); a reset on a different day shows date and time (e.g. `(6/29, 2pm)`).
+<!-- id: REQ-STATUSLINE-008.A3 -->
+- The displayed values are derived only from the source (stdin `rate_limits` or the override file); the command fabricates no usage figure of its own, and `resets_at` (epoch seconds) is converted faithfully to the local reset time.
+<!-- id: REQ-STATUSLINE-008.A4 -->
+- When stdin carries no `rate_limits` and no valid override file applies, the usage-limit sub-segment is omitted entirely and the rest of the segment renders unchanged.
+<!-- id: REQ-STATUSLINE-008.A5 -->
+- A window present on stdin while the other is absent renders only the present window; an override file that is unparseable, missing a field, or stale beyond the freshness window contributes nothing — no estimated or placeholder numbers are shown.
+<!-- id: REQ-STATUSLINE-008.A6 -->
+- Rendering the usage-limit sub-segment opens no SQLite connection, spawns no child process, and performs no network I/O (same bounded-read budget as REQ-STATUSLINE-002).
+<!-- id: REQ-STATUSLINE-008.A7 -->
+- Under `NO_COLOR`, the usage-limit sub-segment contains no ANSI escape sequences (bars and percentages render as plain text).

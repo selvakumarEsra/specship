@@ -1,149 +1,107 @@
 #!/usr/bin/env bash
 #
-# Offline / air-gapped install of SpecShip from this source folder.
+# Offline / air-gapped install of SpecShip from a PRE-BUILT self-contained
+# bundle. No npm, no compiler, no network — the bundle vendors its own Node
+# runtime, so nothing is built on the target machine.
 #
-# Assumes the client workstation has:
-#   - Node.js (>=18 <25) and npm on PATH
-#   - npm configured against a registry it CAN reach (e.g. a private mirror)
-#   - No git, no public GitHub access required
+# This is NOT a build-from-source flow. Point it at a release bundle for the
+# target's platform — an extracted `specship-<target>/` directory, or a
+# `specship-<target>.tar.gz` / `.zip` archive — and it delegates to the
+# installer baked inside that bundle (which symlinks the launcher onto PATH and
+# wires Claude Code via the vendored Node).
 #
-# Does NOT call git, does NOT download anything from github.com. Dependencies
-# are pulled from whatever registry npm is already pointed at.
+# Get a bundle from the GitHub Releases page on a connected machine, or build
+# one with scripts/build-bundle.sh. To install from a source checkout instead
+# (requires a toolchain), see the "install from source" docs.
 #
 # Usage:
-#   ./scripts/offline-install.sh                    # build, link, wire Claude Code
-#   ./scripts/offline-install.sh --skip-claude      # build + link only
-#   ./scripts/offline-install.sh --undo             # unlink the global symlink
+#   ./scripts/offline-install.sh <bundle>                 # install + wire Claude Code
+#   ./scripts/offline-install.sh <bundle> --skip-claude   # install only
+#   ./scripts/offline-install.sh --undo                   # reverse the install
 #
-# After install:  `specship --version` should print the package.json version.
+# Environment:
+#   SPECSHIP_INSTALL_DIR  install location  (default: ~/.specship)
+#   SPECSHIP_BIN_DIR      symlink location  (default: ~/.local/bin)
 
 set -euo pipefail
 
-cd "$(dirname "$0")/.."
-REPO="$(pwd)"
+INSTALL_DIR="${SPECSHIP_INSTALL_DIR:-$HOME/.specship}"
+BIN_DIR="${SPECSHIP_BIN_DIR:-$HOME/.local/bin}"
 
-PKG=$(node -p "require('./package.json').name")
-VERSION=$(node -p "require('./package.json').version")
-
-# --- undo path ---------------------------------------------------------------
-if [ "${1:-}" = "--undo" ]; then
-  echo "[offline-install] unlinking ${PKG}"
-  npm unlink -g "${PKG}" >/dev/null 2>&1 || true
-  echo "[offline-install] done"
+# --- undo --------------------------------------------------------------------
+if [ "${1:-}" = "--undo" ] || [ "${1:-}" = "--uninstall" ]; then
+  if [ -x "$INSTALL_DIR/current/install.sh" ]; then
+    SPECSHIP_INSTALL_DIR="$INSTALL_DIR" SPECSHIP_BIN_DIR="$BIN_DIR" \
+      sh "$INSTALL_DIR/current/install.sh" --uninstall
+  else
+    rm -f "$BIN_DIR/specship"
+    rm -rf "$INSTALL_DIR"
+    echo "SpecShip uninstalled (removed $INSTALL_DIR and $BIN_DIR/specship)."
+  fi
   exit 0
 fi
 
-SKIP_CLAUDE=0
-[ "${1:-}" = "--skip-claude" ] && SKIP_CLAUDE=1
+# --- parse args: <bundle> plus passthrough flags -----------------------------
+BUNDLE_ARG=""
+PASS=""
+for a in "$@"; do
+  case "$a" in
+    --skip-claude) PASS="$PASS --skip-claude" ;;
+    -*) echo "offline-install: unknown option '$a'" >&2; exit 1 ;;
+    *) BUNDLE_ARG="$a" ;;
+  esac
+done
 
-# --- Node version gate -------------------------------------------------------
-# Tighter than package.json engines (>=18 <25): the runtime needs node:sqlite
-# (Node 22.5+) AND that SQLite must have FTS5 compiled in. SpecShip's own
-# release bundle pins v24.16.0 for that reason; older Node builds either lack
-# node:sqlite entirely or ship SQLite without FTS5.
-NODE_MAJOR=$(node -p "process.versions.node.split('.')[0]")
-NODE_MINOR=$(node -p "process.versions.node.split('.')[1]")
-if [ "$NODE_MAJOR" -lt 22 ] \
-  || { [ "$NODE_MAJOR" -eq 22 ] && [ "$NODE_MINOR" -lt 5 ]; } \
-  || [ "$NODE_MAJOR" -ge 25 ]; then
-  echo "[offline-install] error: Node $(node --version) is unsupported. Requires >=22.5 <25 (Node 24.x recommended)." >&2
+if [ -z "$BUNDLE_ARG" ]; then
+  cat >&2 <<'EOF'
+offline-install: need a pre-built bundle (no npm, no compiler required).
+
+Point this at a release bundle for the target machine:
+  ./scripts/offline-install.sh path/to/specship-<target>.tar.gz
+  ./scripts/offline-install.sh path/to/specship-<target>/      # extracted dir
+
+Bundles come from the GitHub Releases page, or scripts/build-bundle.sh on a
+connected machine. (Building from a source checkout requires a toolchain and is
+a different flow.)
+EOF
   exit 1
 fi
 
-# --- FTS5 capability probe ---------------------------------------------------
-# Fail fast with a clear remediation message instead of letting `specship init`
-# die with a cryptic "no such module: fts5" deep inside indexing. node:sqlite
-# is present from 22.5+, but FTS5 is only enabled in newer Node builds —
-# Node 22.x typically ships SQLite without it.
-PROBE=$(node -e "
-  try {
-    const { DatabaseSync } = require('node:sqlite');
-    const db = new DatabaseSync(':memory:');
-    db.exec('CREATE VIRTUAL TABLE t USING fts5(x)');
-    console.log('OK');
-  } catch (e) {
-    console.log('FAIL:' + e.message);
-  }
-" 2>/dev/null)
-case "$PROBE" in
-  OK) ;;
-  FAIL:*)
-    cat >&2 <<EOF
-[offline-install] error: SQLite probe failed: ${PROBE#FAIL:}
+# --- resolve the bundle dir (extract if it's an archive) ---------------------
+CLEANUP=""
+cleanup() { [ -n "$CLEANUP" ] && rm -rf "$CLEANUP"; return 0; }
+trap cleanup EXIT
 
-SpecShip requires Node.js whose bundled SQLite has FTS5 enabled. Your Node
-($(node --version)) does not. Install Node 24.x and re-run:
-
-  nvm install 24 && nvm use 24
-  ./scripts/offline-install.sh
-
-(SpecShip's release bundle pins v24.16.0 as the known-good version.)
-EOF
-    exit 1
-    ;;
-  *)
-    echo "[offline-install] error: unable to probe node:sqlite. Need Node >=22.5 (24.x recommended)." >&2
-    exit 1
-    ;;
-esac
-
-echo "[offline-install] repo:    ${REPO}"
-echo "[offline-install] package: ${PKG}@${VERSION}"
-echo "[offline-install] node:    $(node --version)"
-echo "[offline-install] registry: $(npm config get registry)"
-
-# --- install deps (offline-friendly: respects whatever registry npm is on) ---
-#
-# --ignore-scripts skips native-module postinstalls (notably better-sqlite3,
-# whose node-gyp rebuild needs a C toolchain that an air-gapped workstation
-# usually doesn't have). SpecShip treats better-sqlite3 as optional anyway —
-# without it the wasm SQLite path takes over, which is what the offline-
-# install flow expects.
-if [ -f package-lock.json ]; then
-  echo "[offline-install] npm ci --ignore-scripts"
-  npm ci --ignore-scripts
+if [ -d "$BUNDLE_ARG" ]; then
+  BUNDLE_DIR="$(cd "$BUNDLE_ARG" && pwd)"
 else
-  echo "[offline-install] npm install --ignore-scripts"
-  npm install --ignore-scripts
+  case "$BUNDLE_ARG" in
+    *.tar.gz|*.tgz)
+      CLEANUP="$(mktemp -d)"
+      tar -xzf "$BUNDLE_ARG" -C "$CLEANUP"
+      BUNDLE_DIR="$(find "$CLEANUP" -maxdepth 1 -type d -name 'specship-*' | head -n1)"
+      [ -n "$BUNDLE_DIR" ] || BUNDLE_DIR="$CLEANUP"
+      ;;
+    *.zip)
+      CLEANUP="$(mktemp -d)"
+      unzip -q "$BUNDLE_ARG" -d "$CLEANUP"
+      BUNDLE_DIR="$(find "$CLEANUP" -maxdepth 1 -type d -name 'specship-*' | head -n1)"
+      [ -n "$BUNDLE_DIR" ] || BUNDLE_DIR="$CLEANUP"
+      ;;
+    *)
+      echo "offline-install: '$BUNDLE_ARG' is not a directory or a .tar.gz/.zip bundle." >&2
+      exit 1
+      ;;
+  esac
 fi
 
-# --- build -------------------------------------------------------------------
-# Skip the build when this is a pre-compiled drop (no tsconfig.json + a
-# populated dist/ already on disk). The release tarball is shipped pre-built;
-# only a source checkout has tsconfig.json and needs `npm run build`.
-if [ -f tsconfig.json ]; then
-  echo "[offline-install] npm run build"
-  npm run build
-else
-  echo "[offline-install] skipping build (pre-compiled dist/ found)"
+# --- sanity: does this look like a SpecShip bundle? --------------------------
+if [ ! -f "$BUNDLE_DIR/install.sh" ] || [ ! -e "$BUNDLE_DIR/bin/specship" ]; then
+  echo "offline-install: '$BUNDLE_DIR' is not a SpecShip bundle (missing install.sh / bin/specship)." >&2
+  exit 1
 fi
 
-# --- link as global specship ------------------------------------------------
-echo "[offline-install] npm link"
-npm link
-
-LINKED=$(command -v specship || echo "(not on PATH)")
-echo "[offline-install] specship -> ${LINKED}"
-
-# --- wire Claude Code (non-interactive) --------------------------------------
-# Invoke the just-built binary directly instead of relying on `specship` being
-# visible on PATH in this shell session — `npm link`'s shim may not be picked
-# up until the user opens a new shell.
-if [ "$SKIP_CLAUDE" -eq 0 ]; then
-  echo "[offline-install] wiring Claude Code"
-  node "$REPO/dist/bin/specship.js" install --target claude -y
-fi
-
-cat <<EOF
-
-✓ SpecShip ${VERSION} installed offline from source.
-  binary:    ${LINKED}
-  source:    ${REPO}
-
-Next:
-  specship --version
-  cd <your-project> && specship init && specship index
-
-To uninstall:
-  ./scripts/offline-install.sh --undo
-EOF
+# --- delegate to the bundle's own offline installer --------------------------
+echo "[offline-install] installing from bundle: $BUNDLE_DIR"
+SPECSHIP_INSTALL_DIR="$INSTALL_DIR" SPECSHIP_BIN_DIR="$BIN_DIR" \
+  sh "$BUNDLE_DIR/install.sh" $PASS

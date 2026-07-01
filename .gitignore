@@ -63,6 +63,11 @@ release/
 # Local-only: browser-based tmux session launcher (see tmux-web/README.md)
 tmux-web/
 
+# Generated dashboard build for the server package (produced by
+# packages/server/scripts/copy-web.mjs / `npm run build:web`). A build artifact,
+# not source — don't commit it (it goes stale). Regenerate on demand.
+packages/server/public/web/
+
 assets/__pycache__/
 
 assets/generate-waitlist.py

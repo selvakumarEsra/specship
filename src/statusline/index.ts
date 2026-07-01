@@ -14,6 +14,7 @@ import { SPECSHIP_DIR } from '../directory';
 import { readStatuslineCache } from './cache';
 import { readSessionMarker } from './session-marker';
 import { readActiveRun } from './active-run';
+import { readUsageLimits, usageFromStatuslineInput } from './usage-limits';
 import { renderSegment } from './render';
 
 export * from './types';
@@ -68,15 +69,25 @@ export function buildSegment(rawStdin: string, noColor = !!process.env.NO_COLOR)
     root = null;
   }
 
+  // Usage limits are account-wide (not per-project), so resolve them regardless
+  // of whether we found a SpecShip project. Primary source is Claude's own
+  // status-line `rate_limits` on stdin (real, includes reset times); an external
+  // file is an optional override for setups where stdin lacks them. `now`
+  // formats reset times in local time.
+  const usage = usageFromStatuslineInput(rawStdin) ?? readUsageLimits();
+  const now = Date.now();
+
   if (!root) {
     // No SpecShip project here — render the idle degraded line.
-    return renderSegment({ cache: null, marker: null, run: null, noColor });
+    return renderSegment({ cache: null, marker: null, run: null, usage, now, noColor });
   }
 
   return renderSegment({
     cache: readStatuslineCache(root),
     marker: readSessionMarker(root),
     run: readActiveRun(root),
+    usage,
+    now,
     noColor,
   });
 }

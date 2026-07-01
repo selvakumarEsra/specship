@@ -27,14 +27,15 @@ No particular Node.js version to manage — the published install bundles its ow
 npm i -g @specship/specship@latest
 ```
 
-Offline / air-gapped client workstation? Clone or copy this repo onto the machine and run:
+Offline / air-gapped machine? No npm, no compiler, and no network needed. Every release is a **self-contained bundle** (a vendored Node runtime plus the app). On a connected machine, download the archive matching the offline machine's platform from the [Releases page](https://github.com/selvakumarEsra/specship/releases), copy it across, extract it, and run the installer baked inside:
 
 ```bash
-./scripts/offline-install.sh        # macOS / Linux
-.\scripts\offline-install.ps1       # Windows
+tar -xzf specship-<target>.tar.gz   # or unzip specship-<target>.zip on Windows
+cd specship-<target>
+./install.sh                        # .\install.ps1 on Windows
 ```
 
-The offline installer probes for FTS5 up front, runs `npm install` against whatever registry npm is already pointed at (your private mirror is fine), builds, `npm link`s, and wires Claude Code — no GitHub access required.
+That symlinks `specship` onto your `PATH` and wires Claude Code using only the bundled runtime — nothing is compiled on the target. From a checkout, `./scripts/offline-install.sh <bundle>` (`.ps1` on Windows) does the same given a downloaded bundle. See [Offline / air-gapped install](https://specship.dev/getting-started/installation/#offline--air-gapped-install) for the full walkthrough.
 
 ### 2. Wire up Claude Code
 

@@ -36,9 +36,21 @@ if (!skip) {
   const ngBin = process.platform === 'win32'
     ? path.join(webPkg, 'node_modules', '.bin', 'ng.cmd')
     : path.join(webPkg, 'node_modules', '.bin', 'ng');
+  // Self-heal: the dashboard has its OWN lockfile, so the repo-root `npm ci`
+  // never installs it. When the Angular CLI is absent (a clean checkout, or a
+  // direct `scripts/build-bundle.sh` run), install the dashboard deps here so
+  // the bundle always ships the current UI instead of failing or going stale.
   if (!existsSync(ngBin)) {
-    console.error(`[build-web-bundle] Angular CLI not found at ${ngBin} — run \`cd packages/web-ng && npm install\` first`);
-    process.exit(1);
+    const npmBin = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+    const installArgs = existsSync(path.join(webPkg, 'package-lock.json'))
+      ? ['ci', '--no-audit', '--no-fund']
+      : ['install', '--no-audit', '--no-fund'];
+    console.log(`[build-web-bundle] Angular CLI missing — installing dashboard deps (npm ${installArgs[0]} in packages/web-ng)`);
+    execFileSync(npmBin, installArgs, { stdio: 'inherit', cwd: webPkg });
+    if (!existsSync(ngBin)) {
+      console.error(`[build-web-bundle] Angular CLI still missing at ${ngBin} after install — aborting rather than shipping a stale UI`);
+      process.exit(1);
+    }
   }
   execFileSync(ngBin, ['build', '--configuration', config], { stdio: 'inherit', cwd: webPkg });
 }
