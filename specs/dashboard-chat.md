@@ -83,13 +83,16 @@ implementations:
 - A message that matches no intent runs a full-text search and returns the top matching symbols / specs / domain facts.
 <!-- id: REQ-DASH-CHAT-002.A4 -->
 - Classification is a pure function of the message text (no model, no I/O in the classify step) and is unit-testable in isolation.
+<!-- id: REQ-DASH-CHAT-002.A5 -->
+- "what does X call" routes to callees and "what's drifted" routes to the drift queue, so every intent in the launch set (callers, callees, impact, explore, spec, drift, domain, search) has a routing case.
 
 <!-- id: REQ-DASH-CHAT-003 -->
-## Answers MUST be composed from real results and faux-streamed over SSE like a typing assistant
+## Answers MUST be composed from real results and faux-streamed incrementally like a typing assistant
 
 The endpoint composes the query results into a prose answer using templates that
-fill slots from the real data, then streams it to the client over Server-Sent
-Events as a sequence of events — a thinking indicator, the tool/query being run
+fill slots from the real data, then streams it to the client incrementally (e.g.
+over Server-Sent Events) as a sequence of events — a thinking indicator, the
+tool/query being run
 with its input, the query's result summary, then the answer in incremental
 chunks, then a done event. The full answer is computed deterministically before
 streaming; the chunking is presentation pacing only (a small inter-chunk delay)
@@ -102,7 +105,7 @@ implementations:
 
 ## Acceptance
 <!-- id: REQ-DASH-CHAT-003.A1 -->
-- Sending a message opens an SSE stream that emits, in order: a thinking event, a tool/query event (name + input), a result-summary event, one or more answer-chunk events, and a terminal done event.
+- Sending a message opens an incremental event stream that emits, in order: a thinking event, a tool/query event (name + input), a result-summary event, one or more answer-chunk events, and a terminal done event.
 <!-- id: REQ-DASH-CHAT-003.A2 -->
 - The answer text arrives in multiple chunks over time (progressive reveal), and the concatenation of the chunks equals the fully-composed answer.
 <!-- id: REQ-DASH-CHAT-003.A3 -->
