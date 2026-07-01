@@ -3,7 +3,7 @@ id: SHIP-STATUSLINE-DOC
 title: SpecShip status-line segment
 owner: core
 priority: medium
-version: 2
+version: 3
 ---
 
 <!-- id: SHIP-STATUSLINE-DOC -->
@@ -280,3 +280,50 @@ implementations:
 - Rendering the usage-limit sub-segment opens no SQLite connection, spawns no child process, and performs no network I/O (same bounded-read budget as REQ-STATUSLINE-002).
 <!-- id: REQ-STATUSLINE-008.A7 -->
 - Under `NO_COLOR`, the usage-limit sub-segment contains no ANSI escape sequences (bars and percentages render as plain text).
+
+<!-- id: REQ-STATUSLINE-009 -->
+## The segment MUST show a context-usage bar that escalates to a compaction warning past a configurable threshold
+
+SpecShip cannot compact the conversation — the host (Claude Code) owns the
+context window and its automatic compaction, and no MCP server, hook, or command
+can trigger a compaction. What SpecShip CAN do is make context pressure
+**visible** so the user compacts (or lets the host auto-compact) before the
+conversation gets inefficient. The status-line stdin is the only channel that
+carries context usage, so this lives in the segment.
+
+When Claude Code's status-line stdin carries `context_window.used_percentage`
+(0–100; it may be null early in a session), the segment renders a `CTX` bar in
+the project's art-deco style (`❮▰▱❯`) showing the percentage of the context
+window used. When that percentage is at or above a **configurable inefficiency
+threshold** — default 80% `[needs review]`, overridable via the
+`SPECSHIP_CTX_WARN_PCT` environment variable — the `CTX` element renders in a
+distinct warning style and appends a short compaction hint (e.g. `⚠ compact`);
+below the threshold it renders neutral with no hint. An unset or invalid
+`SPECSHIP_CTX_WARN_PCT` falls back to the default.
+
+The value is Claude's own real `used_percentage` (never fabricated or
+estimated — the honesty constraint, REQ-STATUSLINE-005), and the hint is
+advisory: SpecShip cannot and does not perform the compaction itself. The reader
+obeys REQ-STATUSLINE-002's budget — it only parses the stdin it already
+receives, with no database, subprocess, or network I/O. When
+`context_window.used_percentage` is absent or null, the `CTX` element is omitted
+entirely.
+
+implementations:
+  - src/statusline/usage-limits.ts:contextFromStatuslineInput
+  - src/statusline/render.ts:renderSegment
+  - src/statusline/index.ts:buildSegment
+
+## Acceptance
+<!-- id: REQ-STATUSLINE-009.A1 -->
+- Given a stdin `context_window.used_percentage`, the segment includes a `CTX` bar showing that percentage.
+<!-- id: REQ-STATUSLINE-009.A2 -->
+- When `used_percentage` is at or above the threshold, the `CTX` element renders in a distinct warning style and appends a compaction hint; below the threshold it renders neutral with no hint.
+<!-- id: REQ-STATUSLINE-009.A3 -->
+- The threshold defaults to 80% and is overridden by a valid `SPECSHIP_CTX_WARN_PCT`; an unset or non-numeric / out-of-range value uses the default.
+<!-- id: REQ-STATUSLINE-009.A4 -->
+- When `context_window.used_percentage` is absent or null, the `CTX` element is omitted entirely (no bar, no warning) and the rest of the segment renders unchanged.
+<!-- id: REQ-STATUSLINE-009.A5 -->
+- Under `NO_COLOR`, the `CTX` element (bar, percentage, and any warning hint) contains no ANSI escape sequences.
+<!-- id: REQ-STATUSLINE-009.A6 -->
+- Rendering the `CTX` element opens no SQLite connection, spawns no child process, and performs no network I/O (same bounded-read budget as REQ-STATUSLINE-002).
