@@ -17,8 +17,13 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Fixes
 
 - **Release bundles always contain the latest UI and code.** Building a bundle from a checkout could ship a stale or missing dashboard UI (the dashboard is a separate package whose dependencies the top-level install doesn't fetch), and stale compiled files from renamed/deleted source could linger in the build. Now the dashboard build installs its own dependencies when they're missing, and `scripts/build-bundle.sh` wipes the previous build before recompiling — so every bundle is assembled from a wholly fresh build of the current source, even on a clean checkout.
-- **`specship install` works again on the bundled package.** The first bundled release (0.11.2) shipped only its runtime, dropping the slash-command and subagent files the installer copies — so a fresh `specship install` failed with `ENOENT … /commands/ss-explore.md`. The build now ships those assets inside the bundle and the installer finds them, on both the bundled and the plain package. Upgrade with `npm i -g @specship/specship@latest` and re-run `specship install`. (Affected anyone who installed 0.11.2.)
 
+
+## [0.11.3] - 2026-06-30
+
+### Fixes
+
+- **`specship install` works again on the bundled package.** The first bundled release (0.11.2) shipped only its runtime, dropping the slash-command and subagent files the installer copies — so a fresh `specship install` failed with `ENOENT … /commands/ss-explore.md`. The build now ships those assets inside the bundle and the installer finds them, on both the bundled and the plain package. Upgrade with `npm i -g @specship/specship@latest` and re-run `specship install`. (Affected anyone who installed 0.11.2.)
 
 ## [0.11.2] - 2026-06-29
 
@@ -443,3 +448,4 @@ Thanks @andreinknv for the substantive draft this release was based on.
 [0.11.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.11.0
 [0.11.1]: https://github.com/selvakumarEsra/specship/releases/tag/v0.11.1
 [0.11.2]: https://github.com/selvakumarEsra/specship/releases/tag/v0.11.2
+[0.11.3]: https://github.com/selvakumarEsra/specship/releases/tag/v0.11.3
