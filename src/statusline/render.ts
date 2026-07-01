@@ -10,14 +10,50 @@
  * as "N calls" — what specship was asked, not a fabricated counterfactual.
  */
 
-import { StatuslineCache, SessionMarker, ActiveRun } from './types';
+import { StatuslineCache, SessionMarker, ActiveRun, UsageLimits } from './types';
 
 export interface RenderInput {
   cache: StatuslineCache | null;
   marker: SessionMarker | null;
   run: ActiveRun | null;
+  /**
+   * Real Claude Code usage limits from the external usage file (REQ-STATUSLINE-008),
+   * or null/undefined to omit the usage sub-segment entirely. SpecShip never
+   * estimates these — null in, nothing rendered.
+   */
+  usage?: UsageLimits | null;
+  /**
+   * Current time (ms epoch) used ONLY to format `usage` reset times in local
+   * time; keeps this function pure (no clock). Required when `usage` is present.
+   */
+  now?: number;
   /** When true, emit no ANSI escapes. */
   noColor: boolean;
+}
+
+/** A 5-cell art-deco bar (`❮▰▱❯`) depicting `pct` (0-100) capacity used. */
+function bar(pct: number): string {
+  const cells = 5;
+  const filled = Math.max(0, Math.min(cells, Math.round((pct / 100) * cells)));
+  return `❮${'▰'.repeat(filled)}${'▱'.repeat(cells - filled)}❯`;
+}
+
+/**
+ * Format a reset instant in the machine's local timezone: time-only when it
+ * falls on the same local day as `now` (e.g. `(4pm)`), date + time otherwise
+ * (e.g. `(6/29, 2pm)`). Minutes shown only when non-zero.
+ */
+function formatReset(resetMs: number, nowMs: number): string {
+  const r = new Date(resetMs);
+  const n = new Date(nowMs);
+  const h = r.getHours();
+  const m = r.getMinutes();
+  const ampm = h < 12 ? 'am' : 'pm';
+  const h12 = h % 12 || 12;
+  const time = m === 0 ? `${h12}${ampm}` : `${h12}:${String(m).padStart(2, '0')}${ampm}`;
+  const sameDay =
+    r.getFullYear() === n.getFullYear() && r.getMonth() === n.getMonth() && r.getDate() === n.getDate();
+  return sameDay ? `(${time})` : `(${r.getMonth() + 1}/${r.getDate()}, ${time})`;
 }
 
 const ESC = '\u001b';
@@ -45,7 +81,7 @@ function paint(noColor: boolean, code: number, s: string): string {
  * a minimal `◈ specship … ◈` when caches are absent rather than erroring.
  */
 export function renderSegment(input: RenderInput): string {
-  const { cache, marker, run, noColor } = input;
+  const { cache, marker, run, usage, now, noColor } = input;
   const c = (code: number, s: string) => paint(noColor, code, s);
 
   const orn = c(COLOR.orn, '◈');
@@ -80,6 +116,18 @@ export function renderSegment(input: RenderInput): string {
   if (run) {
     const label = run.specId ? `${run.specId}·${run.status}` : run.status;
     parts.push(c(COLOR.run, label));
+  }
+
+  // Usage-limit sub-segment (REQ-STATUSLINE-008) — ONLY for windows with real
+  // numbers; SpecShip never estimates. `now` formats reset times in local time.
+  if (usage && now != null) {
+    const win = (label: string, w: { pctUsed: number; resetAt: number } | null) => {
+      if (!w) return;
+      const reset = Number.isFinite(w.resetAt) ? ` ${formatReset(w.resetAt, now)}` : '';
+      parts.push(c(COLOR.calls, `${label} ${bar(w.pctUsed)} ${Math.round(w.pctUsed)}%${reset}`));
+    };
+    win('5h', usage.session);
+    win('7d', usage.weekly);
   }
 
   return `${orn} ${brand}${sep}${parts.join(sep)} ${orn}`;

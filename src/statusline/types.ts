@@ -53,6 +53,32 @@ export interface SessionMarker {
   lastAt: number | null;
 }
 
+/**
+ * A single rolling-window usage limit, as written by the external usage tool
+ * (REQ-STATUSLINE-008). SpecShip never computes these — it reflects the file.
+ */
+export interface UsageWindow {
+  /** 0-100, percent of this window's capacity consumed (Claude's `used_percentage`). */
+  pctUsed: number;
+  /** ms epoch when this window resets (from `resets_at` epoch-s / the file's ISO `resetAt`). */
+  resetAt: number;
+}
+
+/**
+ * Validated usage-limit data. The primary source is Claude Code's status-line
+ * stdin `rate_limits` object; an external file (`$SPECSHIP_USAGE_FILE` /
+ * `~/.specship/usage-limits.json`) is an optional override. Either window may be
+ * independently absent (the docs note `five_hour`/`seven_day` can each be
+ * missing); a window is `null` when its data isn't present. The whole object is
+ * null when neither window is available, and the segment omits the sub-segment.
+ */
+export interface UsageLimits {
+  /** The 5-hour rolling session window, or null when absent. */
+  session: UsageWindow | null;
+  /** The weekly (7-day) window, or null when absent. */
+  weekly: UsageWindow | null;
+}
+
 /** The active (or most recent) workflow run for the project. */
 export interface ActiveRun {
   v: 1;
