@@ -133,3 +133,41 @@ implementations:
 - The tool-call card shows the capability actually invoked, the actual input, and a result summary computed from the query result (not a constant string).
 <!-- id: REQ-DASH-CHAT-004.A3 -->
 - The previous mock behaviour — fixed-delay canned reply, random cost/tokens, hardcoded tool output — is no longer present in the send path.
+
+<!-- id: REQ-DASH-CHAT-005 -->
+## For any query the chat MUST surface the full retrieved graph detail per match, bounded and ranked, not just a summary
+
+Today the answer is a composed prose gloss plus lightweight source references
+(label + file:line), capped at a handful of matches. For any query the chat MUST
+also surface the **full detail the graph actually holds** for each match, so the
+user sees everything retrieved rather than a trimmed summary:
+
+- **symbol** → its verbatim source body, its signature, and its immediate
+  callers and callees (Read-equivalent depth);
+- **spec** → its full body and the code it links to, each with its link state;
+- **domain fact** → its full body.
+
+The full-detail set MUST be **bounded and ranked**: the top matches by relevance
+up to a configurable cap (default 15 `[needs review]`, raising the current
+five-per-store limit), so a broad query cannot return unbounded content. All
+detail MUST be derived only from the index — verbatim and real, never
+fabricated — and MUST be deterministic across repeat calls on an unchanged index
+(consistent with REQ-DASH-CHAT-001). The concise composed answer stays on top;
+the chat UI MUST render each match's full detail in an **expandable section**
+below it, so depth is one interaction away without drowning the answer.
+
+implementations:
+  - packages/server/src/routes/chat-answer.ts:answerForIntent
+  - packages/web-ng/src/app/pages/chat/chat.ts:Chat
+
+## Acceptance
+<!-- id: REQ-DASH-CHAT-005.A1 -->
+- For a symbol match, the returned detail includes the symbol's verbatim source body, its signature, and its immediate callers and callees.
+<!-- id: REQ-DASH-CHAT-005.A2 -->
+- For a spec match, the detail includes the spec's full body and the code it links to with each link's state; for a domain-fact match, the full fact body.
+<!-- id: REQ-DASH-CHAT-005.A3 -->
+- The full-detail matches are ranked by relevance and bounded by the configured cap (greater than the current five, default 15); a broad query does not return unbounded content.
+<!-- id: REQ-DASH-CHAT-005.A4 -->
+- Every detail is derived only from the index (verbatim, with a source ref back to the row) and is byte-identical across repeat calls on an unchanged index; nothing is invented.
+<!-- id: REQ-DASH-CHAT-005.A5 -->
+- The chat UI renders each match's full detail in an expandable section, with the concise composed answer shown above it (the answer is not replaced by the raw detail).
