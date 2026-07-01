@@ -15,13 +15,16 @@
  * server never runtime-imports the `@specship/specship` package (which would
  * silently serve a stale build).
  *
- * Faux-streaming (REQ-DASH-CHAT-003) and the classifier (REQ-DASH-CHAT-002)
- * are separate requirements; this endpoint returns the fully-composed answer in
- * one JSON response.
+ * The question is routed by the deterministic, I/O-free classifier
+ * (`../chat/classify.ts`, REQ-DASH-CHAT-002) to the matching knowledge-base
+ * query via `answerForIntent`. Faux-streaming (REQ-DASH-CHAT-003) is a separate
+ * requirement; this endpoint returns the fully-composed answer in one JSON
+ * response.
  */
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import { answerFromKnowledgeBase } from './chat-answer.js';
+import { answerForIntent } from './chat-answer.js';
+import { classifyIntent } from '../chat/classify.js';
 
 export async function registerChatRoutes(app: FastifyInstance): Promise<void> {
   app.post('/api/chat', async (req: FastifyRequest, reply: FastifyReply) => {
@@ -38,7 +41,8 @@ export async function registerChatRoutes(app: FastifyInstance): Promise<void> {
       return;
     }
 
-    const { found, answer, sources } = answerFromKnowledgeBase(cg, question);
+    const classified = classifyIntent(question);
+    const { found, answer, sources } = answerForIntent(cg, classified);
     return { found, answer, sources };
   });
 }
