@@ -27,8 +27,55 @@
  * would silently serve a stale build).
  */
 
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { SpecShipInstance } from '../project-registry.js';
 import type { ClassifiedIntent } from '../chat/classify.js';
+
+/** A pointer to one graph symbol — the shape a symbol detail's neighbours take. */
+export interface SymbolRef {
+  /** Simple name. */
+  name: string;
+  /** Fully-qualified name (stable identity). */
+  qualifiedName: string;
+  /** File the symbol lives in, relative to the project root. */
+  filePath: string;
+  /** 1-indexed start line. */
+  line: number;
+}
+
+/**
+ * Full retrieved detail for a symbol match (REQ-DASH-CHAT-005.A1) — the graph's
+ * Read-equivalent depth: verbatim source body, signature, and the immediate
+ * callers/callees. All derived from the index, never fabricated.
+ */
+export interface SymbolDetail {
+  /** The symbol's signature, when the extractor captured one. */
+  signature?: string;
+  /** Verbatim source body — the exact lines from the file, never synthesized. */
+  body: string;
+  /** Immediate callers (1 hop), deduped and stable-sorted by qualified name. */
+  callers: SymbolRef[];
+  /** Immediate callees (1 hop), deduped and stable-sorted by qualified name. */
+  callees: SymbolRef[];
+}
+
+/** Full retrieved detail for a spec match (REQ-DASH-CHAT-005.A2). */
+export interface SpecDetail {
+  /** The spec's full body, verbatim. */
+  body: string;
+  /** The code the spec links to, each with its current link state. */
+  links: { target: string; state: string }[];
+}
+
+/** Full retrieved detail for a domain-fact match (REQ-DASH-CHAT-005.A2). */
+export interface DomainDetail {
+  /** The fact's full body, verbatim. */
+  body: string;
+}
+
+/** The `detail` payload on a `ChatSource`, discriminated by the source's `kind`. */
+export type ChatSourceDetail = SymbolDetail | SpecDetail | DomainDetail;
 
 /** One indexed row a rendered fact was derived from (A1 traceability). */
 export interface ChatSource {
@@ -42,6 +89,13 @@ export interface ChatSource {
   filePath?: string;
   /** 1-indexed start line of the symbol, when applicable. */
   line?: number;
+  /**
+   * The full detail the graph holds for this match (REQ-DASH-CHAT-005),
+   * discriminated by `kind`: `SymbolDetail` for a symbol, `SpecDetail` for a
+   * spec, `DomainDetail` for a domain fact. Present on every returned source;
+   * the UI renders it in an expandable section below the concise answer.
+   */
+  detail?: ChatSourceDetail;
 }
 
 /** The deterministic answer returned to the route. */
@@ -54,10 +108,35 @@ export interface ChatAnswer {
   sources: ChatSource[];
 }
 
-/** Per-store result caps — keep the composed answer bounded and readable. */
+/**
+ * Per-store caps for the **prose** sections only — keep the composed gloss
+ * bounded and readable. The full-detail set below is a separate, larger cap.
+ */
 const MAX_SYMBOLS = 5;
 const MAX_SPECS = 3;
 const MAX_DOMAIN = 3;
+
+/**
+ * Cap on the ranked full-detail match set (REQ-DASH-CHAT-005.A3). The concise
+ * prose stays bounded by the small per-store caps above; the detail array —
+ * each source's verbatim body / links, rendered as one expandable per match in
+ * the UI — is the top matches by rank up to this cap, so a broad query can't
+ * return unbounded content. Raised well above the old five-per-store limit;
+ * every dispatch helper takes it as a parameter so it stays configurable.
+ */
+const DETAIL_CAP = 15;
+
+/** Minimal shape of a graph node the detail builders read. */
+interface GraphNode {
+  id: string;
+  name: string;
+  qualifiedName: string;
+  kind: string;
+  filePath: string;
+  startLine: number;
+  endLine: number;
+  signature?: string;
+}
 
 /**
  * Words that carry no subject signal — dropped before building the search
@@ -120,6 +199,74 @@ function firstLine(body: string): string {
   return '';
 }
 
+// =============================================================================
+// Full retrieved detail per match (REQ-DASH-CHAT-005)
+// =============================================================================
+
+/**
+ * Read a symbol's verbatim source body from disk — the exact `startLine..endLine`
+ * slice of its file (mirrors `src/mcp/tools.ts`). Real bytes, never synthesized
+ * (A4); returns `''` if the file can't be read so a missing file is honest, not
+ * fabricated.
+ */
+function readNodeBody(cg: SpecShipInstance, node: GraphNode): string {
+  try {
+    const abs = join(cg.getProjectRoot(), node.filePath);
+    const lines = readFileSync(abs, 'utf-8').split('\n');
+    return lines.slice(node.startLine - 1, node.endLine).join('\n');
+  } catch {
+    return '';
+  }
+}
+
+/** Map 1-hop neighbours to deduped, stable-sorted `SymbolRef`s (self excluded). */
+function neighbourRefs(raw: Array<{ node: GraphNode }>, selfId: string): SymbolRef[] {
+  const seen = new Set<string>();
+  return raw
+    .filter((r) => r.node.id !== selfId && !seen.has(r.node.id) && (seen.add(r.node.id), true))
+    .map((r) => ({ name: r.node.name, qualifiedName: r.node.qualifiedName, filePath: r.node.filePath, line: r.node.startLine }))
+    .sort((a, b) => byName(a.qualifiedName, b.qualifiedName));
+}
+
+/**
+ * Full symbol detail (A1): verbatim body + signature + immediate callers/callees.
+ * Read-equivalent depth so the user never has to open the file to see the match.
+ */
+function buildSymbolDetail(cg: SpecShipInstance, node: GraphNode): SymbolDetail {
+  return {
+    signature: node.signature,
+    body: readNodeBody(cg, node),
+    callers: neighbourRefs(cg.getCallers(node.id, 1), node.id),
+    callees: neighbourRefs(cg.getCallees(node.id, 1), node.id),
+  };
+}
+
+/**
+ * Full spec detail (A2): the spec's full body + the code it links to, each with
+ * its current link state. Links are stable-sorted by target (then state) so the
+ * detail is byte-identical across repeat calls (A4).
+ */
+function buildSpecDetail(cg: SpecShipInstance, spec: { id: string; body: string }): SpecDetail {
+  const links = cg
+    .getSpecQueries()
+    .getLinksBySpec(spec.id)
+    .map((l) => ({ target: l.targetQualifiedName, state: l.state as string }))
+    .sort((a, b) => (a.target !== b.target ? byName(a.target, b.target) : byName(a.state, b.state)));
+  return { body: spec.body, links };
+}
+
+/** A symbol `ChatSource` carrying its full detail (A1 + REQ-005). */
+function symbolSource(cg: SpecShipInstance, node: GraphNode): ChatSource {
+  return {
+    kind: 'symbol',
+    ref: node.qualifiedName,
+    label: node.name,
+    filePath: node.filePath,
+    line: node.startLine,
+    detail: buildSymbolDetail(cg, node),
+  };
+}
+
 /**
  * Answer a question deterministically from the indexed knowledge base.
  *
@@ -128,7 +275,7 @@ function firstLine(body: string): string {
  * stable key, and composes a templated prose answer from the real rows. When
  * nothing matches, returns an honest not-found answer with no sources.
  */
-export function answerFromKnowledgeBase(cg: SpecShipInstance, question: string): ChatAnswer {
+export function answerFromKnowledgeBase(cg: SpecShipInstance, question: string, detailCap = DETAIL_CAP): ChatAnswer {
   const { query } = extractSubject(question);
   const subjectLabel = query.length > 0 ? query : question.trim();
 
@@ -137,62 +284,69 @@ export function answerFromKnowledgeBase(cg: SpecShipInstance, question: string):
     return notFound(subjectLabel);
   }
 
-  // --- Symbols (code knowledge graph) --------------------------------------
+  // --- Ranked hits per store (wider than the prose caps to feed the detail
+  //     set; each list is stable-sorted so repeat calls are byte-identical). --
   const symbolHits = cg
-    .searchNodes(query, { limit: MAX_SYMBOLS * 4 })
+    .searchNodes(query, { limit: detailCap * 4 })
     .slice()
     .sort(bySymbolRank)
-    .slice(0, MAX_SYMBOLS);
+    .slice(0, detailCap);
 
-  // --- Specs + domain facts (spec layer) -----------------------------------
   const specHits = cg
     .getSpecQueries()
-    .searchSpecs(query, (MAX_SPECS + MAX_DOMAIN) * 4)
+    .searchSpecs(query, detailCap * 4)
     .slice()
     .sort(bySpecRank);
-  const domainHits = specHits.filter((r) => r.spec.kind === 'domain').slice(0, MAX_DOMAIN);
-  const nonDomainSpecHits = specHits.filter((r) => r.spec.kind !== 'domain').slice(0, MAX_SPECS);
+  const domainHits = specHits.filter((r) => r.spec.kind === 'domain').slice(0, detailCap);
+  const nonDomainSpecHits = specHits.filter((r) => r.spec.kind !== 'domain').slice(0, detailCap);
 
   if (symbolHits.length === 0 && domainHits.length === 0 && nonDomainSpecHits.length === 0) {
     return notFound(subjectLabel);
   }
 
-  const sources: ChatSource[] = [];
+  // --- Concise prose: the small per-store caps, gloss only (no detail). ------
+  const proseSymbols = symbolHits.slice(0, MAX_SYMBOLS);
+  const proseSpecs = nonDomainSpecHits.slice(0, MAX_SPECS);
+  const proseDomain = domainHits.slice(0, MAX_DOMAIN);
   const sections: string[] = [];
 
-  if (symbolHits.length > 0) {
-    const parts = symbolHits.map((r) => {
-      sources.push({
-        kind: 'symbol',
-        ref: r.node.qualifiedName,
-        label: r.node.name,
-        filePath: r.node.filePath,
-        line: r.node.startLine,
-      });
-      return `\`${r.node.name}\` (${r.node.kind} in ${r.node.filePath}:${r.node.startLine})`;
-    });
-    const noun = symbolHits.length === 1 ? 'symbol' : 'symbols';
-    sections.push(`Found ${symbolHits.length} ${noun} matching “${subjectLabel}”: ${parts.join(', ')}.`);
+  if (proseSymbols.length > 0) {
+    const parts = proseSymbols.map((r) => `\`${r.node.name}\` (${r.node.kind} in ${r.node.filePath}:${r.node.startLine})`);
+    const noun = proseSymbols.length === 1 ? 'symbol' : 'symbols';
+    sections.push(`Found ${proseSymbols.length} ${noun} matching “${subjectLabel}”: ${parts.join(', ')}.`);
   }
-
-  if (nonDomainSpecHits.length > 0) {
-    const parts = nonDomainSpecHits.map((r) => {
-      sources.push({ kind: 'spec', ref: r.spec.id, label: r.spec.title });
-      return `${r.spec.id} — ${r.spec.title}`;
-    });
-    const noun = nonDomainSpecHits.length === 1 ? 'spec' : 'specs';
+  if (proseSpecs.length > 0) {
+    const parts = proseSpecs.map((r) => `${r.spec.id} — ${r.spec.title}`);
+    const noun = proseSpecs.length === 1 ? 'spec' : 'specs';
     sections.push(`Related ${noun}: ${parts.join('; ')}.`);
   }
-
-  if (domainHits.length > 0) {
-    const parts = domainHits.map((r) => {
-      sources.push({ kind: 'domain', ref: r.spec.id, label: r.spec.title });
+  if (proseDomain.length > 0) {
+    const parts = proseDomain.map((r) => {
       const gloss = firstLine(r.spec.body);
       return gloss ? `${r.spec.title} — ${gloss}` : r.spec.title;
     });
-    const noun = domainHits.length === 1 ? 'domain fact' : 'domain facts';
+    const noun = proseDomain.length === 1 ? 'domain fact' : 'domain facts';
     sections.push(`Related ${noun}: ${parts.join('; ')}.`);
   }
+
+  // --- Full-detail sources: prose-mentioned first (so every rendered fact has
+  //     its source ref, A1), then extra ranked matches fill the detail budget so
+  //     the user sees everything retrieved — bounded at detailCap (A3, A5). -----
+  const sources: ChatSource[] = [];
+  const specSource = (r: { spec: { id: string; title: string; body: string } }): ChatSource => ({
+    kind: 'spec', ref: r.spec.id, label: r.spec.title, detail: buildSpecDetail(cg, r.spec),
+  });
+  const domainSource = (r: { spec: { id: string; title: string; body: string } }): ChatSource => ({
+    kind: 'domain', ref: r.spec.id, label: r.spec.title, detail: { body: r.spec.body },
+  });
+  const add = (src: ChatSource): void => { if (sources.length < detailCap) sources.push(src); };
+
+  for (const r of proseSymbols) add(symbolSource(cg, r.node));
+  for (const r of proseSpecs) add(specSource(r));
+  for (const r of proseDomain) add(domainSource(r));
+  for (const r of symbolHits.slice(MAX_SYMBOLS)) add(symbolSource(cg, r.node));
+  for (const r of nonDomainSpecHits.slice(MAX_SPECS)) add(specSource(r));
+  for (const r of domainHits.slice(MAX_DOMAIN)) add(domainSource(r));
 
   return { found: true, answer: sections.join('\n\n'), sources };
 }
@@ -269,25 +423,25 @@ export function chunkAnswer(answer: string): string[] {
  * the generic knowledge-base composition. Every rendered fact still carries a
  * `ChatSource` (A1) and every result set is stable-sorted (A3).
  */
-export function answerForIntent(cg: SpecShipInstance, classified: ClassifiedIntent): ChatAnswer {
+export function answerForIntent(cg: SpecShipInstance, classified: ClassifiedIntent, detailCap = DETAIL_CAP): ChatAnswer {
   const query = classified.query.trim();
   switch (classified.intent) {
     case 'callers':
-      return answerNeighbours(cg, query, 'callers');
+      return answerNeighbours(cg, query, 'callers', detailCap);
     case 'callees':
-      return answerNeighbours(cg, query, 'callees');
+      return answerNeighbours(cg, query, 'callees', detailCap);
     case 'impact':
-      return answerImpact(cg, query);
+      return answerImpact(cg, query, detailCap);
     case 'spec':
-      return answerSpecs(cg, query, 'spec');
+      return answerSpecs(cg, query, 'spec', detailCap);
     case 'domain':
-      return answerSpecs(cg, query, 'domain');
+      return answerSpecs(cg, query, 'domain', detailCap);
     case 'drift':
-      return answerDrift(cg);
+      return answerDrift(cg, detailCap);
     case 'explore':
     case 'search':
     default:
-      return answerFromKnowledgeBase(cg, query);
+      return answerFromKnowledgeBase(cg, query, detailCap);
   }
 }
 
@@ -309,7 +463,7 @@ function symbolRef(node: { name: string; kind: string; filePath: string; startLi
 }
 
 /** callers / callees: the subject's 1-hop neighbours in the call graph. */
-function answerNeighbours(cg: SpecShipInstance, query: string, dir: 'callers' | 'callees'): ChatAnswer {
+function answerNeighbours(cg: SpecShipInstance, query: string, dir: 'callers' | 'callees', detailCap = DETAIL_CAP): ChatAnswer {
   const node = resolveNode(cg, query);
   if (!node) return notFound(query);
 
@@ -317,31 +471,29 @@ function answerNeighbours(cg: SpecShipInstance, query: string, dir: 'callers' | 
   const seen = new Set<string>();
   const neighbours = raw
     .filter((r) => r.node.id !== node.id && !seen.has(r.node.id) && (seen.add(r.node.id), true))
-    .sort((a, b) => byName(a.node.qualifiedName, b.node.qualifiedName))
-    .slice(0, MAX_SYMBOLS);
+    .sort((a, b) => byName(a.node.qualifiedName, b.node.qualifiedName));
 
-  const sources: ChatSource[] = [
-    { kind: 'symbol', ref: node.qualifiedName, label: node.name, filePath: node.filePath, line: node.startLine },
-  ];
+  // Subject first, then its neighbours — each with full detail, bounded (A3).
+  const sources: ChatSource[] = [symbolSource(cg, node)];
+  for (const r of neighbours.slice(0, detailCap - 1)) sources.push(symbolSource(cg, r.node));
 
   if (neighbours.length === 0) {
     const rel = dir === 'callers' ? 'has no known callers' : 'makes no known calls';
     return { found: true, answer: `${symbolRef(node)} ${rel} in the index.`, sources };
   }
 
-  const parts = neighbours.map((r) => {
-    sources.push({ kind: 'symbol', ref: r.node.qualifiedName, label: r.node.name, filePath: r.node.filePath, line: r.node.startLine });
-    return symbolRef(r.node);
-  });
+  const shown = neighbours.slice(0, MAX_SYMBOLS);
+  const parts = shown.map((r) => symbolRef(r.node));
+  const more = neighbours.length > shown.length ? ` (+${neighbours.length - shown.length} more)` : '';
   const verb = dir === 'callers' ? 'is called by' : 'calls';
   const noun = dir === 'callers'
     ? (neighbours.length === 1 ? 'caller' : 'callers')
     : (neighbours.length === 1 ? 'callee' : 'callees');
-  return { found: true, answer: `\`${node.name}\` ${verb} ${neighbours.length} ${noun}: ${parts.join(', ')}.`, sources };
+  return { found: true, answer: `\`${node.name}\` ${verb} ${neighbours.length} ${noun}${more}: ${parts.join(', ')}.`, sources };
 }
 
 /** impact: the subject's downstream blast radius. */
-function answerImpact(cg: SpecShipInstance, query: string): ChatAnswer {
+function answerImpact(cg: SpecShipInstance, query: string, detailCap = DETAIL_CAP): ChatAnswer {
   const node = resolveNode(cg, query);
   if (!node) return notFound(query);
 
@@ -350,27 +502,29 @@ function answerImpact(cg: SpecShipInstance, query: string): ChatAnswer {
     .filter((n) => n.id !== node.id)
     .sort((a, b) => byName(a.qualifiedName, b.qualifiedName));
 
-  const sources: ChatSource[] = [
-    { kind: 'symbol', ref: node.qualifiedName, label: node.name, filePath: node.filePath, line: node.startLine },
-  ];
+  // Subject first, then impacted symbols — each with full detail, bounded (A3).
+  const sources: ChatSource[] = [symbolSource(cg, node)];
+  for (const n of impacted.slice(0, detailCap - 1)) sources.push(symbolSource(cg, n));
 
   if (impacted.length === 0) {
     return { found: true, answer: `Changing ${symbolRef(node)} has no known downstream impact in the index.`, sources };
   }
 
   const shown = impacted.slice(0, MAX_SYMBOLS);
-  const parts = shown.map((n) => {
-    sources.push({ kind: 'symbol', ref: n.qualifiedName, label: n.name, filePath: n.filePath, line: n.startLine });
-    return symbolRef(n);
-  });
+  const parts = shown.map((n) => symbolRef(n));
   const more = impacted.length > shown.length ? ` (+${impacted.length - shown.length} more)` : '';
   const noun = impacted.length === 1 ? 'symbol' : 'symbols';
   return { found: true, answer: `Changing \`${node.name}\` could affect ${impacted.length} ${noun}${more}: ${parts.join(', ')}.`, sources };
 }
 
 /** spec / domain: a lookup over the spec layer (exact id first for spec). */
-function answerSpecs(cg: SpecShipInstance, query: string, which: 'spec' | 'domain'): ChatAnswer {
+function answerSpecs(cg: SpecShipInstance, query: string, which: 'spec' | 'domain', detailCap = DETAIL_CAP): ChatAnswer {
   if (query.length === 0) return notFound(query);
+
+  const specDetailSource = (spec: { id: string; title: string; body: string }): ChatSource =>
+    which === 'domain'
+      ? { kind: 'domain', ref: spec.id, label: spec.title, detail: { body: spec.body } }
+      : { kind: 'spec', ref: spec.id, label: spec.title, detail: buildSpecDetail(cg, spec) };
 
   // A spec intent with an exact id resolves directly — deterministic and precise.
   if (which === 'spec') {
@@ -380,39 +534,42 @@ function answerSpecs(cg: SpecShipInstance, query: string, which: 'spec' | 'domai
       return {
         found: true,
         answer: gloss ? `${exact.id} — ${exact.title}: ${gloss}` : `${exact.id} — ${exact.title}`,
-        sources: [{ kind: 'spec', ref: exact.id, label: exact.title }],
+        sources: [specDetailSource(exact)],
       };
     }
   }
 
   const hits = cg
     .getSpecQueries()
-    .searchSpecs(query, (MAX_SPECS + MAX_DOMAIN) * 4)
+    .searchSpecs(query, detailCap * 4)
     .slice()
     .sort(bySpecRank);
-  const filtered = which === 'domain'
-    ? hits.filter((r) => r.spec.kind === 'domain').slice(0, MAX_DOMAIN)
-    : hits.filter((r) => r.spec.kind !== 'domain').slice(0, MAX_SPECS);
+  const matched = which === 'domain'
+    ? hits.filter((r) => r.spec.kind === 'domain').slice(0, detailCap)
+    : hits.filter((r) => r.spec.kind !== 'domain').slice(0, detailCap);
 
-  if (filtered.length === 0) return notFound(query);
+  if (matched.length === 0) return notFound(query);
 
-  const sources: ChatSource[] = [];
-  const parts = filtered.map((r) => {
-    sources.push({ kind: which === 'domain' ? 'domain' : 'spec', ref: r.spec.id, label: r.spec.title });
+  // Full detail for every match, bounded (A2/A3); prose lists the small cap.
+  const sources: ChatSource[] = matched.map((r) => specDetailSource(r.spec));
+
+  const prose = matched.slice(0, which === 'domain' ? MAX_DOMAIN : MAX_SPECS);
+  const parts = prose.map((r) => {
     if (which === 'domain') {
       const gloss = firstLine(r.spec.body);
       return gloss ? `${r.spec.title} — ${gloss}` : r.spec.title;
     }
     return `${r.spec.id} — ${r.spec.title}`;
   });
+  const more = matched.length > prose.length ? ` (+${matched.length - prose.length} more)` : '';
   const noun = which === 'domain'
-    ? (filtered.length === 1 ? 'domain fact' : 'domain facts')
-    : (filtered.length === 1 ? 'spec' : 'specs');
-  return { found: true, answer: `Found ${filtered.length} ${noun} matching “${query}”: ${parts.join('; ')}.`, sources };
+    ? (matched.length === 1 ? 'domain fact' : 'domain facts')
+    : (matched.length === 1 ? 'spec' : 'specs');
+  return { found: true, answer: `Found ${matched.length} ${noun} matching “${query}”${more}: ${parts.join('; ')}.`, sources };
 }
 
 /** drift: the spec ↔ code links that are currently out of sync. */
-function answerDrift(cg: SpecShipInstance): ChatAnswer {
+function answerDrift(cg: SpecShipInstance, detailCap = DETAIL_CAP): ChatAnswer {
   const links = cg
     .getSpecQueries()
     .getLinksByState(['drifted', 'broken', 'orphaned'])
@@ -427,12 +584,24 @@ function answerDrift(cg: SpecShipInstance): ChatAnswer {
     };
   }
 
-  const shown = links.slice(0, MAX_SPECS + MAX_DOMAIN);
+  // One source per distinct drifted spec, each carrying the spec's full detail
+  // (body + all its links with state), bounded at detailCap (A2/A3).
   const sources: ChatSource[] = [];
-  const parts = shown.map((l) => {
-    sources.push({ kind: 'spec', ref: l.specId, label: l.specId });
-    return `${l.specId} → ${l.targetQualifiedName} (${l.state})`;
-  });
+  const sq = cg.getSpecQueries();
+  const seenSpecs = new Set<string>();
+  for (const l of links) {
+    if (sources.length >= detailCap || seenSpecs.has(l.specId)) continue;
+    seenSpecs.add(l.specId);
+    const spec = sq.getSpecById(l.specId);
+    sources.push(
+      spec
+        ? { kind: 'spec', ref: spec.id, label: spec.title, detail: buildSpecDetail(cg, spec) }
+        : { kind: 'spec', ref: l.specId, label: l.specId },
+    );
+  }
+
+  const shown = links.slice(0, MAX_SPECS + MAX_DOMAIN);
+  const parts = shown.map((l) => `${l.specId} → ${l.targetQualifiedName} (${l.state})`);
   const more = links.length > shown.length ? ` (+${links.length - shown.length} more)` : '';
   const noun = links.length === 1 ? 'link' : 'links';
   return { found: true, answer: `${links.length} spec ${noun} out of sync${more}: ${parts.join('; ')}.`, sources };

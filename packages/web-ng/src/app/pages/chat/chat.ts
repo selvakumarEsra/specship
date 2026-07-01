@@ -3,14 +3,45 @@ import { DomSanitizer, type SafeHtml } from '@angular/platform-browser';
 import { Icon } from '../../shell/icon/icon';
 import { Pill } from '../../ui/pill';
 import { Segmented } from '../../ui/segmented';
+import { StatePill } from '../../ui/state-pill';
 import { LogoMark } from '../../shell/logo-mark/logo-mark';
 import { ApiService } from '../../api/api';
 
 interface ToolCall { name: string; input: string; output: string; status: 'ok' | 'error'; open?: boolean; }
+
+/** A neighbour ref inside a symbol source's detail (mirrors the server shape). */
+interface SymbolRefView { name: string; qualifiedName: string; filePath: string; line: number; }
+
+/**
+ * The full retrieved detail the server attaches to each match
+ * (REQ-DASH-CHAT-005). A permissive view over the server's discriminated
+ * union — the source's `kind` decides which fields are populated: `symbol` →
+ * signature/body/callers/callees, `spec` → body/links, `domain` → body.
+ */
+interface ChatSourceDetailView {
+  signature?: string;
+  body?: string;
+  callers?: SymbolRefView[];
+  callees?: SymbolRefView[];
+  links?: { target: string; state: string }[];
+}
+
+/** One indexed match the answer was composed from, with its full graph detail. */
+interface ChatSourceView {
+  kind: 'symbol' | 'spec' | 'domain';
+  ref: string;
+  label: string;
+  filePath?: string;
+  line?: number;
+  detail?: ChatSourceDetailView;
+}
+
 interface ChatMsg {
   role: 'user' | 'assistant';
   text: string;
   tools?: ToolCall[];
+  /** Full retrieved detail per match, rendered as expandable sections (REQ-005). */
+  sources?: ChatSourceView[];
 }
 
 // The three command doors (DASH-DOORS-DOC). Each routes a whole family of
@@ -27,7 +58,7 @@ type ToolAccess = 'ask' | 'safe' | 'all';
 
 @Component({
   selector: 'app-chat',
-  imports: [Icon, Pill, Segmented, LogoMark],
+  imports: [Icon, Pill, Segmented, StatePill, LogoMark],
   templateUrl: './chat.html',
   styleUrl: './chat.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -144,9 +175,16 @@ export class Chat implements OnDestroy {
         this.scrollToBottom();
         break;
       }
-      case 'done':
+      case 'done': {
+        // Attach the full retrieved detail per match below the composed answer
+        // (REQ-DASH-CHAT-005) — the answer text is untouched, detail is additive.
+        const d = (data ?? {}) as { sources?: ChatSourceView[] };
+        if (d.sources?.length) {
+          this.patchMsg(idx, (m) => ({ ...m, sources: d.sources }));
+        }
         this.endStream();
         break;
+      }
     }
   }
 
@@ -187,6 +225,25 @@ export class Chat implements OnDestroy {
   protected toggleToolCall(m: ChatMsg, tc: ToolCall): void {
     tc.open = !tc.open;
     this.messages.update((msgs) => [...msgs]); // trigger CD
+  }
+
+  /**
+   * Open/closed state of each match's expandable detail section
+   * (REQ-DASH-CHAT-005.A5). Held in a signal keyed by `msgIndex:sourceIndex`
+   * rather than mutating the message, so toggling is a pure signal update.
+   */
+  private readonly openDetails = signal<Set<string>>(new Set());
+  private detailKey(msgIndex: number, sourceIndex: number): string { return `${msgIndex}:${sourceIndex}`; }
+  protected isDetailOpen(msgIndex: number, sourceIndex: number): boolean {
+    return this.openDetails().has(this.detailKey(msgIndex, sourceIndex));
+  }
+  protected toggleDetail(msgIndex: number, sourceIndex: number): void {
+    const key = this.detailKey(msgIndex, sourceIndex);
+    this.openDetails.update((s) => {
+      const n = new Set(s);
+      if (n.has(key)) n.delete(key); else n.add(key);
+      return n;
+    });
   }
 
   protected renderMd(s: string): SafeHtml {

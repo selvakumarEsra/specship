@@ -22,6 +22,7 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import SpecShip from '../src/index';
 import { registerChatRoutes } from '../packages/server/src/routes/chat';
 import { answerFromKnowledgeBase, answerForIntent, extractSubject, chunkAnswer } from '../packages/server/src/routes/chat-answer';
+import type { SymbolDetail, SpecDetail, DomainDetail } from '../packages/server/src/routes/chat-answer';
 import { classifyIntent } from '../packages/server/src/chat/classify';
 
 // ---------------------------------------------------------------------------
@@ -357,6 +358,75 @@ describe.skipIf(!fts5Available)('deterministic chat answer engine', () => {
     expect(res.found).toBe(true);
     expect(res.answer.toLowerCase()).toContain('in sync');
     expect(res.sources).toEqual([]);
+  });
+
+  // -------------------------------------------------------------------------
+  // REQ-DASH-CHAT-005: for any query the chat surfaces the full retrieved graph
+  // detail per match — bounded, ranked, verbatim, deterministic.
+  // -------------------------------------------------------------------------
+  it('symbol detail carries verbatim body, signature slot, and callers/callees (A1)', () => {
+    const res = answerFromKnowledgeBase(cg, 'recordEntry');
+    const sym = res.sources.find((s) => s.kind === 'symbol' && s.label === 'recordEntry');
+    expect(sym).toBeDefined();
+    const d = sym!.detail as SymbolDetail;
+    // Verbatim source body — the exact function text, read from the file.
+    expect(d.body).toContain('recordEntry');
+    expect(d.body).toContain('append an entry to the ledger');
+    const fileText = fs.readFileSync(path.join(dir, 'src', 'ledger.ts'), 'utf-8');
+    expect(fileText).toContain(d.body); // a contiguous, real slice (A4 verbatim)
+    // signature is a slot (present or explicitly undefined), never invented.
+    expect(['string', 'undefined']).toContain(typeof d.signature);
+    // Immediate callers include LedgerService.post; each neighbour is a ref.
+    expect(d.callers.some((c) => c.name === 'post')).toBe(true);
+    for (const c of [...d.callers, ...d.callees]) {
+      expect(typeof c.qualifiedName).toBe('string');
+      expect(typeof c.filePath).toBe('string');
+      expect(typeof c.line).toBe('number');
+    }
+  });
+
+  it('spec detail carries the full body + links-with-state; domain detail the full body (A2)', () => {
+    const spec = answerForIntent(cg, classifyIntent('/ss-spec REQ-LEDGER-001'));
+    const s = spec.sources.find((x) => x.ref === 'REQ-LEDGER-001');
+    expect(s).toBeDefined();
+    const sd = s!.detail as SpecDetail;
+    expect(sd.body).toContain('Each posting appends one entry');
+    expect(Array.isArray(sd.links)).toBe(true);
+    for (const l of sd.links) {
+      expect(typeof l.target).toBe('string');
+      expect(typeof l.state).toBe('string');
+    }
+
+    const dom = answerForIntent(cg, classifyIntent('what is a Ledger'));
+    const dm = dom.sources.find((x) => x.ref === 'DOMAIN-LEDGER');
+    expect(dm).toBeDefined();
+    const dd = dm!.detail as DomainDetail;
+    expect(dd.body).toContain('append-only record of balance changes');
+  });
+
+  it('bounds the full-detail set at the configured cap, ranked (A3)', () => {
+    // A tight cap trims the ranked set; the first source is the top match.
+    const capped = answerFromKnowledgeBase(cg, 'Ledger recordEntry post', 2);
+    expect(capped.sources.length).toBeLessThanOrEqual(2);
+    expect(capped.sources.length).toBeGreaterThan(0);
+    // The default cap (15) is greater than the old five-per-store limit and
+    // still bounds a broad query.
+    const full = answerFromKnowledgeBase(cg, 'Ledger recordEntry post');
+    expect(full.sources.length).toBeLessThanOrEqual(15);
+  });
+
+  it('every detail is byte-identical across repeat calls and carries a source ref (A4)', () => {
+    const q = 'who calls recordEntry';
+    const a = answerForIntent(cg, classifyIntent(q));
+    const b = answerForIntent(cg, classifyIntent(q));
+    // Whole body — answer + sources + every detail — is stable (deterministic).
+    expect(JSON.stringify(a)).toBe(JSON.stringify(b));
+    // Each match's detail is attached to a source that names the row it came from.
+    for (const src of a.sources) {
+      expect(src.detail).toBeDefined();
+      expect(typeof src.ref).toBe('string');
+      expect(src.ref.length).toBeGreaterThan(0);
+    }
   });
 
   it('the route dispatches a callers question through the classifier (route)', async () => {

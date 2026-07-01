@@ -12,6 +12,7 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### New Features
 
 - **Dashboard chat replies now stream in as they're composed.** Asking a question in the dashboard chat now reveals the answer progressively — a thinking indicator, the real query being run, its result summary, then the answer typing in chunk by chunk — instead of appearing all at once after a fixed delay. The reply is still answered entirely from your project's own indexed graph, specs, and domain facts with no language model, so the tool-call card shows the actual capability and a truthful result count, and no model name, cost, or token figure is shown. Closing the page mid-answer ends the stream cleanly.
+- **Dashboard chat now shows the full detail behind every match, not just a summary.** Below each answer, every matched symbol, spec, and domain fact gets its own expandable section holding exactly what the graph retrieved — a symbol's verbatim source, its signature, and its immediate callers and callees; a spec's full body and the code it links to with each link's state; a domain fact's full body — so you can read the real detail without leaving the chat. The concise answer stays on top; the detail set is ranked by relevance and capped so a broad question can't flood the page.
 
 ## [0.11.5] - 2026-07-01
 
