@@ -21,7 +21,8 @@ import Fastify from 'fastify';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import SpecShip from '../src/index';
 import { registerChatRoutes } from '../packages/server/src/routes/chat';
-import { answerFromKnowledgeBase, extractSubject } from '../packages/server/src/routes/chat-answer';
+import { answerFromKnowledgeBase, answerForIntent, extractSubject } from '../packages/server/src/routes/chat-answer';
+import { classifyIntent } from '../packages/server/src/chat/classify';
 
 // ---------------------------------------------------------------------------
 // FTS5 guard — identical pattern used across the spec test suite. Search-driven
@@ -261,6 +262,68 @@ describe.skipIf(!fts5Available)('deterministic chat answer engine', () => {
       (globalThis as { fetch?: unknown }).fetch = savedFetch;
       process.env = savedEnv;
     }
+  });
+
+  // -------------------------------------------------------------------------
+  // REQ-DASH-CHAT-002 dispatch: each non-search intent hits the right query
+  // family. classifyIntent → answerForIntent is the exact path the route runs.
+  // -------------------------------------------------------------------------
+  it('callers intent traverses the call graph (dispatch)', () => {
+    const res = answerForIntent(cg, classifyIntent('who calls recordEntry'));
+    expect(res.found).toBe(true);
+    // LedgerService.post calls recordEntry — the caller is surfaced.
+    expect(res.answer).toContain('post');
+    // The subject node is the first traced source.
+    expect(res.sources[0].kind).toBe('symbol');
+    expect(res.sources[0].label).toBe('recordEntry');
+  });
+
+  it('callees intent traverses outgoing calls (dispatch)', () => {
+    const res = answerForIntent(cg, classifyIntent('what does post call'));
+    expect(res.found).toBe(true);
+    // post → recordEntry.
+    expect(res.answer).toContain('recordEntry');
+  });
+
+  it('impact intent reports the downstream blast radius (dispatch)', () => {
+    const res = answerForIntent(cg, classifyIntent('what breaks if I change recordEntry'));
+    expect(res.found).toBe(true);
+    expect(res.answer.toLowerCase()).toContain('could affect');
+  });
+
+  it('spec intent resolves an exact id (dispatch)', () => {
+    const res = answerForIntent(cg, classifyIntent('/ss-spec REQ-LEDGER-001'));
+    expect(res.found).toBe(true);
+    expect(res.answer).toContain('REQ-LEDGER-001');
+    expect(res.sources.map((s) => s.ref)).toContain('REQ-LEDGER-001');
+  });
+
+  it('domain intent hits the domain-fact layer (dispatch)', () => {
+    const res = answerForIntent(cg, classifyIntent('what is a Ledger'));
+    expect(res.found).toBe(true);
+    expect(res.sources.map((s) => s.ref)).toContain('DOMAIN-LEDGER');
+    expect(res.sources.every((s) => s.kind === 'domain')).toBe(true);
+  });
+
+  it('drift intent reads the out-of-sync links (dispatch)', () => {
+    const res = answerForIntent(cg, classifyIntent('/ss-check'));
+    // Freshly indexed project has no drift → honest in-sync answer, no sources.
+    expect(res.found).toBe(true);
+    expect(res.answer.toLowerCase()).toContain('in sync');
+    expect(res.sources).toEqual([]);
+  });
+
+  it('the route dispatches a callers question through the classifier (route)', async () => {
+    app = await buildTestApp(cg);
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/chat',
+      payload: { question: 'who calls recordEntry' },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.payload) as { found: boolean; answer: string };
+    expect(body.found).toBe(true);
+    expect(body.answer).toContain('post');
   });
 
   // -------------------------------------------------------------------------

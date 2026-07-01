@@ -28,6 +28,7 @@
  */
 
 import type { SpecShipInstance } from '../project-registry.js';
+import type { ClassifiedIntent } from '../chat/classify.js';
 
 /** One indexed row a rendered fact was derived from (A1 traceability). */
 export interface ChatSource {
@@ -194,6 +195,190 @@ export function answerFromKnowledgeBase(cg: SpecShipInstance, question: string):
   }
 
   return { found: true, answer: sections.join('\n\n'), sources };
+}
+
+// =============================================================================
+// Intent dispatcher (REQ-DASH-CHAT-002)
+// =============================================================================
+
+/**
+ * Route a classified message to the matching knowledge-base query.
+ *
+ * The classifier (`../chat/classify.ts`) is pure and I/O-free; this is the thin
+ * glue that turns its `{ intent, query }` into a concrete instance query and
+ * composes the deterministic answer. Each intent maps to an existing instance
+ * method — callers/callees/impact traverse the graph, spec/domain hit the spec
+ * layer, drift reads the out-of-sync links, and explore/search fall through to
+ * the generic knowledge-base composition. Every rendered fact still carries a
+ * `ChatSource` (A1) and every result set is stable-sorted (A3).
+ */
+export function answerForIntent(cg: SpecShipInstance, classified: ClassifiedIntent): ChatAnswer {
+  const query = classified.query.trim();
+  switch (classified.intent) {
+    case 'callers':
+      return answerNeighbours(cg, query, 'callers');
+    case 'callees':
+      return answerNeighbours(cg, query, 'callees');
+    case 'impact':
+      return answerImpact(cg, query);
+    case 'spec':
+      return answerSpecs(cg, query, 'spec');
+    case 'domain':
+      return answerSpecs(cg, query, 'domain');
+    case 'drift':
+      return answerDrift(cg);
+    case 'explore':
+    case 'search':
+    default:
+      return answerFromKnowledgeBase(cg, query);
+  }
+}
+
+/** Stable string comparison — the tie-break every dispatch sort shares. */
+function byName(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+/** Resolve a free-form subject to its single best-matching graph node (or null). */
+function resolveNode(cg: SpecShipInstance, query: string) {
+  if (query.length === 0) return null;
+  const hits = cg.searchNodes(query, { limit: MAX_SYMBOLS * 4 }).slice().sort(bySymbolRank);
+  return hits[0]?.node ?? null;
+}
+
+/** Render a symbol reference the same way across every dispatch answer. */
+function symbolRef(node: { name: string; kind: string; filePath: string; startLine: number }): string {
+  return `\`${node.name}\` (${node.kind} in ${node.filePath}:${node.startLine})`;
+}
+
+/** callers / callees: the subject's 1-hop neighbours in the call graph. */
+function answerNeighbours(cg: SpecShipInstance, query: string, dir: 'callers' | 'callees'): ChatAnswer {
+  const node = resolveNode(cg, query);
+  if (!node) return notFound(query);
+
+  const raw = dir === 'callers' ? cg.getCallers(node.id, 1) : cg.getCallees(node.id, 1);
+  const seen = new Set<string>();
+  const neighbours = raw
+    .filter((r) => r.node.id !== node.id && !seen.has(r.node.id) && (seen.add(r.node.id), true))
+    .sort((a, b) => byName(a.node.qualifiedName, b.node.qualifiedName))
+    .slice(0, MAX_SYMBOLS);
+
+  const sources: ChatSource[] = [
+    { kind: 'symbol', ref: node.qualifiedName, label: node.name, filePath: node.filePath, line: node.startLine },
+  ];
+
+  if (neighbours.length === 0) {
+    const rel = dir === 'callers' ? 'has no known callers' : 'makes no known calls';
+    return { found: true, answer: `${symbolRef(node)} ${rel} in the index.`, sources };
+  }
+
+  const parts = neighbours.map((r) => {
+    sources.push({ kind: 'symbol', ref: r.node.qualifiedName, label: r.node.name, filePath: r.node.filePath, line: r.node.startLine });
+    return symbolRef(r.node);
+  });
+  const verb = dir === 'callers' ? 'is called by' : 'calls';
+  const noun = dir === 'callers'
+    ? (neighbours.length === 1 ? 'caller' : 'callers')
+    : (neighbours.length === 1 ? 'callee' : 'callees');
+  return { found: true, answer: `\`${node.name}\` ${verb} ${neighbours.length} ${noun}: ${parts.join(', ')}.`, sources };
+}
+
+/** impact: the subject's downstream blast radius. */
+function answerImpact(cg: SpecShipInstance, query: string): ChatAnswer {
+  const node = resolveNode(cg, query);
+  if (!node) return notFound(query);
+
+  const sub = cg.getImpactRadius(node.id, 3);
+  const impacted = [...sub.nodes.values()]
+    .filter((n) => n.id !== node.id)
+    .sort((a, b) => byName(a.qualifiedName, b.qualifiedName));
+
+  const sources: ChatSource[] = [
+    { kind: 'symbol', ref: node.qualifiedName, label: node.name, filePath: node.filePath, line: node.startLine },
+  ];
+
+  if (impacted.length === 0) {
+    return { found: true, answer: `Changing ${symbolRef(node)} has no known downstream impact in the index.`, sources };
+  }
+
+  const shown = impacted.slice(0, MAX_SYMBOLS);
+  const parts = shown.map((n) => {
+    sources.push({ kind: 'symbol', ref: n.qualifiedName, label: n.name, filePath: n.filePath, line: n.startLine });
+    return symbolRef(n);
+  });
+  const more = impacted.length > shown.length ? ` (+${impacted.length - shown.length} more)` : '';
+  const noun = impacted.length === 1 ? 'symbol' : 'symbols';
+  return { found: true, answer: `Changing \`${node.name}\` could affect ${impacted.length} ${noun}${more}: ${parts.join(', ')}.`, sources };
+}
+
+/** spec / domain: a lookup over the spec layer (exact id first for spec). */
+function answerSpecs(cg: SpecShipInstance, query: string, which: 'spec' | 'domain'): ChatAnswer {
+  if (query.length === 0) return notFound(query);
+
+  // A spec intent with an exact id resolves directly — deterministic and precise.
+  if (which === 'spec') {
+    const exact = cg.getSpecQueries().getSpecById(query);
+    if (exact) {
+      const gloss = firstLine(exact.body);
+      return {
+        found: true,
+        answer: gloss ? `${exact.id} — ${exact.title}: ${gloss}` : `${exact.id} — ${exact.title}`,
+        sources: [{ kind: 'spec', ref: exact.id, label: exact.title }],
+      };
+    }
+  }
+
+  const hits = cg
+    .getSpecQueries()
+    .searchSpecs(query, (MAX_SPECS + MAX_DOMAIN) * 4)
+    .slice()
+    .sort(bySpecRank);
+  const filtered = which === 'domain'
+    ? hits.filter((r) => r.spec.kind === 'domain').slice(0, MAX_DOMAIN)
+    : hits.filter((r) => r.spec.kind !== 'domain').slice(0, MAX_SPECS);
+
+  if (filtered.length === 0) return notFound(query);
+
+  const sources: ChatSource[] = [];
+  const parts = filtered.map((r) => {
+    sources.push({ kind: which === 'domain' ? 'domain' : 'spec', ref: r.spec.id, label: r.spec.title });
+    if (which === 'domain') {
+      const gloss = firstLine(r.spec.body);
+      return gloss ? `${r.spec.title} — ${gloss}` : r.spec.title;
+    }
+    return `${r.spec.id} — ${r.spec.title}`;
+  });
+  const noun = which === 'domain'
+    ? (filtered.length === 1 ? 'domain fact' : 'domain facts')
+    : (filtered.length === 1 ? 'spec' : 'specs');
+  return { found: true, answer: `Found ${filtered.length} ${noun} matching “${query}”: ${parts.join('; ')}.`, sources };
+}
+
+/** drift: the spec ↔ code links that are currently out of sync. */
+function answerDrift(cg: SpecShipInstance): ChatAnswer {
+  const links = cg
+    .getSpecQueries()
+    .getLinksByState(['drifted', 'broken', 'orphaned'])
+    .slice()
+    .sort((a, b) => (a.specId !== b.specId ? byName(a.specId, b.specId) : byName(a.targetQualifiedName, b.targetQualifiedName)));
+
+  if (links.length === 0) {
+    return {
+      found: true,
+      answer: 'No specs are currently drifted, broken, or orphaned — the spec ↔ code links are all in sync.',
+      sources: [],
+    };
+  }
+
+  const shown = links.slice(0, MAX_SPECS + MAX_DOMAIN);
+  const sources: ChatSource[] = [];
+  const parts = shown.map((l) => {
+    sources.push({ kind: 'spec', ref: l.specId, label: l.specId });
+    return `${l.specId} → ${l.targetQualifiedName} (${l.state})`;
+  });
+  const more = links.length > shown.length ? ` (+${links.length - shown.length} more)` : '';
+  const noun = links.length === 1 ? 'link' : 'links';
+  return { found: true, answer: `${links.length} spec ${noun} out of sync${more}: ${parts.join('; ')}.`, sources };
 }
 
 /** The honest not-found answer — no invented symbols, paths, or facts (A4). */
