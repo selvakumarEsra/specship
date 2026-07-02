@@ -15,6 +15,7 @@
  */
 
 import path from 'node:path';
+import { writeSseHead } from './sse.js';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
@@ -172,9 +173,7 @@ export async function registerWorkflowRoutes(app: FastifyInstance): Promise<void
     const runId = req.params.id;
     let lastId = parseInt(req.query.since ?? '0', 10) || 0;
 
-    reply.raw.setHeader('Content-Type', 'text/event-stream');
-    reply.raw.setHeader('Cache-Control', 'no-cache');
-    reply.raw.setHeader('Connection', 'keep-alive');
+    writeSseHead(req, reply);
     reply.raw.flushHeaders();
 
     let closed = false;

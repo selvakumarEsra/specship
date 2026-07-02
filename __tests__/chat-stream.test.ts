@@ -204,6 +204,17 @@ describe.skipIf(!fts5Available)('GET /api/chat/stream faux-streaming', () => {
     expect(middle.every((e) => e === 'chunk')).toBe(true);
   });
 
+  it('reflects the request Origin as Access-Control-Allow-Origin so cross-origin EventSource works', async () => {
+    // Regression: SSE handlers write reply.raw directly, bypassing @fastify/cors,
+    // so a cross-origin dashboard (127.0.0.1 vs localhost) got CORS-blocked.
+    const origin = 'http://127.0.0.1:4242';
+    const res = await fetch(`${baseUrl}/api/chat/stream?question=${encodeURIComponent('how does recordEntry work')}`, {
+      headers: { Origin: origin },
+    });
+    expect(res.headers.get('access-control-allow-origin')).toBe(origin);
+    await res.text(); // drain to close the stream
+  });
+
   it('the tool event names the real capability and query input (A1 / CHAT-004.A2)', async () => {
     const res = await fetch(`${baseUrl}/api/chat/stream?question=${encodeURIComponent('who calls recordEntry')}`);
     const events = parseSse(await res.text());

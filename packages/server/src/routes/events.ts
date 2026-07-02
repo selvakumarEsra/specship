@@ -15,6 +15,7 @@
  */
 
 import os from 'node:os';
+import { writeSseHead } from './sse.js';
 import path from 'node:path';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { enumerate } from './projects.js';
@@ -40,9 +41,7 @@ export async function registerEventsRoutes(app: FastifyInstance): Promise<void> 
   const claudeRoot = path.join(os.homedir(), '.claude', 'projects');
 
   app.get('/api/events', async (req: FastifyRequest, reply: FastifyReply) => {
-    reply.raw.setHeader('Content-Type', 'text/event-stream');
-    reply.raw.setHeader('Cache-Control', 'no-cache');
-    reply.raw.setHeader('Connection', 'keep-alive');
+    writeSseHead(req, reply);
     reply.raw.write(': connected\n\n');
 
     // Per-connection seen-state — emit only NEW transitions.
