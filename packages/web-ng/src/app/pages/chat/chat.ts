@@ -47,9 +47,9 @@ interface ChatMsg {
 // The three command doors (DASH-DOORS-DOC). Each routes a whole family of
 // flows; one slash command per door instead of the retired per-command set.
 const SLASH_COMMANDS = [
-  { cmd: '/ss-spec',    arg: 'REQ-ID | new <desc>',  desc: 'Intent door — view, author, implement, or review a spec' },
-  { cmd: '/ss-explore', arg: 'symbols | from→to',    desc: 'Reads door — explore an area, trace a flow, or get impact' },
-  { cmd: '/ss-check',   arg: '(gate) | drifted | health', desc: 'Gate & health door — run the gate, review drift, or see health' },
+  { cmd: '/specship:spec',    arg: 'REQ-ID | new <desc>',  desc: 'Intent door — view, author, implement, or review a spec' },
+  { cmd: '/specship:explore', arg: 'symbols | from→to',    desc: 'Reads door — explore an area, trace a flow, or get impact' },
+  { cmd: '/specship:check',   arg: '(gate) | drifted | health', desc: 'Gate & health door — run the gate, review drift, or see health' },
 ];
 
 const MCP_TOOLS = ['specship_explore', 'specship_search', 'specship_spec', 'specship_link_verify'];
@@ -75,7 +75,7 @@ export class Chat implements OnDestroy {
   protected readonly messages = signal<ChatMsg[]>([
     {
       role: 'assistant',
-      text: 'Hi — ask anything about your specs, code, or recent Claude Code sessions.\n\nTry **/ss-spec REQ-AUTH-005** to inspect a requirement, or **/ss-explore validateSession** to walk its callers.',
+      text: 'Hi — ask anything about your specs, code, or recent Claude Code sessions.\n\nTry **/specship:spec REQ-AUTH-005** to inspect a requirement, or **/specship:explore validateSession** to walk its callers.',
     },
   ]);
   protected readonly draft = signal('');

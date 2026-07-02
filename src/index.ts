@@ -322,7 +322,7 @@ export class SpecShip {
    * The domain gap-seed (REQ-DOMAIN-003): the structural code entities and
    * non-domain specs that no domain fact yet covers, plus a coverage tally.
    * Read-only — computed from live state, writes nothing. Exposed on the
-   * instance so the `/ss-spec domain` command and the desktop server can drive it
+   * instance so the `/specship:spec domain` command and the desktop server can drive it
    * without runtime-importing the package.
    */
   getDomainGapSeed(): DomainGapSeed {

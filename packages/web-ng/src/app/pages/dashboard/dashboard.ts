@@ -278,19 +278,19 @@ export class Dashboard {
     color: string; blurb: string; subs: string[]; route: string;
   }> = [
     {
-      id: 'intent', label: 'Intent', cmd: '/ss-spec', icon: 'book',
+      id: 'intent', label: 'Intent', cmd: '/specship:spec', icon: 'book',
       color: 'var(--node-spec)', route: 'specs',
       blurb: 'View, author, implement, review, or extend a spec — the whole lifecycle.',
       subs: ['new', 'fast', 'implement', 'review', 'triage', 'behaviour', 'domain'],
     },
     {
-      id: 'reads', label: 'Reads', cmd: '/ss-explore', icon: 'search',
+      id: 'reads', label: 'Reads', cmd: '/specship:explore', icon: 'search',
       color: 'var(--accent)', route: 'graph',
       blurb: 'Explore an area, trace a flow, or get a change’s blast radius.',
       subs: ['explore', 'flow', 'impact'],
     },
     {
-      id: 'gate', label: 'Gate & health', cmd: '/ss-check', icon: 'check',
+      id: 'gate', label: 'Gate & health', cmd: '/specship:check', icon: 'check',
       color: 'var(--warn)', route: 'drift',
       blurb: 'Run the enforcement gate, review drift, repair links, or see code-health.',
       subs: ['gate', 'drifted', 'fix', 'relink', 'health'],

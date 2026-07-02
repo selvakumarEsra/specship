@@ -339,10 +339,21 @@ describe.skipIf(!fts5Available)('deterministic chat answer engine', () => {
   });
 
   it('spec intent resolves an exact id (dispatch)', () => {
-    const res = answerForIntent(cg, classifyIntent('/ss-spec REQ-LEDGER-001'));
+    const res = answerForIntent(cg, classifyIntent('/specship:spec REQ-LEDGER-001'));
     expect(res.found).toBe(true);
     expect(res.answer).toContain('REQ-LEDGER-001');
     expect(res.sources.map((s) => s.ref)).toContain('REQ-LEDGER-001');
+  });
+
+  it('a legacy /ss-* slash form still routes but prepends the rename nudge (CMD-NS-DOC, REQ-CMD-NS-005)', () => {
+    const res = answerForIntent(cg, classifyIntent('/ss-spec REQ-LEDGER-001'));
+    // Routes exactly like the canonical form…
+    expect(res.found).toBe(true);
+    expect(res.sources.map((s) => s.ref)).toContain('REQ-LEDGER-001');
+    // …and the answer names the /specship:* command it was renamed to.
+    expect(res.answer).toContain('/specship:spec');
+    expect(res.answer.toLowerCase()).toContain('renamed');
+    expect(res.answer).toContain('REQ-LEDGER-001'); // original answer still present
   });
 
   it('domain intent hits the domain-fact layer (dispatch)', () => {
@@ -353,7 +364,7 @@ describe.skipIf(!fts5Available)('deterministic chat answer engine', () => {
   });
 
   it('drift intent reads the out-of-sync links (dispatch)', () => {
-    const res = answerForIntent(cg, classifyIntent('/ss-check'));
+    const res = answerForIntent(cg, classifyIntent('/specship:check'));
     // Freshly indexed project has no drift → honest in-sync answer, no sources.
     expect(res.found).toBe(true);
     expect(res.answer.toLowerCase()).toContain('in sync');
@@ -386,7 +397,7 @@ describe.skipIf(!fts5Available)('deterministic chat answer engine', () => {
   });
 
   it('spec detail carries the full body + links-with-state; domain detail the full body (A2)', () => {
-    const spec = answerForIntent(cg, classifyIntent('/ss-spec REQ-LEDGER-001'));
+    const spec = answerForIntent(cg, classifyIntent('/specship:spec REQ-LEDGER-001'));
     const s = spec.sources.find((x) => x.ref === 'REQ-LEDGER-001');
     expect(s).toBeDefined();
     const sd = s!.detail as SpecDetail;

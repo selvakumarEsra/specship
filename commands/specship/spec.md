@@ -49,8 +49,8 @@ NOTHING to disk until the human explicitly confirms.
    markers above every heading, an RFC-2119 keyword per requirement title, one
    concern per requirement, `## Acceptance` with `.A<N>` bullets (happy +
    failure). Mark genuinely-unknowable points `[needs review]`.
-4. **Hand off:** `specship sync`, then `/ss-spec review <ID>` and
-   `/ss-spec implement <ID>`.
+4. **Hand off:** `specship sync`, then `/specship:spec review <ID>` and
+   `/specship:spec implement <ID>`.
 
 (If a richer authoring skill — e.g. `spec-author` — is available in this
 environment, prefer it; this inline flow is the always-present fallback.)
@@ -77,7 +77,7 @@ gap-question interview (REQ-DOORS-002):
    failure). Pick sensible defaults instead of asking; mark only genuinely
    unknowable points `[needs review]`.
 3. `Write` it to `specs/<slug>.md` and tell the user the path.
-4. Hand off: `specship sync`, then `/ss-spec implement <ID>` when ready.
+4. Hand off: `specship sync`, then `/specship:spec implement <ID>` when ready.
 
 The fast-path still produces a well-formed spec that indexes cleanly and is ready
 for implementation + linking — it trades the interview for speed, not correctness.
@@ -91,7 +91,7 @@ match + recommended target. **Preview the exact diff → confirm** (offer edit /
 new-spec / cancel), then append a new requirement (new concern) or a new `.A<N>`
 acceptance criterion (a regression an existing requirement should have covered),
 auto-deriving the next collision-checked id, and `specship_link_assert` it. When
-nothing clears the match floor, say so and offer `/ss-spec new` instead — never
+nothing clears the match floor, say so and offer `/specship:spec new` instead — never
 auto-create. Write nothing until confirmed.
 
 ## Behaviour tests (`behaviour <SPEC_ID>`)

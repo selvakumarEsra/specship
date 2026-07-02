@@ -87,6 +87,20 @@ jobs:
       - name: Ensure zip/unzip
         run: sudo apt-get update -qq && sudo apt-get install -y -qq zip unzip
 
+      # Blocking gate: boot the real dashboard in a browser and prove it renders
+      # live data at 127.0.0.1 with no cross-origin/CORS-blocked API calls. This
+      # runs BEFORE the CHANGELOG promotion, bundling, and publish, so a
+      # dashboard-blank regression (e.g. #55) stops the release before any
+      # user-facing artifact or side effect is produced. See packages/e2e.
+      - name: Dashboard e2e smoke gate
+        run: |
+          set -euo pipefail
+          npm run build
+          cd packages/e2e
+          npm ci
+          npx playwright install --with-deps chromium
+          CI=1 npm test
+
       - name: Resolve version
         id: ver
         run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"

@@ -118,18 +118,24 @@ function packageAssetPath(...segments: string[]): string {
 // sub-actions internally, so a newcomer meets one obvious entry per phase instead
 // of a long flat list.
 
+// Commands ship from a `specship/` subdirectory of the commands dir so Claude
+// Code surfaces them under the `/specship:` colon namespace (CMD-NS-DOC,
+// REQ-CMD-NS-001) — `specship/explore.md` → `/specship:explore`, etc. The names
+// below are relative to the commands dir; `copyAsset` creates the `specship/`
+// parent directory on write.
+
 /** Retrieval tier — the reads door. Shipped on every install. */
 const RETRIEVAL_TIER_COMMANDS = [
-  'ss-explore.md', // reads: explore / trace / impact
+  'specship/explore.md', // reads: explore / trace / impact → /specship:explore
 ] as const;
 
 /** Governance tier — the intent + gate doors, plus the design→code commands. Opt-in (`--sdd`). */
 const GOVERNANCE_TIER_COMMANDS = [
-  'ss-spec.md',  // intent loop: view / new / fast / implement / review / triage / behaviour / domain
-  'ss-check.md', // gate & health: check / drifted / fix / relink / health
+  'specship/spec.md',  // intent loop: view / new / fast / implement / review / triage / behaviour / domain
+  'specship/check.md', // gate & health: check / drifted / fix / relink / health
   // Design→code workflow (own surface; designer is slated for a separate cut, untouched here).
-  'ss-design-implement.md',
-  'ss-design-loop.md',
+  'specship/design-implement.md',
+  'specship/design-loop.md',
 ] as const;
 
 /**
@@ -143,11 +149,15 @@ const SHIPPED_COMMANDS = [...RETRIEVAL_TIER_COMMANDS, ...GOVERNANCE_TIER_COMMAND
  * Slash commands the installer used to ship but no longer does, so install can
  * self-heal on upgrade (it removes any an earlier installer wrote, so the user's
  * autocomplete doesn't carry stale duplicates) and uninstall strips them too.
- * Two generations:
+ * Three generations:
  *   - the pre-v0.2 `cg-` prefix (from when SpecShip was "code graph");
  *   - the flat per-action `ss-*` commands collapsed into the explore/spec/check
- *     doors by WORKFLOW-DOORS-DOC (REQ-DOORS-003.A1). NOTE: the three surviving
- *     doors — ss-explore, ss-spec, ss-check — are deliberately NOT listed here.
+ *     doors by WORKFLOW-DOORS-DOC (REQ-DOORS-003.A1);
+ *   - the flat door commands themselves (`ss-explore`/`ss-spec`/`ss-check` and the
+ *     two design commands), retired when the doors moved into the `specship/`
+ *     subdirectory / `/specship:` namespace (CMD-NS-DOC, REQ-CMD-NS-003). Listing
+ *     them here is what dedupes an upgrading user off the old flat form so they
+ *     don't end up with both `/ss-spec` and `/specship:spec` in autocomplete.
  */
 const LEGACY_SHIPPED_COMMANDS = [
   // pre-v0.2 `cg-` prefix
@@ -176,7 +186,28 @@ const LEGACY_SHIPPED_COMMANDS = [
   'ss-drifted.md',
   'ss-fix.md',
   'ss-relink.md',
+  // flat door commands, superseded by the `specship/` subdir (CMD-NS-DOC)
+  'ss-explore.md',
+  'ss-spec.md',
+  'ss-check.md',
+  'ss-design-implement.md',
+  'ss-design-loop.md',
 ] as const;
+
+/**
+ * The flat door filenames whose removal means we just migrated an existing user
+ * off the pre-namespace `/ss-*` commands — the trigger for the one-time rename
+ * notice (CMD-NS-DOC, REQ-CMD-NS-004). A subset of LEGACY_SHIPPED_COMMANDS: the
+ * older folded per-action `ss-*` / `cg-*` files don't warrant the notice, only
+ * the door rename does.
+ */
+const RENAMED_FLAT_DOOR_COMMANDS: readonly string[] = [
+  'ss-explore.md',
+  'ss-spec.md',
+  'ss-check.md',
+  'ss-design-implement.md',
+  'ss-design-loop.md',
+];
 
 /** Subagents the installer copies into Claude's agents dir. */
 const SHIPPED_AGENTS = ['specship-explorer.md'] as const;
@@ -303,17 +334,24 @@ class ClaudeCodeTarget implements AgentTarget {
     // explicitly. Copies the same .md files that ship for the plugin
     // install path, so the two flows can't drift apart.
     //
-    // 4a. Strip any legacy `cg-*.md` slash commands the pre-v0.2
-    // installer wrote. Self-heals on upgrade so the user's autocomplete
-    // doesn't carry both prefixes side-by-side.
+    // 4a. Strip any legacy slash commands a prior installer wrote — the pre-v0.2
+    // `cg-*` prefix, the folded per-action `ss-*` commands, and (CMD-NS-DOC) the
+    // flat door commands superseded by the `specship/` subdir. Self-heals on
+    // upgrade so the user's autocomplete doesn't carry stale duplicates.
     // Governance is opt-in (INSTALL-WEDGE-DOC, REQ-WEDGE-002): the spec /
     // authoring / review / design commands AND the SDD steering ship together
     // only when the user explicitly enables them with `--sdd`. A default install
     // provisions the retrieval tier alone, protecting the wedge (REQ-WEDGE-001).
     const includeGovernance = opts.sdd === true;
-    for (const f of cleanupLegacyCommandsEntries(loc)) files.push(f);
+    const legacyRemoved = cleanupLegacyCommandsEntries(loc);
+    for (const f of legacyRemoved) files.push(f);
     for (const f of writeCommandsEntries(loc, includeGovernance)) files.push(f);
     for (const f of writeAgentsEntries(loc)) files.push(f);
+    // Did we just migrate an existing user off the flat `/ss-*` door commands?
+    // (CMD-NS-DOC, REQ-CMD-NS-004) — drives the one-time rename notice below.
+    const migratedFlatDoors = legacyRemoved.some((f) =>
+      RENAMED_FLAT_DOOR_COMMANDS.includes(path.basename(f.path)),
+    );
 
     // 5. Spec-driven-development steering (SDD-INSTALL-DOC, as superseded by
     // INSTALL-WEDGE-DOC). Part of the governance tier — opt-in via `--sdd`.
@@ -331,6 +369,15 @@ class ClaudeCodeTarget implements AgentTarget {
     // status line: writeStatusLineEntry returns 'kept' and we surface the
     // composable snippet as a note so the user can wire it in themselves.
     const notes: string[] = [];
+    // One-time rename notice (CMD-NS-DOC, REQ-CMD-NS-004): only when this install
+    // just removed a flat `/ss-*` door command, so a fresh install stays quiet.
+    if (migratedFlatDoors) {
+      notes.push(
+        'SpecShip slash commands moved from `/ss-*` to the `/specship:*` namespace ' +
+        '(e.g. `/ss-spec` → `/specship:spec`, `/ss-explore` → `/specship:explore`). ' +
+        'The old commands were removed from your commands directory.',
+      );
+    }
     if (opts.installStatusLine) {
       const sl = writeStatusLineEntry(loc);
       files.push(sl);
@@ -853,13 +900,22 @@ export function writeAgentsEntries(loc: Location): WriteResult['files'] {
 }
 
 /**
- * Inverse of writeCommandsEntries: delete each cg-*.md we shipped, if
- * present. A file the user replaced with their own content is still
- * removed — match the existing uninstall posture for files specship
- * owns (the user can re-add their version after).
+ * Inverse of writeCommandsEntries: delete each command we shipped under the
+ * `specship/` subdir, if present. A file the user replaced with their own
+ * content is still removed — match the existing uninstall posture for files
+ * specship owns (the user can re-add their version after). The now-empty
+ * `specship/` subdir is dropped too (best-effort, only when empty), so a
+ * user-authored file placed inside it is preserved (CMD-NS-DOC, REQ-CMD-NS-002).
  */
 export function removeCommandsEntries(loc: Location): WriteResult['files'] {
-  return SHIPPED_COMMANDS.map((name) => removeFile(path.join(commandsDir(loc), name)));
+  const removed = SHIPPED_COMMANDS.map((name) => removeFile(path.join(commandsDir(loc), name)));
+  const nsDir = path.join(commandsDir(loc), 'specship');
+  try {
+    if (fs.existsSync(nsDir) && fs.readdirSync(nsDir).length === 0) fs.rmdirSync(nsDir);
+  } catch {
+    // Leave the directory in place if it can't be removed — never fatal.
+  }
+  return removed;
 }
 
 /** Inverse of writeAgentsEntries. */

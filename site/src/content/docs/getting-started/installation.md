@@ -16,11 +16,11 @@ The installer will:
 - Ask whether to wire SpecShip into **just this project** (the default) or **all projects** (global).
 - Write the MCP server entry so Claude Code launches `specship serve --mcp`.
 - Add the read-only `specship_*` (and `designer_*`) tools to Claude Code's auto-allow list, so you aren't prompted on every query.
-- Install the **`/ss-explore`** reads door and the `specship-explorer` subagent.
+- Install the **`/specship:explore`** reads door and the `specship-explorer` subagent.
 - Add the auto-sync hooks (re-index after the agent edits files; catch up on session start).
 - For a project-local install, initialize the current project and build its index.
 
-That's the **retrieval wedge** — everything you need for the agent to explore the index instead of re-reading files, with zero workflow change. The **spec-driven layer** (the `/ss-spec` and `/ss-check` doors plus the "author a spec first" steering) is **opt-in** — add it with `specship install --sdd` when you want it. An existing spec-driven install is preserved on upgrade; it's never silently downgraded.
+That's the **retrieval wedge** — everything you need for the agent to explore the index instead of re-reading files, with zero workflow change. The **spec-driven layer** (the `/specship:spec` and `/specship:check` doors plus the "author a spec first" steering) is **opt-in** — add it with `specship install --sdd` when you want it. An existing spec-driven install is preserved on upgrade; it's never silently downgraded.
 
 ## Project-local vs global
 
@@ -42,7 +42,7 @@ specship install --print-config               # print the MCP snippet, no file w
 |---|---|---|
 | `--location` | `global`, `local` | prompt (highlights `local`) |
 | `--yes` | (boolean) non-interactive | prompt every step → `local` |
-| `--sdd` | (boolean) also install the spec-driven layer (`/ss-spec` + `/ss-check` doors + steering) | off (retrieval only) |
+| `--sdd` | (boolean) also install the spec-driven layer (`/specship:spec` + `/specship:check` doors + steering) | off (retrieval only) |
 | `--no-permissions` | (boolean) skip the auto-allow list | permissions on |
 | `--print-config` | print the MCP snippet and exit | — |
 

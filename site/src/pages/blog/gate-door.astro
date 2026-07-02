@@ -19,7 +19,7 @@ import Article from '../../layouts/Article.astro';
   </svg>
 
   <p>The first two doors get intent into the graph and code out of it. This one keeps them honest with each other over time — because the failure mode of AI-assisted development isn't writing bad code, it's writing plausible code that quietly drifts away from what was promised, and rots the architecture a little on every commit. The gate door is the checkpoint that notices.</p>
-  <p><code>/ss-check</code> is one door over four jobs: run the gate, work the drift queue, repair a broken link, and read code health. It routes on the first word.</p>
+  <p><code>/specship:check</code> is one door over four jobs: run the gate, work the drift queue, repair a broken link, and read code health. It routes on the first word.</p>
 
   <h2>The gate</h2>
   <p>Open it with no argument and it runs the enforcement gate — <code>specship check</code> — which composes four graph-derived checks into one verdict: spec↔code <strong>drift</strong>, architecture <strong>fitness</strong> (your layering rules), <strong>maintainability</strong> (coupling, god-files, cycles), and the spec→test→verify <strong>behaviour chain</strong>. It's the single command an agent runs before it calls a change done.</p>
@@ -29,7 +29,7 @@ import Article from '../../layouts/Article.astro';
   </div>
 
   <h2>The drift queue</h2>
-  <p>Every spec is a node with an edge to the code that satisfies it. Change that code and the edge tells the truth about what happened. <code>/ss-check drifted</code> calls <code>specship_drifted</code> and surfaces the links that need a human's eye, in three states:</p>
+  <p>Every spec is a node with an edge to the code that satisfies it. Change that code and the edge tells the truth about what happened. <code>/specship:check drifted</code> calls <code>specship_drifted</code> and surfaces the links that need a human's eye, in three states:</p>
   <div class="art-stats">
     <div class="as"><div class="v" style="color:#E5A50A">drifted</div><div class="k">the spec or the code changed since the link was verified — the two may no longer agree.</div></div>
     <div class="as"><div class="v" style="color:#F2555A">broken</div><div class="k">a linked test ran and failed — the code no longer satisfies the requirement.</div></div>
@@ -47,20 +47,20 @@ import Article from '../../layouts/Article.astro';
   </ul>
 
   <h2>Code health</h2>
-  <p><code>/ss-check health</code> runs <code>specship maintainability</code> — code health read straight off the graph, no linter to configure. By default it shows the <strong>high-precision</strong> findings: oversized symbols, god files, and dependency cycles, ranked and capped so you get the ten that matter, not a thousand-line wall. Two flags open it up:</p>
+  <p><code>/specship:check health</code> runs <code>specship maintainability</code> — code health read straight off the graph, no linter to configure. By default it shows the <strong>high-precision</strong> findings: oversized symbols, god files, and dependency cycles, ranked and capped so you get the ten that matter, not a thousand-line wall. Two flags open it up:</p>
   <div class="codeblock">
     <div class="cb-bar"><div class="traffic"><i style="background:#F2555A"></i><i style="background:#E5A50A"></i><i style="background:#46C26B"></i></div><span class="fn">the gate door</span></div>
     <pre><span class="c-com"># the gate — advises by default, gates only what you configure</span>
-/ss-check
+/specship:check
 
 <span class="c-com"># the review queue</span>
-/ss-check <span class="c-str">drifted</span>
+/specship:check <span class="c-str">drifted</span>
 
 <span class="c-com"># repair a drifted / broken link</span>
-/ss-check <span class="c-str">fix REQ-AUTH-005</span>
+/specship:check <span class="c-str">fix REQ-AUTH-005</span>
 
 <span class="c-com"># code health — add --deep for coupling + dead code, --json for CI</span>
-/ss-check <span class="c-str">health</span></pre>
+/specship:check <span class="c-str">health</span></pre>
   </div>
   <p>Add <code>--deep</code> for the lower-confidence dead-code and coupling findings, and <code>--json</code> for the full tagged set — the shape you wire into CI when you're ready to let the gate actually fail a build.</p>
 

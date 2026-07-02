@@ -98,7 +98,7 @@
         }
       </div>
       @if (links().length === 0) {
-        <div class="sd-empty-row">No linked code yet — run <span class="mono">/ss-spec implement {{ spec()?.id }}</span> to link it.</div>
+        <div class="sd-empty-row">No linked code yet — run <span class="mono">/specship:spec implement {{ spec()?.id }}</span> to link it.</div>
       } @else {
         <div class="sd-links">
           @for (l of links(); track l.id) {

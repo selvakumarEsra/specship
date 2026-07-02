@@ -1,0 +1,15 @@
+{
+  "name": "@specship/e2e",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Browser end-to-end smoke tests for the SpecShip Desktop dashboard. Boots `specship serve --ui` on 127.0.0.1 against a hermetic fixture and asserts the dashboard renders live data (the regression guard for the same-origin / CORS dashboard-blank class of bug).",
+  "type": "module",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "install:browser": "playwright install chromium"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.48.0"
+  }
+}

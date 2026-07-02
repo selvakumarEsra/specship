@@ -159,10 +159,10 @@ export class SpecDetail {
 
   /** Implement / Verify are agent commands — copy the door command to run. */
   protected onImplement(): void {
-    const id = this.spec()?.id; if (id) this.copyCmd(`/ss-spec implement ${id}`, 'implement');
+    const id = this.spec()?.id; if (id) this.copyCmd(`/specship:spec implement ${id}`, 'implement');
   }
   protected onVerify(): void {
-    this.copyCmd('/ss-check', 'verify');
+    this.copyCmd('/specship:check', 'verify');
   }
   /** Edit lives on the Specs page (Monaco editor); navigate there. */
   protected onEdit(): void {

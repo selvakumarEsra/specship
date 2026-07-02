@@ -50,7 +50,7 @@ interface PromptGroup {
   tools: ClaudeToolCall[];
   totalTokens: number;
   toolBytes: number;
-  /** Slash command extracted from the user prompt text (e.g. "/ss-spec"). */
+  /** Slash command extracted from the user prompt text (e.g. "/specship:spec"). */
   slashCommand: string | null;
   /** Wall-clock between the prompt's ts and its last tool call. 0 when no tools fired. */
   durationMs: number;

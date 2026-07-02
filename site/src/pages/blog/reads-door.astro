@@ -25,7 +25,7 @@ import Article from '../../layouts/Article.astro';
   </svg>
 
   <p>An agent working in an unfamiliar codebase spends most of its budget on one thing: <em>figuring out what the code does</em>. Grep for a name, read the file, follow an import, read that file, grep again. Each hop is a tool call and a few thousand tokens of source pasted into the context, and most of it gets read once and never used. That loop is where sessions go slow and expensive.</p>
-  <p>SpecShip collapses that whole loop into a single door. Type <code>/ss-explore</code>, describe what you want to understand, and the graph answers — no grep, no Read, no file-hopping. This is the post about that door and the six tools behind it.</p>
+  <p>SpecShip collapses that whole loop into a single door. Type <code>/specship:explore</code>, describe what you want to understand, and the graph answers — no grep, no Read, no file-hopping. This is the post about that door and the six tools behind it.</p>
 
   <h2>One door, not six commands</h2>
   <p>The temptation with a code-intelligence tool is to expose a command per capability: one for callers, one for callees, one for impact, one for tracing, one for search. That's honest to the internals and useless to the agent — now it has to <em>choose</em> the right tool before it even understands the problem, and choosing wrong means a wasted round-trip.</p>
@@ -71,13 +71,13 @@ import Article from '../../layouts/Article.astro';
   <div class="codeblock">
     <div class="cb-bar"><div class="traffic"><i style="background:#F2555A"></i><i style="background:#E5A50A"></i><i style="background:#46C26B"></i></div><span class="fn">the reads door, three ways</span></div>
     <pre><span class="c-com"># understand an area</span>
-/ss-explore <span class="c-str">AuthService.login rate-limit enforce</span>
+/specship:explore <span class="c-str">AuthService.login rate-limit enforce</span>
 
 <span class="c-com"># trace a flow (name both ends)</span>
-/ss-explore <span class="c-str">mutateElement renderScene</span>
+/specship:explore <span class="c-str">mutateElement renderScene</span>
 
 <span class="c-com"># blast radius</span>
-/ss-explore <span class="c-str">impact of SessionToken.rotate</span></pre>
+/specship:explore <span class="c-str">impact of SessionToken.rotate</span></pre>
   </div>
 
   <h2>Why it’s a door and not a menu</h2>

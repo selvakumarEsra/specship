@@ -1,0 +1,56 @@
+name: Dashboard e2e
+
+# Boots the real SpecShip Desktop dashboard in a headless browser against a
+# hermetic fixture and asserts it renders live data at 127.0.0.1 with no
+# cross-origin / CORS-blocked API calls. This is the regression guard for the
+# "dashboard opens blank / shows no data" class of bug (e.g. #55) that the
+# vitest suites can't see because they never boot the Angular SPA in a browser.
+#
+# Runs on PRs that touch the dashboard, server, CLI, or the harness itself.
+# The Release workflow runs the same suite as a BLOCKING publish gate.
+on:
+  workflow_dispatch: {}
+  pull_request:
+    paths:
+      - "packages/web-ng/**"
+      - "packages/server/**"
+      - "packages/e2e/**"
+      - "src/**"
+      - "scripts/build-*.mjs"
+      - "scripts/build-*.sh"
+      - ".github/workflows/e2e.yml"
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dashboard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      # Root install compiles the optional better-sqlite3 (ships FTS5), which
+      # the fixture indexer needs; the built-in node:sqlite on Node 22 has no
+      # FTS5. web-ng has its own lockfile the root install doesn't cover.
+      - run: npm ci
+      - name: Install dashboard (web-ng) dependencies
+        run: cd packages/web-ng && npm ci
+      - name: Build CLI + dashboard bundle
+        run: npm run build
+      - name: Install e2e deps + browser
+        run: |
+          cd packages/e2e
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Run dashboard e2e
+        run: cd packages/e2e && CI=1 npm test
+      - name: Upload report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: packages/e2e/playwright-report
+          retention-days: 7

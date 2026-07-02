@@ -126,7 +126,7 @@ jobs:
           # (INSTALL-BUNDLE-ASSETS REQ-002). The bundled package only ships
           # `dist/`; a build that omits the installer's commands/ + agents/
           # from the bundle ENOENTs here — the 0.11.2 regression this guards.
-          test -f "$HOME/.claude/commands/ss-explore.md"
+          test -f "$HOME/.claude/commands/specship/explore.md"
           test -f "$HOME/.claude/agents/specship-explorer.md"
 
       - name: init + index (FTS5 trip-wire)
