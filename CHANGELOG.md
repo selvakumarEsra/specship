@@ -9,6 +9,10 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### New Features
+
+- **Releases now run a real browser check of the dashboard before publishing.** A new end-to-end test opens the dashboard in a headless browser at `127.0.0.1`, against a self-contained sample project, and confirms it actually renders live data with no blocked API calls. It runs on pull requests and as a blocking gate during release — so the "dashboard opens blank / shows no data" class of bug can't ship unnoticed.
+
 
 ## [0.11.7] - 2026-07-02
 
