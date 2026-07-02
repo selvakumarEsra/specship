@@ -9,11 +9,13 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+
+## [0.11.8] - 2026-07-02
+
 ### New Features
 
 - **SpecShip's slash commands now live under a `/specship:` namespace.** The commands you type in Claude Code are now `/specship:spec`, `/specship:explore`, `/specship:check`, `/specship:design-loop`, and `/specship:design-implement` — grouped under one `specship:` prefix instead of scattered among your other commands. Upgrading removes the old flat `/ss-*` commands so you don't end up with duplicates, and the installer prints a one-time note pointing out the new names. The dashboard chat still understands the old `/ss-*` forms and tells you what each was renamed to, so nothing you've memorized suddenly stops working.
 - **Releases now run a real browser check of the dashboard before publishing.** A new end-to-end test opens the dashboard in a headless browser at `127.0.0.1`, against a self-contained sample project, and confirms it actually renders live data with no blocked API calls. It runs on pull requests and as a blocking gate during release — so the "dashboard opens blank / shows no data" class of bug can't ship unnoticed.
-
 
 ## [0.11.7] - 2026-07-02
 
@@ -479,3 +481,4 @@ Thanks @andreinknv for the substantive draft this release was based on.
 [0.11.5]: https://github.com/selvakumarEsra/specship/releases/tag/v0.11.5
 [0.11.6]: https://github.com/selvakumarEsra/specship/releases/tag/v0.11.6
 [0.11.7]: https://github.com/selvakumarEsra/specship/releases/tag/v0.11.7
+[0.11.8]: https://github.com/selvakumarEsra/specship/releases/tag/v0.11.8
