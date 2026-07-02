@@ -3,7 +3,7 @@ id: ENFORCE-DOC
 title: Enforcement mode (gating harness + behaviour chain)
 owner: core
 priority: medium
-version: 1
+version: 2
 ---
 
 <!-- id: ENFORCE-DOC -->
@@ -99,3 +99,34 @@ implementations:
 <!-- id: REQ-ENFORCE-003.A4 -->
 - A requirement explicitly marked out of behaviour-gating scope is skipped, so
   not every spec must carry tests before the gate can be turned on anywhere.
+
+<!-- id: REQ-ENFORCE-004 -->
+## SpecShip MUST provide a graduation ramp from advisory to gating
+
+Opt-in gating without a route to it leaves the gate permanently toothless for
+the solo-dev wedge, who never hand-edits `specship.config.json`. The advisory
+default stays (REQ-ENFORCE-002 is unchanged); the ramp gives it three exits:
+the advisory report sells the gate with the exact opt-in command, a `--strict`
+flag gates one run without persistent config, and the spec-driven (`--sdd`)
+install asks once with gating recommended on.
+
+implementations:
+  - src/enforce/enforce.ts:strictEnforceConfig
+  - src/enforce/enforce.ts:enableGateChecks
+  - src/installer/index.ts:runInstallerWithOptions
+
+## Acceptance
+<!-- id: REQ-ENFORCE-004.A1 -->
+- An advisory run whose findings would fail a gated run ends its report with
+  the exact command that enables gating for each failing check; the command
+  writes the config itself — the user is never told to hand-edit JSON.
+<!-- id: REQ-ENFORCE-004.A2 -->
+- `specship check --strict` treats every check as gating for that run only,
+  with no persistent configuration required or written.
+<!-- id: REQ-ENFORCE-004.A3 -->
+- The `--sdd` install asks once whether to gate the drift and behaviour checks,
+  with yes as the recommended default; declining leaves the install
+  advisory-only.
+<!-- id: REQ-ENFORCE-004.A4 -->
+- With no configuration and no flags the command still reports advisory
+  findings and exits zero — the ramp does not weaken REQ-ENFORCE-002.

@@ -1,12 +1,22 @@
 /**
- * Enforcement-mode tests (REQ-ENFORCE-001/002/003).
+ * Enforcement-mode tests (REQ-ENFORCE-001/002/003/004).
  *
  * Pure-function tests over hand-built dependency snapshots — no DB needed.
  * Covers opt-in (no gate → advisory → passes), per-check gating + incremental
- * adoption, and the behaviour chain (broken / unverified / verified / excluded).
+ * adoption, the behaviour chain (broken / unverified / verified / excluded),
+ * and the graduation ramp (--strict override + --enable-gate config writing).
  */
 import { describe, it, expect } from 'vitest';
-import { evaluateEnforcement } from '../src/enforce/enforce';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+import {
+  evaluateEnforcement,
+  strictEnforceConfig,
+  enableGateChecks,
+  loadEnforceConfig,
+  ENFORCE_CONFIG_FILE,
+} from '../src/enforce/enforce';
 import type { EnforceDeps, EnforceConfig, RequirementVerification } from '../src/enforce/enforce';
 import type { SpecLink } from '../src/types';
 import type { FitnessReport } from '../src/fitness/fitness';
@@ -96,5 +106,54 @@ describe('enforce — behaviour chain (REQ-ENFORCE-003)', () => {
     );
     expect(r.passed).toBe(true);
     expect(find(r, 'behaviour').findings).toEqual([]);
+  });
+});
+
+describe('enforce — graduation ramp (REQ-ENFORCE-004)', () => {
+  it('strictEnforceConfig gates every check for the run (A2)', () => {
+    const r = evaluateEnforcement(
+      deps({ drift: [link('REQ-X', 'drifted')], fitness: dirtyFitness }),
+      strictEnforceConfig(),
+    );
+    expect(r.checks.every((c) => c.gating)).toBe(true);
+    expect(r.passed).toBe(false);
+    expect(r.gatedFailures).toContain('drift');
+    expect(r.gatedFailures).toContain('fitness');
+  });
+
+  it('enableGateChecks writes gating into specship.config.json and preserves other keys (A1)', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'specship-enforce-'));
+    try {
+      fs.writeFileSync(
+        path.join(dir, ENFORCE_CONFIG_FILE),
+        JSON.stringify({ other: { keep: true }, enforce: { behaviour: { exclude: ['REQ-Z'] } } }),
+      );
+      const enabled = enableGateChecks(dir, ['drift', 'behaviour']);
+      expect(enabled).toEqual(['drift', 'behaviour']);
+      const cfg = JSON.parse(fs.readFileSync(path.join(dir, ENFORCE_CONFIG_FILE), 'utf-8'));
+      expect(cfg.enforce.gate).toEqual({ drift: true, behaviour: true });
+      expect(cfg.other).toEqual({ keep: true });
+      expect(cfg.enforce.behaviour.exclude).toEqual(['REQ-Z']);
+      expect(loadEnforceConfig(dir).gate?.drift).toBe(true);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('enableGateChecks creates the config when missing and skips already-gating checks', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'specship-enforce-'));
+    try {
+      expect(enableGateChecks(dir, ['drift'])).toEqual(['drift']);
+      expect(enableGateChecks(dir, ['drift'])).toEqual([]);
+      expect(loadEnforceConfig(dir).gate).toEqual({ drift: true });
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('the ramp does not weaken the no-config default (A4)', () => {
+    const r = evaluateEnforcement(deps({ drift: [link('REQ-X', 'drifted')] }), {});
+    expect(r.passed).toBe(true);
+    expect(find(r, 'drift').gating).toBe(false);
   });
 });

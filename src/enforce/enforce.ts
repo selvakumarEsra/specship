@@ -139,3 +139,42 @@ export function loadEnforceConfig(projectRoot: string): EnforceConfig {
   }
   return {};
 }
+
+/** All check names, for `--strict` / `--enable-gate` validation. */
+export const ALL_CHECKS: CheckName[] = ['drift', 'fitness', 'maintainability', 'behaviour'];
+
+/**
+ * The `--strict` override (REQ-ENFORCE-004.A2): every check gates for this
+ * run only. Nothing is read from or written to the project config.
+ */
+export function strictEnforceConfig(): EnforceConfig {
+  return { gate: { drift: true, fitness: true, maintainability: true, behaviour: true } };
+}
+
+/**
+ * Persist gating for the named checks into `specship.config.json`
+ * (REQ-ENFORCE-004.A1 — the command writes the config; the user is never
+ * told to hand-edit JSON). Merges into an existing file, preserving every
+ * other key (including other `enforce` settings like `behaviour.exclude`).
+ * Returns the checks newly enabled (already-gating checks are skipped).
+ */
+export function enableGateChecks(projectRoot: string, checks: CheckName[]): CheckName[] {
+  const file = path.join(projectRoot, ENFORCE_CONFIG_FILE);
+  let cfg: { enforce?: EnforceConfig; [key: string]: unknown } = {};
+  try {
+    cfg = JSON.parse(fs.readFileSync(file, 'utf-8'));
+  } catch {
+    // missing / unparseable → start fresh
+  }
+  if (!cfg.enforce || typeof cfg.enforce !== 'object') cfg.enforce = {};
+  if (!cfg.enforce.gate || typeof cfg.enforce.gate !== 'object') cfg.enforce.gate = {};
+  const enabled: CheckName[] = [];
+  for (const check of checks) {
+    if (cfg.enforce.gate[check] !== true) {
+      cfg.enforce.gate[check] = true;
+      enabled.push(check);
+    }
+  }
+  if (enabled.length > 0) fs.writeFileSync(file, JSON.stringify(cfg, null, 2) + '\n', 'utf-8');
+  return enabled;
+}

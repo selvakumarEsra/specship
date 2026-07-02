@@ -1560,21 +1560,51 @@ program
  * GATING check fails. Which checks gate vs advise is configured in
  * specship.config.json `enforce.gate`; with no config every check is advisory
  * and the command exits 0 (opt-in — never breaks an existing repo).
+ *
+ * The graduation ramp (REQ-ENFORCE-004): `--strict` gates every check for
+ * one run; `--enable-gate <checks...>` persists gating into the config and
+ * then runs; an advisory run with would-be-gating findings ends by printing
+ * the exact `--enable-gate` command that turns the gate on.
  */
 program
   .command('check [path]')
   .description('Run the enforcement gate (drift + fitness + maintainability + behaviour); exits non-zero on a gating failure')
   .option('-j, --json', 'Output as JSON')
-  .action(async (pathArg: string | undefined, options: { json?: boolean }) => {
+  .option('--strict', 'Treat every check as gating for this run only (nothing read from or written to config)')
+  .option('--enable-gate <checks...>', 'Persist gating for the named checks into specship.config.json, then run the gate')
+  .action(async (pathArg: string | undefined, options: { json?: boolean; strict?: boolean; enableGate?: string[] }) => {
     const projectPath = resolveProjectPath(pathArg);
     try {
       if (!isInitialized(projectPath)) {
         error(`SpecShip not initialized in ${projectPath}`);
         process.exit(1);
       }
+      const enforce = await import('../enforce/enforce');
+
+      // --enable-gate writes the opt-in config, then falls through to a
+      // normal run so the user immediately sees the gate with teeth
+      // (REQ-ENFORCE-004.A1).
+      if (options.enableGate?.length) {
+        const invalid = options.enableGate.filter(
+          (c) => !(enforce.ALL_CHECKS as string[]).includes(c),
+        );
+        if (invalid.length) {
+          error(`Unknown check(s): ${invalid.join(', ')}. Valid: ${enforce.ALL_CHECKS.join(', ')}`);
+          process.exit(1);
+        }
+        const enabled = enforce.enableGateChecks(
+          projectPath,
+          options.enableGate as typeof enforce.ALL_CHECKS,
+        );
+        if (enabled.length) {
+          success(`Gating enabled for ${enabled.join(', ')} — written to specship.config.json.`);
+        }
+      }
+
       const { default: SpecShip } = await loadSpecShip();
       const cg = await SpecShip.open(projectPath);
-      const r = cg.getEnforce();
+      // --strict gates everything for this run only (REQ-ENFORCE-004.A2).
+      const r = options.strict ? cg.getEnforce(enforce.strictEnforceConfig()) : cg.getEnforce();
 
       if (options.json) {
         console.log(JSON.stringify(r, null, 2));
@@ -1595,6 +1625,20 @@ program
         success(r.gatedFailures.length === 0 && r.checks.some((c) => c.gating)
           ? 'All gating checks pass.'
           : 'Pass (no gating checks failed).');
+        // The advisory sell (REQ-ENFORCE-004.A1): findings that would fail
+        // a gated run end the report with the exact opt-in command.
+        const wouldGate = r.checks.filter((c) => !c.gating && !c.passed).map((c) => c.check);
+        if (wouldGate.length) {
+          const total = r.checks
+            .filter((c) => wouldGate.includes(c.check))
+            .reduce((n, c) => n + c.findings.length, 0);
+          console.log(
+            chalk.dim(
+              `\n  ${total} advisory finding(s) would fail a gated run.` +
+              `\n  Enable: specship check --enable-gate ${wouldGate.join(' ')}\n`,
+            ),
+          );
+        }
         cg.destroy();
         return;
       }
