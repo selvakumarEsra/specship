@@ -9,10 +9,12 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+
+## [0.11.7] - 2026-07-02
+
 ### Fixes
 
 - **The dashboard loads whether you open it at `localhost` or `127.0.0.1`.** Opening the dashboard at `http://127.0.0.1:<port>` showed no data — every API call (and the live-update streams) went to `localhost` instead of the page's own host, and the browser blocked the cross-origin requests. The dashboard now calls the API at the same origin it was served from, and the live-update (SSE) endpoints send the right CORS headers, so it works from either address.
-
 
 ## [0.11.6] - 2026-07-01
 
@@ -471,3 +473,4 @@ Thanks @andreinknv for the substantive draft this release was based on.
 [0.11.4]: https://github.com/selvakumarEsra/specship/releases/tag/v0.11.4
 [0.11.5]: https://github.com/selvakumarEsra/specship/releases/tag/v0.11.5
 [0.11.6]: https://github.com/selvakumarEsra/specship/releases/tag/v0.11.6
+[0.11.7]: https://github.com/selvakumarEsra/specship/releases/tag/v0.11.7
