@@ -280,8 +280,8 @@ export class Dashboard {
     {
       id: 'intent', label: 'Intent', cmd: '/specship:spec', icon: 'book',
       color: 'var(--node-spec)', route: 'specs',
-      blurb: 'View, author, design, implement, review, or extend a spec — the whole lifecycle.',
-      subs: ['new', 'fast', 'design', 'implement', 'review', 'triage', 'behaviour', 'domain'],
+      blurb: 'View, list, author, design, implement, review, or extend a spec — the whole lifecycle.',
+      subs: ['list', 'new', 'fast', 'design', 'implement', 'review', 'triage', 'behaviour', 'domain'],
     },
     {
       id: 'reads', label: 'Reads', cmd: '/specship:explore', icon: 'search',

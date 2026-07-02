@@ -1,6 +1,6 @@
 ---
-description: Intent door — view, author, fast-path, design, implement, review, or extend a spec. No arg = the spec funnel; a SPEC_ID = that spec's detail; `new`/`fast`/`design`/`implement`/`review`/`triage`/`behaviour`/`domain` run the matching flow.
-argument-hint: "<SPEC_ID> | new <desc> | fast <desc> | design <URL | intent> | implement <ID> | review <ID> | triage <prompt> | behaviour <ID> | domain"
+description: Intent door — view, list, author, fast-path, design, implement, review, or extend a spec. No arg = the spec funnel; a SPEC_ID = that spec's detail; `list`/`new`/`fast`/`design`/`implement`/`review`/`triage`/`behaviour`/`domain` run the matching flow.
+argument-hint: "<SPEC_ID> | list | new <desc> | fast <desc> | design <URL | intent> | implement <ID> | review <ID> | triage <prompt> | behaviour <ID> | domain"
 allowed-tools: Read, Edit, Write, Bash, mcp__specship__specship_spec, mcp__specship__specship_node, mcp__specship__specship_explore, mcp__specship__specship_search, mcp__specship__specship_link_assert, mcp__specship__specship_link_verify, mcp__specship__specship_drifted, mcp__specship__designer_session, mcp__specship__designer_prompt, mcp__specship__designer_ask, mcp__specship__designer_list, mcp__specship__designer_snapshot, mcp__specship__designer_handoff
 ---
 
@@ -19,6 +19,12 @@ lost.
   `spec_id`: the body, parent/siblings, and linked code with state. Use this
   before Read-ing the spec file. Jump into linked code via `specship_node`; if
   nothing is linked yet, `specship_explore` on terms from the spec's title.
+- **`list`** → call `specship_spec` with `list: true`: the flat spec inventory —
+  idea briefs, then every document's requirements, each carrying exactly one
+  rolled-up status (`authored · in-progress · implemented · verified ·
+  needs-attention`), closing with per-status totals (REQ-DOORS-008). ONE call;
+  render what it returns — no per-spec follow-up calls, no file reading. For
+  pipeline-health rollups use the no-argument funnel instead.
 - **`new <description>`** → the full, gated authoring loop (see *Author* below).
   Use when the design isn't settled.
 - **`fast <description>`** → the **fast-path** (see below).

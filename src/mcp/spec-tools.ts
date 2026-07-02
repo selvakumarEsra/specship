@@ -13,7 +13,7 @@
  */
 
 import type SpecShip from '../index';
-import type { SpecLink, SpecLinkState, SpecLinkKind, NodeKind } from '../types';
+import type { Spec, SpecLink, SpecLinkState, SpecLinkKind, NodeKind } from '../types';
 import type { SpecQueries } from '../db/spec-queries';
 import { renderBehaviourSurface } from '../behaviour/behaviour-surface';
 import type { ToolDefinition, ToolResult } from './tools';
@@ -45,6 +45,23 @@ export const SPEC_LINK_KINDS: SpecLinkKind[] = [
 ];
 
 /**
+ * Rolled-up lifecycle status of a requirement in the `list` inventory
+ * (REQ-FUNNEL-007). Exactly one status per requirement, derived from the
+ * requirement's own spec→code links plus those of its acceptance children.
+ * Ordered from least to most attention-worthy for stable totals rendering.
+ * Degraded links win the derivation so a stale / broken implementation is
+ * never reported as done (never overstate).
+ */
+export const REQUIREMENT_STATUSES = [
+  'authored',
+  'in-progress',
+  'implemented',
+  'verified',
+  'needs-attention',
+] as const;
+export type RequirementStatus = (typeof REQUIREMENT_STATUSES)[number];
+
+/**
  * Tool definitions. Append these to the main `tools` array.
  *
  * Tool guidance follows the CLAUDE.md "adapt to the agent" rule: the
@@ -57,7 +74,7 @@ export const specToolDefinitions: ToolDefinition[] = [
   {
     name: 'specship_spec',
     description:
-      'Fetch a spec/requirement by its ID. Call this FIRST whenever the user mentions a spec ID (e.g., REQ-AUTH-005) or a requirement. Returns the spec body, its parent doc and sibling requirements, and the code it currently links to with link state (verified / drifted / orphaned). Use this instead of Read-ing the spec file — it returns more (linked code + state) than the file alone. Called WITHOUT a spec_id, it returns the project\'s spec lifecycle funnel: brainstormed ideas → specs → implemented, with per-document rollups. Pass `query` instead to SEARCH specs by free text — call this FIRST when a user describes a change (a bug, an error, a one-line enhancement) and you need to find which existing spec it belongs to; it returns scored, ranked candidates (id, title, kind, snippet) over the spec full-text index.',
+      'Fetch a spec/requirement by its ID. Call this FIRST whenever the user mentions a spec ID (e.g., REQ-AUTH-005) or a requirement. Returns the spec body, its parent doc and sibling requirements, and the code it currently links to with link state (verified / drifted / orphaned). Use this instead of Read-ing the spec file — it returns more (linked code + state) than the file alone. Called WITHOUT a spec_id, it returns the project\'s spec lifecycle funnel: brainstormed ideas → specs → implemented, with per-document rollups. Pass `list: true` for a flat inventory instead: every requirement grouped by document with exactly one rolled-up status each (authored / in-progress / implemented / verified / needs-attention) plus per-status totals. Pass `query` instead to SEARCH specs by free text — call this FIRST when a user describes a change (a bug, an error, a one-line enhancement) and you need to find which existing spec it belongs to; it returns scored, ranked candidates (id, title, kind, snippet) over the spec full-text index.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -69,6 +86,11 @@ export const specToolDefinitions: ToolDefinition[] = [
           type: 'string',
           description:
             'Free-text query to SEARCH specs (instead of fetching one by id). Returns scored, ranked candidate specs matched over the spec full-text index — use to find which existing spec a described change belongs to.',
+        },
+        list: {
+          type: 'boolean',
+          description:
+            'Provide with no spec_id to get the flat spec inventory instead of the funnel: every requirement grouped by document with exactly one rolled-up status each (authored / in-progress / implemented / verified / needs-attention), unlinked briefs as ideas, plus per-status totals. A free-text `query` takes precedence over it.',
         },
         behaviour_surface: {
           type: 'boolean',
@@ -304,6 +326,128 @@ function buildFunnel(sq: FunnelLookup): string {
   return lines.join('\n');
 }
 
+const DEGRADED_LINK_STATES: SpecLinkState[] = ['drifted', 'broken', 'orphaned'];
+
+/**
+ * Derive a requirement's single rolled-up lifecycle status (REQ-FUNNEL-007) from
+ * its own spec→code links PLUS the links of its acceptance children — a
+ * requirement's acceptance criteria are separate `acceptance`-kind child specs,
+ * and a criterion's link state is part of the requirement's real status.
+ *
+ * Precedence (a single degraded link always wins — never overstate):
+ *   1. any link drifted / broken / orphaned          → needs-attention
+ *   2. zero links                                     → authored
+ *   3. all links verified                             → verified
+ *   4. every link implemented or verified (no lower)  → implemented
+ *   5. otherwise (a drafted / implementing remains)   → in-progress
+ */
+function deriveRequirementStatus(sq: FunnelLookup, req: Spec): RequirementStatus {
+  const links: SpecLink[] = [...sq.getLinksBySpec(req.id)];
+  for (const child of sq.getSpecsByParent(req.id)) {
+    if (child.kind === 'acceptance') links.push(...sq.getLinksBySpec(child.id));
+  }
+
+  if (links.some((l) => DEGRADED_LINK_STATES.includes(l.state))) return 'needs-attention';
+  if (links.length === 0) return 'authored';
+  if (links.every((l) => l.state === 'verified')) return 'verified';
+  // No degraded and no in-progress link ⇒ every link is implemented or verified.
+  if (links.every((l) => l.state === 'implemented' || l.state === 'verified')) return 'implemented';
+  // A drafted / implementing link remains ⇒ still in progress (never overstate).
+  return 'in-progress';
+}
+
+/**
+ * Build the flat spec inventory markdown (REQ-FUNNEL-007). Shown when
+ * `specship_spec` is called with `list: true`: unlinked briefs as `idea`
+ * entries, then every document with its requirements each carrying exactly one
+ * derived status, requirements with no document parent under an "Ungrouped"
+ * section, and a per-status totals line across all requirements. An empty index
+ * returns a clean empty listing, never an error.
+ */
+function buildInventory(sq: FunnelLookup): string {
+  const all = sq.getAllSpecs();
+  if (all.length === 0) {
+    return '# Spec inventory\n\n_No specs or briefs yet. Author one with /specship:spec new._';
+  }
+
+  const documents = all.filter((s) => s.kind === 'document');
+  const requirements = all.filter((s) => s.kind === 'requirement');
+  const briefs = all.filter((s) => s.kind === 'brief');
+
+  // Ideas — briefs not yet linked to a spec (same idea-state as the funnel).
+  const ideas = briefs
+    .map((b) => summarizeBriefFunnel(sq, b))
+    .filter((e) => e.state === 'idea');
+
+  // One derived status per requirement, memoized so the sections and the
+  // totals line can never disagree.
+  const statusOf = new Map<string, RequirementStatus>();
+  for (const req of requirements) statusOf.set(req.id, deriveRequirementStatus(sq, req));
+
+  const totals: Record<RequirementStatus, number> = {
+    authored: 0,
+    'in-progress': 0,
+    implemented: 0,
+    verified: 0,
+    'needs-attention': 0,
+  };
+  for (const st of statusOf.values()) totals[st]++;
+
+  const lines: string[] = [];
+  lines.push('# Spec inventory');
+  lines.push('');
+  lines.push(
+    `**ideas** ${ideas.length} · **documents** ${documents.length} · **requirements** ${requirements.length}`
+  );
+
+  if (ideas.length) {
+    lines.push('');
+    lines.push('## Ideas (unlinked briefs)');
+    for (const e of ideas) {
+      const b = sq.getSpecById(e.briefId);
+      lines.push(`- ${e.briefId} — ${b?.title ?? ''}  [idea]`);
+    }
+  }
+
+  // Documents and their requirements. Track which requirements were rendered
+  // under a document so the rest fall into "Ungrouped".
+  const grouped = new Set<string>();
+  if (documents.length) {
+    lines.push('');
+    lines.push('## Documents');
+    for (const d of documents) {
+      lines.push('');
+      lines.push(`### ${d.id} — ${d.title}`);
+      const reqs = sq.getSpecsByParent(d.id).filter((s) => s.kind === 'requirement');
+      if (reqs.length === 0) {
+        lines.push('_No requirements yet._');
+        continue;
+      }
+      for (const req of reqs) {
+        grouped.add(req.id);
+        lines.push(`- ${req.id} — ${req.title}  [${statusOf.get(req.id) ?? 'authored'}]`);
+      }
+    }
+  }
+
+  const ungrouped = requirements.filter((r) => !grouped.has(r.id));
+  if (ungrouped.length) {
+    lines.push('');
+    lines.push('## Ungrouped requirements');
+    for (const req of ungrouped) {
+      lines.push(`- ${req.id} — ${req.title}  [${statusOf.get(req.id) ?? 'authored'}]`);
+    }
+  }
+
+  lines.push('');
+  lines.push('## Totals');
+  for (const st of REQUIREMENT_STATUSES) {
+    lines.push(`- ${st} ${totals[st]}`);
+  }
+
+  return lines.join('\n');
+}
+
 export async function handleSpecshipSpec(
   cg: SpecShip,
   args: Record<string, unknown>
@@ -320,6 +464,14 @@ export async function handleSpecshipSpec(
   }
   if (queryArg !== undefined && queryArg !== null && typeof queryArg !== 'string') {
     return error('query must be a string');
+  }
+
+  // List mode (REQ-FUNNEL-007): `list: true` returns the flat spec inventory —
+  // every requirement's single rolled-up status + per-status totals. Sits
+  // between query and the no-arg funnel so query, funnel, spec_id detail, and
+  // behaviour_surface are all unchanged.
+  if (args.list === true) {
+    return text(buildInventory(sq));
   }
 
   // No id → the lifecycle funnel (REQ-FUNNEL-005). The id case below is unchanged.
