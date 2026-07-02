@@ -11,7 +11,6 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### New Features
 
-- **SpecShip's slash commands now live under a `/specship:` namespace.** The commands you type in Claude Code are now `/specship:spec`, `/specship:explore`, and `/specship:check` — grouped under one `specship:` prefix instead of scattered among your other commands. Upgrading removes the old flat `/ss-*` commands so you don't end up with duplicates, and the installer prints a one-time note pointing out the new names. The dashboard chat still understands the old `/ss-*` forms and tells you what each was renamed to, so nothing you've memorized suddenly stops working.
 - **Design imports moved into the spec door: `/specship:spec design`.** Pass a `claude.ai/design` URL to import a settled design, a `figma.com` URL to import through the Figma MCP, or no URL to run the live taste loop first — all three feed the same snapshot → spec → implement pipeline. The standalone `/specship:design-implement` and `/specship:design-loop` commands are retired, and upgrading removes their old command files.
 - **`/specship:spec` now handles free text gracefully.** Input that isn't a spec ID or a known sub-command gets one clarifying question — new, fast, or triage — leading with a recommendation inferred from what you pasted (an error log points at triage; a feature idea points at new or fast) instead of undefined behaviour.
 - **Every authored spec is reviewed before hand-off.** All three authoring paths (`new`, `fast`, `design`) end with the same automatic review pass: structural problems are fixed on the spot, and judgement calls surface as a single proceed/adjust prompt — so no spec reaches disk unreviewed, including on the fast path.
@@ -21,8 +20,14 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Impact analysis now shows the specs governing the blast radius.** When symbols in `specship_impact`'s radius carry spec links, the output lists each governing spec with the link's kind and state, and ends with guidance to re-assert the links after the change — so you learn a change touches a verified promise before making it, not from the drift queue afterwards.
 - **A graduated path from advisory checks to a real gate.** `specship check --strict` gates every check for one run; `specship check --enable-gate <checks…>` turns gating on permanently and writes the config for you; advisory runs whose findings would fail a gated run now end with that exact command; and the spec-driven (`--sdd`) install asks once whether to gate drift & behaviour, recommended on. With no config and no flags, `specship check` still reports advisory findings and exits zero.
 - **A spec can no longer be marked verified when its tests never ran.** The bundled implement workflow now reports whether the test suite ran-and-passed, ran-and-failed, or was skipped (no recognised test framework) in a machine-readable way, and a skipped run leaves spec links at `implemented` instead of `verified`. The final approval also reports how many of the spec's acceptance criteria have linked tests, naming `/specship:spec behaviour` as the follow-up that closes any gap.
-- **Releases now run a real browser check of the dashboard before publishing.** A new end-to-end test opens the dashboard in a headless browser at `127.0.0.1`, against a self-contained sample project, and confirms it actually renders live data with no blocked API calls. It runs on pull requests and as a blocking gate during release — so the "dashboard opens blank / shows no data" class of bug can't ship unnoticed.
 
+
+## [0.11.8] - 2026-07-02
+
+### New Features
+
+- **SpecShip's slash commands now live under a `/specship:` namespace.** The commands you type in Claude Code are now `/specship:spec`, `/specship:explore`, `/specship:check`, `/specship:design-loop`, and `/specship:design-implement` — grouped under one `specship:` prefix instead of scattered among your other commands. Upgrading removes the old flat `/ss-*` commands so you don't end up with duplicates, and the installer prints a one-time note pointing out the new names. The dashboard chat still understands the old `/ss-*` forms and tells you what each was renamed to, so nothing you've memorized suddenly stops working.
+- **Releases now run a real browser check of the dashboard before publishing.** A new end-to-end test opens the dashboard in a headless browser at `127.0.0.1`, against a self-contained sample project, and confirms it actually renders live data with no blocked API calls. It runs on pull requests and as a blocking gate during release — so the "dashboard opens blank / shows no data" class of bug can't ship unnoticed.
 
 ## [0.11.7] - 2026-07-02
 
@@ -488,3 +493,4 @@ Thanks @andreinknv for the substantive draft this release was based on.
 [0.11.5]: https://github.com/selvakumarEsra/specship/releases/tag/v0.11.5
 [0.11.6]: https://github.com/selvakumarEsra/specship/releases/tag/v0.11.6
 [0.11.7]: https://github.com/selvakumarEsra/specship/releases/tag/v0.11.7
+[0.11.8]: https://github.com/selvakumarEsra/specship/releases/tag/v0.11.8
