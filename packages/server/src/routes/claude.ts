@@ -18,6 +18,7 @@
  */
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { writeSseHead } from './sse.js';
 import type { SpecShipInstance } from '../project-registry.js';
 import { decodeProjectSlug } from '../ingest/index.js';
 import { computeSpecshipImpact } from '../ingest/impact-query.js';
@@ -211,9 +212,7 @@ export async function registerClaudeRoutes(app: FastifyInstance): Promise<void> 
       lastToolTs = row?.m ?? 0;
     }
 
-    reply.raw.setHeader('Content-Type', 'text/event-stream');
-    reply.raw.setHeader('Cache-Control', 'no-cache');
-    reply.raw.setHeader('Connection', 'keep-alive');
+    writeSseHead(req, reply);
     reply.raw.setHeader('X-Accel-Buffering', 'no'); // nginx-friendly
     reply.raw.flushHeaders();
 

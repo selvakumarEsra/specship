@@ -13,6 +13,7 @@
  */
 
 import { EventEmitter } from 'node:events';
+import { writeSseHead } from './sse.js';
 import { promises as fs, watch, type FSWatcher } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -163,9 +164,7 @@ export async function registerProjectsRoutes(app: FastifyInstance): Promise<void
   });
 
   app.get('/api/projects/events', async (req: FastifyRequest, reply: FastifyReply) => {
-    reply.raw.setHeader('Content-Type', 'text/event-stream');
-    reply.raw.setHeader('Cache-Control', 'no-cache');
-    reply.raw.setHeader('Connection', 'keep-alive');
+    writeSseHead(req, reply);
     reply.raw.flushHeaders();
 
     let closed = false;

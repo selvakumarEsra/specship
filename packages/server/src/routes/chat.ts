@@ -28,6 +28,7 @@
  */
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { writeSseHead } from './sse.js';
 import { answerForIntent, chunkAnswer } from './chat-answer.js';
 import { classifyIntent, type ClassifiedIntent } from '../chat/classify.js';
 
@@ -83,9 +84,7 @@ export async function registerChatRoutes(app: FastifyInstance): Promise<void> {
     const chunks = chunkAnswer(answer);
     const tool = toolForIntent(classified);
 
-    reply.raw.setHeader('Content-Type', 'text/event-stream');
-    reply.raw.setHeader('Cache-Control', 'no-cache');
-    reply.raw.setHeader('Connection', 'keep-alive');
+    writeSseHead(req, reply);
 
     let closed = false;
     let timer: ReturnType<typeof setTimeout> | undefined;

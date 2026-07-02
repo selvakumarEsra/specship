@@ -40,7 +40,17 @@ export class ApiService {
     const glob = (window as unknown as { SPECSHIP_API_URL?: string }).SPECSHIP_API_URL;
     if (typeof glob === 'string') return glob.replace(/\/$/, '');
     const host = window.location.hostname;
-    if (host === 'localhost' || host === '127.0.0.1') return 'http://localhost:4242';
+    if (host === 'localhost' || host === '127.0.0.1') {
+      // When the dashboard is served by the specship server itself, use the
+      // page's OWN origin so the API host matches exactly. Hardcoding
+      // `localhost` broke a page opened at `127.0.0.1:<port>` — the browser
+      // treats `127.0.0.1` and `localhost` as different origins, so every call
+      // (including the SSE streams) became cross-origin and got CORS-blocked.
+      // Only the Angular dev server (4200/4201) needs the separate API port.
+      const port = window.location.port;
+      if (port === '4200' || port === '4201') return 'http://localhost:4242';
+      return window.location.origin.replace(/\/$/, '');
+    }
     return null;
   }
 
