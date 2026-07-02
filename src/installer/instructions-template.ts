@@ -32,8 +32,8 @@ export const SPECSHIP_SDD_SECTION_END = '<!-- SPECSHIP_SDD_END -->';
  * The spec-driven-development steering rules written into the project CLAUDE.md.
  * A repo's CLAUDE.md takes precedence over a skill's own description, so these
  * deterministically flip feature/bug work to spec-author-first, and steer
- * claude.ai/design links to the design loop. Kept to ordering rules only — they
- * MUST NOT duplicate the MCP server instructions.
+ * claude.ai/design links to the design sub-route. Kept to ordering rules only —
+ * they MUST NOT duplicate the MCP server instructions.
  */
 export function getSddRuleBlock(): string {
   return [
@@ -47,7 +47,7 @@ export function getSddRuleBlock(): string {
     "precedence over a skill's own \"use me first\" guidance.",
     '',
     'When the user shares a **claude.ai/design** link (or references a Claude Design',
-    'project), recommend **`/specship:design-loop`** first and get explicit confirmation',
+    'project), recommend **`/specship:spec design`** first and get explicit confirmation',
     'before proceeding — even mid spec-author. That is the design→code path: taste',
     'the design with the user → snapshot → spec → review → `/specship:spec implement`.',
     SPECSHIP_SDD_SECTION_END,

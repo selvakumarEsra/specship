@@ -3,7 +3,7 @@ id: WORKFLOW-DOORS-DOC
 title: Consolidate the command surface into a few progressive doors
 owner: core
 priority: medium
-version: 1
+version: 2
 ---
 
 <!-- id: WORKFLOW-DOORS-DOC -->
@@ -79,3 +79,108 @@ implementations:
 <!-- id: REQ-DOORS-003.A2 -->
 - The installer's command inventory and its install/uninstall tests are updated
   so the new door set is the contract under test.
+
+<!-- id: REQ-DOORS-004 -->
+## The intent door MUST offer a design sub-route for visually expressed intent
+
+A design is intent expressed visually rather than as text, so it enters through
+the intent door as a third authoring modality alongside `new` (interview) and
+`fast` (no interview): `/specship:spec design <URL | intent>`. Routing is by
+argument shape — a `claude.ai/design` URL takes the import path (snapshot →
+tokens → draft spec → gap-fill gate → implement hand-off), a `figma.com` URL
+takes the Figma import path via the remote Figma MCP, and no URL runs the taste
+loop first and feeds its bundle into the same import path. The standalone
+`design-implement` / `design-loop` commands are retired. The door's dispatch
+entry stays thin by delegating to the bundled workflow and the `designer-loop`
+skill rather than inlining either flow.
+
+implementations:
+- src/installer/targets/claude.ts:writeCommandsEntries
+- src/installer/targets/claude.ts:cleanupLegacyCommandsEntries
+
+## Acceptance
+<!-- id: REQ-DOORS-004.A1 -->
+- `/specship:spec design` with a `claude.ai/design` URL runs the import path
+  end-to-end and hands off to `implement` — the same outcome the retired
+  `design-implement` command produced.
+<!-- id: REQ-DOORS-004.A2 -->
+- With a `figma.com` URL it routes to the Figma import path; when the Figma MCP
+  is not installed it instructs the user to run
+  `claude mcp add --transport http figma https://mcp.figma.com/mcp` and stops —
+  it never falls back to a blind fetch.
+<!-- id: REQ-DOORS-004.A3 -->
+- With no URL it runs the taste loop (designer MCP, human "that's it" gate)
+  first, then feeds the handoff bundle into the same import path.
+<!-- id: REQ-DOORS-004.A4 -->
+- The `design-implement` and `design-loop` command files are retired via the
+  legacy-command cleanup on upgrade, leaving no dangling autocomplete entries,
+  and the dashboard's Intent tile lists `design` among its sub-routes.
+
+<!-- id: REQ-DOORS-005 -->
+## The intent door MUST disambiguate free-text input rather than fall through
+
+Input that is not empty, not a spec ID, and not a known sub-route verb is
+currently undefined. The door instead asks one clarifying question — new, fast,
+or triage — leading with a recommendation inferred from the input's shape.
+
+## Acceptance
+<!-- id: REQ-DOORS-005.A1 -->
+- Free text that is neither a spec ID nor a sub-route verb triggers a single
+  clarifying question offering `new`, `fast`, and `triage` — never undefined
+  behaviour.
+<!-- id: REQ-DOORS-005.A2 -->
+- The question leads with an inferred recommendation: error-log-shaped input
+  recommends `triage`; feature-shaped input recommends `new` or `fast`.
+<!-- id: REQ-DOORS-005.A3 -->
+- The existing no-argument (lifecycle funnel) and bare-spec-ID (detail) dispatch
+  behaviours are unchanged.
+
+<!-- id: REQ-DOORS-006 -->
+## No spec MUST reach disk unreviewed
+
+Every authoring path through the intent door — `new`, `fast`, and `design` —
+ends with the same machine rubric pass after the file is written and synced,
+so the review backstop is a single uniform invariant rather than a per-path
+policy. The standalone `review <SPEC_ID>` route remains for auditing existing
+or hand-written specs.
+
+## Acceptance
+<!-- id: REQ-DOORS-006.A1 -->
+- After any authoring path writes and syncs a spec, the same rubric pass
+  (structural / quality / hygiene) runs automatically.
+<!-- id: REQ-DOORS-006.A2 -->
+- Structural findings are fixed automatically; quality findings that would
+  change implementation behaviour surface as a single proceed/adjust prompt —
+  no additional interview.
+<!-- id: REQ-DOORS-006.A3 -->
+- The fast-path keeps its single-guided-step feel with the pass included, so
+  REQ-DOORS-002.A3's "speed does not sacrifice correctness" is enforced rather
+  than aspirational.
+
+<!-- id: REQ-DOORS-007 -->
+## Door hand-offs MUST NOT leave plan mode gating the write or the implementation
+
+In SpecShip's model the spec IS the plan: by the time the user reaches
+`implement`, intent has been authored, reviewed, and human-gated, and the
+`spec-implement` workflow carries its own plan → approve gate inside an
+isolated worktree. Claude Code's plan mode stacked on top is a redundant third
+planning layer — and a mechanical blocker: it refuses the mutating
+`specship workflow run` launch and the authoring paths' final spec `Write`.
+Plan mode remains appropriate for the authoring *conversation* (the diverge
+phase is read-only exploration); the doors instruct the agent to exit it at
+the confirmation boundary, not to avoid it wholesale.
+
+## Acceptance
+<!-- id: REQ-DOORS-007.A1 -->
+- The `implement` dispatch instructs the agent: when the session is in plan
+  mode, exit it first (presenting the spec plus the workflow's own gates as
+  the plan) before running `specship workflow run spec-implement` — never
+  attempt the launch while plan mode blocks Bash.
+<!-- id: REQ-DOORS-007.A2 -->
+- The authoring paths (`new`, `fast`, `design`) instruct the same at the
+  confirmed-write step: exit plan mode before `Write`-ing the spec file,
+  since the human's confirmation in the flow is the approval plan mode was
+  waiting for.
+<!-- id: REQ-DOORS-007.A3 -->
+- The guidance does not forbid plan mode for the authoring conversation
+  itself — the exit happens at the write/hand-off boundary only.

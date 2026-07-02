@@ -3,7 +3,7 @@ id: TRIAGE-DOC
 title: Spec triage — route a change to the right existing spec
 owner: core
 priority: high
-version: 1
+version: 2
 brief: spec-triage/brief.md
 ---
 
@@ -111,3 +111,29 @@ its own and offers the human a choice instead.
   to the top weak candidate, or to cancel.
 <!-- id: REQ-TRIAGE-004.A3 -->
 - It never creates a new spec without an explicit human choice.
+
+<!-- id: REQ-TRIAGE-005 -->
+## Triage MUST be the single intake for failures and route drift to the gate door
+
+The user standing at the doors cannot tell whether their failing behaviour is a
+"bug" (intent-door taxonomy) or "drift" (gate-door taxonomy) — that distinction
+is SpecShip's, not theirs. So triage becomes the universal intake: after
+matching the owning spec it consults the drift queue, and when the match's
+links are drifted or broken it routes to the gate door's fix flow instead of
+appending a criterion to a spec whose real problem is a stale link. The gate
+door reciprocates: free text that is not a spec ID routes back to triage. The
+user-facing rule collapses to one sentence — anything broken goes in through
+triage; triage decides if it's drift.
+
+## Acceptance
+<!-- id: REQ-TRIAGE-005.A1 -->
+- After matching an owning spec, triage consults the drift queue; when the
+  matched spec has links in the `drifted` or `broken` state, the recommended
+  action is the gate door's fix flow for that spec ID, not an appended
+  requirement or criterion.
+<!-- id: REQ-TRIAGE-005.A2 -->
+- The gate door invoked with a free-text argument that is not a spec ID routes
+  the text to triage rather than failing or behaving undefined.
+<!-- id: REQ-TRIAGE-005.A3 -->
+- When the matched spec's links are healthy, the existing preview-and-confirm
+  append flow (REQ-TRIAGE-003) is unchanged.

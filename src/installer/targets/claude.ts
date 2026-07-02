@@ -129,13 +129,13 @@ const RETRIEVAL_TIER_COMMANDS = [
   'specship/explore.md', // reads: explore / trace / impact → /specship:explore
 ] as const;
 
-/** Governance tier — the intent + gate doors, plus the design→code commands. Opt-in (`--sdd`). */
+/** Governance tier — the intent + gate doors. Opt-in (`--sdd`). */
 const GOVERNANCE_TIER_COMMANDS = [
-  'specship/spec.md',  // intent loop: view / new / fast / implement / review / triage / behaviour / domain
+  'specship/spec.md',  // intent loop: view / new / fast / design / implement / review / triage / behaviour / domain
   'specship/check.md', // gate & health: check / drifted / fix / relink / health
-  // Design→code workflow (own surface; designer is slated for a separate cut, untouched here).
-  'specship/design-implement.md',
-  'specship/design-loop.md',
+  // The design→code flows (design-implement / design-loop) folded into the
+  // intent door's `design` sub-route (WORKFLOW-DOORS-DOC, REQ-DOORS-004); their
+  // standalone command files are retired via LEGACY_SHIPPED_COMMANDS below.
 ] as const;
 
 /**
@@ -192,6 +192,12 @@ const LEGACY_SHIPPED_COMMANDS = [
   'ss-check.md',
   'ss-design-implement.md',
   'ss-design-loop.md',
+  // namespaced design→code commands, folded into the intent door's `design`
+  // sub-route (WORKFLOW-DOORS-DOC, REQ-DOORS-004). Listed here so an upgrade
+  // deletes the files a prior `--sdd` install wrote under `specship/`, leaving
+  // no dangling `/specship:design-implement` / `/specship:design-loop` entries.
+  'specship/design-implement.md',
+  'specship/design-loop.md',
 ] as const;
 
 /**

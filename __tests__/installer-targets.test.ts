@@ -239,8 +239,8 @@ describe('Claude target — specifics', () => {
     const body = fs.readFileSync(claudeMd, 'utf-8');
     expect(body).toContain('SPECSHIP_SDD_START');
     expect(body).toContain('spec-author');
-    // The SDD block also steers claude.ai/design links to the design loop.
-    expect(body).toContain('specship:design-loop');
+    // The SDD block also steers claude.ai/design links to the design sub-route.
+    expect(body).toContain('specship:spec design');
     expect(body).toContain('claude.ai/design');
     expect(result.files.some((f) => /\/CLAUDE\.md$/.test(f.path.replace(/\\/g, '/')) && !f.path.includes('.claude') && f.action === 'created')).toBe(true);
 
@@ -635,10 +635,37 @@ describe('Claude target — specifics', () => {
       expect(fs.existsSync(path.join(cmdsDir, name))).toBe(false);
     }
     // A2: the only shipped doors present are the namespaced ones.
-    for (const name of ['explore.md', 'spec.md', 'check.md', 'design-implement.md', 'design-loop.md']) {
+    for (const name of ['explore.md', 'spec.md', 'check.md']) {
       expect(fs.existsSync(path.join(cmdsDir, 'specship', name))).toBe(true);
     }
+    // The design→code commands were folded into the intent door's `design`
+    // sub-route (REQ-DOORS-004) — they are no longer shipped.
+    for (const name of ['design-implement.md', 'design-loop.md']) {
+      expect(fs.existsSync(path.join(cmdsDir, 'specship', name))).toBe(false);
+    }
     // A3: an unrelated user file is not removed by the cleanup.
+    expect(fs.readFileSync(siblingUser, 'utf-8')).toBe('# user file');
+  });
+
+  it('upgrade retires the namespaced design→code commands folded into the intent door (REQ-DOORS-004.A4)', () => {
+    // Simulate a prior --sdd install that wrote the standalone design commands
+    // under the /specship: namespace, alongside a user file in the same subdir.
+    const nsDir = path.join(tmpHome, '.claude', 'commands', 'specship');
+    fs.mkdirSync(nsDir, { recursive: true });
+    for (const name of ['design-implement.md', 'design-loop.md']) {
+      fs.writeFileSync(path.join(nsDir, name), '# older design command\n');
+    }
+    const siblingUser = path.join(nsDir, 'my-design.md');
+    fs.writeFileSync(siblingUser, '# user file');
+
+    claudeTarget.install('global', { autoAllow: false, sdd: true });
+
+    // The retired design commands are gone; the surviving doors remain.
+    for (const name of ['design-implement.md', 'design-loop.md']) {
+      expect(fs.existsSync(path.join(nsDir, name))).toBe(false);
+    }
+    expect(fs.existsSync(path.join(nsDir, 'spec.md'))).toBe(true);
+    // A user-authored file in the same subdir is untouched.
     expect(fs.readFileSync(siblingUser, 'utf-8')).toBe('# user file');
   });
 

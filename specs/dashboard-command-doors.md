@@ -3,7 +3,7 @@ id: DASH-DOORS-DOC
 title: Dashboard command-doors surface
 owner: web
 priority: medium
-version: 1
+version: 2
 ---
 
 <!-- id: DASH-DOORS-DOC -->
@@ -33,7 +33,7 @@ implementations:
 <!-- id: REQ-DASH-DOORS-001.A1 -->
 - The Dashboard home renders exactly three door tiles labelled Intent, Reads, and Gate & health, each showing its slash command (`/specship:spec`, `/specship:explore`, `/specship:check`).
 <!-- id: REQ-DASH-DOORS-001.A2 -->
-- Each door tile lists the sub-routes it dispatches (e.g. Intent shows new · implement · review · triage · domain).
+- Each door tile lists the sub-routes it dispatches (e.g. Intent shows new · fast · design · implement · review · triage · behaviour · domain).
 <!-- id: REQ-DASH-DOORS-001.A3 -->
 - Activating a door tile navigates to its related dashboard page (Intent → specs, Reads → graph, Gate & health → drift) and is reachable by both pointer and keyboard.
 
