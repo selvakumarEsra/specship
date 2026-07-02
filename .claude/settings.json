@@ -14,7 +14,9 @@
       "mcp__specship__designer_ask",
       "mcp__specship__designer_list",
       "mcp__specship__designer_snapshot",
-      "mcp__specship__designer_handoff"
+      "mcp__specship__designer_handoff",
+      "mcp__specship__specship_maintainability",
+      "mcp__specship__specship_fitness"
     ]
   },
   "hooks": {
