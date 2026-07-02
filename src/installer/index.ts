@@ -15,6 +15,8 @@ import * as fs from 'fs';
 import { claudeTarget, statusLineState, getStatusLineSnippet } from './targets/claude';
 import type { AgentTarget, Location, TargetId } from './targets/types';
 import { getGlyphs } from '../ui/glyphs';
+// Lightweight (fs/path only) — safe for the installer's no-native-modules rule.
+import { enableGateChecks } from '../enforce/enforce';
 // Import the lightweight submodules directly (not the ../sync barrel, which
 // re-exports FileWatcher and would transitively pull in ../extraction — the
 // installer must stay importable even when native modules can't load).
@@ -220,6 +222,37 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
   }
   for (const note of result.notes ?? []) {
     clack.log.info(`Claude Code: ${note}`);
+  }
+
+  // Step 4b: the gate graduation ramp's install ask (REQ-ENFORCE-004.A3).
+  // A user choosing --sdd has opted into spec-driven rigor, so gating the
+  // drift + behaviour checks is offered once, recommended on. Local installs
+  // only — the config is per-project (specship.config.json at the project
+  // root); a global install gets the one-liner instead. `--yes` keeps the
+  // advisory-only default (same posture as the status-line prompt).
+  if (opts.sdd === true) {
+    if (location === 'local' && !useDefaults) {
+      const gate = await clack.confirm({
+        message: 'Gate `specship check` on drift & behaviour? (recommended — declining keeps every check advisory)',
+        initialValue: true,
+      });
+      if (clack.isCancel(gate)) {
+        clack.cancel('Installation cancelled.');
+        process.exit(0);
+      }
+      if (gate) {
+        const enabled = enableGateChecks(process.cwd(), ['drift', 'behaviour']);
+        if (enabled.length) {
+          clack.log.success(`Gating enabled for ${enabled.join(', ')} (specship.config.json)`);
+        } else {
+          clack.log.info('Gating for drift & behaviour was already enabled.');
+        }
+      } else {
+        clack.log.info('Advisory-only. Enable later with: specship check --enable-gate drift behaviour');
+      }
+    } else if (location === 'global') {
+      clack.note('specship check --enable-gate drift behaviour', 'Per-project: turn the gate on');
+    }
   }
 
   // Step 5: for local install, initialize the project.

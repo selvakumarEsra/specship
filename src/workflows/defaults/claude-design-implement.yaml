@@ -11,10 +11,10 @@ worktree:
   enabled: true
 
 # Two entry shapes (provide exactly one source):
-#   - CONNECTOR_URL  — a live claude.ai/design URL (the `/specship:design-implement`
-#     command). The snapshot node fetches it, preferring the `designer` MCP.
+#   - CONNECTOR_URL  — a live claude.ai/design URL (the `/specship:spec design <url>`
+#     import path). The snapshot node fetches it, preferring the `designer` MCP.
 #   - HANDOFF_DIR    — a designer handoff bundle already on disk (the
-#     `/specship:design-loop` command, after the human-tasted loop + designer_handoff).
+#     `/specship:spec design` taste loop, after the human-tasted loop + designer_handoff).
 #     The snapshot node reads files straight from the bundle — no fetch, no CDP.
 # Optional inputs default to "" (see the CLI's declared-default handling), so a
 # `$INPUT.X` reference to an omitted optional input resolves to "" rather than

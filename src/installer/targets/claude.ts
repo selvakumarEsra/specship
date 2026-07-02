@@ -129,13 +129,13 @@ const RETRIEVAL_TIER_COMMANDS = [
   'specship/explore.md', // reads: explore / trace / impact → /specship:explore
 ] as const;
 
-/** Governance tier — the intent + gate doors, plus the design→code commands. Opt-in (`--sdd`). */
+/** Governance tier — the intent + gate doors. Opt-in (`--sdd`). */
 const GOVERNANCE_TIER_COMMANDS = [
-  'specship/spec.md',  // intent loop: view / new / fast / implement / review / triage / behaviour / domain
+  'specship/spec.md',  // intent loop: view / new / fast / design / implement / review / triage / behaviour / domain
   'specship/check.md', // gate & health: check / drifted / fix / relink / health
-  // Design→code workflow (own surface; designer is slated for a separate cut, untouched here).
-  'specship/design-implement.md',
-  'specship/design-loop.md',
+  // The design→code flows (design-implement / design-loop) folded into the
+  // intent door's `design` sub-route (WORKFLOW-DOORS-DOC, REQ-DOORS-004); their
+  // standalone command files are retired via LEGACY_SHIPPED_COMMANDS below.
 ] as const;
 
 /**
@@ -192,6 +192,12 @@ const LEGACY_SHIPPED_COMMANDS = [
   'ss-check.md',
   'ss-design-implement.md',
   'ss-design-loop.md',
+  // namespaced design→code commands, folded into the intent door's `design`
+  // sub-route (WORKFLOW-DOORS-DOC, REQ-DOORS-004). Listed here so an upgrade
+  // deletes the files a prior `--sdd` install wrote under `specship/`, leaving
+  // no dangling `/specship:design-implement` / `/specship:design-loop` entries.
+  'specship/design-implement.md',
+  'specship/design-loop.md',
 ] as const;
 
 /**
@@ -222,7 +228,9 @@ const SPECSHIP_HOOKS = [
   {
     event: 'SessionStart',
     matcher: 'startup|resume',
-    hook: { type: 'command', command: 'specship sync --quiet' },
+    // --drift-summary: one-line drifted-link count at session start, printed
+    // only when the queue is non-empty (DRIFT-PUSH-DOC, REQ-DRIFT-PUSH-002).
+    hook: { type: 'command', command: 'specship sync --quiet --drift-summary' },
   },
 ] as const;
 
@@ -309,6 +317,11 @@ class ClaudeCodeTarget implements AgentTarget {
     // self-healing. Only surfaced when something was actually removed.
     const hookCleanup = cleanupLegacyHooks(loc);
     if (hookCleanup.action === 'removed') files.push(hookCleanup);
+
+    // 2b'. Strip the pre-drift-summary SessionStart sync hook so an upgrade
+    // doesn't leave it double-syncing beside the new --drift-summary form.
+    const sessionHookCleanup = cleanupStaleSessionStartSyncHook(loc);
+    if (sessionHookCleanup.action === 'removed') files.push(sessionHookCleanup);
 
     // 2c. Write the current auto-sync hooks (PostToolUse + SessionStart
     // running `specship sync --quiet`). Gated on autoAllow — same
@@ -598,7 +611,7 @@ function isCurrentSpecshipHookCommand(command: unknown): boolean {
  */
 function stripHooksMatching(
   loc: Location,
-  predicate: (command: unknown) => boolean,
+  predicate: (command: unknown, event?: string) => boolean,
 ): WriteResult['files'][number] {
   const file = settingsJsonPath(loc);
   if (!fs.existsSync(file)) return { path: file, action: 'not-found' };
@@ -616,7 +629,7 @@ function stripHooksMatching(
     for (const group of groups) {
       if (!group || !Array.isArray(group.hooks)) continue;
       const before = group.hooks.length;
-      group.hooks = group.hooks.filter((h: any) => !predicate(h?.command));
+      group.hooks = group.hooks.filter((h: any) => !predicate(h?.command, event));
       if (group.hooks.length !== before) removedAny = true;
     }
   }
@@ -645,6 +658,22 @@ function stripHooksMatching(
  */
 export function cleanupLegacyHooks(loc: Location): WriteResult['files'][number] {
   return stripHooksMatching(loc, isLegacySpecshipHookCommand);
+}
+
+/**
+ * Remove the pre-drift-summary SessionStart auto-sync hook
+ * (`specship sync --quiet` on SessionStart). The current SessionStart form
+ * carries `--drift-summary` (REQ-DRIFT-PUSH-002); the plain form on that
+ * event is a leftover from an earlier install that would otherwise sit
+ * beside the new one, double-syncing at session start. Event-scoped so the
+ * PostToolUse hook — whose current command is exactly `specship sync
+ * --quiet` — is untouched. Install-safe: runs before `writeHooksEntry`.
+ */
+export function cleanupStaleSessionStartSyncHook(loc: Location): WriteResult['files'][number] {
+  return stripHooksMatching(
+    loc,
+    (command, event) => event === 'SessionStart' && command === 'specship sync --quiet',
+  );
 }
 
 /**

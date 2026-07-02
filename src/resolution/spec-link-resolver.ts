@@ -64,6 +64,21 @@ export interface SpecLinkResolverStats {
   driftedCode: number;
   candidatesApplied: number;
   commentLinksApplied: number;
+  /**
+   * Links that TRANSITIONED into `drifted` during this pass (REQ-DRIFT-PUSH-001).
+   * A link already in `drifted` that re-drifts is not recorded — consumers
+   * (the sync CLI's push notice) must see each drift once, not on every sync.
+   */
+  transitions: DriftTransition[];
+}
+
+/** One link's transition into `drifted`, for push notification (DRIFT-PUSH-DOC). */
+export interface DriftTransition {
+  specId: string;
+  fromState: SpecLinkState;
+  axis: 'code' | 'spec';
+  /** The linked symbol (`targetQualifiedName`). */
+  symbol: string;
 }
 
 /** One code link inherited by a spec through a spec→spec dependency edge. */
@@ -201,6 +216,15 @@ export class SpecLinkResolver {
     ) {
       this.specQueries.updateSpecLinkState(link.id, 'drifted', 'code', now);
       stats.driftedCode++;
+      if (link.state !== 'drifted') {
+        // A genuine transition, not a re-drift — record for push notification.
+        stats.transitions.push({
+          specId: link.specId,
+          fromState: link.state,
+          axis: 'code',
+          symbol: link.targetQualifiedName,
+        });
+      }
       if (this.opts.verbose) {
         // eslint-disable-next-line no-console
         console.error(
@@ -346,7 +370,7 @@ export class SpecLinkResolver {
    * The agent's job after seeing drift: re-read the spec, update code if
    * needed, call specship_link_verify to take state back to `verified`.
    */
-  markSpecDrifted(specId: string, newSpecHash: string): number {
+  markSpecDrifted(specId: string, newSpecHash: string, stats?: SpecLinkResolverStats): number {
     const now = Date.now();
     let count = 0;
     for (const link of this.specQueries.getLinksBySpec(specId)) {
@@ -354,6 +378,14 @@ export class SpecLinkResolver {
       if (link.specHashAtLink === newSpecHash) continue;
       this.specQueries.updateSpecLinkState(link.id, 'drifted', 'spec', now);
       count++;
+      if (stats && link.state !== 'drifted') {
+        stats.transitions.push({
+          specId: link.specId,
+          fromState: link.state,
+          axis: 'spec',
+          symbol: link.targetQualifiedName,
+        });
+      }
     }
     return count;
   }
@@ -432,6 +464,7 @@ export class SpecLinkResolver {
       driftedCode: 0,
       candidatesApplied: 0,
       commentLinksApplied: 0,
+      transitions: [],
     };
   }
 }

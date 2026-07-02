@@ -239,8 +239,8 @@ describe('Claude target — specifics', () => {
     const body = fs.readFileSync(claudeMd, 'utf-8');
     expect(body).toContain('SPECSHIP_SDD_START');
     expect(body).toContain('spec-author');
-    // The SDD block also steers claude.ai/design links to the design loop.
-    expect(body).toContain('specship:design-loop');
+    // The SDD block also steers claude.ai/design links to the design sub-route.
+    expect(body).toContain('specship:spec design');
     expect(body).toContain('claude.ai/design');
     expect(result.files.some((f) => /\/CLAUDE\.md$/.test(f.path.replace(/\\/g, '/')) && !f.path.includes('.claude') && f.action === 'created')).toBe(true);
 
@@ -462,11 +462,12 @@ describe('Claude target — specifics', () => {
     expect(stopCommands).not.toContain('specship sync-if-dirty');
     expect(stopCommands.some((c: string) => c.includes('gk') && c.includes('ai hook run'))).toBe(true);
 
-    // SessionStart sync hook is added too.
+    // SessionStart sync hook is added too — the --drift-summary form
+    // (DRIFT-PUSH-DOC, REQ-DRIFT-PUSH-002).
     const sessionCommands = (after.hooks?.SessionStart ?? []).flatMap((g: any) =>
       (g.hooks ?? []).map((h: any) => h.command),
     );
-    expect(sessionCommands).toContain('specship sync --quiet');
+    expect(sessionCommands).toContain('specship sync --quiet --drift-summary');
 
     expect(after.permissions?.allow).toContain('mcp__specship__specship_search');
     // Harness read tools are auto-allowed too (MAINT-DOC / FITNESS-DOC).
@@ -545,7 +546,7 @@ describe('Claude target — specifics', () => {
     const postHooks = settings.hooks?.PostToolUse?.find((g: any) => g.matcher === 'Edit|Write|MultiEdit')?.hooks ?? [];
     expect(postHooks.find((h: any) => h.command === 'specship sync --quiet')?.async).toBe(true);
     const sessionHooks = settings.hooks?.SessionStart?.find((g: any) => g.matcher === 'startup|resume')?.hooks ?? [];
-    expect(sessionHooks.some((h: any) => h.command === 'specship sync --quiet')).toBe(true);
+    expect(sessionHooks.some((h: any) => h.command === 'specship sync --quiet --drift-summary')).toBe(true);
     expect(sessionHooks[0]?.async).toBeUndefined(); // SessionStart is sync
   });
 
@@ -562,6 +563,7 @@ describe('Claude target — specifics', () => {
         (groups as any[]).flatMap((g) => (g.hooks ?? []).map((h: any) => h.command)),
       );
       expect(allCommands).not.toContain('specship sync --quiet');
+      expect(allCommands).not.toContain('specship sync --quiet --drift-summary');
     }
   });
 
@@ -633,10 +635,37 @@ describe('Claude target — specifics', () => {
       expect(fs.existsSync(path.join(cmdsDir, name))).toBe(false);
     }
     // A2: the only shipped doors present are the namespaced ones.
-    for (const name of ['explore.md', 'spec.md', 'check.md', 'design-implement.md', 'design-loop.md']) {
+    for (const name of ['explore.md', 'spec.md', 'check.md']) {
       expect(fs.existsSync(path.join(cmdsDir, 'specship', name))).toBe(true);
     }
+    // The design→code commands were folded into the intent door's `design`
+    // sub-route (REQ-DOORS-004) — they are no longer shipped.
+    for (const name of ['design-implement.md', 'design-loop.md']) {
+      expect(fs.existsSync(path.join(cmdsDir, 'specship', name))).toBe(false);
+    }
     // A3: an unrelated user file is not removed by the cleanup.
+    expect(fs.readFileSync(siblingUser, 'utf-8')).toBe('# user file');
+  });
+
+  it('upgrade retires the namespaced design→code commands folded into the intent door (REQ-DOORS-004.A4)', () => {
+    // Simulate a prior --sdd install that wrote the standalone design commands
+    // under the /specship: namespace, alongside a user file in the same subdir.
+    const nsDir = path.join(tmpHome, '.claude', 'commands', 'specship');
+    fs.mkdirSync(nsDir, { recursive: true });
+    for (const name of ['design-implement.md', 'design-loop.md']) {
+      fs.writeFileSync(path.join(nsDir, name), '# older design command\n');
+    }
+    const siblingUser = path.join(nsDir, 'my-design.md');
+    fs.writeFileSync(siblingUser, '# user file');
+
+    claudeTarget.install('global', { autoAllow: false, sdd: true });
+
+    // The retired design commands are gone; the surviving doors remain.
+    for (const name of ['design-implement.md', 'design-loop.md']) {
+      expect(fs.existsSync(path.join(nsDir, name))).toBe(false);
+    }
+    expect(fs.existsSync(path.join(nsDir, 'spec.md'))).toBe(true);
+    // A user-authored file in the same subdir is untouched.
     expect(fs.readFileSync(siblingUser, 'utf-8')).toBe('# user file');
   });
 
@@ -693,6 +722,42 @@ describe('Claude target — specifics', () => {
     // Our shipped files are gone, but the user's file — and thus the dir — remain.
     expect(fs.existsSync(path.join(nsDir, 'spec.md'))).toBe(false);
     expect(fs.readFileSync(userInNs, 'utf-8')).toBe('# mine, inside the namespace dir');
+  });
+
+  it('upgrade replaces the pre-drift-summary SessionStart sync hook with the --drift-summary form (REQ-DRIFT-PUSH-002)', () => {
+    // A prior install wrote `specship sync --quiet` on SessionStart. The
+    // upgrade must swap it for the --drift-summary form without duplicating,
+    // and without touching the PostToolUse hook whose command is the same
+    // plain string.
+    const file = seedSettings('global', {
+      hooks: {
+        SessionStart: [
+          {
+            matcher: 'startup|resume',
+            hooks: [
+              { type: 'command', command: 'specship sync --quiet' },
+              { type: 'command', command: 'echo user-session-hook' },
+            ],
+          },
+        ],
+      },
+    });
+
+    claudeTarget.install('global', { autoAllow: true });
+
+    const after = JSON.parse(fs.readFileSync(file, 'utf-8'));
+    const sessionCommands = (after.hooks?.SessionStart ?? []).flatMap((g: any) =>
+      (g.hooks ?? []).map((h: any) => h.command),
+    );
+    expect(sessionCommands).toContain('specship sync --quiet --drift-summary');
+    expect(sessionCommands).not.toContain('specship sync --quiet');
+    // The user's own SessionStart hook survives.
+    expect(sessionCommands).toContain('echo user-session-hook');
+    // The PostToolUse hook keeps the plain --quiet form (event-scoped strip).
+    const postCommands = (after.hooks?.PostToolUse ?? []).flatMap((g: any) =>
+      (g.hooks ?? []).map((h: any) => h.command),
+    );
+    expect(postCommands).toContain('specship sync --quiet');
   });
 
   it('cleanupCurrentHooks strips specship sync hooks without touching unrelated user hooks', () => {

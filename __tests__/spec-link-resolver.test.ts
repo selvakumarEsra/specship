@@ -563,3 +563,91 @@ describe.skipIf(!fts5Available)('SpecLinkResolver refactor scenarios', () => {
     expect(links[0]!.state).toBe('implemented');
   });
 });
+
+/**
+ * Drift-push transitions (DRIFT-PUSH-DOC / REQ-DRIFT-PUSH-001): the resolver
+ * records links that TRANSITION into `drifted` — once, not on every re-drift —
+ * so the sync CLI can push a one-line notice at the moment drift happens.
+ */
+describe.skipIf(!fts5Available)('SpecLinkResolver drift transitions (REQ-DRIFT-PUSH-001)', () => {
+  let dir: string;
+  let cg: SpecShip;
+
+  beforeEach(async () => {
+    dir = tempDir();
+    cg = await SpecShip.init(dir);
+  });
+
+  afterEach(async () => {
+    cg?.close();
+    clean(dir);
+  });
+
+  function seedLink(specId: string, qname: string) {
+    const sq = cg.getSpecQueries();
+    const queries = (cg as unknown as { queries: import('../src/db/queries').QueryBuilder }).queries;
+    const now = Date.now();
+    sq.insertSpec({
+      id: specId, kind: 'requirement', title: 'X', body: 'b', format: 'markdown',
+      sourcePath: 'specs/x.md', contentHash: 'h', createdAt: now, updatedAt: now,
+    });
+    const v1 = makeNode('src/t.ts', qname, 'function', 1, `${qname}(a)`);
+    queries.insertNode(v1);
+    sq.upsertSpecLink({
+      specId, targetFilePath: 'src/t.ts', targetQualifiedName: qname,
+      targetNodeKind: 'function', resolvedNodeId: v1.id, kind: 'implements',
+      state: 'implemented', driftAxis: null, specHashAtLink: 'h',
+      nodeSigAtLink: `${qname}(a)`, provenance: 'agent-asserted', confidence: 1.0,
+      createdAt: now, updatedAt: now,
+    });
+    return { sq, queries };
+  }
+
+  it('records a transition with fromState/axis/symbol when a link drifts (A1)', () => {
+    const { queries } = seedLink('REQ-T1', 'foo');
+    const resolver = cg.getSpecLinkResolver();
+
+    queries.deleteNodesByFile('src/t.ts');
+    queries.insertNode(makeNode('src/t.ts', 'foo', 'function', 1, 'foo(a, b)'));
+
+    const stats = resolver.resolveLinksForFiles(['src/t.ts']);
+    expect(stats.transitions).toEqual([
+      { specId: 'REQ-T1', fromState: 'implemented', axis: 'code', symbol: 'foo' },
+    ]);
+  });
+
+  it('does not record a re-drift of an already-drifted link (A2)', () => {
+    const { queries } = seedLink('REQ-T2', 'bar');
+    const resolver = cg.getSpecLinkResolver();
+
+    queries.deleteNodesByFile('src/t.ts');
+    queries.insertNode(makeNode('src/t.ts', 'bar', 'function', 1, 'bar(a, b)'));
+    const first = resolver.resolveLinksForFiles(['src/t.ts']);
+    expect(first.transitions).toHaveLength(1);
+
+    // Second sync over the still-different signature: state is already
+    // `drifted`, so no new transition is recorded.
+    const second = resolver.resolveLinksForFiles(['src/t.ts']);
+    expect(second.transitions).toHaveLength(0);
+  });
+
+  it('records a spec-axis transition once via markSpecDrifted', () => {
+    const { sq } = seedLink('REQ-T3', 'baz');
+    const resolver = cg.getSpecLinkResolver();
+    const stats = {
+      scanned: 0, reresolved: 0, orphaned: 0, driftedCode: 0,
+      candidatesApplied: 0, commentLinksApplied: 0, transitions: [] as import('../src/resolution/spec-link-resolver').DriftTransition[],
+    };
+
+    resolver.markSpecDrifted('REQ-T3', 'h2', stats);
+    expect(stats.transitions).toEqual([
+      { specId: 'REQ-T3', fromState: 'implemented', axis: 'spec', symbol: 'baz' },
+    ]);
+    expect(sq.getLinksBySpec('REQ-T3')[0]!.state).toBe('drifted');
+
+    // Re-mark with a still-different hash: already drifted → no new transition.
+    const again = { ...stats, transitions: [] as import('../src/resolution/spec-link-resolver').DriftTransition[] };
+    resolver.markSpecDrifted('REQ-T3', 'h3', again);
+    expect(again.transitions).toHaveLength(0);
+  });
+});

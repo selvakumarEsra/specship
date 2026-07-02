@@ -83,6 +83,12 @@ export interface SyncResult {
   nodesUpdated: number;
   durationMs: number;
   changedFilePaths?: string[];
+  /**
+   * Spec links that transitioned into `drifted` during this sync's spec
+   * pass (DRIFT-PUSH-DOC). Populated by SpecShip.sync(); absent when no
+   * files changed or the spec pass didn't run.
+   */
+  driftedTransitions?: import('../resolution/spec-link-resolver').DriftTransition[];
 }
 
 /**

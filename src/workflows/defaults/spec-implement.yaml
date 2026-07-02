@@ -102,14 +102,18 @@ nodes:
     bash: |
       # Run the project's test suite. The verify node's exit code drives
       # the gating for the link node — non-zero halts the workflow.
+      # The VERIFY_RESULT marker is the machine-readable contract the link
+      # node routes on (REQ-IMPLINT-001.A1): a skipped run must never be
+      # mistaken for a passing one.
       if [ -f package.json ]; then
-        npm test
+        if npm test; then echo "VERIFY_RESULT=ran-and-passed"; else echo "VERIFY_RESULT=ran-and-failed"; exit 1; fi
       elif [ -f Cargo.toml ]; then
-        cargo test
+        if cargo test; then echo "VERIFY_RESULT=ran-and-passed"; else echo "VERIFY_RESULT=ran-and-failed"; exit 1; fi
       elif [ -f pyproject.toml ] || [ -f requirements.txt ]; then
-        python -m pytest
+        if python -m pytest; then echo "VERIFY_RESULT=ran-and-passed"; else echo "VERIFY_RESULT=ran-and-failed"; exit 1; fi
       else
-        echo "no recognised test framework; skipping"
+        echo "no recognised test framework; tests did NOT run"
+        echo "VERIFY_RESULT=skipped"
       fi
 
   - id: link
@@ -124,9 +128,15 @@ nodes:
       Assert spec→code links for the changes made in the implement step.
       For each symbol that implements $INPUT.SPEC_ID (or its child
       requirements), call specship_link_assert with the spec_id, the
-      file path, and the qualified symbol name. After each assert, if
-      tests passed in the verify step, call specship_link_verify with
-      result="pass".
+      file path, and the qualified symbol name.
+
+      Then route on the VERIFY_RESULT marker in the test results below
+      (REQ-IMPLINT-001):
+      - VERIFY_RESULT=ran-and-passed → after each assert, call
+        specship_link_verify with result="pass".
+      - VERIFY_RESULT=skipped → do NOT call specship_link_verify at all;
+        the links stay in the `implemented` state. Tests that did not run
+        are never reported as passing.
 
       Implementation diff summary:
       $implement.output
@@ -135,16 +145,38 @@ nodes:
       $verify.output
 
       Output: a short list of "spec_id → file:symbol [verified|implemented]"
-      lines.
+      lines, ending with one line stating whether verification ran or was
+      skipped.
+
+  - id: coverage
+    kind: prompt
+    depends_on: [link]
+    output_type: coverage_summary
+    allowed_tools:
+      - mcp__specship__specship_spec
+    prompt: |
+      Report acceptance-criteria test coverage for $INPUT.SPEC_ID
+      (REQ-IMPLINT-002). Call specship_spec with the spec_id, count its
+      acceptance criteria (the .A<N> children; if the spec has none,
+      treat the requirement itself as one criterion), and count how many
+      of them carry a `tests`-kind link.
+
+      Output exactly one or two lines:
+      - "N of M acceptance criteria for $INPUT.SPEC_ID have linked tests."
+      - If N < M, add: "Close the gap with /specship:spec behaviour
+        $INPUT.SPEC_ID."
 
   - id: final_review
     kind: approval
-    depends_on: [link]
+    depends_on: [coverage]
     message: |
       Implementation complete for $INPUT.SPEC_ID.
 
       Links asserted:
       $link.output
+
+      Acceptance-criteria test coverage:
+      $coverage.output
 
       Approve to finalize the run (worktree is left for you to inspect
       and merge), or reject to abandon.

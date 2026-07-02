@@ -1272,8 +1272,44 @@ export class ToolHandler {
       roots: allMatches.nodes.map(n => n.id),
     };
 
-    const formatted = this.formatImpact(symbol, mergedImpact) + allMatches.note;
+    const governedBy = this.formatGovernedBy(cg, mergedImpact);
+    const formatted = this.formatImpact(symbol, mergedImpact) + allMatches.note + governedBy;
     return this.textResult(this.truncateOutput(formatted));
+  }
+
+  /**
+   * Spec-aware impact (REQ-IMPACT-SPEC-001): for each affected symbol in the
+   * blast radius that carries a spec link, surface the governing spec's id, the
+   * link kind, and the link's current state — the intent that a code-only impact
+   * view can't see. When the radius has any governed symbols, close with drift
+   * handoff so the change loops back through the intent/gate doors.
+   *
+   * Shown regardless of install tier — this is what distinguishes SpecShip
+   * impact from a plain code-graph impact (A2). Returns '' when no symbol in the
+   * radius is spec-linked, so a link-free radius reads identically to before (A4).
+   */
+  private formatGovernedBy(cg: SpecShip, impact: Subgraph): string {
+    const sq = cg.getSpecQueries();
+    const entries: string[] = [];
+    for (const node of impact.nodes.values()) {
+      const links = sq.getLinksByNode(node.id);
+      for (const link of links) {
+        const loc = node.startLine ? `:${node.startLine}` : '';
+        entries.push(
+          `- ${node.name} (${node.filePath}${loc}) — ${link.specId} · ${link.kind} · ${link.state}`
+        );
+      }
+    }
+    if (entries.length === 0) return '';
+
+    return [
+      '',
+      '## Governed by',
+      '',
+      ...entries,
+      '',
+      '> Governed symbols are in this radius — changing them drifts a linked promise. After the change, re-assert the affected links with specship_link_assert and check for drift via /specship:check.',
+    ].join('\n');
   }
 
   /**

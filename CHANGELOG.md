@@ -9,6 +9,18 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### New Features
+
+- **Design imports moved into the spec door: `/specship:spec design`.** Pass a `claude.ai/design` URL to import a settled design, a `figma.com` URL to import through the Figma MCP, or no URL to run the live taste loop first — all three feed the same snapshot → spec → implement pipeline. The standalone `/specship:design-implement` and `/specship:design-loop` commands are retired, and upgrading removes their old command files.
+- **`/specship:spec` now handles free text gracefully.** Input that isn't a spec ID or a known sub-command gets one clarifying question — new, fast, or triage — leading with a recommendation inferred from what you pasted (an error log points at triage; a feature idea points at new or fast) instead of undefined behaviour.
+- **Every authored spec is reviewed before hand-off.** All three authoring paths (`new`, `fast`, `design`) end with the same automatic review pass: structural problems are fixed on the spot, and judgement calls surface as a single proceed/adjust prompt — so no spec reaches disk unreviewed, including on the fast path.
+- **Anything broken goes in through triage.** `/specship:spec triage` now consults the drift queue after matching the owning spec — when the real problem is a stale spec↔code link it routes you to the fix flow instead of appending a criterion — and `/specship:check` given free text hands it to triage rather than failing.
+- **Spec authoring and implementation no longer stall in plan mode.** The spec command now exits Claude Code's plan mode at the confirmed-write and implement hand-off boundaries — the spec is the plan, and the implement workflow carries its own plan/approve gate — instead of letting plan mode block the spec write or the workflow launch.
+- **Drift now comes to you instead of waiting to be found.** The moment an edit drifts a spec↔code link, the auto-sync prints a one-line notice naming the spec and the fix; and when a session starts with drifted links in the queue, you get a one-line count pointing at `/specship:check drifted`. Already-drifted links stay quiet — you're told once, at the moment it happens.
+- **Impact analysis now shows the specs governing the blast radius.** When symbols in `specship_impact`'s radius carry spec links, the output lists each governing spec with the link's kind and state, and ends with guidance to re-assert the links after the change — so you learn a change touches a verified promise before making it, not from the drift queue afterwards.
+- **A graduated path from advisory checks to a real gate.** `specship check --strict` gates every check for one run; `specship check --enable-gate <checks…>` turns gating on permanently and writes the config for you; advisory runs whose findings would fail a gated run now end with that exact command; and the spec-driven (`--sdd`) install asks once whether to gate drift & behaviour, recommended on. With no config and no flags, `specship check` still reports advisory findings and exits zero.
+- **A spec can no longer be marked verified when its tests never ran.** The bundled implement workflow now reports whether the test suite ran-and-passed, ran-and-failed, or was skipped (no recognised test framework) in a machine-readable way, and a skipped run leaves spec links at `implemented` instead of `verified`. The final approval also reports how many of the spec's acceptance criteria have linked tests, naming `/specship:spec behaviour` as the follow-up that closes any gap.
+
 
 ## [0.11.8] - 2026-07-02
 
