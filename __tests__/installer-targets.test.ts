@@ -462,11 +462,12 @@ describe('Claude target — specifics', () => {
     expect(stopCommands).not.toContain('specship sync-if-dirty');
     expect(stopCommands.some((c: string) => c.includes('gk') && c.includes('ai hook run'))).toBe(true);
 
-    // SessionStart sync hook is added too.
+    // SessionStart sync hook is added too — the --drift-summary form
+    // (DRIFT-PUSH-DOC, REQ-DRIFT-PUSH-002).
     const sessionCommands = (after.hooks?.SessionStart ?? []).flatMap((g: any) =>
       (g.hooks ?? []).map((h: any) => h.command),
     );
-    expect(sessionCommands).toContain('specship sync --quiet');
+    expect(sessionCommands).toContain('specship sync --quiet --drift-summary');
 
     expect(after.permissions?.allow).toContain('mcp__specship__specship_search');
     // Harness read tools are auto-allowed too (MAINT-DOC / FITNESS-DOC).
@@ -545,7 +546,7 @@ describe('Claude target — specifics', () => {
     const postHooks = settings.hooks?.PostToolUse?.find((g: any) => g.matcher === 'Edit|Write|MultiEdit')?.hooks ?? [];
     expect(postHooks.find((h: any) => h.command === 'specship sync --quiet')?.async).toBe(true);
     const sessionHooks = settings.hooks?.SessionStart?.find((g: any) => g.matcher === 'startup|resume')?.hooks ?? [];
-    expect(sessionHooks.some((h: any) => h.command === 'specship sync --quiet')).toBe(true);
+    expect(sessionHooks.some((h: any) => h.command === 'specship sync --quiet --drift-summary')).toBe(true);
     expect(sessionHooks[0]?.async).toBeUndefined(); // SessionStart is sync
   });
 
@@ -562,6 +563,7 @@ describe('Claude target — specifics', () => {
         (groups as any[]).flatMap((g) => (g.hooks ?? []).map((h: any) => h.command)),
       );
       expect(allCommands).not.toContain('specship sync --quiet');
+      expect(allCommands).not.toContain('specship sync --quiet --drift-summary');
     }
   });
 
@@ -693,6 +695,42 @@ describe('Claude target — specifics', () => {
     // Our shipped files are gone, but the user's file — and thus the dir — remain.
     expect(fs.existsSync(path.join(nsDir, 'spec.md'))).toBe(false);
     expect(fs.readFileSync(userInNs, 'utf-8')).toBe('# mine, inside the namespace dir');
+  });
+
+  it('upgrade replaces the pre-drift-summary SessionStart sync hook with the --drift-summary form (REQ-DRIFT-PUSH-002)', () => {
+    // A prior install wrote `specship sync --quiet` on SessionStart. The
+    // upgrade must swap it for the --drift-summary form without duplicating,
+    // and without touching the PostToolUse hook whose command is the same
+    // plain string.
+    const file = seedSettings('global', {
+      hooks: {
+        SessionStart: [
+          {
+            matcher: 'startup|resume',
+            hooks: [
+              { type: 'command', command: 'specship sync --quiet' },
+              { type: 'command', command: 'echo user-session-hook' },
+            ],
+          },
+        ],
+      },
+    });
+
+    claudeTarget.install('global', { autoAllow: true });
+
+    const after = JSON.parse(fs.readFileSync(file, 'utf-8'));
+    const sessionCommands = (after.hooks?.SessionStart ?? []).flatMap((g: any) =>
+      (g.hooks ?? []).map((h: any) => h.command),
+    );
+    expect(sessionCommands).toContain('specship sync --quiet --drift-summary');
+    expect(sessionCommands).not.toContain('specship sync --quiet');
+    // The user's own SessionStart hook survives.
+    expect(sessionCommands).toContain('echo user-session-hook');
+    // The PostToolUse hook keeps the plain --quiet form (event-scoped strip).
+    const postCommands = (after.hooks?.PostToolUse ?? []).flatMap((g: any) =>
+      (g.hooks ?? []).map((h: any) => h.command),
+    );
+    expect(postCommands).toContain('specship sync --quiet');
   });
 
   it('cleanupCurrentHooks strips specship sync hooks without touching unrelated user hooks', () => {

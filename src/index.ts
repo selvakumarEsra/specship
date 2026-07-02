@@ -46,7 +46,7 @@ import {
   createResolver,
   ResolutionResult,
 } from './resolution';
-import { SpecLinkResolver, SpecLinkResolverStats } from './resolution/spec-link-resolver';
+import { SpecLinkResolver, SpecLinkResolverStats, DriftTransition } from './resolution/spec-link-resolver';
 import { computeSpecFunnel, SpecFunnel } from './resolution/brief-link-resolver';
 import { computeDomainGapSeed, DomainGapSeed } from './resolution/domain-gap-seed';
 import { SpecQueries } from './db/spec-queries';
@@ -782,11 +782,25 @@ export class SpecShip {
 
   /**
    * Internal spec indexing — does NOT take the indexMutex (caller already holds it)
-   * and does NOT take the fileLock. Used by indexAll which manages locks itself.
+   * and does NOT take the fileLock. Used by indexAll and sync, which manage locks
+   * themselves. Returns the links that transitioned into `drifted` during the
+   * pass (spec-side and code-side) so sync can push them (REQ-DRIFT-PUSH-001).
+   *
+   * The per-file content-hash guard makes re-runs cheap; the comment-link scan
+   * + full link re-resolution at the end runs only when a spec file actually
+   * changed or `forceResolve` is set (indexAll, and syncs that touched code —
+   * the orchestrator does not track spec files, so sync calls this
+   * unconditionally and relies on the hash guard).
    */
-  private async indexSpecsInternal(): Promise<void> {
+  private async indexSpecsInternal(forceResolve: boolean = true): Promise<DriftTransition[]> {
+    const transitions: DriftTransition[] = [];
+    const specStats: SpecLinkResolverStats = {
+      scanned: 0, reresolved: 0, orphaned: 0, driftedCode: 0,
+      candidatesApplied: 0, commentLinksApplied: 0, transitions,
+    };
+    let specFilesChanged = 0;
     const specRoots = this.defaultSpecRoots();
-    if (specRoots.length === 0) return;
+    if (specRoots.length === 0) return transitions;
     const specFiles: string[] = [];
     for (const root of specRoots) {
       this.collectSpecFiles(root, specFiles);
@@ -805,6 +819,7 @@ export class SpecShip {
       const hashHex = createHash('sha256').update(source).digest('hex').substring(0, 32);
       const existing = this.specQueries.getSpecFileByPath(rel);
       if (existing && existing.contentHash === hashHex) continue;
+      specFilesChanged++;
 
       this.specQueries.deleteSpecsByFile(rel);
       const result = new MarkdownSpecExtractor(rel, source).extract();
@@ -823,13 +838,17 @@ export class SpecShip {
       const specsById = new Map(result.specs.map((s) => [s.id, s]));
       this.specLinkResolver.applyDeclarationCandidates(result.linkCandidates, specsById);
       for (const spec of result.specs) {
-        this.specLinkResolver.markSpecDrifted(spec.id, spec.contentHash);
+        this.specLinkResolver.markSpecDrifted(spec.id, spec.contentHash, specStats);
       }
     }
 
-    const allFiles = this.queries.getAllFiles().map((f) => f.path);
-    this.specLinkResolver.applyCodeCommentLinks(allFiles);
-    this.specLinkResolver.resolveAll();
+    if (specFilesChanged > 0 || forceResolve) {
+      const allFiles = this.queries.getAllFiles().map((f) => f.path);
+      this.specLinkResolver.applyCodeCommentLinks(allFiles);
+      const resolveStats = this.specLinkResolver.resolveAll();
+      transitions.push(...resolveStats.transitions);
+    }
+    return transitions;
   }
 
   /**
@@ -874,6 +893,7 @@ export class SpecShip {
             driftedCode: 0,
             candidatesApplied: 0,
             commentLinksApplied: 0,
+            transitions: [],
           },
           errors: 0,
           durationMs: Date.now() - start,
@@ -898,6 +918,7 @@ export class SpecShip {
           driftedCode: 0,
           candidatesApplied: 0,
           commentLinksApplied: 0,
+          transitions: [],
         };
 
         for (const absPath of specFiles) {
@@ -945,7 +966,7 @@ export class SpecShip {
           // Spec-side drift: if any prior link's specHashAtLink differs from
           // the new contentHash of its spec, flip the link to drifted(spec).
           for (const spec of result.specs) {
-            this.specLinkResolver.markSpecDrifted(spec.id, spec.contentHash);
+            this.specLinkResolver.markSpecDrifted(spec.id, spec.contentHash, stats);
           }
 
           processed++;
@@ -967,6 +988,7 @@ export class SpecShip {
         stats.reresolved += resolveStats.reresolved;
         stats.orphaned += resolveStats.orphaned;
         stats.driftedCode += resolveStats.driftedCode;
+        stats.transitions.push(...resolveStats.transitions);
 
         return {
           filesProcessed: processed,
@@ -1105,6 +1127,28 @@ export class SpecShip {
         // Refresh planner stats + checkpoint the WAL after bulk writes.
         if (result.filesAdded > 0 || result.filesModified > 0 || result.filesRemoved > 0) {
           this.db.runMaintenance();
+        }
+
+        // Spec pass: pick up changed spec files and re-resolve spec links
+        // against the freshly-synced code, so drift is detected at sync time
+        // (DRIFT-PUSH-DOC) rather than only on a full re-index. Runs on EVERY
+        // sync — the orchestrator does not track spec files, so a spec-only
+        // edit leaves the file counters at zero; the pass's per-file hash
+        // guard keeps the no-change case cheap, and the heavy link
+        // re-resolution tail is skipped unless a spec or code file changed.
+        // Best-effort — a spec parse error never fails the sync. Same lock
+        // dance as indexAll: indexSpecsInternal expects the fileLock released.
+        {
+          const codeChanged =
+            result.filesAdded > 0 || result.filesModified > 0 || result.filesRemoved > 0;
+          this.fileLock.release();
+          try {
+            result.driftedTransitions = await this.indexSpecsInternal(codeChanged);
+          } catch {
+            // Non-fatal; the next full index catches up.
+          } finally {
+            this.fileLock.acquire();
+          }
         }
 
         this.refreshStatuslineCache();

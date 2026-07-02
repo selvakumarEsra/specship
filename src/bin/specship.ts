@@ -818,9 +818,31 @@ program
 program
   .command('sync [path]')
   .description('Sync changes since last index')
-  .option('-q, --quiet', 'Suppress output (for git hooks)')
-  .action(async (pathArg: string | undefined, options: { quiet?: boolean }) => {
+  .option('-q, --quiet', 'Suppress output (for git hooks); drift-transition notices still print')
+  .option('--drift-summary', 'After syncing, print a one-line drifted-link summary when the queue is non-empty (for the SessionStart hook)')
+  .action(async (pathArg: string | undefined, options: { quiet?: boolean; driftSummary?: boolean }) => {
     const projectPath = resolveProjectPath(pathArg);
+
+    // One line per link that TRANSITIONED into drifted this sync
+    // (REQ-DRIFT-PUSH-001). Deliberately printed even under --quiet — the
+    // auto-sync hook runs with --quiet, and these notices are its payload.
+    const pushDriftNotices = (result: { driftedTransitions?: Array<{ specId: string; fromState: string; axis: string; symbol: string }> }) => {
+      for (const t of result.driftedTransitions ?? []) {
+        console.log(
+          `⚠ spec drift: ${t.specId} ${t.fromState}→drifted (${t.symbol} ${t.axis === 'spec' ? 'spec changed' : 'changed'}) — ` +
+          `re-assert with specship_link_assert, or run /specship:check fix ${t.specId}`,
+        );
+      }
+    };
+
+    // One-line drift-queue summary, only when non-empty (REQ-DRIFT-PUSH-002).
+    const pushDriftSummary = (cg: { getSpecQueries(): { getLinksByState(states: string[]): unknown[] } }) => {
+      if (!options.driftSummary) return;
+      const drifted = cg.getSpecQueries().getLinksByState(['drifted']).length;
+      if (drifted > 0) {
+        console.log(`⚠ ${drifted} spec link(s) drifted — review with /specship:check drifted`);
+      }
+    };
 
     try {
       if (!isInitialized(projectPath)) {
@@ -834,7 +856,9 @@ program
       const cg = await SpecShip.open(projectPath);
 
       if (options.quiet) {
-        await cg.sync();
+        const result = await cg.sync();
+        pushDriftNotices(result);
+        pushDriftSummary(cg);
         cg.destroy();
         return;
       }
@@ -864,6 +888,8 @@ program
         clack.log.info(`${details.join(', ')} ${getGlyphs().dash} ${formatNumber(result.nodesUpdated)} nodes in ${formatDuration(result.durationMs)}`);
       }
 
+      pushDriftNotices(result);
+      pushDriftSummary(cg);
       clack.outro('Done');
       cg.destroy();
     } catch (err) {

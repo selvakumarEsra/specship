@@ -222,7 +222,9 @@ const SPECSHIP_HOOKS = [
   {
     event: 'SessionStart',
     matcher: 'startup|resume',
-    hook: { type: 'command', command: 'specship sync --quiet' },
+    // --drift-summary: one-line drifted-link count at session start, printed
+    // only when the queue is non-empty (DRIFT-PUSH-DOC, REQ-DRIFT-PUSH-002).
+    hook: { type: 'command', command: 'specship sync --quiet --drift-summary' },
   },
 ] as const;
 
@@ -309,6 +311,11 @@ class ClaudeCodeTarget implements AgentTarget {
     // self-healing. Only surfaced when something was actually removed.
     const hookCleanup = cleanupLegacyHooks(loc);
     if (hookCleanup.action === 'removed') files.push(hookCleanup);
+
+    // 2b'. Strip the pre-drift-summary SessionStart sync hook so an upgrade
+    // doesn't leave it double-syncing beside the new --drift-summary form.
+    const sessionHookCleanup = cleanupStaleSessionStartSyncHook(loc);
+    if (sessionHookCleanup.action === 'removed') files.push(sessionHookCleanup);
 
     // 2c. Write the current auto-sync hooks (PostToolUse + SessionStart
     // running `specship sync --quiet`). Gated on autoAllow — same
@@ -598,7 +605,7 @@ function isCurrentSpecshipHookCommand(command: unknown): boolean {
  */
 function stripHooksMatching(
   loc: Location,
-  predicate: (command: unknown) => boolean,
+  predicate: (command: unknown, event?: string) => boolean,
 ): WriteResult['files'][number] {
   const file = settingsJsonPath(loc);
   if (!fs.existsSync(file)) return { path: file, action: 'not-found' };
@@ -616,7 +623,7 @@ function stripHooksMatching(
     for (const group of groups) {
       if (!group || !Array.isArray(group.hooks)) continue;
       const before = group.hooks.length;
-      group.hooks = group.hooks.filter((h: any) => !predicate(h?.command));
+      group.hooks = group.hooks.filter((h: any) => !predicate(h?.command, event));
       if (group.hooks.length !== before) removedAny = true;
     }
   }
@@ -645,6 +652,22 @@ function stripHooksMatching(
  */
 export function cleanupLegacyHooks(loc: Location): WriteResult['files'][number] {
   return stripHooksMatching(loc, isLegacySpecshipHookCommand);
+}
+
+/**
+ * Remove the pre-drift-summary SessionStart auto-sync hook
+ * (`specship sync --quiet` on SessionStart). The current SessionStart form
+ * carries `--drift-summary` (REQ-DRIFT-PUSH-002); the plain form on that
+ * event is a leftover from an earlier install that would otherwise sit
+ * beside the new one, double-syncing at session start. Event-scoped so the
+ * PostToolUse hook — whose current command is exactly `specship sync
+ * --quiet` — is untouched. Install-safe: runs before `writeHooksEntry`.
+ */
+export function cleanupStaleSessionStartSyncHook(loc: Location): WriteResult['files'][number] {
+  return stripHooksMatching(
+    loc,
+    (command, event) => event === 'SessionStart' && command === 'specship sync --quiet',
+  );
 }
 
 /**
