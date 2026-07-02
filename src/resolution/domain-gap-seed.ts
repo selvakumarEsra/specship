@@ -2,7 +2,7 @@
  * Domain gap-seed (REQ-DOMAIN-003).
  *
  * A read-only pass that surfaces what the domain knowledge layer does NOT yet
- * cover, so an author (or the `/ss-spec domain` command, REQ-DOMAIN-004) can decide
+ * cover, so an author (or the `/specship:spec domain` command, REQ-DOMAIN-004) can decide
  * what to document next. It answers two questions against current DB state:
  *
  *   - which structural code entities (classes, structs, interfaces, routes,

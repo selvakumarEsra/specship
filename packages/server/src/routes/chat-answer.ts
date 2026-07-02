@@ -424,6 +424,18 @@ export function chunkAnswer(answer: string): string[] {
  * `ChatSource` (A1) and every result set is stable-sorted (A3).
  */
 export function answerForIntent(cg: SpecShipInstance, classified: ClassifiedIntent, detailCap = DETAIL_CAP): ChatAnswer {
+  const base = dispatchIntent(cg, classified, detailCap);
+  // Deprecation nudge (CMD-NS-DOC, REQ-CMD-NS-005): a legacy `/ss-*` form still
+  // routes, but the answer names the `/specship:*` command it was renamed to.
+  if (classified.deprecatedAlias) {
+    const { from, to } = classified.deprecatedAlias;
+    return { ...base, answer: `Note: \`${from}\` was renamed to \`${to}\`.\n\n${base.answer}` };
+  }
+  return base;
+}
+
+/** The intent→query dispatch (see `answerForIntent`, which wraps this). */
+function dispatchIntent(cg: SpecShipInstance, classified: ClassifiedIntent, detailCap = DETAIL_CAP): ChatAnswer {
   const query = classified.query.trim();
   switch (classified.intent) {
     case 'callers':

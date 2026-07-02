@@ -70,11 +70,11 @@ The slash commands are a small set of **progressive doors** (sub-actions are sel
 
 | Door | Tier | What it covers |
 |---|---|---|
-| `/ss-explore <symbols \| flow \| "impact of X">` | retrieval (default) | Reads: explore an area, trace a flow, or get a change's blast radius. |
-| `/ss-spec [<ID> \| new \| fast \| implement \| review \| triage \| behaviour \| domain]` | spec-driven (`--sdd`) | The intent loop: no arg = the funnel; `<ID>` = a spec's detail; `new`/`fast` author (full vs no-interview); `implement`/`review`; `triage` routes a change to an existing spec; `behaviour` generates E2E tests; `domain` captures a domain fact. |
-| `/ss-check [drifted \| fix <ID> \| relink <ID> \| health]` | spec-driven (`--sdd`) | The gate & health door: no arg = the enforcement gate; `drifted` = the review queue; `fix`/`relink` repair links; `health` = the maintainability report. |
-| `/ss-design-implement <url>` | spec-driven (`--sdd`) | Snapshots a Claude Design URL and drafts + implements a spec from it. |
-| `/ss-design-loop` | spec-driven (`--sdd`) | Runs the full human-tasted design→spec→code loop. |
+| `/specship:explore <symbols \| flow \| "impact of X">` | retrieval (default) | Reads: explore an area, trace a flow, or get a change's blast radius. |
+| `/specship:spec [<ID> \| new \| fast \| implement \| review \| triage \| behaviour \| domain]` | spec-driven (`--sdd`) | The intent loop: no arg = the funnel; `<ID>` = a spec's detail; `new`/`fast` author (full vs no-interview); `implement`/`review`; `triage` routes a change to an existing spec; `behaviour` generates E2E tests; `domain` captures a domain fact. |
+| `/specship:check [drifted \| fix <ID> \| relink <ID> \| health]` | spec-driven (`--sdd`) | The gate & health door: no arg = the enforcement gate; `drifted` = the review queue; `fix`/`relink` repair links; `health` = the maintainability report. |
+| `/specship:design-implement <url>` | spec-driven (`--sdd`) | Snapshots a Claude Design URL and drafts + implements a spec from it. |
+| `/specship:design-loop` | spec-driven (`--sdd`) | Runs the full human-tasted design→spec→code loop. |
 
 See [Design-to-code](/workflows/design-to-code/) for the design commands.
 

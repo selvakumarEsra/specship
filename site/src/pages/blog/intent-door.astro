@@ -19,11 +19,11 @@ import Article from '../../layouts/Article.astro';
   </svg>
 
   <p>Most tools treat what you <em>want</em> as ephemeral — a sentence in a chat that scrolls away the moment the code lands. The requirement lived in your head, briefly in the prompt, and then only in the diff, where the “why” is already lost. SpecShip treats intent as a durable, addressable artifact: a spec, with edges to the exact code that satisfies it. The intent door is where that artifact is born, grows, gets built, and stays honest.</p>
-  <p><code>/ss-spec</code> is one door over the whole lifecycle. It routes on the first word of what you type, so a single command covers browsing, authoring, implementing, reviewing, triaging, testing, and capturing domain knowledge.</p>
+  <p><code>/specship:spec</code> is one door over the whole lifecycle. It routes on the first word of what you type, so a single command covers browsing, authoring, implementing, reviewing, triaging, testing, and capturing domain knowledge.</p>
 
   <h2>The funnel behind the door</h2>
   <p>Open it with no argument and you get the <strong>spec lifecycle funnel</strong>: brainstormed ideas → written specs → implemented-and-linked requirements, with a rollup per document. It's the one screen that answers “where does intent stand in this repo?” — what's been captured, what's been built, what's still just an idea. Under the hood that's <code>specship_spec</code> called with no ID; it reads the spec layer of the graph directly.</p>
-  <p>Hand it a specific ID (<code>/ss-spec REQ-AUTH-005</code>) and it opens that spec: the requirement body, its parent document and sibling requirements, and — the part a plain file can't give you — <strong>the code it links to, with each link's state</strong>: verified, drifted, orphaned. You read the intent and its real implementation side by side, before touching a file.</p>
+  <p>Hand it a specific ID (<code>/specship:spec REQ-AUTH-005</code>) and it opens that spec: the requirement body, its parent document and sibling requirements, and — the part a plain file can't give you — <strong>the code it links to, with each link's state</strong>: verified, drifted, orphaned. You read the intent and its real implementation side by side, before touching a file.</p>
 
   <h2>Authoring, at two speeds</h2>
   <p>A requirement enters the graph one of two ways, and the door offers both because the right one depends on how settled the design is.</p>
@@ -34,7 +34,7 @@ import Article from '../../layouts/Article.astro';
   <p>Both produce the same thing: a spec that indexes cleanly, carries RFC-2119 keywords and independently-checkable acceptance criteria, and is ready to implement. <code>fast</code> trades the interview for speed, not correctness.</p>
 
   <h2>Implement — plan, gate, build, link</h2>
-  <p><code>/ss-spec implement REQ-X</code> runs the bundled <code>spec-implement</code> workflow in an <strong>isolated git worktree</strong>: it fetches the spec, writes a concrete plan, pauses at an approval gate, implements, verifies, and links the resulting code back to the spec. The isolation means a failed run never touches your working tree; the gate means a non-coding spec author can review the plan before any code is written.</p>
+  <p><code>/specship:spec implement REQ-X</code> runs the bundled <code>spec-implement</code> workflow in an <strong>isolated git worktree</strong>: it fetches the spec, writes a concrete plan, pauses at an approval gate, implements, verifies, and links the resulting code back to the spec. The isolation means a failed run never touches your working tree; the gate means a non-coding spec author can review the plan before any code is written.</p>
   <div class="callout">
     <div class="co-ic" style="background:color-mix(in srgb,#A586F5 16%,transparent);color:#A586F5"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/></svg></div>
     <div class="co-body"><strong>The link is the contract closing.</strong> After editing code for a spec, the door calls <code>specship_link_assert</code> — declaring “this symbol implements REQ-X.” That edge is what later lets drift detection notice when the code moves out from under the requirement. A spec’s <code>implementations:</code> block is the backstop: it re-asserts the link on every index even if the agent forgets.</div>

@@ -1,12 +1,12 @@
 ---
-description: Run the full design→code loop — taste a claude.ai/design with the human via the designer MCP, then snapshot → spec → review → hand off to /ss-spec implement. Two human gates.
+description: Run the full design→code loop — taste a claude.ai/design with the human via the designer MCP, then snapshot → spec → review → hand off to /specship:spec implement. Two human gates.
 argument-hint: [intent — what you want to design]
 allowed-tools: Read, Write, Edit, Bash, mcp__specship__designer_session, mcp__specship__designer_prompt, mcp__specship__designer_ask, mcp__specship__designer_list, mcp__specship__designer_snapshot, mcp__specship__designer_handoff, mcp__specship__specship_explore, mcp__specship__specship_search, mcp__specship__specship_node, mcp__specship__specship_spec, mcp__specship__specship_files
 ---
 
 # SpecShip Design Loop: `$ARGUMENTS`
 
-One continuous pipeline: **intent → taste → design → handoff → spec → `/ss-spec implement`**.
+One continuous pipeline: **intent → taste → design → handoff → spec → `/specship:spec implement`**.
 You (the orchestrator) drive `claude.ai/design` through the `designer` MCP while the
 **human tastes** the variants, then promote the chosen design into a SpecShip spec via the
 bundled `claude-design-implement` workflow. Two human gates:
@@ -14,7 +14,7 @@ bundled `claude-design-implement` workflow. Two human gates:
 - **Gate 1 (aesthetic):** the human says *"that's it"* in the taste loop. Driven here, conversationally.
 - **Gate 2 (contract):** the human walks the spec's `[needs review]` markers at the workflow's approval gate.
 
-This is the deeper companion to `/ss-design-implement` — that command imports a design you've
+This is the deeper companion to `/specship:design-implement` — that command imports a design you've
 *already* settled on (by URL); this one runs the taste loop first, then hands the resulting
 bundle to the same workflow. `$ARGUMENTS` is the human's opening intent (optional).
 
@@ -100,7 +100,7 @@ it to the human, and walk the `[needs review]` markers + gap-fill questions toge
 When the workflow completes it prints the bridge message. Relay it to the human:
 - the spec path `specs/<slug>.md` and its REQ IDs,
 - the reference files (`snapshot.html`, `tokens.css`, `source.md`),
-- the exact next step: **`/ss-spec implement <first REQ ID>`**.
+- the exact next step: **`/specship:spec implement <first REQ ID>`**.
 
 Remind them: the implementer reads `snapshot.html` for visual fidelity — the spec is
 contract-only.
@@ -114,7 +114,7 @@ contract-only.
 - **Auto-promoting.** Don't `designer_handoff` on every iteration — only once Gate 1 passes.
 - **Re-fetching in the workflow.** Always pass `HANDOFF_DIR` (the bundle you just fetched), never
   `CONNECTOR_URL` — that re-drives Chrome from a headless subprocess and is fragile. The URL path
-  is what `/ss-design-implement` is for.
+  is what `/specship:design-implement` is for.
 - **Putting hex/pixels in the spec.** Reference tokens by name; values live in `tokens.css`.
 - **Skipping Gate 2.** The gap-fill questions are where the static design's blind spots (failure
   modes, real-time updates, keyboard order) get closed.
@@ -122,4 +122,4 @@ contract-only.
 If `designer_session` errors with a CDP / sign-in problem, stop and route the human to
 `designer setup` (debug-Chrome profile + login) — this command cannot run the taste loop without
 the live browser. To import a design you've already settled on by URL, use
-`/ss-design-implement <url>` instead.
+`/specship:design-implement <url>` instead.

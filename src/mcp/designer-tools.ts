@@ -312,7 +312,7 @@ export const designerToolDefinitions: ToolDefinition[] = [
   {
     name: 'designer_handoff',
     description:
-      "Promote: fetch the project's export zip and extract it under ./artifacts/<key>/handoff-<ts>/project/, plus decision-record.md (the live chat transcript, verbatim). Call when the human says 'yes, that's it'. The bundle is what /ss-design-loop feeds to the claude-design-implement workflow.",
+      "Promote: fetch the project's export zip and extract it under ./artifacts/<key>/handoff-<ts>/project/, plus decision-record.md (the live chat transcript, verbatim). Call when the human says 'yes, that's it'. The bundle is what /specship:design-loop feeds to the claude-design-implement workflow.",
     inputSchema: {
       type: 'object',
       properties: {

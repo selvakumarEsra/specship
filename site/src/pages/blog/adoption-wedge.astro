@@ -9,7 +9,7 @@ import Article from '../../layouts/Article.astro';
     <g font-family="Geist Mono, monospace" font-size="15">
       <rect x="120" y="300" width="220" height="74" rx="13" fill="rgba(11,13,17,0.5)" stroke="rgba(70,194,107,0.6)" stroke-width="1.6"/>
       <text x="140" y="332" fill="rgba(120,210,150,0.95)">1 · retrieval</text>
-      <text x="140" y="356" fill="rgba(150,165,200,0.7)">/ss-explore</text>
+      <text x="140" y="356" fill="rgba(150,165,200,0.7)">/specship:explore</text>
 
       <rect x="380" y="210" width="220" height="74" rx="13" fill="rgba(11,13,17,0.5)" stroke="rgba(91,147,242,0.55)" stroke-width="1.6"/>
       <text x="400" y="242" fill="rgba(111,160,246,0.95)">2 · code health</text>
@@ -17,7 +17,7 @@ import Article from '../../layouts/Article.astro';
 
       <rect x="640" y="120" width="240" height="74" rx="13" fill="rgba(11,13,17,0.5)" stroke="rgba(165,134,245,0.55)" stroke-width="1.6" stroke-dasharray="7 7"/>
       <text x="660" y="152" fill="rgba(180,150,250,0.95)">3 · intent (--sdd)</text>
-      <text x="660" y="176" fill="rgba(150,165,200,0.7)">/ss-spec · /ss-check</text>
+      <text x="660" y="176" fill="rgba(150,165,200,0.7)">/specship:spec · /specship:check</text>
     </g>
     <path d="M340 320 L380 250 M600 230 L640 160" stroke="rgba(150,165,200,0.32)" stroke-width="2" fill="none" stroke-dasharray="5 6"/>
   </svg>
@@ -27,7 +27,7 @@ import Article from '../../layouts/Article.astro';
 
   <h2>The wedge is retrieval, and it needs nothing from you</h2>
   <p>SpecShip's one indisputable benefit is the cheapest to adopt: the agent explores a pre-built index instead of grepping and re-reading. No specs, no config, no new habits — you ask Claude Code a question and it stops thrashing. That's the wedge, and a first install should be <em>only</em> that.</p>
-  <p>So a default <code>specship install</code> now wires up the code-intelligence tools, the <code>/ss-explore</code> reads door, the status line, and the index. That's it. The MCP tools the agent actually uses are unchanged — what's gone from the default is the workflow tax.</p>
+  <p>So a default <code>specship install</code> now wires up the code-intelligence tools, the <code>/specship:explore</code> reads door, the status line, and the index. That's it. The MCP tools the agent actually uses are unchanged — what's gone from the default is the workflow tax.</p>
 
   <div class="pullquote">
     <p>The change is subtractive at the front and additive on demand. You meet a smaller surface, feel the benefit, and reach for depth when you want it.</p>
@@ -50,11 +50,11 @@ specship install <span class="c-key">--sdd</span></pre>
   <h2>Seventeen commands became three doors</h2>
   <p>The flat command list is gone. In its place are a few <strong>progressive doors</strong>, where sub-actions are chosen inside a door instead of cluttering your autocomplete:</p>
   <ul>
-    <li><strong><code>/ss-explore</code></strong> — reads: explore an area, trace a flow, or get a change's blast radius.</li>
-    <li><strong><code>/ss-spec</code></strong> — the whole intent loop: the funnel, a spec's detail, and <code>new</code> / <code>fast</code> / <code>implement</code> / <code>review</code> / <code>triage</code> / <code>behaviour</code> / <code>domain</code>.</li>
-    <li><strong><code>/ss-check</code></strong> — the enforcement gate, the drift queue, link repair, and code health.</li>
+    <li><strong><code>/specship:explore</code></strong> — reads: explore an area, trace a flow, or get a change's blast radius.</li>
+    <li><strong><code>/specship:spec</code></strong> — the whole intent loop: the funnel, a spec's detail, and <code>new</code> / <code>fast</code> / <code>implement</code> / <code>review</code> / <code>triage</code> / <code>behaviour</code> / <code>domain</code>.</li>
+    <li><strong><code>/specship:check</code></strong> — the enforcement gate, the drift queue, link repair, and code health.</li>
   </ul>
-  <p>One of those sub-actions is new and aimed squarely at solo devs in a hurry: <code>/ss-spec fast &lt;description&gt;</code> records intent and heads straight to implementation, skipping the brainstorm-and-interview loop that <code>/ss-spec new</code> runs when the design isn't settled yet.</p>
+  <p>One of those sub-actions is new and aimed squarely at solo devs in a hurry: <code>/specship:spec fast &lt;description&gt;</code> records intent and heads straight to implementation, skipping the brainstorm-and-interview loop that <code>/specship:spec new</code> runs when the design isn't settled yet.</p>
 
   <h2>The second hit stopped lying</h2>
   <p>Once retrieval earns trust, the natural next step is read-only code health — it needs no specs and runs on any indexed repo. But <code>specship maintainability</code> used to bury you: a thousand dead-code guesses and a coupling list topped by artifacts (every method named <code>set</code> or <code>now</code> collapsed into one inflated hotspot). A gateway that floods you destroys the trust the wedge just built.</p>

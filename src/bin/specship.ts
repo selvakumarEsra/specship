@@ -2346,14 +2346,14 @@ program
 
 /**
  * specship starter-prompt — print the manufactured first-run flow/impact prompt
- * (ACTIVATION-DOC). The single delivery mechanism for the bare `/ss-explore`
+ * (ACTIVATION-DOC). The single delivery mechanism for the bare `/specship:explore`
  * door: it self-gates (prints nothing if the index can't be queried —
  * REQ-ACTIVATION-004) and self-retires (prints nothing once a real specship
  * lookup has been recorded this session — REQ-ACTIVATION-003).
  */
 program
   .command('starter-prompt [path]')
-  .description('Print a suggested first flow/impact prompt for this project (used by the /ss-explore door).')
+  .description('Print a suggested first flow/impact prompt for this project (used by the /specship:explore door).')
   .option('-j, --json', 'Output as JSON')
   .action(async (pathArg: string | undefined, options: { json?: boolean }) => {
     const projectRoot = path.resolve(pathArg ?? process.cwd());
@@ -2433,7 +2433,7 @@ program
       const additionalContext =
         'This repo uses spec-driven development (SpecShip). Before any brainstorming or ' +
         'planning skill, FIRST invoke spec-author to author the spec under specs/ for this ' +
-        'work — the spec is the contract; implement from it with /ss-spec implement.';
+        'work — the spec is the contract; implement from it with /specship:spec implement.';
       process.stdout.write(
         JSON.stringify({ hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext } }) + '\n',
       );
@@ -2538,12 +2538,12 @@ program
 
 // @implements REQ-DOMAIN-003
 // Thin surface over the read-only gap-seed pass (SpecShip.getDomainGapSeed,
-// REQ-DOMAIN-003) so the `/ss-spec domain` capture command can cite the SAME real
+// REQ-DOMAIN-003) so the `/specship:spec domain` capture command can cite the SAME real
 // undocumented entities/specs the library computes (REQ-DOMAIN-004.A4) without a
 // new MCP tool (REQ-DOMAIN-005) or a runtime package import. Writes nothing.
 program
   .command('domain-gaps [path]')
-  .description('List code entities and specs not yet covered by a domain fact (the domain gap-seed). Feeds the /ss-spec domain capture interview.')
+  .description('List code entities and specs not yet covered by a domain fact (the domain gap-seed). Feeds the /specship:spec domain capture interview.')
   .option('-l, --limit <n>', 'max entities and specs to print in text mode (default: 50)')
   .option('--json', 'emit JSON')
   .action(async (pathArg: string | undefined, options: { limit?: string; json?: boolean }) => {
@@ -2585,7 +2585,7 @@ program
           }
           if (seed.specs.length > limit) console.log(`  … and ${seed.specs.length - limit} more`);
         }
-        console.log(`\nCapture a fact for any of these with \`/ss-spec domain\`.`);
+        console.log(`\nCapture a fact for any of these with \`/specship:spec domain\`.`);
       }
       /* eslint-enable no-console */
     } finally {
@@ -2705,7 +2705,7 @@ program
           console.log(JSON.stringify({ summary: { ideas: 0, specified: 0, conflicts: 0, documents: 0, requirements: 0 }, specs: [], briefs: [] }, null, 2));
         } else {
           // eslint-disable-next-line no-console
-          console.log('No specs or briefs found. Author one with /ss-spec new.');
+          console.log('No specs or briefs found. Author one with /specship:spec new.');
         }
         return;
       }

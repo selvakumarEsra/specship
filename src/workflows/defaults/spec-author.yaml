@@ -211,4 +211,4 @@ nodes:
       After writing:
       - Run `specship sync` to index the new spec.
       - Output the relative path of the file written + a one-line note
-        about what to do next (typically: `/ss-spec implement <REQ-ID>`).
+        about what to do next (typically: `/specship:spec implement <REQ-ID>`).

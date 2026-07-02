@@ -39,13 +39,13 @@ For one session the page shows the stat strip, a session-summary panel, and the 
 A panel between the stat strip and the prompt list that rolls up what the session actually *did*, not just what it cost:
 
 - **Top tools used**, with call counts color-coded by kind (Read / Edit / Bash / MCP).
-- **Every slash command and skill** the agent invoked across the session (e.g. `/ss-spec`, `spec-author`).
+- **Every slash command and skill** the agent invoked across the session (e.g. `/specship:spec`, `spec-author`).
 - **The models that ran** — multi-model sessions are visible, so a sidechain to Haiku no longer hides behind the session-level last-model column.
 - **Top files touched**, each with its last operation.
 
 ### Prompt timeline
 
-Each prompt is a row with the user text, a token micro-bar (input / output / cache-write / cache-read), per-prompt cost, an end-to-end **duration** (millisecond-aware, so a 400 ms tool round-trip doesn't collapse to "0s"), a **slash-command pill** when one was used (e.g. `/ss-spec`), an inline **tool-mix chip strip** for that turn (`Bash×3 Read×2 Edit×1`) so you can scan hundreds of prompts and tell heavy code work from heavy thinking, and a small **quality dot** colored by the prompt's rule-based quality score (see below).
+Each prompt is a row with the user text, a token micro-bar (input / output / cache-write / cache-read), per-prompt cost, an end-to-end **duration** (millisecond-aware, so a 400 ms tool round-trip doesn't collapse to "0s"), a **slash-command pill** when one was used (e.g. `/specship:spec`), an inline **tool-mix chip strip** for that turn (`Bash×3 Read×2 Edit×1`) so you can scan hundreds of prompts and tell heavy code work from heavy thinking, and a small **quality dot** colored by the prompt's rule-based quality score (see below).
 
 Click a row → it expands inline:
 

@@ -41,6 +41,42 @@ describe('slash commands (A1)', () => {
 });
 
 // ---------------------------------------------------------------------------
+// CMD-NS-DOC REQ-CMD-NS-005: the canonical `/specship:*` forms route, and the
+// legacy `/ss-*` forms still route but are flagged as a deprecated alias.
+// ---------------------------------------------------------------------------
+describe('command namespace (CMD-NS-DOC, REQ-CMD-NS-005)', () => {
+  it('/specship:spec <ID> routes to spec with no deprecation flag', () => {
+    const c = classifyIntent('/specship:spec REQ-DASH-CHAT-002');
+    expect(c.intent).toBe('spec');
+    expect(c.query).toBe('REQ-DASH-CHAT-002');
+    expect(c.confident).toBe(true);
+    expect(c.deprecatedAlias).toBeUndefined();
+  });
+
+  it('/specship:explore <symbols> routes to explore', () => {
+    const c = classifyIntent('/specship:explore LedgerService recordEntry');
+    expect(c.intent).toBe('explore');
+    expect(c.query).toBe('LedgerService recordEntry');
+  });
+
+  it('/specship:check routes to drift', () => {
+    expect(classifyIntent('/specship:check').intent).toBe('drift');
+  });
+
+  it('legacy /ss-spec still routes but is flagged as renamed to /specship:spec', () => {
+    const c = classifyIntent('/ss-spec REQ-LEDGER-001');
+    expect(c.intent).toBe('spec');
+    expect(c.query).toBe('REQ-LEDGER-001');
+    expect(c.deprecatedAlias).toEqual({ from: '/ss-spec', to: '/specship:spec' });
+  });
+
+  it('legacy /ss-explore and /ss-check carry their rename targets', () => {
+    expect(classifyIntent('/ss-explore foo').deprecatedAlias).toEqual({ from: '/ss-explore', to: '/specship:explore' });
+    expect(classifyIntent('/ss-check').deprecatedAlias).toEqual({ from: '/ss-check', to: '/specship:check' });
+  });
+});
+
+// ---------------------------------------------------------------------------
 // A2 / A5: free-form phrasings route to the matching capability.
 // ---------------------------------------------------------------------------
 describe('free-form routing (A2, A5)', () => {

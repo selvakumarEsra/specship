@@ -240,7 +240,7 @@ describe('Claude target — specifics', () => {
     expect(body).toContain('SPECSHIP_SDD_START');
     expect(body).toContain('spec-author');
     // The SDD block also steers claude.ai/design links to the design loop.
-    expect(body).toContain('ss-design-loop');
+    expect(body).toContain('specship:design-loop');
     expect(body).toContain('claude.ai/design');
     expect(result.files.some((f) => /\/CLAUDE\.md$/.test(f.path.replace(/\\/g, '/')) && !f.path.includes('.claude') && f.action === 'created')).toBe(true);
 
@@ -251,11 +251,11 @@ describe('Claude target — specifics', () => {
 
   it('default install provisions ONLY the retrieval tier — no governance commands, no SDD (REQ-WEDGE-001)', () => {
     claudeTarget.install('local', { autoAllow: false });
-    const cmds = path.join(tmpCwd, '.claude', 'commands');
-    // Retrieval tier present — the reads door.
-    expect(fs.existsSync(path.join(cmds, 'ss-explore.md'))).toBe(true);
+    const cmds = path.join(tmpCwd, '.claude', 'commands', 'specship');
+    // Retrieval tier present — the reads door (under the /specship: namespace).
+    expect(fs.existsSync(path.join(cmds, 'explore.md'))).toBe(true);
     // Governance tier absent (REQ-WEDGE-001.A2) — the intent + gate doors.
-    for (const name of ['ss-spec.md', 'ss-check.md']) {
+    for (const name of ['spec.md', 'check.md']) {
       expect(fs.existsSync(path.join(cmds, name))).toBe(false);
     }
     // SDD steering absent: no project CLAUDE.md, no spec-nudge hook.
@@ -282,8 +282,8 @@ describe('Claude target — specifics', () => {
 
   it('install --sdd adds the governance tier on top of retrieval (REQ-WEDGE-002.A1)', () => {
     claudeTarget.install('local', { autoAllow: false, sdd: true });
-    const cmds = path.join(tmpCwd, '.claude', 'commands');
-    for (const name of ['ss-explore.md', 'ss-spec.md', 'ss-check.md']) {
+    const cmds = path.join(tmpCwd, '.claude', 'commands', 'specship');
+    for (const name of ['explore.md', 'spec.md', 'check.md']) {
       expect(fs.existsSync(path.join(cmds, name))).toBe(true);
     }
     expect(fs.readFileSync(path.join(tmpCwd, 'CLAUDE.md'), 'utf-8')).toContain('SPECSHIP_SDD_START');
@@ -291,7 +291,7 @@ describe('Claude target — specifics', () => {
 
   it('a default install AFTER a governance opt-in preserves the governance tier (REQ-WEDGE-002.A4)', () => {
     claudeTarget.install('local', { autoAllow: false, sdd: true });
-    const govCmd = path.join(tmpCwd, '.claude', 'commands', 'ss-spec.md');
+    const govCmd = path.join(tmpCwd, '.claude', 'commands', 'specship', 'spec.md');
     expect(fs.existsSync(govCmd)).toBe(true);
     // A later plain install must not silently downgrade / strip governance.
     claudeTarget.install('local', { autoAllow: false });
@@ -568,8 +568,8 @@ describe('Claude target — specifics', () => {
   it('install --sdd copies the full shipped door set and subagent', () => {
     claudeTarget.install('global', { autoAllow: false, sdd: true });
 
-    for (const name of ['ss-explore.md', 'ss-spec.md', 'ss-check.md']) {
-      expect(fs.existsSync(path.join(tmpHome, '.claude', 'commands', name))).toBe(true);
+    for (const name of ['explore.md', 'spec.md', 'check.md']) {
+      expect(fs.existsSync(path.join(tmpHome, '.claude', 'commands', 'specship', name))).toBe(true);
     }
     expect(fs.existsSync(path.join(tmpHome, '.claude', 'agents', 'specship-explorer.md'))).toBe(true);
 
@@ -587,7 +587,7 @@ describe('Claude target — specifics', () => {
     claudeTarget.install('global', { autoAllow: false });
 
     expect(fs.readFileSync(userCmd, 'utf-8')).toBe('---\ndescription: mine\n---\nHello\n');
-    expect(fs.existsSync(path.join(tmpHome, '.claude', 'commands', 'ss-explore.md'))).toBe(true);
+    expect(fs.existsSync(path.join(tmpHome, '.claude', 'commands', 'specship', 'explore.md'))).toBe(true);
   });
 
   it('install removes superseded commands (legacy cg-* and the per-action ss-* folded into doors)', () => {
@@ -609,23 +609,61 @@ describe('Claude target — specifics', () => {
     for (const name of supersededNames) {
       expect(fs.existsSync(path.join(cmdsDir, name))).toBe(false);
     }
-    // The surviving doors exist.
-    expect(fs.existsSync(path.join(cmdsDir, 'ss-explore.md'))).toBe(true);
-    expect(fs.existsSync(path.join(cmdsDir, 'ss-spec.md'))).toBe(true);
-    expect(fs.existsSync(path.join(cmdsDir, 'ss-check.md'))).toBe(true);
+    // The surviving doors exist under the /specship: namespace.
+    expect(fs.existsSync(path.join(cmdsDir, 'specship', 'explore.md'))).toBe(true);
+    expect(fs.existsSync(path.join(cmdsDir, 'specship', 'spec.md'))).toBe(true);
+    expect(fs.existsSync(path.join(cmdsDir, 'specship', 'check.md'))).toBe(true);
     // The user's own file is untouched.
     expect(fs.readFileSync(siblingUser, 'utf-8')).toBe('# user file');
   });
 
+  it('upgrade removes the flat /ss-* door commands and keeps only the namespaced ones (CMD-NS-DOC, REQ-CMD-NS-003)', () => {
+    // Simulate a pre-rename install: the flat door files at the top level.
+    const cmdsDir = path.join(tmpHome, '.claude', 'commands');
+    fs.mkdirSync(cmdsDir, { recursive: true });
+    const flatDoors = ['ss-explore.md', 'ss-spec.md', 'ss-check.md', 'ss-design-implement.md', 'ss-design-loop.md'];
+    for (const name of flatDoors) fs.writeFileSync(path.join(cmdsDir, name), '# older flat door\n');
+    const siblingUser = path.join(cmdsDir, 'my-notes.md');
+    fs.writeFileSync(siblingUser, '# user file');
+
+    claudeTarget.install('global', { autoAllow: false, sdd: true });
+
+    // A1: all five flat door files are gone.
+    for (const name of flatDoors) {
+      expect(fs.existsSync(path.join(cmdsDir, name))).toBe(false);
+    }
+    // A2: the only shipped doors present are the namespaced ones.
+    for (const name of ['explore.md', 'spec.md', 'check.md', 'design-implement.md', 'design-loop.md']) {
+      expect(fs.existsSync(path.join(cmdsDir, 'specship', name))).toBe(true);
+    }
+    // A3: an unrelated user file is not removed by the cleanup.
+    expect(fs.readFileSync(siblingUser, 'utf-8')).toBe('# user file');
+  });
+
+  it('install surfaces a one-time rename notice only when it migrates off the flat commands (CMD-NS-DOC, REQ-CMD-NS-004)', () => {
+    const cmdsDir = path.join(tmpHome, '.claude', 'commands');
+
+    // A2: a fresh install (no flat commands present) shows no rename notice.
+    const fresh = claudeTarget.install('global', { autoAllow: false, sdd: true });
+    expect((fresh.notes ?? []).some((n) => /specship:/.test(n) && /ss-/.test(n))).toBe(false);
+
+    // Now plant a flat door file and re-install → the migration notice appears.
+    fs.writeFileSync(path.join(cmdsDir, 'ss-spec.md'), '# older flat door\n');
+    const migrated = claudeTarget.install('global', { autoAllow: false, sdd: true });
+    // A1: the notice names both the old (/ss-*) and new (/specship:*) forms.
+    const notice = (migrated.notes ?? []).find((n) => /\/specship:/.test(n) && /\/ss-/.test(n));
+    expect(notice).toBeDefined();
+  });
+
   it('uninstall removes the shipped doors + subagent + current-release hooks', () => {
     claudeTarget.install('global', { autoAllow: true, sdd: true });
-    expect(fs.existsSync(path.join(tmpHome, '.claude', 'commands', 'ss-explore.md'))).toBe(true);
+    expect(fs.existsSync(path.join(tmpHome, '.claude', 'commands', 'specship', 'explore.md'))).toBe(true);
     expect(fs.existsSync(path.join(tmpHome, '.claude', 'agents', 'specship-explorer.md'))).toBe(true);
 
     claudeTarget.uninstall('global');
 
-    for (const name of ['ss-explore.md', 'ss-spec.md', 'ss-check.md']) {
-      expect(fs.existsSync(path.join(tmpHome, '.claude', 'commands', name))).toBe(false);
+    for (const name of ['explore.md', 'spec.md', 'check.md']) {
+      expect(fs.existsSync(path.join(tmpHome, '.claude', 'commands', 'specship', name))).toBe(false);
     }
     expect(fs.existsSync(path.join(tmpHome, '.claude', 'agents', 'specship-explorer.md'))).toBe(false);
 
@@ -642,6 +680,19 @@ describe('Claude target — specifics', () => {
     claudeTarget.uninstall('global');
 
     expect(fs.readFileSync(userCmd, 'utf-8')).toBe('---\ndescription: mine\n---\nHello\n');
+  });
+
+  it('uninstall preserves a user file placed inside the specship/ subdir (CMD-NS-DOC, REQ-CMD-NS-002.A2)', () => {
+    claudeTarget.install('global', { autoAllow: false, sdd: true });
+    const nsDir = path.join(tmpHome, '.claude', 'commands', 'specship');
+    const userInNs = path.join(nsDir, 'my-own.md');
+    fs.writeFileSync(userInNs, '# mine, inside the namespace dir');
+
+    claudeTarget.uninstall('global');
+
+    // Our shipped files are gone, but the user's file — and thus the dir — remain.
+    expect(fs.existsSync(path.join(nsDir, 'spec.md'))).toBe(false);
+    expect(fs.readFileSync(userInNs, 'utf-8')).toBe('# mine, inside the namespace dir');
   });
 
   it('cleanupCurrentHooks strips specship sync hooks without touching unrelated user hooks', () => {

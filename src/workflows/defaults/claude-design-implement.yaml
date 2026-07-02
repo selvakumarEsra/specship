@@ -1,5 +1,5 @@
 name: claude-design-implement
-description: Import a Claude Design (live URL or a designer handoff bundle) — snapshot + tokens + source record — draft the spec, gate at review, write the spec — ready to hand off to /ss-spec implement.
+description: Import a Claude Design (live URL or a designer handoff bundle) — snapshot + tokens + source record — draft the spec, gate at review, write the spec — ready to hand off to /specship:spec implement.
 tags: [spec, ui, claude-design, default]
 requires: [specship, git]
 
@@ -11,10 +11,10 @@ worktree:
   enabled: true
 
 # Two entry shapes (provide exactly one source):
-#   - CONNECTOR_URL  — a live claude.ai/design URL (the `/ss-design-implement`
+#   - CONNECTOR_URL  — a live claude.ai/design URL (the `/specship:design-implement`
 #     command). The snapshot node fetches it, preferring the `designer` MCP.
 #   - HANDOFF_DIR    — a designer handoff bundle already on disk (the
-#     `/ss-design-loop` command, after the human-tasted loop + designer_handoff).
+#     `/specship:design-loop` command, after the human-tasted loop + designer_handoff).
 #     The snapshot node reads files straight from the bundle — no fetch, no CDP.
 # Optional inputs default to "" (see the CLI's declared-default handling), so a
 # `$INPUT.X` reference to an omitted optional input resolves to "" rather than
@@ -308,7 +308,7 @@ nodes:
 
       Output: the relative path of the file written + the first REQ
       ID (e.g. "REQ-DATA-FLOW-001") so the next step can hand it to
-      /ss-spec implement.
+      /specship:spec implement.
 
   - id: handoff
     kind: prompt
@@ -327,7 +327,7 @@ nodes:
              - specs/$INPUT.SLUG/tokens.css
              - specs/$INPUT.SLUG/source.md
         4. The exact next command:
-             /ss-spec implement <first REQ ID>
+             /specship:spec implement <first REQ ID>
         5. A one-line reminder that the implementation step should
            load the snapshot for visual fidelity — the spec covers
            contract only.

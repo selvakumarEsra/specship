@@ -45,7 +45,34 @@ export interface ClassifiedIntent {
   subject?: string;
   /** True when a slash command or a keyword pattern matched; false on fallback. */
   confident: boolean;
+  /**
+   * Set when the message used a legacy `/ss-*` slash form that has been renamed
+   * to the `/specship:*` namespace (CMD-NS-DOC, REQ-CMD-NS-005). The message
+   * still routes normally; this carries the old + new forms so the answer layer
+   * can nudge the user toward the canonical command.
+   */
+  deprecatedAlias?: { from: string; to: string };
 }
+
+/**
+ * Slash-command → intent routing table (CMD-NS-DOC, REQ-CMD-NS-005). Each door
+ * is reachable by three tokens: the canonical `/specship:*` namespace form, the
+ * legacy flat `/ss-*` form (kept as a deprecation alias), and the bare verb.
+ * The check family routes to `drift` — the launch set has no separate
+ * gate/health intent. Keys are lowercased to match `cmd`.
+ */
+const SLASH_ROUTES: Record<string, ChatIntent> = {
+  'specship:spec': 'spec', 'ss-spec': 'spec', spec: 'spec',
+  'specship:explore': 'explore', 'ss-explore': 'explore', explore: 'explore',
+  'specship:check': 'drift', 'ss-check': 'drift', check: 'drift',
+};
+
+/** Legacy `/ss-*` slash forms → the canonical `/specship:*` command they were renamed to. */
+const RENAMED_SLASH: Record<string, string> = {
+  'ss-spec': '/specship:spec',
+  'ss-explore': '/specship:explore',
+  'ss-check': '/specship:check',
+};
 
 /** A spec-id-shaped token — `REQ-DASH-CHAT-002`, `DOMAIN-LEDGER`, `DASH-CHAT-DOC`. */
 const SPEC_ID = /\b[A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)+\b/;
@@ -85,14 +112,15 @@ export function classifyIntent(message: string): ClassifiedIntent {
   if (slash) {
     const cmd = (slash[1] ?? '').toLowerCase();
     const rest = (slash[2] ?? '').trim();
-    if (cmd === 'ss-spec' || cmd === 'spec') {
-      return { intent: 'spec', query: rest, subject: rest || undefined, confident: true };
-    }
-    if (cmd === 'ss-explore' || cmd === 'explore') {
-      return { intent: 'explore', query: rest, subject: rest || undefined, confident: true };
-    }
-    if (cmd === 'ss-check' || cmd === 'check') {
-      return { intent: 'drift', query: rest, subject: rest || undefined, confident: true };
+    const routed = SLASH_ROUTES[cmd];
+    if (routed) {
+      const result: ClassifiedIntent = {
+        intent: routed, query: rest, subject: rest || undefined, confident: true,
+      };
+      // Legacy `/ss-*` form → flag it so the answer nudges toward `/specship:*`.
+      const renamedTo = RENAMED_SLASH[cmd];
+      if (renamedTo) result.deprecatedAlias = { from: `/${cmd}`, to: renamedTo };
+      return result;
     }
     // Unknown slash command → fall through to keyword matching on the subject
     // (extractSubject has already stripped the leading slash token).
