@@ -9,6 +9,9 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### New Features
+
+- **`specship update` upgrades you to the latest release in one command.** It detects how SpecShip was installed — the `install.sh` bundle or an npm global — and runs the matching update, so you no longer have to remember which one you used. `specship update --check` just tells you whether a newer version is available (and exits with a distinct code so scripts and hooks can gate on it) without changing anything. It no-ops cleanly when you're already up to date, leaves your install untouched if anything goes wrong, and reminds you to restart a running dashboard/MCP session to pick up the new version.
 
 ## [0.12.1] - 2026-07-04
 
