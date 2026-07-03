@@ -19,20 +19,10 @@
     </div>
   } @else {
 
-    <!-- Stat tiles -->
+    <!-- Stat tiles — Est. saved leads; net is demoted and explained (REQ-DASHUX-001) -->
     <div class="tiles">
 
-      <!-- Spend tile -->
-      <div class="card card-pad tile">
-        <div class="tile-label row gap-6">
-          <app-icon name="dollar" [size]="12" style="color: var(--text-muted);" />
-          <span class="muted">Spend</span>
-        </div>
-        <div class="big-number mono">{{ fmtK(spendTokens()) }}</div>
-        <div class="muted tile-sub">tokens · {{ fmt$(spendCostUsd()) }}</div>
-      </div>
-
-      <!-- Est. saved tile -->
+      <!-- Est. saved tile (leading) -->
       <div class="card card-pad tile tile-saved">
         <div class="tile-label row gap-6">
           <app-icon name="trendDown" [size]="12" style="color: var(--success);" />
@@ -40,19 +30,28 @@
           <span class="est-badge">est.</span>
         </div>
         <div class="big-number mono" style="color: var(--success);">{{ fmtK(savedTokens()) }}</div>
-        <div class="muted tile-sub">tokens · {{ fmt$(savedCostUsd()) }}</div>
+        <div class="muted tile-sub">tokens · {{ fmt$(savedCostUsd()) }} · reads specship made unnecessary</div>
       </div>
 
-      <!-- Net tile -->
+      <!-- Retrieval ROI tile -->
+      <div class="card card-pad tile">
+        <div class="tile-label row gap-6">
+          <app-icon name="dollar" [size]="12" style="color: var(--text-muted);" />
+          <span class="muted">Retrieval ROI</span>
+          <span class="est-badge">est.</span>
+        </div>
+        <div class="big-number mono" [style.color]="retrievalNetTokens() >= 0 ? 'var(--success)' : 'var(--warn)'">{{ retrievalNetTokens() > 0 ? '+' : '' }}{{ fmtK(retrievalNetTokens()) }}</div>
+        <div class="muted tile-sub">saved − {{ fmtK(retrievalSpendTokens()) }} retrieval spend</div>
+      </div>
+
+      <!-- Governance overhead tile (carries the demoted overall net) -->
       <div class="card card-pad tile">
         <div class="tile-label row gap-6">
           <app-icon name="coins" [size]="12" style="color: var(--text-muted);" />
-          <span class="muted">Net</span>
+          <span class="muted">Governance</span>
         </div>
-        <div class="row gap-8" style="align-items: baseline;">
-          <div class="big-number mono" [style.color]="netTokens() >= 0 ? 'var(--success)' : 'var(--warn)'">{{ netTokens() > 0 ? '+' : '' }}{{ fmtK(netTokens()) }}</div>
-        </div>
-        <div class="muted tile-sub">tokens · {{ fmt$(netCostUsd()) }} · saved − spend − overhead</div>
+        <div class="big-number mono">{{ fmtK(governanceSpendTokens() + overheadTokens()) }}</div>
+        <div class="muted tile-sub">bookkeeping (link asserts, spec reads) + tool definitions — not retrieval · overall net {{ netTokens() > 0 ? '+' : '' }}{{ fmtK(netTokens()) }}</div>
       </div>
 
       <!-- Coverage tile -->
