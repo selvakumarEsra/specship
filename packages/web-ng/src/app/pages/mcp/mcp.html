@@ -84,6 +84,12 @@
                   <app-pill [color]="scopeMeta(srv.scope).color" [bg]="mix(scopeMeta(srv.scope).color)">
                     <app-icon [name]="scopeMeta(srv.scope).icon" [size]="10" /> {{ scopeMeta(srv.scope).label }}
                   </app-pill>
+                  <!-- Seed data must be unmistakable on the row itself, not
+                       only in the page banner (REQ-DASHINT-005) — a
+                       screenshot of one card can't pass as live data. -->
+                  @if (isSeed()) {
+                    <app-pill color="var(--warn)" [bg]="mix('var(--warn)')">sample</app-pill>
+                  }
                 </span>
                 <span class="mono muted server-command">{{ srv.command }}</span>
               </span>
