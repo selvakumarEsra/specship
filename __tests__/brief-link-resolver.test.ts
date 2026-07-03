@@ -12,6 +12,7 @@ import {
   cleanSpecPointer,
   resolveToDocumentId,
   summarizeBriefFunnel,
+  ideaCaptureFields,
   SpecLookup,
   FunnelLookup,
 } from '../src/resolution/brief-link-resolver';
@@ -142,6 +143,61 @@ describe('resolveBriefLink (REQ-FUNNEL-002)', () => {
     expect(link.linkedSpecId).toBe('DOC');
     // It does not claim the sibling requirement.
     expect(link.linkedSpecId).not.toBe('REQ-2');
+  });
+});
+
+describe('ideaCaptureFields (REQ-IDEAS-002.A2)', () => {
+  const brief = (metadata: Record<string, unknown>): Spec =>
+    spec({ id: 'brief:x', kind: 'brief', sourcePath: 'specs/x/brief.md', metadata });
+
+  it('returns null age + no labels for a brief with no capture fields', () => {
+    expect(ideaCaptureFields(brief({ slug: 'x' }))).toEqual({ capturedAt: null, labels: [] });
+    // A brief with no metadata at all is handled too (older briefs).
+    expect(ideaCaptureFields(spec({ id: 'brief:y', kind: 'brief' }))).toEqual({
+      capturedAt: null,
+      labels: [],
+    });
+  });
+
+  it('parses `created` as an ISO date string into epoch ms', () => {
+    const { capturedAt } = ideaCaptureFields(brief({ created: '2026-06-30' }));
+    expect(capturedAt).toBe(Date.parse('2026-06-30'));
+  });
+
+  it('accepts `created` as a raw epoch-ms number', () => {
+    const ms = 1_781_000_000_000;
+    expect(ideaCaptureFields(brief({ created: ms })).capturedAt).toBe(ms);
+  });
+
+  it('returns null age for an unparseable `created`', () => {
+    expect(ideaCaptureFields(brief({ created: 'not-a-date' })).capturedAt).toBeNull();
+    expect(ideaCaptureFields(brief({ created: '' })).capturedAt).toBeNull();
+  });
+
+  it('splits a comma-delimited `labels` string', () => {
+    expect(ideaCaptureFields(brief({ labels: 'perf, cache , infra' })).labels).toEqual([
+      'perf',
+      'cache',
+      'infra',
+    ]);
+  });
+
+  it('accepts `labels` as a string array (map to String, drop blanks)', () => {
+    expect(ideaCaptureFields(brief({ labels: ['perf', 'cache', ''] })).labels).toEqual([
+      'perf',
+      'cache',
+    ]);
+  });
+
+  it('accepts the singular `label` key as a one-element list (the capture verb writes it)', () => {
+    expect(ideaCaptureFields(brief({ label: 'infra' })).labels).toEqual(['infra']);
+  });
+
+  it('combines a plural `labels` and a singular `label`', () => {
+    expect(ideaCaptureFields(brief({ labels: 'perf', label: 'infra' })).labels).toEqual([
+      'perf',
+      'infra',
+    ]);
   });
 });
 

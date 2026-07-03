@@ -116,6 +116,65 @@ export function resolveBriefLink(sq: SpecLookup, brief: Spec): BriefLink {
 }
 
 // ---------------------------------------------------------------------------
+// Idea capture fields (REQ-IDEAS-002.A2) — the single source of truth for a
+// brief's capture date + labels, shared by the `ideas` review view and the
+// list-mode inventory so both surfaces render the same values.
+// ---------------------------------------------------------------------------
+
+/**
+ * Read a brief's idea-capture fields from the frontmatter REQ-IDEAS-001 writes.
+ *
+ *  - `capturedAt` — `metadata.created` (the capture moment) parsed to epoch ms.
+ *    `spec.createdAt` is index-time, not capture-time, so age MUST come from
+ *    here. Accepts an epoch-ms number or an ISO/date string; `null` when the
+ *    key is absent or unparseable.
+ *  - `labels` — the plural `metadata.labels` (a comma-delimited string OR a
+ *    `string[]`) PLUS the singular `metadata.label` the capture verb writes
+ *    (treated as a one-element list). `[]` when neither is present.
+ *
+ * Defensive throughout: older briefs (captured before REQ-IDEAS-001) carry
+ * neither field, and both surfaces must still render cleanly.
+ */
+export function ideaCaptureFields(brief: Spec): { capturedAt: number | null; labels: string[] } {
+  const meta =
+    brief.metadata && typeof brief.metadata === 'object'
+      ? (brief.metadata as Record<string, unknown>)
+      : {};
+
+  let capturedAt: number | null = null;
+  const created = meta.created;
+  if (typeof created === 'number' && Number.isFinite(created)) {
+    capturedAt = created;
+  } else if (typeof created === 'string' && created.trim().length > 0) {
+    const parsed = Date.parse(created.trim());
+    if (!Number.isNaN(parsed)) capturedAt = parsed;
+  }
+
+  const labels: string[] = [];
+  // Plural `labels`: comma-delimited string or an array.
+  const many = meta.labels;
+  if (typeof many === 'string') {
+    for (const part of many.split(',')) {
+      const v = part.trim();
+      if (v) labels.push(v);
+    }
+  } else if (Array.isArray(many)) {
+    for (const part of many) {
+      const v = String(part).trim();
+      if (v) labels.push(v);
+    }
+  }
+  // Singular `label`: the key the capture verb writes — a one-element list.
+  const one = meta.label;
+  if (typeof one === 'string') {
+    const v = one.trim();
+    if (v) labels.push(v);
+  }
+
+  return { capturedAt, labels };
+}
+
+// ---------------------------------------------------------------------------
 // Project-wide funnel (REQ-FUNNEL-004/005/006 share this one computation)
 // ---------------------------------------------------------------------------
 
@@ -137,7 +196,7 @@ export interface SpecFunnelDoc {
 export interface SpecFunnel {
   summary: SpecFunnelSummary;
   documents: SpecFunnelDoc[];
-  ideas: Array<{ briefId: string; title: string }>;
+  ideas: Array<{ briefId: string; title: string; capturedAt: number | null; labels: string[] }>;
   conflicts: Array<{ briefId: string; briefSide: string | null; specSide: string | null }>;
 }
 
@@ -184,7 +243,11 @@ export function computeSpecFunnel(sq: FunnelLookup): SpecFunnel {
 
   const ideas = briefLinks
     .filter((l) => l.state === 'idea')
-    .map((l) => ({ briefId: l.briefId, title: sq.getSpecById(l.briefId)?.title ?? '' }));
+    .map((l) => {
+      const brief = sq.getSpecById(l.briefId);
+      const cap = brief ? ideaCaptureFields(brief) : { capturedAt: null, labels: [] };
+      return { briefId: l.briefId, title: brief?.title ?? '', capturedAt: cap.capturedAt, labels: cap.labels };
+    });
   const conflicts = briefLinks
     .filter((l) => l.state === 'conflict')
     .map((l) => ({ briefId: l.briefId, briefSide: l.briefSide, specSide: l.specSide }));

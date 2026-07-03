@@ -17,7 +17,7 @@ import type { Spec, SpecLink, SpecLinkState, SpecLinkKind, NodeKind } from '../t
 import type { SpecQueries } from '../db/spec-queries';
 import { renderBehaviourSurface } from '../behaviour/behaviour-surface';
 import type { ToolDefinition, ToolResult } from './tools';
-import { summarizeBriefFunnel } from '../resolution/brief-link-resolver';
+import { summarizeBriefFunnel, ideaCaptureFields } from '../resolution/brief-link-resolver';
 import type { FunnelLookup } from '../resolution/brief-link-resolver';
 
 const projectPathProperty = {
@@ -74,7 +74,7 @@ export const specToolDefinitions: ToolDefinition[] = [
   {
     name: 'specship_spec',
     description:
-      'Fetch a spec/requirement by its ID. Call this FIRST whenever the user mentions a spec ID (e.g., REQ-AUTH-005) or a requirement. Returns the spec body, its parent doc and sibling requirements, and the code it currently links to with link state (verified / drifted / orphaned). Use this instead of Read-ing the spec file — it returns more (linked code + state) than the file alone. Called WITHOUT a spec_id, it returns the project\'s spec lifecycle funnel: brainstormed ideas → specs → implemented, with per-document rollups. Pass `list: true` for a flat inventory instead: every requirement grouped by document with exactly one rolled-up status each (authored / in-progress / implemented / verified / needs-attention) plus per-status totals. Pass `query` instead to SEARCH specs by free text — call this FIRST when a user describes a change (a bug, an error, a one-line enhancement) and you need to find which existing spec it belongs to; it returns scored, ranked candidates (id, title, kind, snippet) over the spec full-text index.',
+      'Fetch a spec/requirement by its ID. Call this FIRST whenever the user mentions a spec ID (e.g., REQ-AUTH-005) or a requirement. Returns the spec body, its parent doc and sibling requirements, and the code it currently links to with link state (verified / drifted / orphaned). Use this instead of Read-ing the spec file — it returns more (linked code + state) than the file alone. Called WITHOUT a spec_id, it returns the project\'s spec lifecycle funnel: brainstormed ideas → specs → implemented, with per-document rollups. Pass `list: true` for a flat inventory instead: every requirement grouped by document with exactly one rolled-up status each (authored / in-progress / implemented / verified / needs-attention) plus per-status totals. Pass `ideas: true` for the ideas review view: exactly the idea-state briefs (unlinked brainstorm briefs) with each one\'s age since capture and labels, closing with the promotion hand-off (`/specship:spec new <brief-id>`). Pass `query` instead to SEARCH specs by free text — call this FIRST when a user describes a change (a bug, an error, a one-line enhancement) and you need to find which existing spec it belongs to; it returns scored, ranked candidates (id, title, kind, snippet) over the spec full-text index.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -91,6 +91,11 @@ export const specToolDefinitions: ToolDefinition[] = [
           type: 'boolean',
           description:
             'Provide with no spec_id to get the flat spec inventory instead of the funnel: every requirement grouped by document with exactly one rolled-up status each (authored / in-progress / implemented / verified / needs-attention), unlinked briefs as ideas, plus per-status totals. A free-text `query` takes precedence over it.',
+        },
+        ideas: {
+          type: 'boolean',
+          description:
+            'Provide with no spec_id to get the ideas review view: exactly the idea-state briefs (unlinked brainstorm briefs), each with its age since capture and labels, closing with the promotion hand-off (/specship:spec new <brief-id>). A free-text `query`, `list`, and a `spec_id` all take precedence.',
         },
         behaviour_surface: {
           type: 'boolean',
@@ -326,6 +331,84 @@ function buildFunnel(sq: FunnelLookup): string {
   return lines.join('\n');
 }
 
+/**
+ * Human age of an idea since capture (REQ-IDEAS-002.A1), computed at render from
+ * the brief's capture timestamp. `unknown` when the brief carries no parseable
+ * capture date; a future date (clock skew) clamps to `today` rather than showing
+ * a negative age.
+ */
+function formatIdeaAge(capturedAt: number | null, now: number): string {
+  if (capturedAt === null) return 'unknown';
+  const ms = now - capturedAt;
+  if (ms < 86_400_000) return 'today';
+  const days = Math.floor(ms / 86_400_000);
+  if (days < 14) return `${days}d`;
+  if (days < 60) return `${Math.floor(days / 7)}w`;
+  return `${Math.floor(days / 30)}mo`;
+}
+
+/**
+ * The `<age>  ·  <labels>` suffix shared by the `ideas` review view and the
+ * list-mode inventory's Ideas section (REQ-IDEAS-002.A2) — one renderer so both
+ * surfaces always agree on an idea's age and labels.
+ */
+function ideaMetaSuffix(brief: Spec, now: number): string {
+  const { capturedAt, labels } = ideaCaptureFields(brief);
+  const age = formatIdeaAge(capturedAt, now);
+  return `${age}  ·  ${labels.length ? labels.join(', ') : '—'}`;
+}
+
+/**
+ * Build the ideas review view (REQ-IDEAS-002). Shown when `specship_spec` is
+ * called with `ideas: true`: exactly the idea-state briefs (the same idea-state
+ * predicate the funnel and inventory use), each row carrying id, title, age
+ * since capture, and labels — resolved from this single call, no per-idea
+ * follow-up (A1). Newest capture first (unknown-age last). Closes by naming the
+ * promotion hand-off (A3). Zero idea-state briefs → a clean empty-lane message
+ * pointing at the `idea` capture verb, never an error (A4).
+ */
+function buildIdeas(sq: FunnelLookup): string {
+  const ideas = sq
+    .getAllSpecs()
+    .filter((s) => s.kind === 'brief')
+    .filter((b) => summarizeBriefFunnel(sq, b).state === 'idea');
+
+  const lines: string[] = [];
+  lines.push('# Ideas');
+  lines.push('');
+
+  if (ideas.length === 0) {
+    lines.push(
+      '_No ideas parked yet. Capture one in five seconds with `/specship:spec idea <one-liner>` — it never interrupts your flow._'
+    );
+    return lines.join('\n');
+  }
+
+  const now = Date.now();
+  const rows = ideas
+    .map((b) => ({ brief: b, ...ideaCaptureFields(b) }))
+    .sort((a, z) => {
+      if (a.capturedAt !== z.capturedAt) {
+        if (a.capturedAt === null) return 1; // unknown-age sorts last
+        if (z.capturedAt === null) return -1;
+        return z.capturedAt - a.capturedAt; // newest capture first
+      }
+      return a.brief.id.localeCompare(z.brief.id);
+    });
+
+  lines.push(`${rows.length} idea${rows.length === 1 ? '' : 's'} parked, newest first:`);
+  lines.push('');
+  for (const { brief } of rows) {
+    lines.push(`- ${brief.id} — ${brief.title}  ·  ${ideaMetaSuffix(brief, now)}`);
+  }
+  lines.push('');
+  lines.push(
+    'Promote any idea into a spec with `/specship:spec new <brief-id>` — it seeds the authoring interview from the brief.'
+  );
+
+  return lines.join('\n');
+}
+
 const DEGRADED_LINK_STATES: SpecLinkState[] = ['drifted', 'broken', 'orphaned'];
 
 /**
@@ -401,11 +484,15 @@ function buildInventory(sq: FunnelLookup): string {
   );
 
   if (ideas.length) {
+    // A2: carry the same age + labels the `ideas` review view shows (one
+    // renderer, so both surfaces agree). Computed at render off one `now`.
+    const now = Date.now();
     lines.push('');
     lines.push('## Ideas (unlinked briefs)');
     for (const e of ideas) {
       const b = sq.getSpecById(e.briefId);
-      lines.push(`- ${e.briefId} — ${b?.title ?? ''}  [idea]`);
+      const suffix = b ? ideaMetaSuffix(b, now) : 'unknown  ·  —';
+      lines.push(`- ${e.briefId} — ${b?.title ?? ''}  [idea]  ·  ${suffix}`);
     }
   }
 
@@ -472,6 +559,14 @@ export async function handleSpecshipSpec(
   // behaviour_surface are all unchanged.
   if (args.list === true) {
     return text(buildInventory(sq));
+  }
+
+  // Ideas mode (REQ-IDEAS-002): `ideas: true` returns the ideas review view —
+  // exactly the idea-state briefs with age + labels. A peer of `list`, so
+  // query, list, funnel, spec_id detail, and behaviour_surface are all
+  // unchanged.
+  if (args.ideas === true) {
+    return text(buildIdeas(sq));
   }
 
   // No id → the lifecycle funnel (REQ-FUNNEL-005). The id case below is unchanged.

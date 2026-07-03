@@ -1,6 +1,6 @@
 ---
-description: Intent door — view, list, capture an idea, author, fast-path, design, implement, review, or extend a spec. No arg = the spec funnel; a SPEC_ID = that spec's detail; `idea`/`list`/`new`/`fast`/`design`/`implement`/`review`/`triage`/`behaviour`/`domain` run the matching flow.
-argument-hint: "<SPEC_ID> | idea <one-liner> | list | new <desc> | fast <desc> | design <URL | intent> | implement <ID> | review <ID> | triage <prompt> | behaviour <ID> | domain"
+description: Intent door — view, list, capture or review ideas, author, fast-path, design, implement, review, or extend a spec. No arg = the spec funnel; a SPEC_ID = that spec's detail; `idea`/`ideas`/`list`/`new`/`fast`/`design`/`implement`/`review`/`triage`/`behaviour`/`domain` run the matching flow.
+argument-hint: "<SPEC_ID> | idea <one-liner> | ideas | list | new <desc> | fast <desc> | design <URL | intent> | implement <ID> | review <ID> | triage <prompt> | behaviour <ID> | domain"
 allowed-tools: Read, Edit, Write, Bash, mcp__specship__specship_spec, mcp__specship__specship_node, mcp__specship__specship_explore, mcp__specship__specship_search, mcp__specship__specship_link_assert, mcp__specship__specship_link_verify, mcp__specship__specship_drifted, mcp__specship__designer_session, mcp__specship__designer_prompt, mcp__specship__designer_ask, mcp__specship__designer_list, mcp__specship__designer_snapshot, mcp__specship__designer_handoff
 ---
 
@@ -28,6 +28,13 @@ lost.
   needs-attention`), closing with per-status totals (REQ-DOORS-008). ONE call;
   render what it returns — no per-spec follow-up calls, no file reading. For
   pipeline-health rollups use the no-argument funnel instead.
+- **`ideas`** → call `specship_spec` with `ideas: true`: the ideas review view —
+  exactly the idea-state briefs (parked, unpromoted brainstorms), each showing
+  id, title, age since capture, and labels, closing with the promotion hand-off
+  (`/specship:spec new <brief-id>`) (REQ-IDEAS-002). ONE call; render what it
+  returns as-is — no per-idea follow-up calls, no file reading. An empty lane is
+  reported cleanly, not as an error. Promote a listed idea with
+  `/specship:spec new <brief-id>`.
 - **`new <description>`** → the full, gated authoring loop (see *Author* below).
   Use when the design isn't settled.
 - **`fast <description>`** → the **fast-path** (see below).
@@ -48,9 +55,10 @@ lost.
   acceptance criteria; see below.
 - **`domain`** → capture a human-confirmed domain fact; see below.
 - **any other free text** (not empty, not a `SPEC_ID`, not a known sub-route
-  verb — the known verbs are `idea`, `list`, `new`, `fast`, `design`,
+  verb — the known verbs are `idea`, `ideas`, `list`, `new`, `fast`, `design`,
   `implement`, `review`, `triage`, `behaviour`, `domain`, so `idea …` routes to
-  the capture flow above and never reaches this disambiguation, REQ-IDEAS-001.A6)
+  the capture flow above and `ideas` to the review view, never reaching this
+  disambiguation — REQ-IDEAS-001.A6, REQ-IDEAS-002.A5)
   → don't fall through to undefined behaviour. Ask **one** clarifying
   question offering `new`, `fast`, and `triage`, **leading with an inferred
   recommendation** from the input's shape: error-log-shaped input (a stack

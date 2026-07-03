@@ -65,6 +65,12 @@ The backlog that is never reviewed is a graveyard. `/specship:spec ideas`
 shows only the idea-state briefs — each with its age, labels, and the next
 action (promote via `new <brief-id>`) — from a single `specship_spec` call.
 
+implementations:
+- src/mcp/spec-tools.ts:buildIdeas
+- src/mcp/spec-tools.ts:handleSpecshipSpec
+- src/resolution/brief-link-resolver.ts:ideaCaptureFields
+- commands/specship/spec.md
+
 ## Acceptance
 <!-- id: REQ-IDEAS-002.A1 -->
 - `/specship:spec ideas` lists exactly the idea-state briefs, each entry
