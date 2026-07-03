@@ -12,6 +12,8 @@ import {
   cleanSpecPointer,
   resolveToDocumentId,
   summarizeBriefFunnel,
+  ideaCaptureFields,
+  computeSpecFunnel,
   SpecLookup,
   FunnelLookup,
 } from '../src/resolution/brief-link-resolver';
@@ -114,6 +116,22 @@ describe('resolveBriefLink (REQ-FUNNEL-002)', () => {
     expect(link.specSide).toBe('DOCY');
   });
 
+  it('REQ-IDEAS-001.A1: the brief the `idea` verb writes (slug + created + label, no spec) is an idea', () => {
+    // Exactly the frontmatter the capture verb emits — a slug, a creation
+    // date, and a capture-time label, but no `spec:` pointer and no document
+    // pointing back at it. The funnel must report this as an unlinked `idea`.
+    const brief = spec({
+      id: 'brief:cache-the-snapshots',
+      kind: 'brief',
+      sourcePath: 'specs/cache-the-snapshots/brief.md',
+      metadata: { slug: 'cache-the-snapshots', created: '2026-07-03', label: 'perf' },
+    });
+    const sq = lookup([doc, req1, req2, brief]);
+    const link = resolveBriefLink(sq, brief);
+    expect(link.state).toBe('idea');
+    expect(link.linkedSpecId).toBeNull();
+  });
+
   it('A5: a brief linked to a requirement is attributed to its document, not the sibling requirements', () => {
     const brief = spec({
       id: 'brief:doc',
@@ -126,6 +144,61 @@ describe('resolveBriefLink (REQ-FUNNEL-002)', () => {
     expect(link.linkedSpecId).toBe('DOC');
     // It does not claim the sibling requirement.
     expect(link.linkedSpecId).not.toBe('REQ-2');
+  });
+});
+
+describe('ideaCaptureFields (REQ-IDEAS-002.A2)', () => {
+  const brief = (metadata: Record<string, unknown>): Spec =>
+    spec({ id: 'brief:x', kind: 'brief', sourcePath: 'specs/x/brief.md', metadata });
+
+  it('returns null age + no labels for a brief with no capture fields', () => {
+    expect(ideaCaptureFields(brief({ slug: 'x' }))).toEqual({ capturedAt: null, labels: [] });
+    // A brief with no metadata at all is handled too (older briefs).
+    expect(ideaCaptureFields(spec({ id: 'brief:y', kind: 'brief' }))).toEqual({
+      capturedAt: null,
+      labels: [],
+    });
+  });
+
+  it('parses `created` as an ISO date string into epoch ms', () => {
+    const { capturedAt } = ideaCaptureFields(brief({ created: '2026-06-30' }));
+    expect(capturedAt).toBe(Date.parse('2026-06-30'));
+  });
+
+  it('accepts `created` as a raw epoch-ms number', () => {
+    const ms = 1_781_000_000_000;
+    expect(ideaCaptureFields(brief({ created: ms })).capturedAt).toBe(ms);
+  });
+
+  it('returns null age for an unparseable `created`', () => {
+    expect(ideaCaptureFields(brief({ created: 'not-a-date' })).capturedAt).toBeNull();
+    expect(ideaCaptureFields(brief({ created: '' })).capturedAt).toBeNull();
+  });
+
+  it('splits a comma-delimited `labels` string', () => {
+    expect(ideaCaptureFields(brief({ labels: 'perf, cache , infra' })).labels).toEqual([
+      'perf',
+      'cache',
+      'infra',
+    ]);
+  });
+
+  it('accepts `labels` as a string array (map to String, drop blanks)', () => {
+    expect(ideaCaptureFields(brief({ labels: ['perf', 'cache', ''] })).labels).toEqual([
+      'perf',
+      'cache',
+    ]);
+  });
+
+  it('accepts the singular `label` key as a one-element list (the capture verb writes it)', () => {
+    expect(ideaCaptureFields(brief({ label: 'infra' })).labels).toEqual(['infra']);
+  });
+
+  it('combines a plural `labels` and a singular `label`', () => {
+    expect(ideaCaptureFields(brief({ labels: 'perf', label: 'infra' })).labels).toEqual([
+      'perf',
+      'infra',
+    ]);
   });
 });
 
@@ -195,5 +268,40 @@ describe('summarizeBriefFunnel (REQ-FUNNEL-003)', () => {
     const e = summarizeBriefFunnel(sq, conflicting);
     expect(e.state).toBe('conflict');
     expect(e.rollup).toBeNull();
+  });
+});
+
+describe('computeSpecFunnel — seeded-promotion drops the brief from ideas (REQ-IDEAS-003.A2)', () => {
+  function funnelLookup(specs: Spec[], links: Record<string, SpecLink[]> = {}): FunnelLookup {
+    const byId = new Map(specs.map((s) => [s.id, s]));
+    return {
+      getSpecById: (id) => byId.get(id) ?? null,
+      getAllSpecs: () => specs,
+      getSpecsByParent: (pid) => specs.filter((s) => s.parentId === pid),
+      getLinksBySpec: (sid) => links[sid] ?? [],
+    };
+  }
+
+  it('a spec whose `brief:` frontmatter resolves to a brief flips it to specified and out of the ideas view; an unlinked brief stays', () => {
+    // The spec a seeded promotion writes: `specs/doc.md` carrying
+    // `brief: doc/brief.md` — a value relative to the spec file's own dir, so it
+    // resolves to the brief at `specs/doc/brief.md` (documentPointingAtBrief).
+    const doc = spec({
+      id: 'DOC',
+      kind: 'document',
+      sourcePath: 'specs/doc.md',
+      metadata: { brief: 'doc/brief.md' },
+    });
+    const req1 = spec({ id: 'REQ-1', kind: 'requirement', parentId: 'DOC', sourcePath: 'specs/doc.md' });
+    const promoted = spec({ id: 'brief:doc', kind: 'brief', sourcePath: 'specs/doc/brief.md', metadata: {} });
+    const lonely = spec({ id: 'brief:lonely', kind: 'brief', sourcePath: 'specs/lonely/brief.md', metadata: {} });
+
+    const funnel = computeSpecFunnel(funnelLookup([doc, req1, promoted, lonely]));
+
+    const ideaIds = funnel.ideas.map((i) => i.briefId);
+    expect(ideaIds).toContain('brief:lonely'); // still an unpromoted idea
+    expect(ideaIds).not.toContain('brief:doc'); // promoted → specified
+    expect(funnel.summary.ideas).toBe(1);
+    expect(funnel.summary.specified).toBe(1);
   });
 });

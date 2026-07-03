@@ -34,6 +34,9 @@ questions, no review pass, one confirmation line. When the session's context
 makes it cheap, the brief records where the thought occurred (the files or
 symbols under discussion) so future review can re-ground it.
 
+implementations:
+  - commands/specship/spec.md
+
 ## Acceptance
 <!-- id: REQ-IDEAS-001.A1 -->
 - `/specship:spec idea <one-liner>` writes a brief under the specs root whose
@@ -62,6 +65,12 @@ The backlog that is never reviewed is a graveyard. `/specship:spec ideas`
 shows only the idea-state briefs — each with its age, labels, and the next
 action (promote via `new <brief-id>`) — from a single `specship_spec` call.
 
+implementations:
+- src/mcp/spec-tools.ts:buildIdeas
+- src/mcp/spec-tools.ts:handleSpecshipSpec
+- src/resolution/brief-link-resolver.ts:ideaCaptureFields
+- commands/specship/spec.md
+
 ## Acceptance
 <!-- id: REQ-IDEAS-002.A1 -->
 - `/specship:spec ideas` lists exactly the idea-state briefs, each entry
@@ -89,6 +98,9 @@ problem statement, evidence, and code grounding, and the interview asks only
 what the brief does not already answer. The written spec points back at the
 brief, so the funnel's existing reconciliation flips the idea to `specified`
 with no extra bookkeeping.
+
+implementations:
+  - commands/specship/spec.md
 
 ## Acceptance
 <!-- id: REQ-IDEAS-003.A1 -->
