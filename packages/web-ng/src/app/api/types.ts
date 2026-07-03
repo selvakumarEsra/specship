@@ -283,6 +283,11 @@ export interface Spec {
 
 export interface SpecsResponse {
   specs: Spec[];
+  /**
+   * Rolled-up link state per spec id (REQ-DASHUX-003) — worst-first collapse
+   * of that spec's own links. Absent for specs with no links.
+   */
+  linkStates?: Record<string, string>;
 }
 
 /** Spec lifecycle funnel: idea → spec → implemented (GET /api/spec/funnel). */

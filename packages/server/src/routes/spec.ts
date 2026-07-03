@@ -121,8 +121,28 @@ async function resolveCg(app: FastifyInstance, req: FastifyRequest, reply: Fasti
 export async function registerSpecRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/specs', async (req: FastifyRequest<{ Querystring: ProjectQuery }>, reply) => {
     const cg = await resolveCg(app, req, reply); if (!cg) return;
-    const docs = cg.getSpecQueries().getAllSpecs();
-    return { specs: docs };
+    const sq = cg.getSpecQueries();
+    const docs = sq.getAllSpecs();
+    // Rolled-up link state per spec id (REQ-DASHUX-003): worst state wins
+    // (broken > orphaned > drifted), else verified only when every link is,
+    // else implemented. One bulk pass — the tree colors 500+ rows from this
+    // map without per-spec detail calls.
+    const statesById = new Map<string, string[]>();
+    for (const l of sq.getAllLinks()) {
+      const arr = statesById.get(l.specId) ?? [];
+      arr.push(l.state);
+      statesById.set(l.specId, arr);
+    }
+    const linkStates: Record<string, string> = {};
+    for (const [id, states] of statesById) {
+      linkStates[id] =
+        states.includes('broken') ? 'broken'
+        : states.includes('orphaned') ? 'orphaned'
+        : states.includes('drifted') ? 'drifted'
+        : states.every((s) => s === 'verified') ? 'verified'
+        : 'implemented';
+    }
+    return { specs: docs, linkStates };
   });
 
   // Spec lifecycle funnel: idea → spec → implemented (REQ-FUNNEL-006). Computed
