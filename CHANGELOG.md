@@ -9,6 +9,9 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+
+## [0.11.9] - 2026-07-03
+
 ### New Features
 
 - **Design imports moved into the spec door: `/specship:spec design`.** Pass a `claude.ai/design` URL to import a settled design, a `figma.com` URL to import through the Figma MCP, or no URL to run the live taste loop first — all three feed the same snapshot → spec → implement pipeline. The standalone `/specship:design-implement` and `/specship:design-loop` commands are retired, and upgrading removes their old command files.
@@ -37,7 +40,6 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **The dashboard's neighborhood graph no longer invents connections.** It renders the real edges between the most-connected symbols (deterministically), and illustrative sample data — the dashboard fallback and seeded MCP servers — is now labeled "sample" on every card.
 - **Opening the dashboard no longer breaks the server after a while.** The notification stream's cross-project sweep could evict and close the primary project's database handle, after which every page errored until restart; the primary is now pinned and the sweep bounded.
 - **The dashboard now finds your projects even when their paths contain hyphens, dots, or underscores.** Claude Code stores project folders under a name where every such character becomes a dash, and SpecShip previously guessed the path back by turning every dash into a slash — so a project under a folder like `~/dev/claude-projects/` was looked up at the wrong path. The result: `specship serve --ui` could start with no project selected, the project picker listed every project as "missing", and picking one showed no data at all. SpecShip now recovers the real paths from Claude Code's own records, so the dashboard auto-selects your most recent project and switching projects in the picker works.
-
 
 ## [0.11.8] - 2026-07-02
 
@@ -511,3 +513,4 @@ Thanks @andreinknv for the substantive draft this release was based on.
 [0.11.6]: https://github.com/selvakumarEsra/specship/releases/tag/v0.11.6
 [0.11.7]: https://github.com/selvakumarEsra/specship/releases/tag/v0.11.7
 [0.11.8]: https://github.com/selvakumarEsra/specship/releases/tag/v0.11.8
+[0.11.9]: https://github.com/selvakumarEsra/specship/releases/tag/v0.11.9
