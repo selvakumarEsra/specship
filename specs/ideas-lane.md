@@ -99,6 +99,9 @@ what the brief does not already answer. The written spec points back at the
 brief, so the funnel's existing reconciliation flips the idea to `specified`
 with no extra bookkeeping.
 
+implementations:
+  - commands/specship/spec.md
+
 ## Acceptance
 <!-- id: REQ-IDEAS-003.A1 -->
 - `new` given an argument that resolves to a brief id (e.g. `brief:<slug>`)

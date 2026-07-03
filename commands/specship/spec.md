@@ -36,7 +36,11 @@ lost.
   reported cleanly, not as an error. Promote a listed idea with
   `/specship:spec new <brief-id>`.
 - **`new <description>`** → the full, gated authoring loop (see *Author* below).
-  Use when the design isn't settled.
+  Use when the design isn't settled. A first token shaped `brief:<slug>` (a
+  parked idea's id) instead opens the **brief-seeded** loop: the interview
+  starts pre-filled from that brief and asks only what it leaves open, and the
+  written spec points back at the brief. Plain text still opens a blank
+  interview — the seeded path is additive.
 - **`fast <description>`** → the **fast-path** (see below).
 - **`design <URL | intent>`** → author from visually-expressed intent: a
   `claude.ai/design` URL, a `figma.com` URL, or no URL (taste loop first). See
@@ -134,10 +138,31 @@ human's confirmation inside this flow is the approval plan mode was waiting
 for; staying in plan mode past it just blocks the write and stalls the
 hand-off. Don't re-plan the spec in the exit — the spec is the plan.
 
-## Author (`new <description>`)
+## Author (`new <description | brief:<slug>>`)
 
 The gated authoring loop, run conversationally — diverge, then formalize. Write
 NOTHING to disk until the human explicitly confirms.
+
+**Seeded from a brief (`new brief:<slug>`).** A first token shaped `brief:<slug>`
+means this is the promotion of a parked idea, not a blank author. This path is
+purely additive — a plain description still falls straight to the loop below
+(A4). When the argument is `brief:`-shaped:
+
+- **Resolve** the brief first: call `specship_spec` with `spec_id:
+  "brief:<slug>"` (or `Read specs/<slug>/brief.md`).
+- **Not found (A3):** if `specship_spec` reports no such brief, **stop** — print
+  a one-line not-found notice pointing at `/specship:spec ideas` to browse the
+  parked ideas (and offer plain `new <description>`). Never fall through to a
+  blank interview.
+- **Found (A1):** treat the brief's problem statement, evidence, and code
+  grounding as **already-answered** interview inputs. Pre-fill step 1's
+  scope/ground and step 2's diverge from the brief, and interview **only** on
+  what the brief leaves open (UX, edge cases, non-goals). Still run
+  `specship_explore` on the brief's terms in step 1 — the brief's captured
+  grounding may be stale.
+
+Then run the loop below, skipping every question the brief already answers; on
+the write (step 3) the spec points back at the brief so the funnel promotes it.
 
 1. **Scope + ground.** Confirm it's one feature area (refuse "spec the whole
    app"). Call `specship_explore` on terms from the description to find where
@@ -150,7 +175,12 @@ NOTHING to disk until the human explicitly confirms.
    `spec-author` format: frontmatter (id/title/owner/priority), `<!-- id: -->`
    markers above every heading, an RFC-2119 keyword per requirement title, one
    concern per requirement, `## Acceptance` with `.A<N>` bullets (happy +
-   failure). Mark genuinely-unknowable points `[needs review]`.
+   failure). Mark genuinely-unknowable points `[needs review]`. **Seeded from a
+   brief:** the frontmatter MUST also carry `brief: <brief-slug>/brief.md` — the
+   value is relative to the spec file's own directory, so a spec at
+   `specs/<slug>.md` names `<brief-slug>/brief.md` (A2). After the step-4 sync,
+   the funnel's brief↔spec reconciliation flips that brief to `specified` and it
+   drops out of the `ideas` view automatically — no extra bookkeeping.
 4. **Sync + review:** `specship sync`, then run the shared **Post-write review**
    (see below) — it is automatic, not optional. Then hand off with
    `/specship:spec implement <ID>`.

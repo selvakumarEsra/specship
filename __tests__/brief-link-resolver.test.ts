@@ -13,6 +13,7 @@ import {
   resolveToDocumentId,
   summarizeBriefFunnel,
   ideaCaptureFields,
+  computeSpecFunnel,
   SpecLookup,
   FunnelLookup,
 } from '../src/resolution/brief-link-resolver';
@@ -267,5 +268,40 @@ describe('summarizeBriefFunnel (REQ-FUNNEL-003)', () => {
     const e = summarizeBriefFunnel(sq, conflicting);
     expect(e.state).toBe('conflict');
     expect(e.rollup).toBeNull();
+  });
+});
+
+describe('computeSpecFunnel — seeded-promotion drops the brief from ideas (REQ-IDEAS-003.A2)', () => {
+  function funnelLookup(specs: Spec[], links: Record<string, SpecLink[]> = {}): FunnelLookup {
+    const byId = new Map(specs.map((s) => [s.id, s]));
+    return {
+      getSpecById: (id) => byId.get(id) ?? null,
+      getAllSpecs: () => specs,
+      getSpecsByParent: (pid) => specs.filter((s) => s.parentId === pid),
+      getLinksBySpec: (sid) => links[sid] ?? [],
+    };
+  }
+
+  it('a spec whose `brief:` frontmatter resolves to a brief flips it to specified and out of the ideas view; an unlinked brief stays', () => {
+    // The spec a seeded promotion writes: `specs/doc.md` carrying
+    // `brief: doc/brief.md` — a value relative to the spec file's own dir, so it
+    // resolves to the brief at `specs/doc/brief.md` (documentPointingAtBrief).
+    const doc = spec({
+      id: 'DOC',
+      kind: 'document',
+      sourcePath: 'specs/doc.md',
+      metadata: { brief: 'doc/brief.md' },
+    });
+    const req1 = spec({ id: 'REQ-1', kind: 'requirement', parentId: 'DOC', sourcePath: 'specs/doc.md' });
+    const promoted = spec({ id: 'brief:doc', kind: 'brief', sourcePath: 'specs/doc/brief.md', metadata: {} });
+    const lonely = spec({ id: 'brief:lonely', kind: 'brief', sourcePath: 'specs/lonely/brief.md', metadata: {} });
+
+    const funnel = computeSpecFunnel(funnelLookup([doc, req1, promoted, lonely]));
+
+    const ideaIds = funnel.ideas.map((i) => i.briefId);
+    expect(ideaIds).toContain('brief:lonely'); // still an unpromoted idea
+    expect(ideaIds).not.toContain('brief:doc'); // promoted → specified
+    expect(funnel.summary.ideas).toBe(1);
+    expect(funnel.summary.specified).toBe(1);
   });
 });
