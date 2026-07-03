@@ -849,17 +849,25 @@ export async function registerClaudeRoutes(app: FastifyInstance): Promise<void> 
     const db = getDb(cg);
     const tips: Array<Record<string, unknown>> = [];
 
+    // The claude_* tables span every project's sessions; tips for the primary
+    // project must cite only its own (REQ-DASHINT-006). Sessions store the
+    // project path in the mangled slug round-trip form, so match both it and
+    // the real path.
+    const realRoot = (cg.getProjectRoot ? cg.getProjectRoot() : '').replace(/\/+$/, '');
+    const mangledRoot = realRoot.replace(/[^A-Za-z0-9]/g, '/');
+    const inProject = `session_id IN (SELECT id FROM claude_sessions WHERE project_path IN (?, ?))`;
+
     // Rule 1: "you read X N times" — same file path Read more than 10 times in
     // a single session.
     const wastefulReads = db.prepare(`
       SELECT session_id, input_summary as file, COUNT(*) as n
       FROM claude_tool_calls
-      WHERE tool_name = 'Read' AND input_summary != ''
+      WHERE tool_name = 'Read' AND input_summary != '' AND ${inProject}
       GROUP BY session_id, input_summary
       HAVING n >= 10
       ORDER BY n DESC
       LIMIT 5
-    `).all() as Array<{ session_id: string; file: string; n: number }>;
+    `).all(realRoot, mangledRoot) as Array<{ session_id: string; file: string; n: number }>;
     for (const r of wastefulReads) {
       tips.push({
         id: 'wasteful_reads:' + r.session_id + ':' + r.file,
@@ -877,10 +885,10 @@ export async function registerClaudeRoutes(app: FastifyInstance): Promise<void> 
     const heavyResults = db.prepare(`
       SELECT id, session_id, tool_name, input_summary, result_length
       FROM claude_tool_calls
-      WHERE result_length > 50000
+      WHERE result_length > 50000 AND ${inProject}
       ORDER BY result_length DESC
       LIMIT 5
-    `).all() as Array<{ id: number; session_id: string; tool_name: string; input_summary: string; result_length: number }>;
+    `).all(realRoot, mangledRoot) as Array<{ id: number; session_id: string; tool_name: string; input_summary: string; result_length: number }>;
     for (const r of heavyResults) {
       tips.push({
         id: 'heavy_result:' + r.id,
@@ -900,9 +908,10 @@ export async function registerClaudeRoutes(app: FastifyInstance): Promise<void> 
       FROM claude_sessions s
       WHERE s.prompt_count >= 10
         AND (s.total_input_tokens + s.total_cache_creation_tokens + s.total_cache_read_tokens) > 0
+        AND s.project_path IN (?, ?)
       ORDER BY (CAST(s.total_cache_read_tokens AS REAL) / (s.total_input_tokens + s.total_cache_creation_tokens + s.total_cache_read_tokens)) ASC
       LIMIT 3
-    `).all() as Array<{ id: string; cr: number; ti: number; cw: number; prompt_count: number; last_model: string }>;
+    `).all(realRoot, mangledRoot) as Array<{ id: string; cr: number; ti: number; cw: number; prompt_count: number; last_model: string }>;
     for (const r of lowCache) {
       const total = r.ti + r.cw + r.cr;
       const rate = total > 0 ? r.cr / total : 0;

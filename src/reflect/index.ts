@@ -8,7 +8,7 @@
  */
 
 export * from './types';
-export { mineProposals } from './miner';
+export { mineProposals, projectPathForms } from './miner';
 export { buildProposal, learningMarkers, memoryNoteMarker } from './targets';
 export { previewProposal, applyProposal, undoProposal, lineDiff } from './apply';
 export { ReflectStore } from './store';

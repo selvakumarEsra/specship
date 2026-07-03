@@ -46,12 +46,16 @@ afterEach(() => {
 
 let promptSeq = 0;
 let callSeq = 0;
-function seedSession(id: string): void {
+// Sessions default to the ctx project (REQ-REFLECT-008: mining is scoped to
+// the target project's own sessions). Pass a different path to seed another
+// project's session, or the mangled stored form to exercise both-form matching.
+function seedSession(id: string, projectPath?: string): void {
+  const p = projectPath ?? ctx.projectRoot;
   db.prepare(`INSERT OR IGNORE INTO claude_projects (path, name, first_seen, last_seen) VALUES (?,?,?,?)`)
-    .run('/p', 'p', 1, 1);
+    .run(p, 'p', 1, 1);
   db.prepare(
     `INSERT OR IGNORE INTO claude_sessions (id, project_path, source_file, started_at, prompt_count) VALUES (?,?,?,?,?)`,
-  ).run(id, '/p', 'f.jsonl', 1, 0);
+  ).run(id, p, 'f.jsonl', 1, 0);
 }
 function seedPrompt(sessionId: string, text: string): string {
   const id = `pr-${promptSeq++}`;
@@ -83,6 +87,40 @@ function seedTool(
 
 describe('reflect miner', () => {
   it('returns no proposals for an empty corpus (REQ-REFLECT-001.A2)', () => {
+    expect(mineProposals(db, ctx)).toEqual([]);
+  });
+
+  it('ignores patterns that exist only in another project\'s sessions (REQ-REFLECT-008.A1)', () => {
+    seedSession('other-s1', '/somewhere/else');
+    const p = seedPrompt('other-s1', 'work');
+    for (let i = 0; i < 11; i++) seedTool('other-s1', p, 'Read', 'src/ibkr-file.ts');
+    expect(mineProposals(db, ctx)).toEqual([]);
+  });
+
+  it('matches sessions stored under the mangled project-path form (REQ-REFLECT-008.A2)', () => {
+    // The ingest stores the slug round-trip: every non-alphanumeric char → '/'.
+    const mangled = ctx.projectRoot.replace(/[^A-Za-z0-9]/g, '/');
+    seedSession('mangled-s1', mangled);
+    const p = seedPrompt('mangled-s1', 'work');
+    for (let i = 0; i < 11; i++) seedTool('mangled-s1', p, 'Read', 'src/big-file.ts');
+    const props = mineProposals(db, ctx);
+    expect(props.find((x) => x.type === 'memory_rule' && x.targetKind === 'claude_md')).toBeTruthy();
+  });
+
+  it('counts only the target project\'s occurrences toward thresholds (REQ-REFLECT-008.A3)', () => {
+    // R10 fires when a doc file is Read across ≥3 distinct sessions. Two own
+    // sessions + two other-project sessions = 4 total, but only 2 in scope —
+    // the cross-project occurrences must not push it over the threshold.
+    for (const [sid, proj] of [
+      ['own-a', undefined],
+      ['own-b', undefined],
+      ['other-a', '/somewhere/else'],
+      ['other-b', '/somewhere/else'],
+    ] as Array<[string, string | undefined]>) {
+      seedSession(sid, proj);
+      const p = seedPrompt(sid, 'work');
+      seedTool(sid, p, 'Read', 'docs/architecture.md');
+    }
     expect(mineProposals(db, ctx)).toEqual([]);
   });
 

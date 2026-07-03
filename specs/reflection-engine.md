@@ -214,3 +214,37 @@ implementations:
 <!-- id: REQ-REFLECT-007.A4 -->
 - The Improvements list renders, for each open proposal, its severity, a
   non-empty evidence reference, and apply / undo / dismiss controls.
+
+<!-- id: REQ-REFLECT-008 -->
+## Mining MUST cite only the target project's own sessions
+
+The transcript tables the miner reads span every project's sessions. A
+reflection pass for a project MUST restrict its evidence to that project's own
+sessions — matching the stored session project path in both its stored
+(mangled) form and its real-path form — so a pattern present only in another
+project's transcripts can never produce a proposal for this project.
+(Observed 2026-07-03: repeated reads of an `ibkr` project file surfaced as an
+applied learning block in the specship repo's CLAUDE.md.)
+
+This deliberately scopes ALL rules — including user-habit rules like repeated
+prompts and recurring corrections — to the target project's sessions: the
+Improvements surface for a project reflects that project's activity. A future
+cross-project/portable mining surface would be a separate, explicit feature.
+`[needs review]` if habit rules should instead stay cross-project and target
+portable memory.
+
+implementations:
+  - src/reflect/miner.ts:mineProposals
+  - src/reflect/miner.ts:projectPathForms
+
+## Acceptance
+<!-- id: REQ-REFLECT-008.A1 -->
+- A pattern that crosses a rule's threshold only within another project's
+  sessions produces no proposal for the target project.
+<!-- id: REQ-REFLECT-008.A2 -->
+- The same pattern within the target project's own sessions produces the
+  proposal, whether the session rows store the project path in real or in
+  mangled form.
+<!-- id: REQ-REFLECT-008.A3 -->
+- A pattern split across projects counts only the target project's occurrences
+  toward the rule's threshold.

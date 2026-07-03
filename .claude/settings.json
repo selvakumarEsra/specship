@@ -30,6 +30,35 @@
             "async": true
           }
         ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pnpm --filter @lih/frontend typecheck 2>&1 | tail -10"
+          },
+          {
+            "type": "command",
+            "command": "pnpm --filter @lih/backend typecheck 2>&1 | tail -10"
+          },
+          {
+            "type": "command",
+            "command": "npm test 2>&1 | tail -40"
+          },
+          {
+            "type": "command",
+            "command": "test -f bun.lockb && echo \"bun\" || test -f pnpm-lock.yaml && echo \"pnpm\" || test -f yarn.lock && echo \"yarn\" || test -f package-lock.json && echo \"npm\" || echo \"unknown\""
+          },
+          {
+            "type": "command",
+            "command": "npm install 2>&1 | tail -15"
+          },
+          {
+            "type": "command",
+            "command": "git status --porcelain"
+          }
+        ]
       }
     ],
     "SessionStart": [
