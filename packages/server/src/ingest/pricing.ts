@@ -18,6 +18,9 @@ const FAMILY_FALLBACKS: Record<string, string> = {
   opus: 'claude-opus-4',
   sonnet: 'claude-sonnet-4',
   haiku: 'claude-haiku-4',
+  fable: 'claude-fable-5',
+  // Claude Mythos shares Fable's capabilities and pricing.
+  mythos: 'claude-fable-5',
 };
 
 /**

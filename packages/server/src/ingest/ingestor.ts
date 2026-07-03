@@ -138,6 +138,7 @@ export function listTranscriptFiles(claudeRoot: string): Array<{ filePath: strin
  * the ingestor seeds on first pass instead of failing silently.
  */
 const DEFAULT_PRICING: ReadonlyArray<readonly [string, number, number, number, number]> = [
+  ['claude-fable-5',     10.0, 50.0, 12.5,  1.0],
   ['claude-opus-4-7',    15.0, 75.0, 18.75, 1.5],
   ['claude-opus-4',      15.0, 75.0, 18.75, 1.5],
   ['claude-sonnet-4-6',   3.0, 15.0,  3.75, 0.3],
@@ -147,24 +148,23 @@ const DEFAULT_PRICING: ReadonlyArray<readonly [string, number, number, number, n
   ['claude-haiku-4',      0.80, 4.0,  1.0,  0.08],
 ];
 
-/** Load the pricing table once per ingest pass. Seeds defaults if empty. */
-function loadPricing(db: IngestDb): PricingRow[] {
-  let rows = db
+/**
+ * Load the pricing table once per ingest pass. Always INSERT OR IGNOREs the
+ * default rows first — self-healing for DBs seeded by an older binary that
+ * lacked newer model families (e.g. fable), while user-edited rates survive
+ * untouched (REQ-DASHINT-001).
+ */
+export function loadPricing(db: IngestDb): PricingRow[] {
+  const now = Date.now();
+  const ins = db.prepare(`
+    INSERT OR IGNORE INTO claude_pricing
+      (model, input_per_mtok, output_per_mtok, cache_creation_per_mtok, cache_read_per_mtok, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `);
+  for (const r of DEFAULT_PRICING) ins.run(r[0], r[1], r[2], r[3], r[4], now);
+  return db
     .prepare('SELECT model, input_per_mtok, output_per_mtok, cache_creation_per_mtok, cache_read_per_mtok FROM claude_pricing')
     .all() as PricingRow[];
-  if (rows.length === 0) {
-    const now = Date.now();
-    const ins = db.prepare(`
-      INSERT OR IGNORE INTO claude_pricing
-        (model, input_per_mtok, output_per_mtok, cache_creation_per_mtok, cache_read_per_mtok, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `);
-    for (const r of DEFAULT_PRICING) ins.run(r[0], r[1], r[2], r[3], r[4], now);
-    rows = db
-      .prepare('SELECT model, input_per_mtok, output_per_mtok, cache_creation_per_mtok, cache_read_per_mtok FROM claude_pricing')
-      .all() as PricingRow[];
-  }
-  return rows;
 }
 
 /**

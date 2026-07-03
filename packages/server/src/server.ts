@@ -19,6 +19,7 @@ import Fastify, { FastifyInstance, FastifyRequest } from 'fastify';
 import cors from '@fastify/cors';
 import { startWatcher, primaryProjectMatcher, type WatcherHandle } from './ingest/index.js';
 import { backfillDisplaced } from './ingest/impact-backfill.js';
+import { recostUnpricedPrompts } from './ingest/pricing-backfill.js';
 import { ProjectRegistry, type SpecShipInstance } from './project-registry.js';
 import { makeStaticHandler } from './static-handler.js';
 import { registerGraphRoutes } from './routes/graph.js';
@@ -191,6 +192,16 @@ export async function createServer(options: ServerOptions): Promise<ServerHandle
         if (verbose) console.error('[specship-server] specship-impact backfill complete');
       } catch (err) {
         console.error('[specship-server] specship-impact backfill failed (non-fatal):',
+          err instanceof Error ? err.message : String(err));
+      }
+
+      // Re-cost prompts ingested while their model family was unpriced,
+      // e.g. fable sessions stuck at $0 (REQ-DASHINT-001.A2). Idempotent.
+      try {
+        const recosted = recostUnpricedPrompts(dbHandle as Parameters<typeof recostUnpricedPrompts>[0]);
+        if (verbose && recosted > 0) console.error(`[specship-server] re-costed ${recosted} unpriced prompts`);
+      } catch (err) {
+        console.error('[specship-server] pricing backfill failed (non-fatal):',
           err instanceof Error ? err.message : String(err));
       }
     }
