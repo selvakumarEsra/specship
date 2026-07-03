@@ -15,7 +15,7 @@
  * hierarchy) is global to the user, not scoped to one project.
  */
 
-import { decodeProjectSlug } from './ingest/ingestor.js';
+import { createSlugResolver } from './ingest/project-paths.js';
 
 type SpecShipInstance = Awaited<ReturnType<typeof import('@specship/specship').SpecShip.open>>;
 
@@ -35,6 +35,12 @@ export interface ProjectRegistryOptions {
    * server itself resolves it.
    */
   openImpl?: (projectPath: string) => Promise<SpecShipInstance>;
+  /**
+   * Injected slug→path resolver (so tests can pin claude.json / claudeRoot).
+   * Defaults to the real resolver over `~/.claude.json` + transcript cwds
+   * (REQ-SLUGRES-003).
+   */
+  resolveSlug?: (slug: string) => string;
 }
 
 export class ProjectRegistry {
@@ -42,11 +48,13 @@ export class ProjectRegistry {
   private readonly maxOpen: number;
   private readonly verbose: boolean;
   private readonly openImpl: (projectPath: string) => Promise<SpecShipInstance>;
+  private readonly resolveSlug: (slug: string) => string;
 
   constructor(opts: ProjectRegistryOptions, defaultOpenImpl: (projectPath: string) => Promise<SpecShipInstance>) {
     this.maxOpen = opts.maxOpen ?? 5;
     this.verbose = opts.verbose ?? false;
     this.openImpl = opts.openImpl ?? defaultOpenImpl;
+    this.resolveSlug = opts.resolveSlug ?? createSlugResolver();
   }
 
   /**
@@ -77,7 +85,7 @@ export class ProjectRegistry {
    * (`-Users-alice-foo` → `/Users/alice/foo`).
    */
   async getBySlug(slug: string): Promise<SpecShipInstance | null> {
-    return this.get(decodeProjectSlug(slug));
+    return this.get(this.resolveSlug(slug));
   }
 
   /** Currently-cached project paths (most-recent-access first). */

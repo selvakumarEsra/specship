@@ -104,10 +104,64 @@ async function loadServerPackage(): Promise<ServerPackage> {
  */
 
 /**
+ * Claude Code's slug encoding (every non-alphanumeric char → '-') is lossy,
+ * so decoding by mapping '-' back to '/' mangles any path containing
+ * hyphens/dots/underscores. Recover real paths from `~/.claude.json` (its
+ * `projects` object is keyed by real absolute paths), then from a `"cwd"`
+ * value in the slug's newest transcript, before falling back to the lossy
+ * decode. Mirrors `packages/server/src/ingest/project-paths.ts`
+ * (REQ-SLUGRES-004) — the server package depends on this one, so the CLI
+ * can't import it.
+ */
+function buildClaudeSlugIndex(): Map<string, string> {
+  const bySlug = new Map<string, string>();
+  try {
+    const raw = fs.readFileSync(path.join(os.homedir(), '.claude.json'), 'utf8');
+    const parsed = JSON.parse(raw) as { projects?: Record<string, unknown> };
+    for (const realPath of Object.keys(parsed.projects ?? {})) {
+      bySlug.set(realPath.replace(/[^A-Za-z0-9]/g, '-'), realPath);
+    }
+  } catch { /* missing or malformed — sniff/fallback below still work */ }
+  return bySlug;
+}
+
+function sniffClaudeSlugCwd(claudeRoot: string, slug: string): string | null {
+  const dir = path.join(claudeRoot, slug);
+  let newest: { file: string; mtimeMs: number } | null = null;
+  try {
+    for (const f of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (!f.isFile() || !f.name.toLowerCase().endsWith('.jsonl')) continue;
+      const st = fs.statSync(path.join(dir, f.name));
+      if (!newest || st.mtimeMs > newest.mtimeMs) newest = { file: f.name, mtimeMs: st.mtimeMs };
+    }
+  } catch { return null; }
+  if (!newest) return null;
+  try {
+    const fd = fs.openSync(path.join(dir, newest.file), 'r');
+    let chunk: string;
+    try {
+      const buf = Buffer.alloc(64 * 1024);
+      const read = fs.readSync(fd, buf, 0, buf.length, 0);
+      chunk = buf.toString('utf8', 0, read);
+    } finally { fs.closeSync(fd); }
+    const m = /"cwd"\s*:\s*"((?:[^"\\]|\\.)*)"/.exec(chunk);
+    if (!m) return null;
+    let cwd = JSON.parse(`"${m[1]}"`) as string;
+    // Accept the cwd or an ancestor of it — sessions may record a subdir.
+    for (; ;) {
+      if (cwd.replace(/[^A-Za-z0-9]/g, '-') === slug) return cwd;
+      const parent = path.dirname(cwd);
+      if (parent === cwd) return null;
+      cwd = parent;
+    }
+  } catch { return null; }
+}
+
+/**
  * Auto-pick a default project for `specship serve --ui` when the user
  * didn't pass `-p` and the cwd isn't initialized either. Walks
  * `~/.claude/projects/*` (Claude Code's per-project transcript dirs),
- * decodes each slug back to a real path, and returns the most-recently-
+ * resolves each slug back to a real path, and returns the most-recently-
  * touched one that's still on disk AND has been `specship init`'d.
  *
  * Returns null when nothing qualifies — the server boots projectless and
@@ -119,13 +173,16 @@ async function pickRecentInitializedProject(): Promise<string | null> {
   try {
     entries = fs.readdirSync(claudeRoot, { withFileTypes: true });
   } catch { return null; }
+  const slugIndex = buildClaudeSlugIndex();
   type Candidate = { decoded: string; lastTouched: number };
   const candidates: Candidate[] = [];
   for (const ent of entries) {
     if (!ent.isDirectory()) continue;
     const slug = ent.name;
-    // Same encoding the server's decodeProjectSlug uses: '-' → '/'.
-    const decoded = slug.startsWith('-') ? '/' + slug.slice(1).replace(/-/g, '/') : slug;
+    const decoded =
+      slugIndex.get(slug) ??
+      sniffClaudeSlugCwd(claudeRoot, slug) ??
+      (slug.startsWith('-') ? '/' + slug.slice(1).replace(/-/g, '/') : slug);
     try {
       const st = fs.statSync(decoded);
       if (!st.isDirectory()) continue;

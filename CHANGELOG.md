@@ -22,6 +22,11 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **A spec can no longer be marked verified when its tests never ran.** The bundled implement workflow now reports whether the test suite ran-and-passed, ran-and-failed, or was skipped (no recognised test framework) in a machine-readable way, and a skipped run leaves spec links at `implemented` instead of `verified`. The final approval also reports how many of the spec's acceptance criteria have linked tests, naming `/specship:spec behaviour` as the follow-up that closes any gap.
 
 
+### Fixes
+
+- **The dashboard now finds your projects even when their paths contain hyphens, dots, or underscores.** Claude Code stores project folders under a name where every such character becomes a dash, and SpecShip previously guessed the path back by turning every dash into a slash — so a project under a folder like `~/dev/claude-projects/` was looked up at the wrong path. The result: `specship serve --ui` could start with no project selected, the project picker listed every project as "missing", and picking one showed no data at all. SpecShip now recovers the real paths from Claude Code's own records, so the dashboard auto-selects your most recent project and switching projects in the picker works.
+
+
 ## [0.11.8] - 2026-07-02
 
 ### New Features
