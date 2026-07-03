@@ -40,6 +40,28 @@ const THRESHOLDS = {
 /** Per-rule cap so a noisy corpus can't flood the Improvements list. */
 const PER_RULE_LIMIT = 5;
 
+/**
+ * The two forms a project's path can take in `claude_sessions.project_path`
+ * (REQ-REFLECT-008): the real absolute path, and the mangled form the ingest
+ * stores — Claude Code slug-encodes every non-alphanumeric character to '-',
+ * and the ingest decodes every '-' back to '/', so round-tripping the real
+ * path reproduces the stored value (`/a/b-c` → `/a/b/c`).
+ */
+export function projectPathForms(projectRoot: string): [string, string] {
+  const real = projectRoot.replace(/\/+$/, '') || projectRoot;
+  const mangled = real.replace(/[^A-Za-z0-9]/g, '/');
+  return [real, mangled];
+}
+
+/**
+ * SQL predicate restricting a claude_* row to the target project's own
+ * sessions (REQ-REFLECT-008) — the analytics tables span every project, and a
+ * pattern from another project's transcripts must never become a proposal
+ * here. Binds the two `projectPathForms` values, in order.
+ */
+const IN_PROJECT =
+  `session_id IN (SELECT id FROM claude_sessions WHERE project_path IN (?, ?))`;
+
 function tableExists(db: SqliteDatabase, name: string): boolean {
   try {
     const row = db
@@ -56,39 +78,42 @@ export function mineProposals(db: SqliteDatabase, ctx: ReflectContext): Proposal
   if (!tableExists(db, 'claude_tool_calls') || !tableExists(db, 'claude_prompts')) {
     return [];
   }
+  const forms = projectPathForms(ctx.projectRoot);
   const out: Proposal[] = [];
-  out.push(...ruleRepeatedReads(db, ctx));
-  out.push(...ruleGrepHabit(db, ctx));
-  out.push(...ruleRepeatedPrompts(db, ctx));
-  out.push(...ruleRepeatedCommands(db, ctx));
+  out.push(...ruleRepeatedReads(db, ctx, forms));
+  out.push(...ruleGrepHabit(db, ctx, forms));
+  out.push(...ruleRepeatedPrompts(db, ctx, forms));
+  out.push(...ruleRepeatedCommands(db, ctx, forms));
   // Round 2 detectors.
-  out.push(...ruleDestructiveCommands(db, ctx));
-  out.push(...ruleEditHotspot(db, ctx));
-  out.push(...ruleRecurringCorrection(db, ctx));
+  out.push(...ruleDestructiveCommands(db, ctx, forms));
+  out.push(...ruleEditHotspot(db, ctx, forms));
+  out.push(...ruleRecurringCorrection(db, ctx, forms));
   // Round 3 detectors.
-  out.push(...ruleSpecshipCold(db, ctx));
-  out.push(...ruleHeavyOutput(db, ctx));
-  out.push(...ruleReferenceDoc(db, ctx));
+  out.push(...ruleSpecshipCold(db, ctx, forms));
+  out.push(...ruleHeavyOutput(db, ctx, forms));
+  out.push(...ruleReferenceDoc(db, ctx, forms));
   return out;
 }
+
+type PathForms = [string, string];
 
 /**
  * R1 → memory_rule (project CLAUDE.md): the agent Read the same file many times
  * in a single session. A project-specific rule steering it to specship_explore
  * for that area is the durable fix.
  */
-function ruleRepeatedReads(db: SqliteDatabase, ctx: ReflectContext): Proposal[] {
+function ruleRepeatedReads(db: SqliteDatabase, ctx: ReflectContext, forms: PathForms): Proposal[] {
   const rows = db
     .prepare(
       `SELECT session_id, input_summary AS file, COUNT(*) AS n
        FROM claude_tool_calls
-       WHERE tool_name = 'Read' AND input_summary != ''
+       WHERE tool_name = 'Read' AND input_summary != '' AND ${IN_PROJECT}
        GROUP BY session_id, input_summary
        HAVING n >= ?
        ORDER BY n DESC
        LIMIT ?`,
     )
-    .all(THRESHOLDS.repeatedReadsPerSession, PER_RULE_LIMIT) as Array<{
+    .all(...forms, THRESHOLDS.repeatedReadsPerSession, PER_RULE_LIMIT) as Array<{
     session_id: string;
     file: string;
     n: number;
@@ -116,25 +141,27 @@ function ruleRepeatedReads(db: SqliteDatabase, ctx: ReflectContext): Proposal[] 
  * R2 → memory_rule (portable ~/.claude/memory): heavy grep/find usage is a
  * cross-project habit, so the learning is portable, not repo-specific.
  */
-function ruleGrepHabit(db: SqliteDatabase, ctx: ReflectContext): Proposal[] {
+function ruleGrepHabit(db: SqliteDatabase, ctx: ReflectContext, forms: PathForms): Proposal[] {
   const row = db
     .prepare(
       `SELECT COUNT(*) AS n, COUNT(DISTINCT session_id) AS s
        FROM claude_tool_calls
        WHERE tool_name = 'Bash'
          AND (input_summary LIKE 'grep%' OR input_summary LIKE '%grep %'
-              OR input_summary LIKE 'find %' OR input_summary LIKE 'rg %')`,
+              OR input_summary LIKE 'find %' OR input_summary LIKE 'rg %')
+         AND ${IN_PROJECT}`,
     )
-    .get() as { n: number; s: number } | undefined;
+    .get(...forms) as { n: number; s: number } | undefined;
   if (!row || row.n < THRESHOLDS.grepHabitTotal) return [];
   const sessRows = db
     .prepare(
       `SELECT DISTINCT session_id FROM claude_tool_calls
        WHERE tool_name = 'Bash' AND (input_summary LIKE '%grep %' OR input_summary LIKE 'grep%'
              OR input_summary LIKE 'find %' OR input_summary LIKE 'rg %')
+         AND ${IN_PROJECT}
        LIMIT 8`,
     )
-    .all() as Array<{ session_id: string }>;
+    .all(...forms) as Array<{ session_id: string }>;
   return [
     buildProposal(ctx, {
       type: 'memory_rule',
@@ -163,17 +190,18 @@ function normalizePrompt(t: string): string {
  * R3 → skill (commands/ss-<name>.md): the user typed essentially the same ask
  * many times. A reusable slash command captures the routine.
  */
-function ruleRepeatedPrompts(db: SqliteDatabase, ctx: ReflectContext): Proposal[] {
+function ruleRepeatedPrompts(db: SqliteDatabase, ctx: ReflectContext, forms: PathForms): Proposal[] {
   const rows = db
     .prepare(
       `SELECT id, text FROM claude_prompts
        WHERE text IS NOT NULL AND length(text) BETWEEN 12 AND 200
          AND text NOT LIKE '<%' AND text NOT LIKE '%<command-name>%'
          AND is_sidechain = 0
+         AND ${IN_PROJECT}
        ORDER BY ts DESC
        LIMIT 4000`,
     )
-    .all() as Array<{ id: string; text: string }>;
+    .all(...forms) as Array<{ id: string; text: string }>;
   const groups = new Map<string, { count: number; prompts: string[]; sample: string }>();
   for (const r of rows) {
     const key = normalizePrompt(r.text);
@@ -208,7 +236,7 @@ function ruleRepeatedPrompts(db: SqliteDatabase, ctx: ReflectContext): Proposal[
  * R4 → hook (.claude/settings.json): the agent ran the same shell command after
  * edits across multiple sessions. A PostToolUse hook automates the manual step.
  */
-function ruleRepeatedCommands(db: SqliteDatabase, ctx: ReflectContext): Proposal[] {
+function ruleRepeatedCommands(db: SqliteDatabase, ctx: ReflectContext, forms: PathForms): Proposal[] {
   const rows = db
     .prepare(
       `SELECT input_summary AS cmd, COUNT(*) AS n, COUNT(DISTINCT session_id) AS s,
@@ -218,12 +246,14 @@ function ruleRepeatedCommands(db: SqliteDatabase, ctx: ReflectContext): Proposal
          AND input_summary NOT LIKE 'grep%' AND input_summary NOT LIKE '%grep %'
          AND input_summary NOT LIKE 'find %' AND input_summary NOT LIKE 'cd %'
          AND input_summary NOT LIKE 'ls%' AND input_summary NOT LIKE 'cat %'
+         AND ${IN_PROJECT}
        GROUP BY input_summary
        HAVING s >= ? AND n >= ?
        ORDER BY n DESC
        LIMIT ?`,
     )
     .all(
+      ...forms,
       THRESHOLDS.repeatedCmdSessions,
       THRESHOLDS.repeatedCmdTotal,
       PER_RULE_LIMIT,
@@ -261,10 +291,10 @@ const DESTRUCTIVE: Array<{ key: string; label: string; re: RegExp }> = [
  * deliberately propose a *rule* rather than auto-generating a fragile guard
  * script (a guard-hook variant is a future detector).
  */
-function ruleDestructiveCommands(db: SqliteDatabase, ctx: ReflectContext): Proposal[] {
+function ruleDestructiveCommands(db: SqliteDatabase, ctx: ReflectContext, forms: PathForms): Proposal[] {
   const rows = db
-    .prepare(`SELECT session_id, input_summary AS cmd FROM claude_tool_calls WHERE tool_name = 'Bash' AND input_summary != ''`)
-    .all() as Array<{ session_id: string; cmd: string }>;
+    .prepare(`SELECT session_id, input_summary AS cmd FROM claude_tool_calls WHERE tool_name = 'Bash' AND input_summary != '' AND ${IN_PROJECT}`)
+    .all(...forms) as Array<{ session_id: string; cmd: string }>;
   const buckets = new Map<string, { count: number; sessions: Set<string>; sample: string }>();
   for (const r of rows) {
     for (const d of DESTRUCTIVE) {
@@ -305,19 +335,19 @@ function ruleDestructiveCommands(db: SqliteDatabase, ctx: ReflectContext): Propo
  * sessions — a hotspot whose contract is worth documenting so future edits
  * don't relearn it from scratch.
  */
-function ruleEditHotspot(db: SqliteDatabase, ctx: ReflectContext): Proposal[] {
+function ruleEditHotspot(db: SqliteDatabase, ctx: ReflectContext, forms: PathForms): Proposal[] {
   const rows = db
     .prepare(
       `SELECT input_summary AS file, COUNT(*) AS n, COUNT(DISTINCT session_id) AS s,
               GROUP_CONCAT(DISTINCT session_id) AS sessions
        FROM claude_tool_calls
-       WHERE tool_name IN ('Edit', 'Write', 'MultiEdit') AND input_summary != ''
+       WHERE tool_name IN ('Edit', 'Write', 'MultiEdit') AND input_summary != '' AND ${IN_PROJECT}
        GROUP BY input_summary
        HAVING n >= ? AND s >= ?
        ORDER BY n DESC
        LIMIT ?`,
     )
-    .all(THRESHOLDS.editHotspotTotal, THRESHOLDS.editHotspotSessions, PER_RULE_LIMIT) as Array<{
+    .all(...forms, THRESHOLDS.editHotspotTotal, THRESHOLDS.editHotspotSessions, PER_RULE_LIMIT) as Array<{
     file: string;
     n: number;
     s: number;
@@ -350,17 +380,18 @@ const CORRECTION_CUE = /^(no\b|don'?t\b|do not\b|never\b|always\b|stop\b|instead
  * corrective instruction. That's a durable preference worth recording so it
  * doesn't have to be repeated — the core Hermes "learn from corrections" idea.
  */
-function ruleRecurringCorrection(db: SqliteDatabase, ctx: ReflectContext): Proposal[] {
+function ruleRecurringCorrection(db: SqliteDatabase, ctx: ReflectContext, forms: PathForms): Proposal[] {
   const rows = db
     .prepare(
       `SELECT id, text FROM claude_prompts
        WHERE text IS NOT NULL AND length(text) BETWEEN 12 AND 200
          AND text NOT LIKE '<%' AND text NOT LIKE '%<command-name>%'
          AND is_sidechain = 0
+         AND ${IN_PROJECT}
        ORDER BY ts DESC
        LIMIT 4000`,
     )
-    .all() as Array<{ id: string; text: string }>;
+    .all(...forms) as Array<{ id: string; text: string }>;
   const groups = new Map<string, { count: number; prompts: string[]; sample: string }>();
   for (const r of rows) {
     const trimmed = r.text.trim();
@@ -399,7 +430,7 @@ function ruleRecurringCorrection(db: SqliteDatabase, ctx: ReflectContext): Propo
  * portable habit-note to query it first is the durable fix. Uses the
  * `is_specship` classification on tool calls.
  */
-function ruleSpecshipCold(db: SqliteDatabase, ctx: ReflectContext): Proposal[] {
+function ruleSpecshipCold(db: SqliteDatabase, ctx: ReflectContext, forms: PathForms): Proposal[] {
   const rows = db
     .prepare(
       `SELECT session_id,
@@ -409,10 +440,11 @@ function ruleSpecshipCold(db: SqliteDatabase, ctx: ReflectContext): Proposal[] {
                        THEN 1 ELSE 0 END) AS reads,
               SUM(is_specship) AS ss
        FROM claude_tool_calls
+       WHERE ${IN_PROJECT}
        GROUP BY session_id
        HAVING reads >= ? AND ss = 0`,
     )
-    .all(THRESHOLDS.specshipColdReadMin) as Array<{ session_id: string; reads: number; ss: number }>;
+    .all(...forms, THRESHOLDS.specshipColdReadMin) as Array<{ session_id: string; reads: number; ss: number }>;
   if (rows.length < THRESHOLDS.specshipColdSessions) return [];
   const totalReads = rows.reduce((a, r) => a + r.reads, 0);
   return [
@@ -439,19 +471,19 @@ function ruleSpecshipCold(db: SqliteDatabase, ctx: ReflectContext): Proposal[] {
  * into context, repeatedly. Scoping its output (or using a structural query) is
  * the durable fix. Uses `result_length`.
  */
-function ruleHeavyOutput(db: SqliteDatabase, ctx: ReflectContext): Proposal[] {
+function ruleHeavyOutput(db: SqliteDatabase, ctx: ReflectContext, forms: PathForms): Proposal[] {
   const rows = db
     .prepare(
       `SELECT input_summary AS cmd, COUNT(*) AS n, MAX(result_length) AS maxlen,
               GROUP_CONCAT(DISTINCT session_id) AS sessions
        FROM claude_tool_calls
-       WHERE tool_name = 'Bash' AND input_summary != '' AND result_length > ?
+       WHERE tool_name = 'Bash' AND input_summary != '' AND result_length > ? AND ${IN_PROJECT}
        GROUP BY input_summary
        HAVING n >= ?
        ORDER BY maxlen DESC
        LIMIT ?`,
     )
-    .all(THRESHOLDS.heavyOutputBytes, THRESHOLDS.heavyOutputMin, PER_RULE_LIMIT) as Array<{
+    .all(THRESHOLDS.heavyOutputBytes, ...forms, THRESHOLDS.heavyOutputMin, PER_RULE_LIMIT) as Array<{
     cmd: string;
     n: number;
     maxlen: number;
@@ -481,7 +513,7 @@ function ruleHeavyOutput(db: SqliteDatabase, ctx: ReflectContext): Proposal[] {
  * from CLAUDE.md keeps it in context. Distinct from R1 (in-session re-reads of
  * any file) — this keys on cross-session breadth of a *doc* file.
  */
-function ruleReferenceDoc(db: SqliteDatabase, ctx: ReflectContext): Proposal[] {
+function ruleReferenceDoc(db: SqliteDatabase, ctx: ReflectContext, forms: PathForms): Proposal[] {
   const rows = db
     .prepare(
       `SELECT input_summary AS file, COUNT(DISTINCT session_id) AS s,
@@ -491,12 +523,13 @@ function ruleReferenceDoc(db: SqliteDatabase, ctx: ReflectContext): Proposal[] {
          AND (input_summary LIKE '%.md' OR input_summary LIKE '%.mdx'
               OR input_summary LIKE '%.txt' OR input_summary LIKE '%.rst'
               OR input_summary LIKE '%.adoc')
+         AND ${IN_PROJECT}
        GROUP BY input_summary
        HAVING s >= ?
        ORDER BY s DESC
        LIMIT ?`,
     )
-    .all(THRESHOLDS.refDocSessions, PER_RULE_LIMIT) as Array<{
+    .all(...forms, THRESHOLDS.refDocSessions, PER_RULE_LIMIT) as Array<{
     file: string;
     s: number;
     sessions: string;

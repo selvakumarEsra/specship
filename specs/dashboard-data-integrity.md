@@ -125,3 +125,24 @@ implementations:
 <!-- id: REQ-DASHINT-005.A1 -->
 - When the MCP endpoint is unreachable, every displayed seed server carries
   a visible `SAMPLE` marker in addition to the page-level notice.
+
+<!-- id: REQ-DASHINT-006 -->
+## Tips MUST be computed from the primary project's own sessions
+
+The advisory tips cards are mined from the same cross-project transcript
+tables as reflection proposals, and MUST likewise restrict their evidence to
+the primary project's sessions (matching the stored project path in both its
+stored mangled form and its real-path form). The Improvements page for a
+project never advises about files, commands, or sessions that belong to a
+different project.
+
+implementations:
+  - packages/server/src/routes/claude.ts:registerClaudeRoutes
+
+## Acceptance
+<!-- id: REQ-DASHINT-006.A1 -->
+- A wasteful pattern present only in another project's sessions produces no
+  tip card for the primary project.
+<!-- id: REQ-DASHINT-006.A2 -->
+- The same pattern within the primary project's sessions produces its tip,
+  whether the session rows store the project path in real or in mangled form.

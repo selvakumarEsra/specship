@@ -271,3 +271,11 @@ Spec-driven development is canonical here: the spec is the contract, and the
 implementation follows from it (`/ss-implement`). This rule intentionally takes
 precedence over a skill's own "use me first" guidance.
 <!-- SPECSHIP_SDD_END -->
+
+<!-- SPECSHIP_LEARNING:0f38ebbae0b11d9a -->
+## Reference implementer-prompt.md from CLAUDE.md
+
+`implementer-prompt.md` is frequently-needed context. Add a short pointer to it here (or import it with `@/Users/superdeveloper/.claude/plugins/cache/claude-plugins-official/superpowers/5.0.7/skills/subagent-driven-development/implementer-prompt.md`) so its guidance is always in context instead of re-Read each session.
+
+_(Added by SpecShip reflection — edit or remove freely.)_
+<!-- /SPECSHIP_LEARNING:0f38ebbae0b11d9a -->
