@@ -21,7 +21,7 @@ import { startWatcher, primaryProjectMatcher, type WatcherHandle } from './inges
 import { backfillDisplaced } from './ingest/impact-backfill.js';
 import { recostUnpricedPrompts } from './ingest/pricing-backfill.js';
 import { ProjectRegistry, type SpecShipInstance } from './project-registry.js';
-import { makeStaticHandler } from './static-handler.js';
+import { makeStaticHandler, isAssetPath } from './static-handler.js';
 import { registerGraphRoutes } from './routes/graph.js';
 import { registerSpecRoutes } from './routes/spec.js';
 import { registerWorkflowRoutes } from './routes/workflow.js';
@@ -274,7 +274,10 @@ export async function createServer(options: ServerOptions): Promise<ServerHandle
       //   2. Fall through to index.html for any other GET so Angular's
       //      client-side router can take over (`/memory`, `/graph`, …).
       // Non-GET methods and `/api/*` paths still 404 cleanly so the UI
-      // can surface them.
+      // can surface them. A MISSING asset path (e.g. a stale build's old
+      // content-hashed bundle) must also 404, never receive the shell —
+      // HTML under an asset URL poisons the offline service worker's cache
+      // (REQ-OFFLINE-005).
       app.setNotFoundHandler((request, reply) => {
         if (request.method !== 'GET') {
           reply.code(404).send({ error: 'not found' });
@@ -287,6 +290,10 @@ export async function createServer(options: ServerOptions): Promise<ServerHandle
         const hit = serveStatic(request.url);
         if (hit) {
           reply.code(200).type(hit.contentType).send(hit.body);
+          return;
+        }
+        if (isAssetPath(request.url)) {
+          reply.code(404).send({ error: 'not found' });
           return;
         }
         reply.code(200).type('text/html').send(cachedIndex);

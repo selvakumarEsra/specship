@@ -9,6 +9,9 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixes
+
+- **A dashboard tab can no longer get stuck on a broken build after a server restart.** If a tab holding an older build asked for its old app bundle, the server answered with the app shell instead of an error; the dashboard's offline cache then stored that wrong answer and kept replaying it, leaving the tab broken until site data was cleared by hand. Missing asset requests now fail cleanly, the offline cache refuses mismatched responses, and upgrading discards any cache poisoned before the fix.
 
 ## [0.11.9] - 2026-07-03
 

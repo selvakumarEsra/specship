@@ -14,6 +14,7 @@
  *     }
  *     const hit = serveStatic(req.url);
  *     if (hit) { reply.type(hit.contentType).send(hit.body); return; }
+ *     if (isAssetPath(req.url)) { reply.code(404).send({ error: 'not found' }); return; }
  *     reply.code(200).type('text/html').send(cachedIndex);
  *   });
  *
@@ -49,6 +50,30 @@ const CT: Record<string, string> = {
 export interface StaticHit {
   body: Buffer;
   contentType: string;
+}
+
+/**
+ * Whether a URL path names a static asset (its final segment ends in a
+ * recognized asset extension). Used by the SPA fallback to answer a MISSING
+ * asset with 404 instead of index.html (REQ-OFFLINE-005): serving HTML at an
+ * asset URL poisons the browser's and the offline service worker's caches —
+ * a tab holding a stale build requests its old content-hashed bundle, gets
+ * the shell, and stores HTML under the bundle URL until site data is cleared.
+ *
+ * Only extensions from the content-type table count — client routes with
+ * dotted params (`/specs/REQ-OFFLINE-001.A1`) must keep the shell fallback.
+ */
+export function isAssetPath(urlPath: string): boolean {
+  const qIdx = urlPath.indexOf('?');
+  const hIdx = urlPath.indexOf('#');
+  let clean = urlPath;
+  if (qIdx >= 0) clean = clean.slice(0, qIdx);
+  if (hIdx >= 0) clean = clean.slice(0, hIdx);
+  let decoded: string;
+  try { decoded = decodeURIComponent(clean); }
+  catch { decoded = clean; }
+  const ext = path.extname(decoded).toLowerCase();
+  return ext !== '' && ext in CT;
 }
 
 export function makeStaticHandler(rootDir: string): (urlPath: string) => StaticHit | null {

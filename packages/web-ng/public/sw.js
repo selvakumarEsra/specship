@@ -20,7 +20,9 @@
  * Google Fonts, …) passes straight through.
  */
 
-const CACHE = 'specship-shell-v2';
+// v3: drops v2 caches that may hold HTML poisoned under asset URLs
+// (cached before the content-type guard below existed — REQ-OFFLINE-006.A3).
+const CACHE = 'specship-shell-v3';
 const SHELL = '/index.html';
 
 self.addEventListener('install', (event) => {
@@ -53,12 +55,20 @@ self.addEventListener('fetch', (event) => {
   const key = isNav ? SHELL : req;
 
   // Network-first: fresh when reachable, cached copy when the server is down.
+  // Never cache an HTML-typed response for a non-navigation request
+  // (REQ-OFFLINE-006): a server answering a missing asset with the SPA shell
+  // would otherwise store HTML under the asset's URL, and every offline load
+  // after that replays it as a broken module/stylesheet.
   event.respondWith(
     fetch(req)
       .then((res) => {
         if (res && res.ok && res.type === 'basic') {
-          const copy = res.clone();
-          caches.open(CACHE).then((c) => c.put(key, copy)).catch(() => undefined);
+          const ct = (res.headers.get('content-type') || '').toLowerCase();
+          const poisoned = !isNav && ct.indexOf('text/html') !== -1;
+          if (!poisoned) {
+            const copy = res.clone();
+            caches.open(CACHE).then((c) => c.put(key, copy)).catch(() => undefined);
+          }
         }
         return res;
       })

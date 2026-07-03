@@ -116,3 +116,58 @@ silently lose the user's input.
 implementations:
   - packages/web-ng/src/app/api/refresh.ts:RefreshService
   - packages/web-ng/src/app/api/api.ts:ApiService
+
+<!-- id: REQ-OFFLINE-005 -->
+## A missing static asset MUST NOT be answered with the app shell
+
+A GET for a path whose final segment ends in a recognized static-asset
+extension (`.js`, `.css`, `.woff2`, `.png`, …) but which does not exist under
+the web root MUST be answered with 404 — never with the SPA shell. Serving the
+shell (HTML) at an asset URL corrupts every cache between the server and the
+page — the browser's HTTP cache and the offline cache both store HTML under
+the asset's URL — and surfaces as a module-MIME error that persists until the
+user manually clears site data. (Observed 2026-07-03: a tab holding a stale
+build requested its old content-hashed bundle during a server restart window;
+the shell fallback answered it and the offline cache stored HTML under the
+bundle URL.)
+
+Extension-less paths (client routes like `/memory`) MUST keep falling back to
+the shell so deep links keep working — including route params that contain
+dots without being asset paths (e.g. `/specs/REQ-OFFLINE-001.A1`).
+
+## Acceptance
+<!-- id: REQ-OFFLINE-005.A1 -->
+- GET of a non-existent content-hashed bundle (e.g. `/main-STALEHASH.js`) returns 404 and the response body is not the app shell.
+<!-- id: REQ-OFFLINE-005.A2 -->
+- GET of an extension-less client route (e.g. `/memory`) still returns 200 with the app shell.
+<!-- id: REQ-OFFLINE-005.A3 -->
+- GET of a route param whose dot-suffix is not an asset extension (e.g. `/specs/REQ-OFFLINE-001.A1`) still returns 200 with the app shell.
+<!-- id: REQ-OFFLINE-005.A4 -->
+- GET of an existing asset still returns 200 with its correct content type, and `/api/*` misses and non-GET methods still return a JSON 404 (behavior for those is unchanged).
+
+implementations:
+  - packages/server/src/static-handler.ts:isAssetPath
+  - packages/server/src/server.ts:createServer
+
+<!-- id: REQ-OFFLINE-006 -->
+## The offline cache MUST NOT store a response that contradicts its request
+
+The offline cache MUST refuse to store a response whose declared content type
+contradicts what the request asked for — concretely, an HTML-typed response
+MUST never be stored for a non-navigation request (a script, stylesheet, font,
+or image URL). The mismatched response still passes through to the page, so
+the browser surfaces the real failure; it just never enters the cache, and
+later offline loads can never replay poisoned content. A new cache generation
+MUST discard the previous generation's entries on activation, so caches
+poisoned before this rule existed are dropped on upgrade.
+
+## Acceptance
+<!-- id: REQ-OFFLINE-006.A1 -->
+- When the network answers a script request with an HTML-typed response, no entry for that URL is written to the offline cache.
+<!-- id: REQ-OFFLINE-006.A2 -->
+- Correctly-typed responses are cached and served offline exactly as REQ-OFFLINE-001 requires: navigations cache the shell, and assets cache their bodies.
+<!-- id: REQ-OFFLINE-006.A3 -->
+- After upgrading to a build with a new cache generation, entries from the previous generation are no longer served — a cache poisoned before the upgrade cannot poison the app after it.
+
+implementations:
+  - packages/web-ng/public/sw.js
