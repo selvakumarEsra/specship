@@ -253,6 +253,45 @@ x
     expect(result.specs).toHaveLength(0);
     expect(result.errors.filter((e) => e.severity === 'error')).toEqual([]);
   });
+
+  it('indexes the exact brief the `idea` verb writes as an idea (REQ-IDEAS-001.A1/A3/A4)', () => {
+    // The shape `/specship:spec idea perf: cache the snapshots` writes:
+    // slug + created + a label from the `word:` prefix, NO `spec:` (so it
+    // reconciles to the `idea` state), the one-liner as the H1 + body, and an
+    // opportunistic `## Grounding` section for the code under discussion.
+    const source = `---
+slug: cache-the-snapshots
+created: 2026-07-03
+label: perf
+---
+# cache the snapshots
+
+cache the snapshots
+
+## Grounding
+- src/context/context-builder.ts:buildContext
+`;
+    const result = new MarkdownSpecExtractor(
+      'specs/cache-the-snapshots/brief.md',
+      source
+    ).extract();
+    expect(result.errors.filter((e) => e.severity === 'error')).toEqual([]);
+    expect(result.specs).toHaveLength(1);
+
+    const brief = result.specs[0]!;
+    // A1: an addressable brief:<slug> of kind 'brief'.
+    expect(brief.id).toBe('brief:cache-the-snapshots');
+    expect(brief.kind).toBe('brief');
+    expect(brief.title).toBe('cache the snapshots');
+    // A1: no `spec:` pointer, so the resolver reports the `idea` state.
+    expect((brief.metadata as Record<string, unknown>).spec).toBeUndefined();
+    // A1: creation date is carried for the review view's age.
+    expect((brief.metadata as Record<string, unknown>).created).toBe('2026-07-03');
+    // A3: the capture-time label survives into the graph as brief metadata.
+    expect((brief.metadata as Record<string, unknown>).label).toBe('perf');
+    // A4: opportunistic grounding lands in the body (full-text searchable).
+    expect(brief.body).toContain('src/context/context-builder.ts:buildContext');
+  });
 });
 
 describe('MarkdownSpecExtractor — domain spec kind (REQ-DOMAIN-001)', () => {

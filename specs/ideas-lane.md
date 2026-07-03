@@ -34,6 +34,9 @@ questions, no review pass, one confirmation line. When the session's context
 makes it cheap, the brief records where the thought occurred (the files or
 symbols under discussion) so future review can re-ground it.
 
+implementations:
+  - commands/specship/spec.md
+
 ## Acceptance
 <!-- id: REQ-IDEAS-001.A1 -->
 - `/specship:spec idea <one-liner>` writes a brief under the specs root whose

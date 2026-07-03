@@ -114,6 +114,22 @@ describe('resolveBriefLink (REQ-FUNNEL-002)', () => {
     expect(link.specSide).toBe('DOCY');
   });
 
+  it('REQ-IDEAS-001.A1: the brief the `idea` verb writes (slug + created + label, no spec) is an idea', () => {
+    // Exactly the frontmatter the capture verb emits — a slug, a creation
+    // date, and a capture-time label, but no `spec:` pointer and no document
+    // pointing back at it. The funnel must report this as an unlinked `idea`.
+    const brief = spec({
+      id: 'brief:cache-the-snapshots',
+      kind: 'brief',
+      sourcePath: 'specs/cache-the-snapshots/brief.md',
+      metadata: { slug: 'cache-the-snapshots', created: '2026-07-03', label: 'perf' },
+    });
+    const sq = lookup([doc, req1, req2, brief]);
+    const link = resolveBriefLink(sq, brief);
+    expect(link.state).toBe('idea');
+    expect(link.linkedSpecId).toBeNull();
+  });
+
   it('A5: a brief linked to a requirement is attributed to its document, not the sibling requirements', () => {
     const brief = spec({
       id: 'brief:doc',

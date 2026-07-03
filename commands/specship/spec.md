@@ -1,6 +1,6 @@
 ---
-description: Intent door — view, list, author, fast-path, design, implement, review, or extend a spec. No arg = the spec funnel; a SPEC_ID = that spec's detail; `list`/`new`/`fast`/`design`/`implement`/`review`/`triage`/`behaviour`/`domain` run the matching flow.
-argument-hint: "<SPEC_ID> | list | new <desc> | fast <desc> | design <URL | intent> | implement <ID> | review <ID> | triage <prompt> | behaviour <ID> | domain"
+description: Intent door — view, list, capture an idea, author, fast-path, design, implement, review, or extend a spec. No arg = the spec funnel; a SPEC_ID = that spec's detail; `idea`/`list`/`new`/`fast`/`design`/`implement`/`review`/`triage`/`behaviour`/`domain` run the matching flow.
+argument-hint: "<SPEC_ID> | idea <one-liner> | list | new <desc> | fast <desc> | design <URL | intent> | implement <ID> | review <ID> | triage <prompt> | behaviour <ID> | domain"
 allowed-tools: Read, Edit, Write, Bash, mcp__specship__specship_spec, mcp__specship__specship_node, mcp__specship__specship_explore, mcp__specship__specship_search, mcp__specship__specship_link_assert, mcp__specship__specship_link_verify, mcp__specship__specship_drifted, mcp__specship__designer_session, mcp__specship__designer_prompt, mcp__specship__designer_ask, mcp__specship__designer_list, mcp__specship__designer_snapshot, mcp__specship__designer_handoff
 ---
 
@@ -19,6 +19,9 @@ lost.
   `spec_id`: the body, parent/siblings, and linked code with state. Use this
   before Read-ing the spec file. Jump into linked code via `specship_node`; if
   nothing is linked yet, `specship_explore` on terms from the spec's title.
+- **`idea <one-liner>`** → park the thought as an idea brief and return to the
+  interrupted work, without breaking flow (see *Idea* below). Append-only: no
+  gap-fill questions, no review pass, one confirmation line.
 - **`list`** → call `specship_spec` with `list: true`: the flat spec inventory —
   idea briefs, then every document's requirements, each carrying exactly one
   rolled-up status (`authored · in-progress · implemented · verified ·
@@ -45,7 +48,10 @@ lost.
   acceptance criteria; see below.
 - **`domain`** → capture a human-confirmed domain fact; see below.
 - **any other free text** (not empty, not a `SPEC_ID`, not a known sub-route
-  verb) → don't fall through to undefined behaviour. Ask **one** clarifying
+  verb — the known verbs are `idea`, `list`, `new`, `fast`, `design`,
+  `implement`, `review`, `triage`, `behaviour`, `domain`, so `idea …` routes to
+  the capture flow above and never reaches this disambiguation, REQ-IDEAS-001.A6)
+  → don't fall through to undefined behaviour. Ask **one** clarifying
   question offering `new`, `fast`, and `triage`, **leading with an inferred
   recommendation** from the input's shape: error-log-shaped input (a stack
   trace, `file:line`, an exception/failure message) → recommend `triage`;
@@ -53,6 +59,62 @@ lost.
   `fast` if it reads as a quick, settled change). Route to the chosen sub-route
   once answered. The no-argument funnel and bare-`SPEC_ID` detail behaviours
   above are unchanged.
+
+## Idea (`idea <one-liner>`)
+
+The **five-second capture verb** (REQ-IDEAS-001). An idea arrives mid-flow; park
+it and get back to what you were doing. This path is deliberately dumb — **no
+brainstorm, no gap-fill questions, no diverge, no Post-write review** (those are
+for authoring; parking is not authoring). Enrichment is what promotion
+(`new <brief-id>`) is for.
+
+**This path SKIPS both authoring gates below.** It does *not* run the "Plan mode
+at the write/hand-off boundary" exit dance and it does *not* run the "Post-write
+review" pass — capture is append-only. (If the session happens to be in plan
+mode, exit it only so the one `Write` can land, nothing more — there is no plan
+to present; the whole point is not to interrupt.)
+
+Steps:
+
+1. **Empty guard (A5).** If the one-liner is empty (bare `idea`, or only
+   whitespace), **write nothing** — print the one-line usage hint
+   `Usage: /specship:spec idea <one-liner>` and return. No file, no sync.
+2. **Label prefix (A3).** If the one-liner begins with a bare `word:` prefix
+   (a single leading word immediately followed by a colon, e.g.
+   `idea perf: cache the snapshots`), take that word as the **label** and the
+   remainder (trimmed) as the one-liner. Match only a single leading
+   `^(\w+):\s*` — `we should: cache X` has no label (its first word isn't
+   colon-terminated). If stripping the label leaves an empty remainder, fall
+   back to the empty guard (A5).
+3. **Slug.** Kebab-case the one-liner (lowercase, non-alphanumeric → `-`,
+   collapse repeats, trim `-`), truncated to a sane length. If
+   `specs/<slug>/brief.md` already exists, append `-2`, `-3`, … until the path
+   is free — never overwrite an existing brief.
+4. **Grounding (A4), opportunistic — never blocking.** If the current
+   conversation already makes the code under discussion obvious (files just
+   read/edited, symbols named in the exchange), record them as a `## Grounding`
+   body section of `file:symbol` / `file` bullets so future review can
+   re-ground. If nothing is clearly in scope, **skip it silently** — absence of
+   context never blocks or delays capture. Do **not** go search for grounding.
+5. **Write the brief (A1).** `Write` `specs/<slug>/brief.md`:
+   ```markdown
+   ---
+   slug: <slug>
+   created: <YYYY-MM-DD>   # today, from `date +%F`
+   label: <label>          # only when a prefix label was parsed (A3)
+   ---
+   # <one-liner>
+
+   <one-liner>
+
+   ## Grounding            # only when step 4 captured something (A4)
+   - <file>:<symbol>
+   ```
+   There is **no `spec:` key** — a brief without one reconciles to the `idea`
+   state, so it indexes as an `idea`-state `brief:<slug>` on the next sync (A1).
+6. **Sync + confirm (A2).** Run `specship sync`, then print exactly **one**
+   confirmation line naming the brief — e.g. `Parked as brief:<slug>.` — and
+   return to the interrupted work. Ask nothing.
 
 ## Plan mode at the write/hand-off boundary (every authoring path)
 
