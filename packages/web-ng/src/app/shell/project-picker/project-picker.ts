@@ -1,6 +1,9 @@
 import { ChangeDetectionStrategy, Component, computed, ElementRef, inject, signal } from '@angular/core';
+import { ApiService } from '../../api/api';
+import { apiResource } from '../../api/resource';
 import { ProjectsService } from '../../api/projects';
 import { Icon } from '../icon/icon';
+import type { StatusResponse } from '../../api/types';
 
 @Component({
   selector: 'app-project-picker',
@@ -15,10 +18,25 @@ import { Icon } from '../icon/icon';
 })
 export class ProjectPicker {
   private readonly host = inject(ElementRef<HTMLElement>);
+  private readonly api = inject(ApiService);
   protected readonly projects = inject(ProjectsService);
 
   protected readonly open = signal(false);
   protected readonly query = signal('');
+
+  /**
+   * The EFFECTIVE project (REQ-DASHUX-006): when the user hasn't picked one,
+   * the server still serves its boot-time primary — showing "Select project"
+   * next to a header full of that project's data reads as a contradiction.
+   * Surface the primary's path with a "default" hint instead.
+   */
+  private readonly status = apiResource<StatusResponse>(
+    this.api,
+    () => `/api/status${this.projects.projectQuery()}`,
+  );
+  protected readonly defaultPath = computed<string | null>(
+    () => this.status.state().data?.projectPath ?? null,
+  );
 
   protected readonly filtered = computed(() => {
     const q = this.query().trim().toLowerCase();

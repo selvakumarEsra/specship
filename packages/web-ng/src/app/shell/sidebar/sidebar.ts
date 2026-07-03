@@ -50,7 +50,11 @@ export class Sidebar {
           id: 'improvements',
           label: 'Improvements',
           icon: 'sparkles',
-          badge: () => (this.improvements.state().data?.proposals ?? []).filter((p) => p.severity === 'high').length,
+          // Combined badge: high-severity proposals + actionable tips — the
+          // Tips page merged into this surface (REQ-DASHUX-005).
+          badge: () =>
+            (this.improvements.state().data?.proposals ?? []).filter((p) => p.severity === 'high').length +
+            (this.tips.state().data?.tips ?? []).filter((t) => t.severity !== 'info').length,
           badgeKind: 'error',
         },
         { id: 'workflows', label: 'Workflows', icon: 'workflow' },
@@ -68,13 +72,6 @@ export class Sidebar {
         { id: 'compare', label: 'Compare projects', icon: 'compare' },
         { id: 'memory', label: 'Memory', icon: 'memory' },
         { id: 'mcp', label: 'MCP', icon: 'plug' },
-        {
-          id: 'tips',
-          label: 'Tips',
-          icon: 'tips',
-          badge: () => (this.tips.state().data?.tips ?? []).filter((t) => t.severity !== 'info').length,
-          badgeKind: 'error',
-        },
       ],
     },
   ];

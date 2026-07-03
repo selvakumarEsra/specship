@@ -143,7 +143,10 @@ export async function createServer(options: ServerOptions): Promise<ServerHandle
   // Lazy-load specship. Used as the open() impl for the registry, and
   // (only when a primary path is set) to open the primary instance below.
   const cgMod = await loadSpecShip();
-  const registry = new ProjectRegistry({ verbose }, (p) => cgMod.SpecShip.open(p));
+  // maxOpen must exceed the /api/events cross-project sweep size (10) plus
+  // the primary and a user-picked project, or the sweep churns open/close
+  // cycles through the LRU on every poll.
+  const registry = new ProjectRegistry({ verbose, maxOpen: 16 }, (p) => cgMod.SpecShip.open(p));
 
   // Primary project (optional). When set, specship-scoped routes default to
   // it when no `?project=<slug>` is provided, and the analytics ingest
@@ -151,7 +154,11 @@ export async function createServer(options: ServerOptions): Promise<ServerHandle
   let primaryCg: SpecShipInstance | null = null;
   if (options.projectRoot) {
     primaryCg = await registry.get(options.projectRoot);
-    if (!primaryCg && verbose) {
+    if (primaryCg) {
+      // Routes capture this instance by reference — it must never be LRU
+      // evicted (eviction closes the SQLite handle and every request 500s).
+      registry.pin(options.projectRoot);
+    } else if (verbose) {
       console.error(`[specship-server] primary project ${options.projectRoot} not initialized — booting projectless`);
     }
   }

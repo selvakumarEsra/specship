@@ -16,6 +16,11 @@
       } @else {
         <span class="status-dot ok" title="initialized"></span>
       }
+    } @else if (defaultPath(); as p) {
+      <!-- No explicit pick — show the server's boot-time primary, which is
+           what every page is actually rendering (REQ-DASHUX-006). -->
+      <span class="path mono">{{ shortPath(p) }}</span>
+      <span class="placeholder" style="font-size: 9.5px;">default</span>
     } @else {
       <span class="placeholder">Select project</span>
     }

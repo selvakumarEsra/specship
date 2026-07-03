@@ -99,11 +99,8 @@ export const routes: Routes = [
     loadComponent: () => import('./pages/compare/compare').then((m) => m.Compare),
     data: { nav: 'compare', title: 'Compare projects' },
   },
-  {
-    path: 'tips',
-    loadComponent: () => import('./pages/tips/tips').then((m) => m.Tips),
-    data: { nav: 'tips', title: 'Tips' },
-  },
+  // Tips merged into Improvements (REQ-DASHUX-005); deep links keep working.
+  { path: 'tips', redirectTo: 'improvements' },
   {
     path: 'memory',
     loadComponent: () => import('./pages/memory/memory').then((m) => m.Memory),

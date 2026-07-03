@@ -1,0 +1,13 @@
+import { chromium } from '@playwright/test';
+const browser = await chromium.launch();
+const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+const errors = [];
+page.on('pageerror', (e) => errors.push(e.message.slice(0, 300)));
+page.on('console', (m) => { if (m.type() === 'error') errors.push('[console] ' + m.text().slice(0, 200)); });
+await page.goto('http://127.0.0.1:4880/dashboard', { waitUntil: 'domcontentloaded' });
+await page.waitForTimeout(9000);
+await page.screenshot({ path: '/tmp/wt-dashboard2.png' });
+const text = await page.evaluate(() => document.body.innerText.replace(/\s+/g, ' ').slice(0, 300));
+console.log('TEXT:', text);
+console.log('ERRORS:', errors.join(' | ') || 'none');
+await browser.close();

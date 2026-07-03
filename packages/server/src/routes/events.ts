@@ -60,8 +60,13 @@ export async function registerEventsRoutes(app: FastifyInstance): Promise<void> 
     const poll = async (): Promise<void> => {
       let projects;
       try { projects = await enumerate(claudeRoot); } catch { return; }
+      // Bound the sweep to the most-recently-active initialized projects
+      // (enumerate() sorts by recency): every project here is opened via the
+      // registry, and an unbounded sweep churns the LRU open/close cycle on
+      // every poll once slugs resolve to real paths.
+      projects = projects.filter((p) => p.initialized).slice(0, 10);
       for (const p of projects) {
-        if (!p.initialized || closed) continue;
+        if (closed) continue;
         let cg;
         try { cg = await app.projects.getBySlug(p.slug); } catch { cg = null; }
         if (!cg) continue;

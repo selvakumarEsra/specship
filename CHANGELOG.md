@@ -22,8 +22,22 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **A spec can no longer be marked verified when its tests never ran.** The bundled implement workflow now reports whether the test suite ran-and-passed, ran-and-failed, or was skipped (no recognised test framework) in a machine-readable way, and a skipped run leaves spec links at `implemented` instead of `verified`. The final approval also reports how many of the spec's acceptance criteria have linked tests, naming `/specship:spec behaviour` as the follow-up that closes any gap.
 
 
+### New Features
+
+- **The SpecShip Impact page now leads with what retrieval saves you.** Estimated savings and a Retrieval ROI tile come first, and the overall net moved into a Governance tile that separates bookkeeping spend (link asserts and verifies, spec reads) from retrieval — so a negative net reads as explained overhead instead of an alarming raw number.
+- **The specs tree is now an alignment map.** Each requirement's dot is colored by its rolled-up spec↔code link state (verified, implemented, drifted, broken, or unlinked) with a legend, and the lifecycle funnel is a proper stat strip with a needs-attention count — you can see how much of the spec surface is actually kept at a glance.
+- **Dashboard pages now stay fresh on their own.** The dashboard, drift queue, costs, and other pages refetch automatically within seconds of an index update, workflow transition, or newly detected drift, instead of waiting for a manual refresh.
+- **The graph opens readable.** The overview starts with the top-connected neighborhood instead of a 250-node hairball (the full layout is one click away), and layout work is reused instead of recomputed on every filter toggle.
+- **Tips merged into Improvements.** Both surfaced the same mined-from-transcripts insight; they're now one sidebar destination with a combined badge, and `/tips` links redirect there.
+- **The project picker now shows the project you're actually looking at.** When you haven't picked one, it displays the server's default project instead of a "Select project" placeholder that contradicted the data on screen.
+
 ### Fixes
 
+- **Claude Fable sessions are no longer priced at $0.00.** The fable model family now has pricing (with existing sessions re-costed automatically), fixing the dashboard's last-session cost tile, the Costs and Compare rankings, and the misleading delta that came with the zero.
+- **Session detail no longer errors on sessions that used skills.** Long tool inputs are stored truncated, and the summary endpoint crashed trying to parse them as JSON; it now reads the full input and degrades gracefully.
+- **Numbers render like numbers.** Deltas always show as percentages (never a raw `-1` or `+2.372016052719695`), and large negative token counts abbreviate like positive ones (`-972k`, not `-971752`).
+- **The dashboard's neighborhood graph no longer invents connections.** It renders the real edges between the most-connected symbols (deterministically), and illustrative sample data — the dashboard fallback and seeded MCP servers — is now labeled "sample" on every card.
+- **Opening the dashboard no longer breaks the server after a while.** The notification stream's cross-project sweep could evict and close the primary project's database handle, after which every page errored until restart; the primary is now pinned and the sweep bounded.
 - **The dashboard now finds your projects even when their paths contain hyphens, dots, or underscores.** Claude Code stores project folders under a name where every such character becomes a dash, and SpecShip previously guessed the path back by turning every dash into a slash — so a project under a folder like `~/dev/claude-projects/` was looked up at the wrong path. The result: `specship serve --ui` could start with no project selected, the project picker listed every project as "missing", and picking one showed no data at all. SpecShip now recovers the real paths from Claude Code's own records, so the dashboard auto-selects your most recent project and switching projects in the picker works.
 
 

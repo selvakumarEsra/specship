@@ -45,6 +45,7 @@ export interface ProjectRegistryOptions {
 
 export class ProjectRegistry {
   private readonly cache = new Map<string, CacheEntry>();
+  private readonly pinned = new Set<string>();
   private readonly maxOpen: number;
   private readonly verbose: boolean;
   private readonly openImpl: (projectPath: string) => Promise<SpecShipInstance>;
@@ -97,6 +98,15 @@ export class ProjectRegistry {
 
   has(projectPath: string): boolean { return this.cache.has(projectPath); }
 
+  /**
+   * Exempt `projectPath` from LRU eviction. The server pins its primary:
+   * routes capture the primary instance by reference (`app.primaryCg`), so
+   * an eviction CLOSES a handle they still use and every request 500s with
+   * "database connection is not open". Surfaced when the /api/events sweep
+   * started opening many projects through this cache.
+   */
+  pin(projectPath: string): void { this.pinned.add(projectPath); }
+
   /** Close + drop every cached instance. Called on server shutdown. */
   closeAll(): void {
     for (const [, v] of this.cache) {
@@ -110,6 +120,7 @@ export class ProjectRegistry {
     let oldestKey: string | null = null;
     let oldestTime = Infinity;
     for (const [k, v] of this.cache) {
+      if (this.pinned.has(k)) continue; // never close a pinned instance
       if (v.lastAccess < oldestTime) {
         oldestTime = v.lastAccess;
         oldestKey = k;

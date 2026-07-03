@@ -1,16 +1,20 @@
-/** Tips page — full tip cards ordered by severity with snooze dropdown. */
+/**
+ * Tips section — full tip cards ordered by severity with snooze dropdown.
+ * Embedded in the Improvements page (REQ-DASHUX-005): tips and improvement
+ * proposals are the same mined-from-transcripts insight, so they share one
+ * surface instead of two near-duplicate sidebar destinations.
+ */
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { ApiService } from '../../api/api';
 import { apiResource } from '../../api/resource';
-import { PageHead } from '../../ui/page-head';
 import { Pill } from '../../ui/pill';
 import { CopyBtn } from '../../ui/copy-btn';
 import { Icon } from '../../shell/icon/icon';
 import type { Tip, TipsResponse } from '../../api/types';
 
 @Component({
-  selector: 'app-tips',
-  imports: [PageHead, Pill, CopyBtn, Icon],
+  selector: 'app-tips-section',
+  imports: [Pill, CopyBtn, Icon],
   templateUrl: './tips.html',
   styleUrl: './tips.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
