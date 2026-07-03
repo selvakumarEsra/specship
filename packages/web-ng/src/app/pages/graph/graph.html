@@ -82,9 +82,12 @@
             [hiddenIds]="hiddenIds()"
             (nodeClick)="pickFromCanvas($event)"
           />
-          <!-- overview hint: how much of the graph is shown -->
+          <!-- overview hint: how much of the graph is shown + scope toggle -->
           <div class="gp-overview-note">
-            Showing the {{ fullGraphCounts().shown }} most-connected of {{ fullGraphCounts().total.toLocaleString() }} nodes · search or click a node to drill in
+            Showing the {{ fullGraphCounts().shown }} most-connected of {{ fullGraphCounts().total.toLocaleString() }} nodes · search or click a node to drill in ·
+            <button type="button" class="btn btn-ghost btn-xs" (click)="toggleOverviewScope()">
+              {{ overviewScope() === 'full' ? 'Show fewer' : 'Show full graph' }}
+            </button>
           </div>
         } @else if (fullGraphLoading()) {
           <div class="gp-empty"><p>Loading graph…</p></div>

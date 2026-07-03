@@ -49,8 +49,17 @@ export class Graph {
 
   protected readonly status = apiResource<StatusResponse>(this.api, () => `/api/status${this.projects.projectQuery()}`);
   protected readonly health = apiResource<GraphHealthResponse>(this.api, () => `/api/graph/health${this.projects.projectQuery()}`);
+
+  /**
+   * Overview scope (REQ-DASHUX-002.A1): default to a readable top-60
+   * neighborhood instead of the 250-node hairball; the full layout stays one
+   * click away via the footer toggle.
+   */
+  protected readonly overviewScope = signal<'neighborhood' | 'full'>('neighborhood');
+  private overviewLimit(): number { return this.overviewScope() === 'full' ? 250 : 60; }
+
   /** Whole-repo overview (top-N most-connected nodes), shown when nothing is selected. */
-  protected readonly fullGraph = apiResource<FullGraphResponse>(this.api, () => `/api/graph/full?limit=250${this.projects.projectQuery('&')}`);
+  protected readonly fullGraph = apiResource<FullGraphResponse>(this.api, () => `/api/graph/full?limit=${this.overviewLimit()}${this.projects.projectQuery('&')}`);
 
   // Layout mode
   protected readonly layoutMode = signal<LayoutMode>('hierarchical');
@@ -156,10 +165,12 @@ export class Graph {
 
   /**
    * Whole-repo overview: the top-N nodes from /api/graph/full, filtered by kind,
-   * positioned by the active layout mode. Recomputes when the layout toggle, the
-   * kind filters, or the fetched graph change.
+   * positioned by the active layout mode. A computed() — NOT a method — so the
+   * O(n²)×120-iteration force pass runs at most once per input change instead
+   * of once per consumer per change-detection cycle (REQ-DASHUX-002.A2; it is
+   * read by both canvasData and fullGraphActive).
    */
-  private fullGraphData(): { nodes: CanvasNode[]; edges: CanvasEdge[] } {
+  private readonly fullGraphData = computed<{ nodes: CanvasNode[]; edges: CanvasEdge[] }>(() => {
     const data = this.fullGraph.state().data;
     if (!data?.nodes?.length) return { nodes: [], edges: [] };
 
@@ -191,6 +202,11 @@ export class Graph {
         : 'calls',
     }));
     return { nodes, edges };
+  });
+
+  protected toggleOverviewScope(): void {
+    this.overviewScope.update((s) => (s === 'full' ? 'neighborhood' : 'full'));
+    this.fitKey.update((k) => k + 1);
   }
 
   /** True when the canvas is showing the whole-repo overview (nothing selected). */
