@@ -156,3 +156,36 @@ through to its implementation state.
 - Selecting a brief shows its content and its linked spec, if any.
 <!-- id: REQ-FUNNEL-006.A4 -->
 - When the server is unreachable, the funnel degrades per OFFLINE-DOC — it is served from the shared client cache (marked stale, like every other surface) rather than crashing on the new funnel data.
+
+<!-- id: REQ-FUNNEL-007 -->
+## `specship_spec` MUST provide a list mode with one derived status per spec
+
+The funnel answers "how healthy is the pipeline" with rollup counts; nothing
+answers "what specs exist and where does each stand" in one call. Invoked with
+`list: true`, `specship_spec` MUST return the full inventory — idea briefs,
+then each document grouped with its requirements — where every requirement
+carries exactly ONE derived lifecycle status, so the intent door's `list`
+sub-route resolves in a single call. The status vocabulary is
+`authored · in-progress · implemented · verified · needs-attention`, keeping
+implemented distinct from verified (REQ-FUNNEL-003.A4's rule) and never letting
+a degraded link read as done. A status is derived from the links attached to
+the requirement and to its acceptance criteria.
+
+implementations:
+  - src/mcp/spec-tools.ts:handleSpecshipSpec
+
+## Acceptance
+<!-- id: REQ-FUNNEL-007.A1 -->
+- Called with `list: true`, the tool returns every document grouped with its requirements — each requirement labelled with exactly one status from the vocabulary — and closes with per-status totals.
+<!-- id: REQ-FUNNEL-007.A2 -->
+- A requirement with any link in `drifted`, `broken`, or `orphaned` (on itself or an acceptance criterion) reports `needs-attention` with the degraded state named, regardless of its other links.
+<!-- id: REQ-FUNNEL-007.A3 -->
+- A requirement whose links are all `verified` (at least one) reports `verified`; a mix of `implemented` and `verified` links reports `implemented` — completion is never overstated.
+<!-- id: REQ-FUNNEL-007.A4 -->
+- A requirement with no links reports `authored`; one whose links are only `drafted`/`implementing` reports `in-progress`.
+<!-- id: REQ-FUNNEL-007.A5 -->
+- Unlinked briefs appear as `idea` entries, visibly distinct from documents and requirements.
+<!-- id: REQ-FUNNEL-007.A6 -->
+- In a project with no specs or briefs, list mode returns a clean empty listing — not an error.
+<!-- id: REQ-FUNNEL-007.A7 -->
+- The existing modes — the no-arg funnel, `spec_id` detail, `behaviour_surface`, and free-text `query` — are unchanged; list mode is additive.

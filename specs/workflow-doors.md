@@ -3,7 +3,7 @@ id: WORKFLOW-DOORS-DOC
 title: Consolidate the command surface into a few progressive doors
 owner: core
 priority: medium
-version: 2
+version: 3
 ---
 
 <!-- id: WORKFLOW-DOORS-DOC -->
@@ -184,3 +184,31 @@ the confirmation boundary, not to avoid it wholesale.
 <!-- id: REQ-DOORS-007.A3 -->
 - The guidance does not forbid plan mode for the authoring conversation
   itself — the exit happens at the write/hand-off boundary only.
+
+<!-- id: REQ-DOORS-008 -->
+## The intent door MUST offer a `list` sub-route inventorying every spec
+
+The no-argument funnel answers pipeline health with rollup counts; nothing at
+the door answers "what specs do we have, and where does each stand".
+`/specship:spec list` resolves the full inventory — idea briefs, then every
+document's requirements, each with one derived lifecycle status
+(`authored · in-progress · implemented · verified · needs-attention`) — in a
+single list-mode `specship_spec` call. REQ-FUNNEL-007 owns the list surface
+and the status derivation; the door's dispatch entry stays thin — one call,
+render, no fallback exploration.
+
+implementations:
+  - packages/web-ng/src/app/pages/dashboard/dashboard.ts:Dashboard
+
+## Acceptance
+<!-- id: REQ-DOORS-008.A1 -->
+- `/specship:spec list` is a dispatch route in the intent door: it produces
+  the grouped inventory (idea briefs + documents with per-requirement
+  statuses and closing totals) from a single list-mode `specship_spec` call —
+  no per-spec follow-up calls, no file reading.
+<!-- id: REQ-DOORS-008.A2 -->
+- `list` is a known sub-route verb: the free-text disambiguation
+  (REQ-DOORS-005) does not trigger on it, and the no-argument funnel and
+  every other dispatch behaviour are unchanged.
+<!-- id: REQ-DOORS-008.A3 -->
+- The dashboard's Intent tile lists `list` among its sub-routes.
