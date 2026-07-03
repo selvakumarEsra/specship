@@ -18,7 +18,7 @@ import { promises as fs, watch, type FSWatcher } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import { decodeProjectSlug } from '../ingest/ingestor.js';
+import { createSlugResolver, type SlugResolverOptions } from '../ingest/project-paths.js';
 
 export interface ProjectEntry {
   /** The encoded directory name under ~/.claude/projects/. Stable id. */
@@ -43,18 +43,21 @@ export interface ProjectsResponse {
 const projectsBus = new EventEmitter();
 projectsBus.setMaxListeners(0); // many SSE subscribers + internal
 
-export async function enumerate(claudeRoot: string): Promise<ProjectEntry[]> {
+export async function enumerate(claudeRoot: string, resolverOpts?: SlugResolverOptions): Promise<ProjectEntry[]> {
   let entries: import('node:fs').Dirent[];
   try {
     entries = await fs.readdir(claudeRoot, { withFileTypes: true });
   } catch {
     return [];
   }
+  // Slug decoding is lossy ('-'/'.'/'_' → '-'); resolve real paths from
+  // ~/.claude.json + transcript cwds instead (REQ-SLUGRES-002).
+  const resolveSlug = createSlugResolver(resolverOpts);
   const out: ProjectEntry[] = [];
   for (const ent of entries) {
     if (!ent.isDirectory()) continue;
     const slug = ent.name;
-    const decoded = decodeProjectSlug(slug);
+    const decoded = resolveSlug(slug);
     const projDir = path.join(claudeRoot, slug);
 
     let sessionCount = 0;

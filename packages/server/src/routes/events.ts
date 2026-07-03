@@ -21,7 +21,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { enumerate } from './projects.js';
 
 interface AlertEvent {
-  kind: 'approval' | 'runDone' | 'drift' | 'reflect';
+  kind: 'approval' | 'runDone' | 'drift' | 'reflect' | 'activity';
   project: string;
   projectPath: string;
   id: string;
@@ -48,6 +48,7 @@ export async function registerEventsRoutes(app: FastifyInstance): Promise<void> 
     const lastStatus = new Map<string, string>(); // `${slug}:${runId}` -> status
     const seenDrift = new Set<string>(); // `${slug}:${linkId}`
     const lastSweep = new Map<string, number>(); // slug -> last reflection sweep ms
+    const lastIndexSig = new Map<string, string>(); // slug -> lastIndexed signature
     let primed = false; // first pass seeds state silently (no burst on connect)
     let closed = false;
 
@@ -59,8 +60,13 @@ export async function registerEventsRoutes(app: FastifyInstance): Promise<void> 
     const poll = async (): Promise<void> => {
       let projects;
       try { projects = await enumerate(claudeRoot); } catch { return; }
+      // Bound the sweep to the most-recently-active initialized projects
+      // (enumerate() sorts by recency): every project here is opened via the
+      // registry, and an unbounded sweep churns the LRU open/close cycle on
+      // every poll once slugs resolve to real paths.
+      projects = projects.filter((p) => p.initialized).slice(0, 10);
       for (const p of projects) {
-        if (!p.initialized || closed) continue;
+        if (closed) continue;
         let cg;
         try { cg = await app.projects.getBySlug(p.slug); } catch { cg = null; }
         if (!cg) continue;
@@ -80,6 +86,19 @@ export async function registerEventsRoutes(app: FastifyInstance): Promise<void> 
             send({ kind: 'runDone', project: p.slug, projectPath: p.path, id: r.id, title: `Run ${r.status}`, detail: r.workflowName, status: r.status });
           }
         }
+
+        // Index/ingest activity (REQ-DASHUX-004): emit when the project's
+        // index freshness changes so open pages can refetch instead of
+        // going stale between manual refreshes.
+        try {
+          const sig = String(cg.getLastIndexedAt() ?? '');
+          if (lastIndexSig.get(p.slug) !== sig) {
+            lastIndexSig.set(p.slug, sig);
+            if (primed) {
+              send({ kind: 'activity', project: p.slug, projectPath: p.path, id: sig, title: 'Index updated' });
+            }
+          }
+        } catch { /* ignore — activity detection must not break the stream */ }
 
         // Newly-drifted links.
         let links: ReturnType<typeof sq.getLinksByState> = [];

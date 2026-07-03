@@ -129,10 +129,10 @@
       <div class="card-head">
         <div class="card-title row gap-8">
           <app-icon name="graph" [size]="14" style="color: var(--accent);" />
-          <span>Recent neighborhood</span>
-          <span class="muted" style="font-size: 11px; font-weight: 400;">· last edited files</span>
+          <span>Graph neighborhood</span>
+          <span class="muted" style="font-size: 11px; font-weight: 400;">· most connected symbols</span>
           @if (miniGraphSource() === 'seed') {
-            <span class="pill seed-pill" title="No graph data yet — illustrative">seed</span>
+            <span class="pill seed-pill" title="No graph data yet — illustrative sample">sample</span>
           }
         </div>
         <a routerLink="/graph" class="btn btn-ghost btn-xs">

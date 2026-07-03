@@ -13,6 +13,7 @@ import { apiResource } from '../../api/resource';
 import { PageHead } from '../../ui/page-head';
 import { Pill } from '../../ui/pill';
 import { Icon } from '../../shell/icon/icon';
+import { Tips } from '../tips/tips';
 import type {
   ReflectActionResponse,
   ReflectAnalyzeResponse,
@@ -23,7 +24,7 @@ import type {
 
 @Component({
   selector: 'app-improvements',
-  imports: [PageHead, Pill, Icon],
+  imports: [PageHead, Pill, Icon, Tips],
   templateUrl: './improvements.html',
   styleUrl: './improvements.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

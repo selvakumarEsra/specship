@@ -2,8 +2,14 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
 import { Icon } from '../shell/icon/icon';
 
 /**
- * Delta indicator — trend arrow + signed value/percent, green for "good".
- * Mirrors design ui.jsx Delta. Values with |v| < 1 render as a percentage.
+ * Delta indicator — trend arrow + signed percent, green for "good".
+ *
+ * Contract (REQ-DASHINT-002): `value` is always a signed FRACTION of change
+ * (0.55 → +55%, -1 → -100%, 2.37 → +237%). Every finite magnitude renders
+ * as a percentage — the old `|v| < 1` heuristic leaked raw floats like
+ * `-1` and `2.372016052719695` into stat tiles. Ratios ≥ 10× render in
+ * multiplier form (+×12) to stay legible; non-finite values render as an
+ * em dash.
  */
 @Component({
   selector: 'app-delta',
@@ -28,7 +34,9 @@ export class Delta {
   protected readonly good = computed(() => (this.invert() ? !this.up() : this.up()));
   protected readonly text = computed(() => {
     const v = this.value();
-    const body = Math.abs(v) < 1 && v !== 0 ? Math.round(v * 100) + '%' : String(v);
-    return (this.up() ? '+' : '') + body + this.suffix();
+    if (!Number.isFinite(v)) return '—';
+    const abs = Math.abs(v);
+    const body = abs >= 10 ? '×' + Math.round(abs) : Math.round(abs * 100) + '%';
+    return (v < 0 ? '-' : '+') + body + this.suffix();
   });
 }

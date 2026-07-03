@@ -15,18 +15,48 @@
       </span>
     </div>
 
-    <!-- Lifecycle funnel summary (REQ-FUNNEL-006) -->
+    <!-- Lifecycle funnel — promoted stat strip (REQ-FUNNEL-006, REQ-DASHUX-003.A2) -->
     @if (funnel(); as f) {
-      <div class="row gap-8" style="padding:6px 12px;border-bottom:1px solid var(--border-subtle);font-size:11px;color:var(--text-secondary)" aria-label="Spec lifecycle funnel">
-        <span><b style="color:var(--text-primary)">{{ f.summary.ideas }}</b> ideas</span>
-        <span style="color:var(--text-muted)">→</span>
-        <span><b style="color:var(--text-primary)">{{ f.summary.specified }}</b> specs</span>
-        <span style="color:var(--text-muted)">→</span>
-        <span><b style="color:var(--text-primary)">{{ f.summary.links.implemented }}</b> impl · <b style="color:var(--text-primary)">{{ f.summary.links.verified }}</b> ver</span>
-        @if (f.summary.conflicts > 0) {
-          <span class="grow"></span>
-          <span style="color:var(--warn)">{{ f.summary.conflicts }} ⚠</span>
-        }
+      <div style="padding:10px 12px;border-bottom:1px solid var(--border-subtle)" aria-label="Spec lifecycle funnel">
+        <div class="row gap-12">
+          <div style="text-align:center">
+            <div class="mono tabular" style="font-size:16px;font-weight:650;color:var(--text-primary)">{{ f.summary.ideas }}</div>
+            <div class="muted" style="font-size:10px">ideas</div>
+          </div>
+          <span style="color:var(--text-muted);font-size:12px">→</span>
+          <div style="text-align:center">
+            <div class="mono tabular" style="font-size:16px;font-weight:650;color:var(--text-primary)">{{ f.summary.specified }}</div>
+            <div class="muted" style="font-size:10px">specs</div>
+          </div>
+          <span style="color:var(--text-muted);font-size:12px">→</span>
+          <div style="text-align:center">
+            <div class="mono tabular" style="font-size:16px;font-weight:650;color:var(--node-spec)">{{ f.summary.links.implemented }}</div>
+            <div class="muted" style="font-size:10px">implemented</div>
+          </div>
+          <span style="color:var(--text-muted);font-size:12px">→</span>
+          <div style="text-align:center">
+            <div class="mono tabular" style="font-size:16px;font-weight:650;color:var(--success)">{{ f.summary.links.verified }}</div>
+            <div class="muted" style="font-size:10px">verified</div>
+          </div>
+          @if (f.summary.links.drifted + f.summary.links.broken + f.summary.links.orphaned > 0) {
+            <span class="grow"></span>
+            <div style="text-align:center">
+              <div class="mono tabular" style="font-size:16px;font-weight:650;color:var(--warn)">{{ f.summary.links.drifted + f.summary.links.broken + f.summary.links.orphaned }}</div>
+              <div class="muted" style="font-size:10px">need attention</div>
+            </div>
+          }
+          @if (f.summary.conflicts > 0) {
+            <span style="color:var(--warn)">{{ f.summary.conflicts }} ⚠</span>
+          }
+        </div>
+        <!-- Dot legend: the tree's row dots encode rolled-up link state -->
+        <div class="row gap-8" style="margin-top:6px;font-size:10px;color:var(--text-muted)">
+          <span class="row gap-4"><span class="pill-dot" style="background:var(--success)"></span> verified</span>
+          <span class="row gap-4"><span class="pill-dot" style="background:var(--node-spec)"></span> implemented</span>
+          <span class="row gap-4"><span class="pill-dot" style="background:var(--warn)"></span> drifted</span>
+          <span class="row gap-4"><span class="pill-dot" style="background:var(--error)"></span> broken/orphaned</span>
+          <span class="row gap-4"><span class="pill-dot" style="background:var(--text-muted)"></span> unlinked</span>
+        </div>
       </div>
     }
 
@@ -73,9 +103,12 @@
                 (keydown.enter)="open(s.id)"
                 (keydown.space)="open(s.id)"
               >
+                <!-- Dot encodes ROLLED-UP LINK STATE, not node kind — the
+                     tree reads as an alignment map (REQ-DASHUX-003.A1). -->
                 <span
                   class="pill-dot"
-                  [style.background]="stateColorFor(s.kind)"
+                  [style.background]="dotColorFor(s)"
+                  [title]="dotTitleFor(s)"
                   style="flex-shrink:0"
                 ></span>
                 <div class="grow" style="min-width:0">

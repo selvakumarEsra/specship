@@ -353,6 +353,7 @@ const migrations: Migration[] = [
         VALUES (?, ?, ?, ?, ?, ?)
       `);
       const rates: Array<[string, number, number, number, number]> = [
+        ['claude-fable-5',    10.0, 50.0, 12.5,  1.0],
         ['claude-opus-4-7',   15.0, 75.0, 18.75, 1.5],
         ['claude-opus-4',     15.0, 75.0, 18.75, 1.5],
         ['claude-sonnet-4-6',  3.0, 15.0,  3.75, 0.3],

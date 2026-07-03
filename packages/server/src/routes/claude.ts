@@ -79,6 +79,21 @@ function priorWindow(key: RangeKey): { start: number; end: number } {
  * Claude-specific aggregate queries directly. SpecShip exposes this via
  * `getDb()`-style accessors. Falls back to digging via the queries property.
  */
+/**
+ * SQL expression extracting `path` from a tool call's input JSON. Prefers
+ * the full v7 `input_json` column and falls back to `input_summary`; BOTH
+ * are guarded with json_valid() because input_summary is truncated to 400
+ * chars by the ingestor — long inputs are malformed JSON and an unguarded
+ * json_extract throws SQLITE_ERROR, 500ing the route (REQ-DASHINT-003).
+ * `col` is the optional table alias prefix (e.g. 't.').
+ */
+function jsonInputExtract(path: string, col = ''): string {
+  return `COALESCE(
+    CASE WHEN json_valid(${col}input_json) THEN json_extract(${col}input_json, '${path}') END,
+    CASE WHEN json_valid(${col}input_summary) THEN json_extract(${col}input_summary, '${path}') END
+  )`;
+}
+
 function getDb(cg: SpecShipInstance): DbHandle {
   // SpecShip exposes the underlying DB via its DatabaseConnection. Look it
   // up via the private field as a fallback — works because it's the same
@@ -321,13 +336,20 @@ export async function registerClaudeRoutes(app: FastifyInstance): Promise<void> 
       LIMIT 30
     `).all(sessionId) as Array<{ path: string; ops: number; lastOp: string }>;
 
-    // Skills invoked via the Skill tool. The ingestor stashes the
-    // JSON-serialized input under input_summary, so json_extract pulls the
-    // skill name straight out without needing the v7 input_json column to
-    // be backfilled.
+    // Skills invoked via the Skill tool. Read the skill name from the full
+    // v7 `input_json` column first — `input_summary` is truncated to 400
+    // chars by the ingestor, so long inputs are INVALID JSON and a bare
+    // json_extract on them throws SQLITE_ERROR ("malformed JSON"), 500ing
+    // the whole summary (REQ-DASHINT-003). Every extraction is guarded by
+    // json_valid(); rows malformed in both columns degrade to 'unknown'.
     const skills = db.prepare(`
       SELECT
-        COALESCE(json_extract(input_summary, '$.skill'), json_extract(input_summary, '$.skill_name'), 'unknown') as name,
+        COALESCE(
+          CASE WHEN json_valid(input_json)
+               THEN COALESCE(json_extract(input_json, '$.skill'), json_extract(input_json, '$.skill_name')) END,
+          CASE WHEN json_valid(input_summary)
+               THEN COALESCE(json_extract(input_summary, '$.skill'), json_extract(input_summary, '$.skill_name')) END,
+          'unknown') as name,
         COUNT(*) as count
       FROM claude_tool_calls
       WHERE session_id = ? AND tool_name = 'Skill'
@@ -438,12 +460,12 @@ export async function registerClaudeRoutes(app: FastifyInstance): Promise<void> 
       GROUP BY type
     `).all(since);
 
-    // Subagent breakdown by name — Task tool calls grouped by subagent_type.
-    // input_summary is the JSON-serialized tool input; json_extract pulls
-    // out subagent_type (defaults to 'general-purpose' when unset).
+    // Subagent breakdown by name — Task tool calls grouped by subagent_type
+    // (defaults to 'general-purpose' when unset). Guarded extraction: Task
+    // inputs carry long prompts, so input_summary is almost always truncated.
     const subagentByName = db.prepare(`
       SELECT
-        COALESCE(NULLIF(json_extract(input_summary, '$.subagent_type'), ''), 'general-purpose') as name,
+        COALESCE(NULLIF(${jsonInputExtract('$.subagent_type')}, ''), 'general-purpose') as name,
         COUNT(*) as calls,
         MIN(ts) as firstSeen,
         MAX(ts) as lastSeen
@@ -541,19 +563,19 @@ export async function registerClaudeRoutes(app: FastifyInstance): Promise<void> 
       SELECT COUNT(*) as calls, COUNT(DISTINCT session_id) as sessions
       FROM claude_tool_calls
       WHERE tool_name = 'Task' AND ts >= ?
-        AND COALESCE(NULLIF(json_extract(input_summary, '$.subagent_type'), ''), 'general-purpose') = ?
+        AND COALESCE(NULLIF(${jsonInputExtract('$.subagent_type')}, ''), 'general-purpose') = ?
     `).get(since, type);
     const invocations = db.prepare(`
       SELECT
         t.session_id,
         t.ts,
-        COALESCE(json_extract(t.input_summary, '$.description'), '') as description,
-        COALESCE(json_extract(t.input_summary, '$.prompt'), '') as prompt,
+        COALESCE(${jsonInputExtract('$.description', 't.')}, '') as description,
+        COALESCE(${jsonInputExtract('$.prompt', 't.')}, '') as prompt,
         s.last_model
       FROM claude_tool_calls t
       LEFT JOIN claude_sessions s ON s.id = t.session_id
       WHERE t.tool_name = 'Task' AND t.ts >= ?
-        AND COALESCE(NULLIF(json_extract(t.input_summary, '$.subagent_type'), ''), 'general-purpose') = ?
+        AND COALESCE(NULLIF(${jsonInputExtract('$.subagent_type', 't.')}, ''), 'general-purpose') = ?
       ORDER BY t.ts DESC
       LIMIT 50
     `).all(since, type);

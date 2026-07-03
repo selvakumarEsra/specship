@@ -19,6 +19,7 @@ import Fastify, { FastifyInstance, FastifyRequest } from 'fastify';
 import cors from '@fastify/cors';
 import { startWatcher, primaryProjectMatcher, type WatcherHandle } from './ingest/index.js';
 import { backfillDisplaced } from './ingest/impact-backfill.js';
+import { recostUnpricedPrompts } from './ingest/pricing-backfill.js';
 import { ProjectRegistry, type SpecShipInstance } from './project-registry.js';
 import { makeStaticHandler } from './static-handler.js';
 import { registerGraphRoutes } from './routes/graph.js';
@@ -142,7 +143,10 @@ export async function createServer(options: ServerOptions): Promise<ServerHandle
   // Lazy-load specship. Used as the open() impl for the registry, and
   // (only when a primary path is set) to open the primary instance below.
   const cgMod = await loadSpecShip();
-  const registry = new ProjectRegistry({ verbose }, (p) => cgMod.SpecShip.open(p));
+  // maxOpen must exceed the /api/events cross-project sweep size (10) plus
+  // the primary and a user-picked project, or the sweep churns open/close
+  // cycles through the LRU on every poll.
+  const registry = new ProjectRegistry({ verbose, maxOpen: 16 }, (p) => cgMod.SpecShip.open(p));
 
   // Primary project (optional). When set, specship-scoped routes default to
   // it when no `?project=<slug>` is provided, and the analytics ingest
@@ -150,7 +154,11 @@ export async function createServer(options: ServerOptions): Promise<ServerHandle
   let primaryCg: SpecShipInstance | null = null;
   if (options.projectRoot) {
     primaryCg = await registry.get(options.projectRoot);
-    if (!primaryCg && verbose) {
+    if (primaryCg) {
+      // Routes capture this instance by reference — it must never be LRU
+      // evicted (eviction closes the SQLite handle and every request 500s).
+      registry.pin(options.projectRoot);
+    } else if (verbose) {
       console.error(`[specship-server] primary project ${options.projectRoot} not initialized — booting projectless`);
     }
   }
@@ -191,6 +199,16 @@ export async function createServer(options: ServerOptions): Promise<ServerHandle
         if (verbose) console.error('[specship-server] specship-impact backfill complete');
       } catch (err) {
         console.error('[specship-server] specship-impact backfill failed (non-fatal):',
+          err instanceof Error ? err.message : String(err));
+      }
+
+      // Re-cost prompts ingested while their model family was unpriced,
+      // e.g. fable sessions stuck at $0 (REQ-DASHINT-001.A2). Idempotent.
+      try {
+        const recosted = recostUnpricedPrompts(dbHandle as Parameters<typeof recostUnpricedPrompts>[0]);
+        if (verbose && recosted > 0) console.error(`[specship-server] re-costed ${recosted} unpriced prompts`);
+      } catch (err) {
+        console.error('[specship-server] pricing backfill failed (non-fatal):',
           err instanceof Error ? err.message : String(err));
       }
     }

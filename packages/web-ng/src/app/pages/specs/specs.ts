@@ -134,6 +134,54 @@ export class Specs {
     this.groups().reduce((n, g) => n + g.specs.length, 0),
   );
 
+  // --- Rolled-up link state per tree row (REQ-DASHUX-003) -------------------
+
+  private readonly linkStates = computed<Record<string, string>>(
+    () => this.resource.state().data?.linkStates ?? {},
+  );
+
+  private readonly childrenByParent = computed<Map<string, Spec[]>>(() => {
+    const m = new Map<string, Spec[]>();
+    for (const s of this.resource.state().data?.specs ?? []) {
+      if (!s.parentId) continue;
+      const arr = m.get(s.parentId) ?? [];
+      arr.push(s);
+      m.set(s.parentId, arr);
+    }
+    return m;
+  });
+
+  /**
+   * A row's alignment state: its own links' rollup, else the worst rollup of
+   * its children (a requirement inherits its acceptance criteria's state),
+   * else 'unlinked'. This is what turns the tree from an inventory into an
+   * at-a-glance alignment map — every dot answers "is this promise kept?".
+   */
+  protected rollupFor(s: Spec): string {
+    const states = this.linkStates();
+    const own = states[s.id];
+    if (own) return own;
+    const childStates = (this.childrenByParent().get(s.id) ?? [])
+      .map((c) => states[c.id])
+      .filter((st): st is string => !!st);
+    if (!childStates.length) return 'unlinked';
+    if (childStates.includes('broken')) return 'broken';
+    if (childStates.includes('orphaned')) return 'orphaned';
+    if (childStates.includes('drifted')) return 'drifted';
+    if (childStates.every((st) => st === 'verified')) return 'verified';
+    return 'implemented';
+  }
+
+  protected dotColorFor(s: Spec): string {
+    const st = this.rollupFor(s);
+    return STATE[st]?.color ?? 'var(--text-muted)';
+  }
+
+  protected dotTitleFor(s: Spec): string {
+    const st = this.rollupFor(s);
+    return st === 'unlinked' ? 'No code links yet' : (STATE[st]?.label ?? st);
+  }
+
   protected readonly selectedSpec = computed<Spec | null>(() => {
     const id = this.sel();
     if (!id) return null;

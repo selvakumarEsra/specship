@@ -1,12 +1,14 @@
-<div class="page scroll-y">
-  <!-- Page head with severity counts in actions slot -->
-  <app-page-head icon="tips" title="Tips" sub="A senior teammate reviewed your transcripts">
-    <ng-container actions>
-      <app-pill [color]="'var(--error)'" [bg]="'var(--error-soft)'">{{ counts().error }} urgent</app-pill>
-      <app-pill [color]="'var(--warn)'" [bg]="'var(--warn-soft)'">{{ counts().warn }} warn</app-pill>
-      <app-pill [color]="'var(--info)'" [bg]="'var(--info-soft)'">{{ counts().info }} info</app-pill>
-    </ng-container>
-  </app-page-head>
+<section>
+  <!-- Section head with severity counts (embedded in Improvements) -->
+  <div class="row gap-8" style="margin: 18px 0 10px;">
+    <app-icon name="tips" [size]="14" style="color: var(--warn);" />
+    <span style="font-weight: 600; font-size: 12.5px;">Tips</span>
+    <span class="muted" style="font-size: 11px;">· a senior teammate reviewed your transcripts</span>
+    <span class="grow"></span>
+    <app-pill [color]="'var(--error)'" [bg]="'var(--error-soft)'">{{ counts().error }} urgent</app-pill>
+    <app-pill [color]="'var(--warn)'" [bg]="'var(--warn-soft)'">{{ counts().warn }} warn</app-pill>
+    <app-pill [color]="'var(--info)'" [bg]="'var(--info-soft)'">{{ counts().info }} info</app-pill>
+  </div>
 
   @if (resource.state().loading) {
     @for (i of [0,1,2,3]; track i) { <div class="skel card-skel"></div> }
@@ -80,4 +82,4 @@
       }
     </div>
   }
-</div>
+</section>

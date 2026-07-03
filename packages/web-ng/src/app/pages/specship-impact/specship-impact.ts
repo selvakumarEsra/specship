@@ -51,6 +51,28 @@ export class SpecshipImpact {
   protected readonly byTool = computed(() => this.data()?.byTool ?? []);
   protected readonly byProject = computed(() => this.data()?.byProject ?? []);
 
+  /**
+   * Split retrieval from governance (REQ-DASHUX-001): retrieval tools are
+   * the ones savings estimates apply to; link asserts/verifies, spec reads,
+   * designer calls etc. are bookkeeping — real spend, but not what the
+   * "does retrieval pay for itself" question is about.
+   */
+  private static readonly RETRIEVAL_TOOL_RE =
+    /specship_(explore|search|node|callers|callees|impact|files|status|trace)$/;
+
+  protected readonly retrievalSpendTokens = computed(() =>
+    this.byTool()
+      .filter((t) => SpecshipImpact.RETRIEVAL_TOOL_RE.test(t.tool))
+      .reduce((s, t) => s + t.spendTokens, 0),
+  );
+  protected readonly governanceSpendTokens = computed(() =>
+    Math.max(0, this.spendTokens() - this.retrievalSpendTokens()),
+  );
+  /** Saved − retrieval spend: the page's headline ROI. */
+  protected readonly retrievalNetTokens = computed(
+    () => this.savedTokens() - this.retrievalSpendTokens(),
+  );
+
   /** Trend mapped to LinePoint shape for the spend series. */
   protected readonly spendSeries = computed<LinePoint[]>(() =>
     (this.data()?.trend ?? []).map((t, i) => ({ day: i + 1, cost: t.spendTokens / 1000, prompts: 0 })),
@@ -70,12 +92,20 @@ export class SpecshipImpact {
   protected onHoverSaved(p: LinePoint | null): void { this.hoveredSaved.set(p); }
 
   protected fmt$(n: number): string {
-    return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const sign = n < 0 ? '-' : '';
+    return sign + '$' + Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
 
+  /**
+   * Compact token count. Abbreviates the MAGNITUDE and preserves the sign —
+   * the old version fell through to String(n) for negatives, rendering the
+   * net tile as a raw `-971752` (REQ-DASHINT-002.A3).
+   */
   protected fmtK(n: number): string {
-    if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
-    if (n >= 1000) return (n / 1000).toFixed(n >= 10_000 ? 0 : 1) + 'k';
-    return String(n);
+    const sign = n < 0 ? '-' : '';
+    const abs = Math.abs(n);
+    if (abs >= 1_000_000) return sign + (abs / 1_000_000).toFixed(1) + 'M';
+    if (abs >= 1000) return sign + (abs / 1000).toFixed(abs >= 10_000 ? 0 : 1) + 'k';
+    return sign + String(abs);
   }
 }

@@ -43,7 +43,7 @@ import type {
   HeatmapResponse,
   TipsResponse,
   SessionsResponse,
-  GraphSearchResponse,
+  FullGraphResponse,
   StatsResponse,
   StatMetric,
 } from '../../api/types';
@@ -90,9 +90,12 @@ export class Dashboard {
     () => `/api/status${this.projects.projectQuery()}`,
   );
 
-  protected readonly miniGraphSearch = apiResource<GraphSearchResponse>(
+  // Real neighborhood data: top-connected nodes AND the real edges among
+  // them (REQ-DASHINT-004) — replaces a hardcoded `q=on` symbol search whose
+  // edges were then invented with Math.random().
+  protected readonly miniGraphFull = apiResource<FullGraphResponse>(
     this.api,
-    () => `/api/graph/search?q=on&limit=18${this.projects.projectQuery('&')}`,
+    () => `/api/graph/full?limit=18${this.projects.projectQuery('&')}`,
   );
 
   protected readonly tips = apiResource<TipsResponse>(this.api, () => '/api/claude/tips');
@@ -231,34 +234,36 @@ export class Dashboard {
 
   // Mini graph ---------------------------------------------------------------
   protected readonly miniGraphSource = computed<'api' | 'seed'>(() =>
-    (this.miniGraphSearch.state().data?.results?.length ?? 0) > 0 ? 'api' : 'seed',
+    (this.miniGraphFull.state().data?.nodes?.length ?? 0) > 0 ? 'api' : 'seed',
   );
 
   protected readonly miniGraphNodes = computed<CanvasNode[]>(() => {
-    const apiResults = this.miniGraphSearch.state().data?.results ?? [];
-    if (apiResults.length > 0) {
+    const apiNodes = this.miniGraphFull.state().data?.nodes ?? [];
+    if (apiNodes.length > 0) {
       return layoutCluster(
-        apiResults.slice(0, 18).map((r) => ({
-          id: r.node.id,
-          label: r.node.name,
-          sub: r.node.filePath?.split('/').slice(-2).join('/'),
-          kind: r.node.kind,
+        apiNodes.slice(0, 18).map((n) => ({
+          id: n.id,
+          label: n.name,
+          sub: n.filePath?.split('/').slice(-2).join('/'),
+          kind: n.kind,
         })),
       );
     }
     return SEED_NEIGHBORHOOD_NODES;
   });
 
+  /**
+   * Only REAL edges, filtered to the displayed node set — never fabricated
+   * (REQ-DASHINT-004). Deterministic: same data in, same lines out. Capped
+   * so a densely-connected top-18 stays readable.
+   */
   protected readonly miniGraphEdges = computed<CanvasEdge[]>(() => {
     if (this.miniGraphSource() === 'api') {
-      const nodes = this.miniGraphNodes();
-      const edges: CanvasEdge[] = [];
-      for (let i = 1; i < nodes.length; i++) {
-        const from = nodes[Math.floor(Math.random() * i)];
-        const to = nodes[i];
-        if (from && to) edges.push({ from: from.id, to: to.id, kind: 'calls' });
-      }
-      return edges;
+      const shown = new Set(this.miniGraphNodes().map((n) => n.id));
+      return (this.miniGraphFull.state().data?.edges ?? [])
+        .filter((e) => shown.has(e.from) && shown.has(e.to) && e.from !== e.to)
+        .slice(0, 48)
+        .map((e) => ({ from: e.from, to: e.to, kind: e.kind }));
     }
     return SEED_NEIGHBORHOOD_EDGES;
   });
