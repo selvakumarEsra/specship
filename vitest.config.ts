@@ -1,6 +1,19 @@
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
+  resolve: {
+    /**
+     * `packages/server` consumes the specship core as the npm dep
+     * `@specship/specship` (a `file:../..` link). Tests import server modules
+     * from the repo root, where that specifier isn't resolvable — map it to
+     * the core's source entry so vite can build the module graph.
+     */
+    alias: [
+      { find: /^@specship\/specship$/, replacement: fileURLToPath(new URL('./src/index.ts', import.meta.url)) },
+      { find: /^@specship\/specship\/dist\/(.*)$/, replacement: fileURLToPath(new URL('./dist/', import.meta.url)) + '$1' },
+    ],
+  },
   test: {
     globals: true,
     environment: 'node',
