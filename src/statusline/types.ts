@@ -79,6 +79,15 @@ export interface UsageLimits {
   weekly: UsageWindow | null;
 }
 
+/**
+ * Remaining-time estimate embedded in the run marker (REQ-STATUSLINE-011).
+ * Computed by the executor at marker-write time (WORKFLOW-ETA-DOC), so the
+ * render path never opens the DB. Absent when no estimate exists.
+ */
+export type ActiveRunEta =
+  | { kind: 'range'; lowMs: number; highMs: number }
+  | { kind: 'waiting'; sinceMs?: number };
+
 /** The active (or most recent) workflow run for the project. */
 export interface ActiveRun {
   v: 1;
@@ -88,4 +97,6 @@ export interface ActiveRun {
   status: string;
   /** ms epoch of the last status change. */
   updatedAt: number;
+  /** Remaining-time estimate, when one exists (REQ-STATUSLINE-011). */
+  eta?: ActiveRunEta;
 }

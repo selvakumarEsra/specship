@@ -9,6 +9,10 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### New Features
+
+- **The status line now reads as two lines.** SpecShip's identity (sync state, call count, the active run) stays on the first line — now including the active run's estimated time remaining ("≈4–11m left", or "waiting on you" at an approval gate) — while the capacity bars (context, 5-hour and 7-day usage) move to a second line, so neither crowds the other.
+- **Workflow runs now show an estimated time to completion.** Running runs display an honest range (for example "≈4–11 min left") built from that workflow's own past step timings, tightening as steps complete; runs paused at an approval gate show "waiting on you since…" instead, and time spent waiting on you never skews future estimates. New workflows show no estimate until a few runs of history exist, rather than a made-up number.
 
 ## [0.12.0] - 2026-07-04
 

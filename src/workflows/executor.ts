@@ -38,7 +38,8 @@ import {
 import { SpecQueries } from '../db/spec-queries';
 import { WorktreeProvider } from '../isolation/worktree';
 import { getSpecShipDir } from '../directory';
-import { writeActiveRun, clearActiveRun } from '../statusline';
+import { writeActiveRun, clearActiveRun, ActiveRunEta } from '../statusline';
+import { estimateRunEta } from './eta';
 import {
   NodeOutput,
   substituteRefs,
@@ -178,7 +179,7 @@ export class WorkflowExecutor {
       },
     };
     this.specQueries.insertWorkflowRun(run);
-    this.syncActiveRunMarker(run.status, run.inputs);
+    this.syncActiveRunMarker(run.status, run.inputs, run.id);
     this.event(runId, 'run_started', { workflowName: workflow.name, inputs: opts.inputs });
 
     return this.driveExecution(workflow, run, cwd, artifactsDir, logsDir, opts);
@@ -222,7 +223,7 @@ export class WorkflowExecutor {
       errorMessage: undefined,
     };
     this.specQueries.updateWorkflowRun(refreshed);
-    this.syncActiveRunMarker(refreshed.status, refreshed.inputs);
+    this.syncActiveRunMarker(refreshed.status, refreshed.inputs, refreshed.id);
     this.event(runId, 'run_started', { resumed: true });
 
     return this.driveExecution(workflow, refreshed, cwd, artifactsDir, logsDir, opts);
@@ -301,7 +302,7 @@ export class WorkflowExecutor {
       });
       // Archon's paused→failed-but-resumable convention: keep the run visible
       // in the status line (resume drives it back to running).
-      this.syncActiveRunMarker('failed', run.inputs);
+      this.syncActiveRunMarker('failed', run.inputs, run.id);
       this.event(runId, 'approval_granted', { nodeId: approval.nodeId, comment });
     }
   }
@@ -607,13 +608,24 @@ export class WorkflowExecutor {
    * marker; any live state (running / paused / failed-but-resumable) writes it.
    * Best-effort and fully guarded — marker bookkeeping never affects a run.
    */
-  private syncActiveRunMarker(status: WorkflowRunStatus, inputs?: Record<string, string>): void {
+  private syncActiveRunMarker(status: WorkflowRunStatus, inputs?: Record<string, string>, runId?: string): void {
     if (!this.projectRoot) return;
     try {
       if (status === 'completed' || status === 'cancelled') {
         clearActiveRun(this.projectRoot);
       } else {
-        writeActiveRun(this.projectRoot, inputs?.SPEC_ID ?? null, status);
+        // Embed the remaining-time estimate at write time (REQ-STATUSLINE-011)
+        // so the status-line render path never opens the DB. Best-effort: any
+        // estimator failure just writes a marker without an eta.
+        let eta: ActiveRunEta | undefined;
+        if (runId) {
+          try {
+            const e = estimateRunEta(this.specQueries.getRawDb(), runId);
+            if (e.available) eta = { kind: 'range', lowMs: e.lowMs, highMs: e.highMs };
+            else if (e.reason === 'paused') eta = { kind: 'waiting', sinceMs: e.waitingSinceMs };
+          } catch { /* no estimate */ }
+        }
+        writeActiveRun(this.projectRoot, inputs?.SPEC_ID ?? null, status, eta);
       }
     } catch { /* never let the status-line marker affect a workflow run */ }
   }
@@ -643,7 +655,7 @@ export class WorkflowExecutor {
       errorMessage,
       metadata: meta,
     });
-    this.syncActiveRunMarker(status, run.inputs);
+    this.syncActiveRunMarker(status, run.inputs, run.id);
 
     if (status === 'completed') {
       this.event(run.id, 'run_completed', { duration_ms: now - run.createdAt });

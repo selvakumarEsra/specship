@@ -114,11 +114,26 @@ export async function registerWorkflowRoutes(app: FastifyInstance): Promise<void
     return { runId: result.run.id, status: result.run.status };
   });
 
+  // Estimated time-to-completion for in-flight runs (WORKFLOW-ETA-DOC).
+  // Guarded so a stale core build without the method degrades to "no
+  // estimate" instead of failing the runs surfaces.
+  function etaFor(cg: unknown, runId: string): unknown {
+    try {
+      const fn = (cg as { estimateWorkflowRunEta?: (id: string) => unknown }).estimateWorkflowRunEta;
+      return typeof fn === 'function' ? fn.call(cg, runId) : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
   app.get('/api/workflows/runs', async (req: FastifyRequest<{ Querystring: ProjectQuery & { limit?: string } }>, reply) => {
     const cg = await resolveCg(app, req, reply); if (!cg) return;
     const { sq } = executorFor(cg);
     const limit = Math.min(parseInt(req.query.limit ?? '50', 10) || 50, 500);
-    return { runs: sq.getAllWorkflowRuns(limit) };
+    const runs = sq.getAllWorkflowRuns(limit).map((r) =>
+      r.status === 'running' || r.status === 'paused' ? { ...r, eta: etaFor(cg, r.id) } : r,
+    );
+    return { runs };
   });
 
   app.get('/api/workflows/runs/:id', async (req: FastifyRequest<{ Params: { id: string }; Querystring: ProjectQuery }>, reply) => {
@@ -127,7 +142,8 @@ export async function registerWorkflowRoutes(app: FastifyInstance): Promise<void
     const run = sq.getWorkflowRunById(req.params.id);
     if (!run) return reply.code(404).send({ error: 'run not found' });
     const events = sq.getEventsByRun(req.params.id, 500);
-    return { run, events };
+    const eta = run.status === 'running' || run.status === 'paused' ? etaFor(cg, run.id) : undefined;
+    return { run: eta === undefined ? run : { ...run, eta }, events };
   });
 
   /**

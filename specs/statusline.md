@@ -327,3 +327,47 @@ implementations:
 - Under `NO_COLOR`, the `CTX` element (bar, percentage, and any warning hint) contains no ANSI escape sequences.
 <!-- id: REQ-STATUSLINE-009.A6 -->
 - Rendering the `CTX` element opens no SQLite connection, spawns no child process, and performs no network I/O (same bounded-read budget as REQ-STATUSLINE-002).
+
+<!-- id: REQ-STATUSLINE-010 -->
+## The segment MUST render as two lines when usage telemetry is present
+
+The SpecShip identity elements (brand ornament, sync state, drift, call
+count, active run) render on the FIRST line; the capacity telemetry (the
+`CTX` context bar and the `5h`/`7d` usage-limit bars) renders on a SECOND
+line, framed by the same ornament glyphs. When no telemetry element is
+available the output stays a single line — never a trailing empty line.
+The glyph vocabulary (`◈`, `◆`, `❮▰▱❯`) is unchanged.
+
+## Acceptance
+<!-- id: REQ-STATUSLINE-010.A1 -->
+- With context and/or usage windows present, the output contains exactly one newline: SpecShip elements before it, all telemetry bars after it.
+<!-- id: REQ-STATUSLINE-010.A2 -->
+- With no context and no usage data, the output is a single line with no newline.
+
+implementations:
+  - src/statusline/render.ts:renderSegment
+
+<!-- id: REQ-STATUSLINE-011 -->
+## The active-run element MUST carry the run's remaining-time estimate
+
+When the active workflow run has a time-to-completion estimate
+(WORKFLOW-ETA-DOC), the first line's run element appends it — a compact
+range for a running run (e.g. `≈4–11m left`), or a waiting-on-you signal for
+a run paused at an approval gate. The estimate is computed and embedded when
+the run marker is written (at run/step transitions), NEVER on the render
+path — rendering still opens no SQLite connection (REQ-STATUSLINE-002's
+budget). No estimate in the marker → the run element renders exactly as
+before.
+
+## Acceptance
+<!-- id: REQ-STATUSLINE-011.A1 -->
+- A marker carrying a range estimate renders the run element with a `≈low–high` suffix; equal bounds collapse to one value.
+<!-- id: REQ-STATUSLINE-011.A2 -->
+- A marker for a paused run carrying the waiting signal renders `waiting on you` in place of a range.
+<!-- id: REQ-STATUSLINE-011.A3 -->
+- A marker without an estimate field (older writer) renders the run element unchanged — no placeholder.
+
+implementations:
+  - src/statusline/render.ts:renderSegment
+  - src/statusline/active-run.ts:writeActiveRun
+  - src/workflows/executor.ts:WorkflowExecutor.syncActiveRunMarker

@@ -8,12 +8,17 @@
  */
 
 import * as fs from 'fs';
-import { ActiveRun } from './types';
+import { ActiveRun, ActiveRunEta } from './types';
 import { activeRunPath, writeJsonAtomic, readJsonSafe } from './paths';
 
 /** Atomically record the active run. Best-effort; never throws. */
-export function writeActiveRun(projectRoot: string, specId: string | null, status: string): void {
-  const data: ActiveRun = { v: 1, specId, status, updatedAt: Date.now() };
+export function writeActiveRun(
+  projectRoot: string,
+  specId: string | null,
+  status: string,
+  eta?: ActiveRunEta,
+): void {
+  const data: ActiveRun = { v: 1, specId, status, updatedAt: Date.now(), ...(eta ? { eta } : {}) };
   try {
     writeJsonAtomic(activeRunPath(projectRoot), data);
   } catch {

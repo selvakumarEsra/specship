@@ -246,6 +246,15 @@ function rowToIsolationEnv(row: IsolationEnvRow): IsolationEnvironment {
 export class SpecQueries {
   private db: SqliteDatabase;
 
+  /**
+   * Raw handle for read-side helpers that live outside this class (the
+   * workflow ETA estimator computes over workflow_events at marker-write
+   * time — see WORKFLOW-ETA-DOC / REQ-STATUSLINE-011).
+   */
+  getRawDb(): SqliteDatabase {
+    return this.db;
+  }
+
   private stmts: {
     // specs
     insertSpec?: SqliteStatement;
