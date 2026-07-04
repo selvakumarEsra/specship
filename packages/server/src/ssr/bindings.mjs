@@ -483,3 +483,50 @@ export function bindGraphCanvas(html, names, specIds) {
   });
   return html;
 }
+
+// ---------------------------------------------------------------- mcp servers
+const MCP_CARD = '<div class="card" style="padding: 12px 14px; cursor: pointer; display: flex; align-items: center; gap: 12px; transition: background 100ms, border-color 100ms;">';
+export function bindMcp(html, servers) {
+  const list = servers ?? [];
+  const rows = listRows(html, MCP_CARD, '');
+  if (!rows.length || !list.length) return html;
+  const unit = rows[0].row;
+  const fmtK = (n) => (n >= 1_000_000 ? (n / 1_000_000).toFixed(1) + 'M' : n >= 1000 ? Math.round(n / 1000) + 'k' : String(n));
+  const built = list.slice(0, 12).map((sv) => {
+    let r = unit;
+    // name
+    r = setCell(r, /(<span class="mono" style="font-size: 13\.5px; font-weight: 600;">)([^<]*)(<\/span>)/, sv.name ?? '—');
+    // status dot: running = success, idle = muted, stale = warn
+    const dot = sv.state === 'running' ? 'var(--success)' : sv.state === 'idle' ? 'var(--text-muted)' : 'var(--warn)';
+    r = r.replace(/(border-radius: 50%; background: )var\(--[a-z-]+\)(; border: 2px solid var\(--bg-panel\); box-shadow: 0 0 6px )var\(--[a-z-]+\)/,
+      (m, a, b) => a + dot + b + dot);
+    // scope pill (first pill after the name)
+    r = r.replace(/(<span class="pill" style="color: var\(--node-[a-z]+\); background: color-mix[^"]*">[\s\S]*?<\/svg>)[^<]*(<\/span>)/,
+      (m, a, b) => a + esc(sv.scope ?? '') + b);
+    // state word anywhere (Running/Idle labels)
+    r = r.replace(/>Running</g, '>' + esc(sv.state === 'running' ? 'Running' : sv.state === 'idle' ? 'Idle' : 'Stale') + '<');
+    // command / transport line: any mono muted line becomes the command
+    r = r.replace(/(<div class="mono muted"[^>]*>)([^<]*)(<\/div>)/, (m, a, _o, b) => a + esc((sv.command ?? '').slice(0, 60)) + b);
+    // numeric cells: calls + result bytes (tabular cells, in order)
+    let ci = 0;
+    r = r.replace(/(<span class="mono tabular"[^>]*>)([^<]*)(<\/span>)/g, (m, a, _o, b) => {
+      ci++;
+      if (ci === 1) return a + String(sv.tools?.length ?? 0) + b;
+      if (ci === 2) return a + fmtK(sv.calls ?? 0) + b;
+      return m;
+    });
+    return r;
+  });
+  html = swapRows(html, rows, built);
+  // KPI tiles: servers / running / tools / needs-attention
+  const running = list.filter((x) => x.state === 'running').length;
+  const toolsTotal = list.reduce((a, x) => a + (x.tools?.length ?? 0), 0);
+  const stale = list.filter((x) => x.state === 'stale');
+  html = html.replace(/>6<\/div><div[^>]*>global \+ project</, '>' + list.length + '</div><div class="muted" style="font-size: 11px;">global + project<');
+  html = html.replace(/>4 \/ 6</, '>' + running + ' / ' + list.length + '<');
+  html = html.replace(/>17<\/div><div[^>]*>exposed to agents</, '>' + toolsTotal + '</div><div class="muted" style="font-size: 11px;">exposed to agents<');
+  html = html.replace(/>1<\/div><div[^>]*>sentry[^<]*</, '>' + stale.length + '</div><div class="muted" style="font-size: 11px;">' + esc(stale[0] ? stale[0].name + ' · usage stale' : 'all healthy') + '<');
+  // header count if present ("N servers")
+  html = html.replace(/>\d+ servers?</, `>${list.length} server${list.length === 1 ? '' : 's'}<`);
+  return html;
+}

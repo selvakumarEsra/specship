@@ -139,7 +139,7 @@ export async function registerSsrRoutes(app: FastifyInstance): Promise<void> {
     ['costs', 'Costs', async (html) => B.bindCosts(html, await inject('/api/claude/costs'))],
     ['compare', 'Compare projects', async (html) => B.bindCompare(html, (await inject('/api/claude/compare'))['projects'])],
     ['memory', 'Memory', async (html) => B.bindMemory(html, await inject('/api/memory'))],
-    ['mcp', 'MCP'],
+    ['mcp', 'MCP', async (html) => B.bindMcp(html, (await inject('/api/mcp/servers'))['servers'])],
     ['tips', 'Tips', async (html) => B.bindTips(html, (await inject('/api/reflect'))['proposals'])],
     ['design-system', 'Design system'], ['settings', 'Settings'],
   ];
