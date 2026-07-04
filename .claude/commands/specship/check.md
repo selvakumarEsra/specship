@@ -36,6 +36,11 @@ links honest. Route on the first token of `$ARGUMENTS`.
   Shows the high-precision findings (oversized symbols, god files, dependency
   cycles), ranked and capped. Add `--deep` for the lower-confidence dead-code and
   coupling findings; `--json` for the full tagged set (CI).
+- **any other free text** (not a `SPEC_ID`, not one of the verbs above) → the
+  user brought a failing behaviour to the gate but it isn't a known route. Don't
+  fail or behave undefined — hand it to triage, the single failure intake:
+  `/specship:spec triage <text>`. Triage decides whether it's drift (and routes
+  back here to `fix`) or a spec change.
 
 ## After running tests against a spec link
 
