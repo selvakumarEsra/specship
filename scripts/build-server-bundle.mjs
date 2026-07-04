@@ -15,7 +15,7 @@
  * untouched so the workspace dev path keeps working.
  */
 import { execFileSync } from 'node:child_process';
-import { existsSync, statSync } from 'node:fs';
+import { existsSync, statSync, cpSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -48,6 +48,22 @@ execFileSync(
   ['-p', serverTsconfig, '--outDir', outDir, '--declaration', 'false', '--declarationMap', 'false', '--sourceMap', 'false'],
   { stdio: 'inherit', cwd: serverPkg },
 );
+
+// Copy the SSR dashboard's server-local assets that tsc does NOT emit: the
+// `.mjs` render modules (plain JS emitting HTML strings — intentionally not
+// tsc-compiled, keeping the dashboard dependency-free per REQ-DASHLEAN-002)
+// and the static assets (CSS + island JS) served by the SSR routes.
+const ssrSrc = path.join(serverPkg, 'src', 'ssr');
+const ssrOut = path.join(outDir, 'ssr');
+if (existsSync(ssrSrc)) {
+  for (const f of ['render.mjs', 'md.mjs']) {
+    const from = path.join(ssrSrc, f);
+    if (existsSync(from)) cpSync(from, path.join(ssrOut, f));
+  }
+  const pubFrom = path.join(ssrSrc, 'public');
+  if (existsSync(pubFrom)) cpSync(pubFrom, path.join(ssrOut, 'public'), { recursive: true });
+  console.log('[build-server-bundle] copied SSR render modules + assets → dist/server/ssr/');
+}
 
 // Make the CLI executable (its shebang is preserved by tsc, but the file
 // mode isn't automatic on POSIX).

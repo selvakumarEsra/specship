@@ -12,9 +12,6 @@
  * pass `--no-ingest` to disable.
  */
 
-import path from 'node:path';
-import { existsSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import { createServer } from './server.js';
 
@@ -71,45 +68,6 @@ Options:
   return args;
 }
 
-/**
- * Locate the built Angular UI. Tries (in order):
- *   1. Explicit --web-dir / env var
- *   2. Sibling `public/web/` next to the running script (production layout)
- *   3. Sibling `../web-ng/dist/web-ng/browser/` (monorepo dev layout)
- *   4. Walk up looking for `packages/web-ng/dist/web-ng/browser/`
- * Returns null when nothing is found — the server then runs API-only.
- */
-function locateWebDir(explicit: string | null): string | null {
-  const envDir = process.env.SPECSHIP_WEB_DIR ?? process.env.SPECSHIP_WEB_DIR;
-  const candidates: string[] = [];
-  if (explicit) candidates.push(path.resolve(explicit));
-  if (envDir) candidates.push(path.resolve(envDir));
-
-  // __dirname equivalent in ESM
-  const here = path.dirname(fileURLToPath(import.meta.url));
-  // Production layout: <pkg>/dist/cli.js, UI shipped at <pkg>/public/web/
-  candidates.push(path.resolve(here, '..', 'public', 'web'));
-  candidates.push(path.resolve(here, '..', '..', 'public', 'web'));
-  // Monorepo dev layout: packages/server/dist/cli.js → packages/web-ng/dist/web-ng/browser
-  candidates.push(path.resolve(here, '..', '..', 'web-ng', 'dist', 'web-ng', 'browser'));
-  candidates.push(path.resolve(here, '..', '..', '..', 'web-ng', 'dist', 'web-ng', 'browser'));
-
-  // Walk up from cwd looking for the monorepo layout (handy when run via npx
-  // inside a checkout).
-  let cur = process.cwd();
-  for (let depth = 0; depth < 6; depth++) {
-    candidates.push(path.join(cur, 'packages', 'web-ng', 'dist', 'web-ng', 'browser'));
-    const parent = path.dirname(cur);
-    if (parent === cur) break;
-    cur = parent;
-  }
-
-  for (const c of candidates) {
-    if (existsSync(path.join(c, 'index.html'))) return c;
-  }
-  return null;
-}
-
 function tryOpenInBrowser(url: string): void {
   const cmd = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'start' : 'xdg-open';
   try {
@@ -121,7 +79,7 @@ function tryOpenInBrowser(url: string): void {
 
 async function main(): Promise<void> {
   const args = parseArgs();
-  const webDir = args.noWeb ? null : locateWebDir(args.webDir);
+  const serveUi = !args.noWeb;
 
   const handle = await createServer({
     projectRoot: args.projectRoot ?? undefined,
@@ -129,17 +87,17 @@ async function main(): Promise<void> {
     port: args.port,
     ingest: args.ingest,
     verbose: args.verbose,
-    webDir,
+    webDir: null,
+    ssr: serveUi,
   });
 
   console.error(`[specship-desktop] listening on ${handle.url}`);
   if (args.projectRoot) {
     console.error(`[specship-desktop] project: ${args.projectRoot}`);
   } else {
-    console.error(`[specship-desktop] project: (none — pick one in the desktop UI)`);
+    console.error(`[specship-desktop] project: (none — pick one in the dashboard)`);
   }
-  if (webDir) console.error(`[specship-desktop] UI:      ${webDir}`);
-  else console.error(`[specship-desktop] UI:      (none — running headless)`);
+  console.error(`[specship-desktop] UI:      ${serveUi ? handle.url + '/  (server-rendered)' : '(none — running headless)'}`);
   if (args.ingest) console.error(`[specship-desktop] Claude Code transcript ingest active`);
 
   if (args.open) tryOpenInBrowser(handle.url);

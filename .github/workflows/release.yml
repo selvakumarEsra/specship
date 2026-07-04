@@ -78,12 +78,8 @@ jobs:
           git push origin "HEAD:${GITHUB_REF#refs/heads/}"
 
       - run: npm ci
-      # The dashboard (packages/web-ng) is a separate Angular package with its
-      # own lockfile — the root `npm ci` does NOT install it, so `build:web`
-      # (the Angular `ng build` inside `npm run build`) would fail on a clean
-      # runner. Install it explicitly.
-      - name: Install dashboard (web-ng) dependencies
-        run: cd packages/web-ng && npm ci
+      # The dashboard is server-rendered (packages/server/src/ssr) and built by
+      # the root `npm run build` — no separate UI install/build step.
       - name: Ensure zip/unzip
         run: sudo apt-get update -qq && sudo apt-get install -y -qq zip unzip
 
