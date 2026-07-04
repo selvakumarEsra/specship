@@ -45,6 +45,33 @@ function bar(pct: number): string {
   return `❮${'▰'.repeat(filled)}${'▱'.repeat(cells - filled)}❯`;
 }
 
+/** Compact duration for the run ETA element: `4m`, `1h20m`, `<1m`. */
+function fmtEtaDur(ms: number): string {
+  const m = Math.round(ms / 60_000);
+  if (m < 1) return '<1m';
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  const rest = m % 60;
+  return rest === 0 ? `${h}h` : `${h}h${rest}m`;
+}
+
+/**
+ * ETA suffix for the active-run element (REQ-STATUSLINE-011): a compact
+ * range for a running run, a waiting signal for a gated one, '' when the
+ * marker carries no estimate (older writer / no history).
+ */
+function etaSuffix(run: ActiveRun): string {
+  const eta = run.eta;
+  if (!eta) return '';
+  if (eta.kind === 'range') {
+    const low = fmtEtaDur(eta.lowMs);
+    const high = fmtEtaDur(eta.highMs);
+    return low === high ? ` ≈${low} left` : ` ≈${low}–${high} left`;
+  }
+  if (eta.kind === 'waiting') return ' waiting on you';
+  return '';
+}
+
 /**
  * Format a reset instant in the machine's local timezone: time-only when it
  * falls on the same local day as `now` (e.g. `(4pm)`), date + time otherwise
@@ -119,11 +146,16 @@ export function renderSegment(input: RenderInput): string {
   const calls = marker ? marker.calls : 0;
   parts.push(c(COLOR.calls, `${calls} ${calls === 1 ? 'call' : 'calls'}`));
 
-  // Active workflow run, only when one exists.
+  // Active workflow run, only when one exists — with its remaining-time
+  // estimate when the marker carries one (REQ-STATUSLINE-011).
   if (run) {
     const label = run.specId ? `${run.specId}·${run.status}` : run.status;
-    parts.push(c(COLOR.run, label));
+    parts.push(c(COLOR.run, `${label}${etaSuffix(run)}`));
   }
+
+  // Telemetry elements render on their own SECOND line (REQ-STATUSLINE-010):
+  // the SpecShip identity stays scannable while capacity bars get room.
+  const telemetry: string[] = [];
 
   // Context-usage element (REQ-STATUSLINE-009) — Claude's real context %, with
   // an escalating compaction warning past the threshold. Advisory only;
@@ -132,7 +164,7 @@ export function renderSegment(input: RenderInput): string {
     const warn = context >= (ctxWarnPct ?? 80);
     const color = warn ? COLOR.pending : COLOR.calls; // amber when high, else gold
     const hint = warn ? ' ⚠ compact' : '';
-    parts.push(c(color, `CTX ${bar(context)} ${Math.round(context)}%${hint}`));
+    telemetry.push(c(color, `CTX ${bar(context)} ${Math.round(context)}%${hint}`));
   }
 
   // Usage-limit sub-segment (REQ-STATUSLINE-008) — ONLY for windows with real
@@ -141,11 +173,13 @@ export function renderSegment(input: RenderInput): string {
     const win = (label: string, w: { pctUsed: number; resetAt: number } | null) => {
       if (!w) return;
       const reset = Number.isFinite(w.resetAt) ? ` ${formatReset(w.resetAt, now)}` : '';
-      parts.push(c(COLOR.calls, `${label} ${bar(w.pctUsed)} ${Math.round(w.pctUsed)}%${reset}`));
+      telemetry.push(c(COLOR.calls, `${label} ${bar(w.pctUsed)} ${Math.round(w.pctUsed)}%${reset}`));
     };
     win('5h', usage.session);
     win('7d', usage.weekly);
   }
 
-  return `${orn} ${brand}${sep}${parts.join(sep)} ${orn}`;
+  const line1 = `${orn} ${brand}${sep}${parts.join(sep)} ${orn}`;
+  if (telemetry.length === 0) return line1;
+  return `${line1}\n${orn} ${telemetry.join(sep)} ${orn}`;
 }
