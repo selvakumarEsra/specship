@@ -27,9 +27,23 @@ export async function registerSsrRoutes(app: FastifyInstance): Promise<void> {
   const B: any = await import('./bindings.mjs');
   const PUB = join(here, 'public');
 
-  const inject = async (url: string): Promise<Record<string, any>> => {
-    const res = await app.inject({ method: 'GET', url });
-    try { return res.json(); } catch { return {}; }
+  // In-process API reads, memoized briefly: one page render fans out to
+  // several endpoints and the shell (badges/strip) re-reads the same ones on
+  // every page — a short TTL collapses the duplicates without staleness a
+  // human could notice (all surfaces are read-only telemetry).
+  const injectCache = new Map<string, { at: number; p: Promise<Record<string, any>> }>();
+  const INJECT_TTL_MS = 2_000;
+  const inject = (url: string): Promise<Record<string, any>> => {
+    const hit = injectCache.get(url);
+    if (hit && Date.now() - hit.at < INJECT_TTL_MS) return hit.p;
+    const p = app.inject({ method: 'GET', url }).then((res) => {
+      try { return res.json() as Record<string, any>; } catch { return {}; }
+    });
+    injectCache.set(url, { at: Date.now(), p });
+    if (injectCache.size > 64) {
+      for (const [k, v] of injectCache) if (Date.now() - v.at > INJECT_TTL_MS) injectCache.delete(k);
+    }
+    return p;
   };
 
   // --- static assets (no extra dependency) ---
@@ -38,9 +52,15 @@ export async function registerSsrRoutes(app: FastifyInstance): Promise<void> {
     '/islands.js': ['islands.js', 'text/javascript; charset=utf-8'],
     '/islands/graph.js': [join('islands', 'graph.js'), 'text/javascript; charset=utf-8'],
   };
+  // Read once, serve from memory, and let the browser cache across
+  // navigations — these files only change on server upgrade.
   for (const [route, spec] of Object.entries(assets)) {
     const [file, type] = spec;
-    app.get(route, async (_req, reply) => reply.header('content-type', type).send(readFileSync(join(PUB, file))));
+    const body = readFileSync(join(PUB, file));
+    app.get(route, async (_req, reply) => reply
+      .header('content-type', type)
+      .header('cache-control', 'public, max-age=300')
+      .send(body));
   }
 
   /** Shared per-request chrome data: badges + project path. */

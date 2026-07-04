@@ -73,7 +73,10 @@ export function designLayout({ route, title, content, badges, projectPath, strip
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${title} · SpecShip</title>
-<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;450;500;600;650;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;450;500;600;650;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+<noscript><link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;450;500;600;650;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet"></noscript>
 <link rel="stylesheet" href="/app.css">
 <style>html,body{margin:0;height:100%;background:var(--bg-canvas);color:var(--text-primary);font-family:var(--font-ui);font-size:var(--fs-base)}#app{height:100vh}a{color:inherit}</style>
 </head>
