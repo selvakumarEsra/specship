@@ -19,10 +19,10 @@ test.describe('SSR dashboard renders live data @ 127.0.0.1', () => {
     expect(res.ok()).toBeTruthy();
     const html = await res.text();
 
-    expect(html, 'server-rendered shell').toContain('class="shell"');
-    expect(html, 'KPI tiles present').toMatch(/stat-tile/);
+    expect(html, 'server-rendered shell').toContain('var(--sidebar-w)');
+    expect(html, 'KPI tiles present').toMatch(/Last session cost/i);
     // A tile's value is a real rendered number, not a skeleton.
-    expect(html, 'a stat tile rendered a number').toMatch(/stat-value">[\d,]/);
+    expect(html, 'live cost value rendered').toMatch(/\$\d+\.\d{2}/);
     // No Angular SPA, no framework runtime.
     expect(html, 'no Angular shell').not.toContain('app-root');
     expect(html, 'no framework version marker').not.toMatch(/ng-version/);

@@ -34,6 +34,7 @@ import { registerReflectRoutes } from './routes/reflect.js';
 import { registerMaintainabilityRoutes } from './routes/maintainability.js';
 import { registerDomainRoutes } from './routes/domain.js';
 import { registerChatRoutes } from './routes/chat.js';
+import { registerMcpRoutes } from './routes/mcp.js';
 
 export interface ServerOptions {
   /**
@@ -258,6 +259,7 @@ export async function createServer(options: ServerOptions): Promise<ServerHandle
   await registerMaintainabilityRoutes(app);
   await registerDomainRoutes(app);
   await registerChatRoutes(app);
+  await registerMcpRoutes(app);
 
   // SSR dashboard (DASH-LEAN-DOC / REQ-DASHLEAN-004): explicit page routes
   // rendered in-process from the /api handlers above (via app.inject), plus the
