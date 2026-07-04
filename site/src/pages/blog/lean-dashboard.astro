@@ -1,0 +1,48 @@
+---
+import Article from '../../layouts/Article.astro';
+---
+<Article slug="lean-dashboard">
+  <svg slot="figure" viewBox="0 0 980 440" preserveAspectRatio="xMidYMid slice">
+    <defs><radialGradient id="hld" cx="50%" cy="22%" r="70%"><stop offset="0" stop-color="rgba(91,147,242,0.18)"/><stop offset="1" stop-color="rgba(91,147,242,0)"/></radialGradient></defs>
+    <rect width="980" height="440" fill="url(#hld)"/>
+    <g font-family="Geist Mono, monospace" font-size="15">
+      <rect x="140" y="120" width="250" height="200" rx="13" fill="rgba(11,13,17,0.5)" stroke="rgba(248,81,73,0.5)" stroke-width="1.6"/>
+      <text x="165" y="152" fill="rgba(214,130,130,0.95)">before · Angular SPA</text>
+      <text x="165" y="196" fill="rgba(150,165,200,0.7)">~640 packages</text>
+      <text x="165" y="220" fill="rgba(150,165,200,0.7)">73 MB editor</text>
+      <text x="165" y="244" fill="rgba(150,165,200,0.7)">native build tooling</text>
+      <text x="165" y="288" fill="rgba(214,130,130,0.75)">✗ enterprise mirror</text>
+
+      <rect x="590" y="120" width="250" height="200" rx="13" fill="rgba(11,13,17,0.5)" stroke="rgba(70,194,107,0.55)" stroke-width="1.6"/>
+      <text x="615" y="152" fill="rgba(120,210,150,0.95)">after · server-rendered</text>
+      <text x="615" y="196" fill="rgba(150,165,200,0.7)">&lt; 250 packages</text>
+      <text x="615" y="220" fill="rgba(150,165,200,0.7)">no native builds</text>
+      <text x="615" y="244" fill="rgba(150,165,200,0.7)">ships in the server</text>
+      <text x="615" y="288" fill="rgba(120,210,150,0.9)">✓ installs anywhere</text>
+    </g>
+    <path d="M390 220 L590 220" stroke="rgba(150,165,200,0.4)" stroke-width="2" fill="none" stroke-dasharray="6 7"/>
+    <polyline points="578 213 590 220 578 227" fill="none" stroke="rgba(150,165,200,0.5)" stroke-width="2"/>
+  </svg>
+
+  <p>SpecShip's dashboard is the loopback UI you get from <code>specship serve --ui</code> — stat tiles, the spec funnel, a drift queue, a tool-call heatmap, cost analytics. It was an Angular single-page app, and for most people it Just Worked. Then an enterprise user tried to build SpecShip from source inside their network and it fell over: their internal npm registry didn't carry a few of the dashboard's dependencies, and the build died.</p>
+  <p>The root cause wasn't a bug. It was the <em>shape</em> of the dependency tree.</p>
+
+  <h2>640 packages, and the ones you can't mirror</h2>
+  <p>The Angular dashboard resolved to roughly <strong>640 npm packages</strong>: bleeding-edge Angular 21, a 73 MB Monaco code editor, a full bundler toolchain, and native modules that fetch prebuilt binaries from the internet at install time. A locked-down corporate registry is a mirror — it proxies the public registry but only carries what it's been asked to. Bleeding-edge and niche packages often aren't there yet, and the post-install binary fetches reach hosts the network blocks outright. One missing package anywhere in that tree, and <code>npm ci</code> fails.</p>
+  <p>You can't fix that by pinning versions. The only durable fix is a smaller, more mainstream tree — few enough packages, common enough that any mirror already has them, and zero native compilation.</p>
+
+  <div class="pullquote">
+    <p>"Fewer direct dependencies" and "a smaller install tree" aren't the same thing. The bundler is most of the weight, and every framework needs one.</p>
+  </div>
+
+  <h2>Server-rendered, folded into the server</h2>
+  <p>So the dashboard moved off Angular entirely. Every page is now rendered to HTML <strong>on the server</strong> — in the very same process that already serves the <code>/api</code> the old SPA called. There's no client framework, no router, no hydration; the only JavaScript shipped is a tiny vanilla island for the one genuinely interactive surface, the node graph (pan, zoom, hover). Pages that don't need interactivity ship no script at all.</p>
+  <p>The renderer lives in <code>packages/server</code> and pulls its data through an in-process request to the existing API handlers — no second server, no HTTP round-trip. The dashboard's dependency tree collapsed from ~640 packages to <strong>well under 250</strong>, all mainstream, all mirrorable, with no native builds. It installs behind a restricted registry because there's nothing left in it that a mirror wouldn't already have.</p>
+
+  <h2>Read-only, on purpose</h2>
+  <p>The enterprise need was a viewer, not an editor, so the dashboard is now <strong>read-only</strong>. That let the biggest single dependency — the Monaco editor — go entirely: specs render as formatted Markdown instead of in a code editor, and the write paths that came with it are gone. You still launch and approve workflows, edit specs, and run everything else the way you always did — from the CLI and the <code>/specship:*</code> slash commands. The dashboard shows you the state; Claude Code and the CLI change it.</p>
+
+  <h2>Same look, and a smaller core</h2>
+  <p>None of this changed the design. The dashboard reuses the exact same design tokens it always had, so it reads as the same product — just rendered a different way. And because the dashboard is now optional and self-contained, there's a new <code>npm run build:core</code> that builds just the CLI and MCP server: if all you want is the Claude Code integration, you can skip the dashboard's tree completely and every command except <code>serve --ui</code> still works.</p>
+  <p>The whole thing was written as a spec first — <code>DASH-LEAN-DOC</code> — with the dependency ceiling, the read-only contract, and the page-parity set as testable requirements, then implemented against it. If you're building SpecShip behind a firewall, it now installs like anything else.</p>
+</Article>

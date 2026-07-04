@@ -43,13 +43,13 @@ Most teams running Claude Code at scale don't measure any of this. SpecShip surf
 
 When `specship serve --ui` starts, three things happen in parallel:
 
-1. The Fastify HTTP server binds `127.0.0.1:4242` and serves both the API and the SPA.
+1. The Fastify HTTP server binds `127.0.0.1:4242` and serves both the API and the server-rendered dashboard.
 2. The codegraph engine opens the project's SQLite (or the picker's selected project, if you boot projectless).
 3. The **ingest watcher** does a one-shot reconciliation pass against `~/.claude/projects/`, then registers an `fs.watch` on that directory.
 
 The reconciliation parses any new `.jsonl` files (and any new lines on existing files) and writes them into SpecShip's SQLite. The watcher then triggers incremental ingests on every file-mtime change with a debounce — so live sessions stream into the desktop UI within roughly a second of Claude Code writing them. (The Session Detail page also pushes new prompts and tool calls live over SSE — see [Sessions](/claude-code/sessions/).)
 
-The watcher runs in-process; pass `--ingest` to be explicit, or `--no-web` to run the API headless (no SPA). The UI hits `127.0.0.1:4242` by default — change it with `--port` / `--host`.
+The watcher runs in-process; pass `--ingest` to be explicit, or `--no-web` to run the API headless (no dashboard). The dashboard hits `127.0.0.1:4242` by default — change it with `--port` / `--host`.
 
 ## Install as a desktop app
 
