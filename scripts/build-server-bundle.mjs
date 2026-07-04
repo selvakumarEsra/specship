@@ -56,7 +56,7 @@ execFileSync(
 const ssrSrc = path.join(serverPkg, 'src', 'ssr');
 const ssrOut = path.join(outDir, 'ssr');
 if (existsSync(ssrSrc)) {
-  for (const f of ['render.mjs', 'md.mjs', 'design.mjs']) {
+  for (const f of ['render.mjs', 'md.mjs', 'design.mjs', 'bindings.mjs']) {
     const from = path.join(ssrSrc, f);
     if (existsSync(from)) cpSync(from, path.join(ssrOut, f));
   }

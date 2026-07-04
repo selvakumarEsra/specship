@@ -23,6 +23,8 @@ export async function registerSsrRoutes(app: FastifyInstance): Promise<void> {
   const D: any = await import('./design.mjs');
   // @ts-expect-error -- untyped server-local module
   const R: any = await import('./render.mjs');
+  // @ts-expect-error -- untyped server-local module
+  const B: any = await import('./bindings.mjs');
   const PUB = join(here, 'public');
 
   const inject = async (url: string): Promise<Record<string, any>> => {
@@ -51,6 +53,12 @@ export async function registerSsrRoutes(app: FastifyInstance): Promise<void> {
       inject('/api/reflect').catch(() => empty),
     ]);
     const driftN = (drift['links'] ?? []).filter((l: any) => ['drifted', 'broken', 'orphaned'].includes(l.state)).length;
+    const ago = (() => {
+      const t = status['lastIndexed'] ? Date.parse(status['lastIndexed']) : null;
+      if (!t) return null;
+      const m = Math.max(0, Math.round((Date.now() - t) / 60000));
+      return m < 60 ? `${m}m ago` : `${Math.round(m / 60)}h ago`;
+    })();
     return {
       projectPath: String(status['projectPath'] ?? '').replace(/^\/Users\/[^/]+/, '~'),
       badges: {
@@ -58,6 +66,7 @@ export async function registerSsrRoutes(app: FastifyInstance): Promise<void> {
         runs: (runs['runs'] ?? []).length,
         tips: (reflect['proposals'] ?? []).length,
       },
+      strip: { nodes: status['nodeCount'], edges: status['edgeCount'], drift: driftN, indexedAgo: ago },
       status,
     };
   };
@@ -67,7 +76,7 @@ export async function registerSsrRoutes(app: FastifyInstance): Promise<void> {
     let content = D.screenContent(route) as string;
     if (bind) content = await bind(content);
     reply.header('content-type', 'text/html; charset=utf-8').send(
-      D.designLayout({ route, title, content, badges: c.badges, projectPath: c.projectPath }),
+      D.designLayout({ route, title, content, badges: c.badges, projectPath: c.projectPath, strip: c.strip }),
     );
   };
 
@@ -90,8 +99,11 @@ export async function registerSsrRoutes(app: FastifyInstance): Promise<void> {
       html = html.replace(/>7</, '>' + driftN + '<');
       return html;
     }],
-    ['graph', 'Graph'], ['specs', 'Specs'], ['drift', 'Drift queue'], ['runs', 'Runs'],
-    ['sessions', 'Sessions'], ['heatmap', 'Heatmap'], ['costs', 'Costs'], ['compare', 'Compare projects'],
+    ['graph', 'Graph'], ['specs', 'Specs'],
+    ['drift', 'Drift queue', async (html) => B.bindDrift(html, (await inject('/api/drift'))['links'])],
+    ['runs', 'Runs', async (html) => B.bindRuns(html, (await inject('/api/workflows/runs'))['runs'])],
+    ['sessions', 'Sessions', async (html) => B.bindSessions(html, (await inject('/api/claude/sessions'))['sessions'])],
+    ['heatmap', 'Heatmap'], ['costs', 'Costs'], ['compare', 'Compare projects'],
     ['memory', 'Memory'], ['mcp', 'MCP'], ['tips', 'Tips'], ['design-system', 'Design system'], ['settings', 'Settings'],
   ];
   for (const [route, title, bind] of SCREENS) {

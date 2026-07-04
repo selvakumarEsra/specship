@@ -11,6 +11,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { bindStatusStrip } from './bindings.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const T = join(here, 'templates');
@@ -54,18 +55,18 @@ function sidebar(route, badges = {}) {
   return s;
 }
 
-/** Status strip with the real project path. */
-function statusStrip(projectPath) {
+/** Status strip with the real project path + live index counts. */
+function statusStrip(projectPath, strip = {}) {
   let s = STATUS;
   if (projectPath) s = s.replace(/~\/dev\/specship/g, projectPath);
-  return s;
+  return bindStatusStrip(s, strip);
 }
 
 /**
  * Full document. content is design markup (already pixel-true); callers bind
  * per-screen data into it before passing.
  */
-export function designLayout({ route, title, content, badges, projectPath, theme = 'dark' }) {
+export function designLayout({ route, title, content, badges, projectPath, strip, theme = 'dark' }) {
   return `<!doctype html>
 <html lang="en" data-theme="${theme}">
 <head>
@@ -80,7 +81,7 @@ export function designLayout({ route, title, content, badges, projectPath, theme
 <div id="app"><div style="display: flex; height: 100%; position: relative;">
 ${sidebar(route, badges)}
 <div style="flex: 1 1 0%; display: flex; flex-direction: column; min-width: 0px;">
-${statusStrip(projectPath)}
+${statusStrip(projectPath, strip)}
 ${TOPBAR}
 ${content}
 </div>
