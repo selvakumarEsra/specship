@@ -97,14 +97,51 @@ export async function registerSsrRoutes(app: FastifyInstance): Promise<void> {
       if (nodes != null) html = html.replace(/4,218 nodes/g, Number(nodes).toLocaleString() + ' nodes');
       const driftN = (drift['links'] ?? []).filter((l: any) => ['drifted', 'broken', 'orphaned'].includes(l.state)).length;
       html = html.replace(/>7</, '>' + driftN + '<');
+      // panels: tips, recent prompts, cache rate, subagent %, mini-graph labels
+      const [reflect, costs, sessions, topNodes] = await Promise.all([
+        inject('/api/reflect').catch(() => ({} as Record<string, any>)),
+        inject('/api/claude/costs').catch(() => ({} as Record<string, any>)),
+        inject('/api/claude/sessions').catch(() => ({} as Record<string, any>)),
+        inject('/api/graph/nodes?limit=9&sort=degree').catch(() => ({} as Record<string, any>)),
+      ]);
+      const sess = sessions['sessions'] ?? [];
+      const inTok = sess.reduce((a: number, s: any) => a + (s.total_input_tokens ?? 0), 0);
+      const cacheTok = sess.reduce((a: number, s: any) => a + (s.total_cache_read_tokens ?? 0), 0);
+      html = B.bindDashboardExtras(html, {
+        subagentPct: stats['subagentPct']?.value ?? stats['subagentPct'],
+        tips: reflect['proposals'],
+        prompts: costs['topPrompts'],
+        cacheRate: inTok + cacheTok ? cacheTok / (inTok + cacheTok) : null,
+        graphNames: (topNodes['nodes'] ?? []).map((n: any) => n.name).filter(Boolean),
+      });
       return html;
     }],
-    ['graph', 'Graph'], ['specs', 'Specs'],
+    ['graph', 'Graph', async (html) => {
+      const [nodesResp, specsResp] = await Promise.all([
+        inject('/api/graph/nodes?limit=20&sort=degree').catch(() => ({} as Record<string, any>)),
+        inject('/api/specs').catch(() => ({} as Record<string, any>)),
+      ]);
+      const names = (nodesResp['nodes'] ?? []).map((n: any) => n.name).filter(Boolean);
+      const specIds = (specsResp['specs'] ?? []).filter((s: any) => s.kind === 'requirement').map((s: any) => s.id);
+      return B.bindGraphCanvas(html, names, specIds);
+    }],
+    ['specs', 'Specs', async (html) => {
+      const specsResp = await inject('/api/specs');
+      // Detail panel binds the first REQUIREMENT (documents have no acceptance children).
+      const first = (specsResp['specs'] ?? []).find((s: any) => s.kind === 'requirement');
+      const det = first ? await inject(`/api/spec/${encodeURIComponent(first.id)}`).catch(() => null) : null;
+      return B.bindSpecs(html, specsResp, det);
+    }],
     ['drift', 'Drift queue', async (html) => B.bindDrift(html, (await inject('/api/drift'))['links'])],
     ['runs', 'Runs', async (html) => B.bindRuns(html, (await inject('/api/workflows/runs'))['runs'])],
     ['sessions', 'Sessions', async (html) => B.bindSessions(html, (await inject('/api/claude/sessions'))['sessions'])],
-    ['heatmap', 'Heatmap'], ['costs', 'Costs'], ['compare', 'Compare projects'],
-    ['memory', 'Memory'], ['mcp', 'MCP'], ['tips', 'Tips'], ['design-system', 'Design system'], ['settings', 'Settings'],
+    ['heatmap', 'Heatmap', async (html) => B.bindHeatmap(html, (await inject('/api/claude/heatmap'))['files'])],
+    ['costs', 'Costs', async (html) => B.bindCosts(html, await inject('/api/claude/costs'))],
+    ['compare', 'Compare projects', async (html) => B.bindCompare(html, (await inject('/api/claude/compare'))['projects'])],
+    ['memory', 'Memory', async (html) => B.bindMemory(html, await inject('/api/memory'))],
+    ['mcp', 'MCP'],
+    ['tips', 'Tips', async (html) => B.bindTips(html, (await inject('/api/reflect'))['proposals'])],
+    ['design-system', 'Design system'], ['settings', 'Settings'],
   ];
   for (const [route, title, bind] of SCREENS) {
     app.get('/' + route, async (_req, reply) => sendScreen(reply, route, title, bind));
