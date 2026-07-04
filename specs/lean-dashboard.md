@@ -46,8 +46,12 @@ Kept page set (19, all read-only): `compare`, `costs`, `dashboard`, `domain`,
 `run-detail`, `runs`, `session-detail`, `sessions`, `spec-detail`, `specs`,
 `specship-impact`, `tips`.
 
-Dropped page set (4, write/interactive-only, no read-only value): `chat`,
-`design`, `settings`, `workflows`.
+Dropped page set (3, write/interactive-only, no read-only value): `chat`,
+`design` (the designer loop page), `workflows` (launch UI; run history stays
+under `runs`). The 2026-07-04 design import (REQ-DASHLEAN-005) added three
+design screens to the kept set: `tips`, `design-system`, and a read-only
+`settings` view — the design is canonical for the page set where the two
+conflict.
 
 Current integration sites the rebuild must preserve or adapt (prose, not
 `implementations:` links — several are shell/generated and the graph does not
@@ -144,20 +148,28 @@ implementations:
 <!-- id: REQ-DASHLEAN-005 -->
 ## The rebuilt dashboard MUST preserve the existing visual design system
 
-The rebuild MUST reproduce the current dashboard's appearance — the same design
-tokens, shared `ui/` kit components, and SVG/canvas visualizations — so no page
-regresses visually. Fidelity of the look is a product requirement, not a
+The rebuild MUST reproduce the "SpecShip Desktop" Claude Design bundle — the
+canonical design reference imported on 2026-07-04 into `specs/lean-dashboard/`:
+`design-system.css` (the design's own stylesheet: tokens for dark + light,
+utility classes, `btn`/`pill`/`card` components, and the `sp-*` spec-document
+formatting language) and `screens/*.html` (the 14 rendered screens captured
+from the live design preview, whose markup and inline styles are the
+pixel-level truth). Fidelity to that reference is a product requirement, not a
 best-effort.
 
 ## Acceptance
 <!-- id: REQ-DASHLEAN-005.A1 -->
-- Each kept page's rendered appearance matches the current dashboard under
-  side-by-side visual comparison, with no unintended visual differences in
-  layout, color, type, or spacing.
+- Each kept page's rendered appearance matches its captured reference screen in
+  `specs/lean-dashboard/screens/` under side-by-side visual comparison, with no
+  unintended differences in layout, color, type, or spacing.
 <!-- id: REQ-DASHLEAN-005.A2 -->
-- The shared design-system primitives (pill, segmented control, state-pill,
-  page-head, delta, and the graph/heatmap/treemap visualizations) render with
-  the same visual output they have today.
+- The dashboard serves the design's own stylesheet (tokens and classes from
+  `specs/lean-dashboard/design-system.css`) rather than an approximation of it,
+  and spec bodies render with the design's `sp-*` document formatting.
+<!-- id: REQ-DASHLEAN-005.A3 -->
+- The shell matches the design: grouped sidebar (PROJECT / CLAUDE CODE
+  accordions with badges), top status strip with the project path, and the
+  top bar with search affordance and theme toggle.
 
 <!-- id: REQ-DASHLEAN-006 -->
 ## The rebuilt dashboard MUST preserve the read-only page set and serve no dropped page

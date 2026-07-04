@@ -56,12 +56,14 @@ execFileSync(
 const ssrSrc = path.join(serverPkg, 'src', 'ssr');
 const ssrOut = path.join(outDir, 'ssr');
 if (existsSync(ssrSrc)) {
-  for (const f of ['render.mjs', 'md.mjs']) {
+  for (const f of ['render.mjs', 'md.mjs', 'design.mjs']) {
     const from = path.join(ssrSrc, f);
     if (existsSync(from)) cpSync(from, path.join(ssrOut, f));
   }
-  const pubFrom = path.join(ssrSrc, 'public');
-  if (existsSync(pubFrom)) cpSync(pubFrom, path.join(ssrOut, 'public'), { recursive: true });
+  for (const dir of ['public', 'templates']) {
+    const from = path.join(ssrSrc, dir);
+    if (existsSync(from)) cpSync(from, path.join(ssrOut, dir), { recursive: true });
+  }
   console.log('[build-server-bundle] copied SSR render modules + assets → dist/server/ssr/');
 }
 
