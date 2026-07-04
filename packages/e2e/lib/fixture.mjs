@@ -26,6 +26,35 @@ export function normalizeTotal(total: number): number {
 }
 `;
 
+// A tiny spec so the dashboard's Specs page has real content to render
+// read-only (the REQ-DASHLEAN-003 e2e selects a spec and asserts no editor).
+const SPEC_ORDERS = `---
+id: ORDERS-DOC
+title: Orders
+owner: fixture
+priority: medium
+---
+
+<!-- id: ORDERS-DOC -->
+# Orders
+
+Fixture spec so the Specs page has content to render read-only.
+
+<!-- id: REQ-ORDERS-001 -->
+## Order totals MUST be normalized to non-negative cents
+
+\`createOrder\` normalizes the total before storing it.
+
+implementations:
+  - src/orders.ts:createOrder
+
+## Acceptance
+<!-- id: REQ-ORDERS-001.A1 -->
+- A negative total is clamped to zero.
+<!-- id: REQ-ORDERS-001.A2 -->
+- A fractional total is rounded to two decimal places.
+`;
+
 const SRC_SERVICE = `import { createOrder, Order } from './orders';
 
 export class OrderService {
@@ -118,6 +147,8 @@ export async function buildFixture() {
   fs.mkdirSync(path.join(FIXTURE, 'src'), { recursive: true });
   fs.writeFileSync(path.join(FIXTURE, 'src', 'orders.ts'), SRC_ORDERS);
   fs.writeFileSync(path.join(FIXTURE, 'src', 'service.ts'), SRC_SERVICE);
+  fs.mkdirSync(path.join(FIXTURE, 'specs'), { recursive: true });
+  fs.writeFileSync(path.join(FIXTURE, 'specs', 'orders.md'), SPEC_ORDERS);
   fs.mkdirSync(HOME_DIR, { recursive: true });
 
   await indexFixture();

@@ -12,7 +12,6 @@ on:
   workflow_dispatch: {}
   pull_request:
     paths:
-      - "packages/web-ng/**"
       - "packages/server/**"
       - "packages/e2e/**"
       - "src/**"
@@ -34,11 +33,10 @@ jobs:
           node-version: 22
       # Root install compiles the optional better-sqlite3 (ships FTS5), which
       # the fixture indexer needs; the built-in node:sqlite on Node 22 has no
-      # FTS5. web-ng has its own lockfile the root install doesn't cover.
+      # FTS5. The dashboard is now server-rendered (packages/server/src/ssr),
+      # built by the root `npm run build` — no separate UI install step.
       - run: npm ci
-      - name: Install dashboard (web-ng) dependencies
-        run: cd packages/web-ng && npm ci
-      - name: Build CLI + dashboard bundle
+      - name: Build CLI + server (server-rendered dashboard)
         run: npm run build
       - name: Install e2e deps + browser
         run: |

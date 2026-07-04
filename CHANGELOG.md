@@ -9,6 +9,11 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### New Features
+
+- **A lean, server-rendered dashboard that installs behind locked-down registries.** The dashboard has moved off its heavy Angular build to a server-rendered UI that ships with the server itself — the dependency tree drops from ~640 packages to well under 250, all mainstream and mirrorable, with no native builds. It renders read-only (specs, graph, drift, maintainability, domain, memory, costs, sessions, and more), so enterprises building SpecShip from source against an internal npm mirror no longer hit missing-dependency failures. `specship serve --ui` serves it directly.
+- **Build just the CLI and MCP server with `npm run build:core`.** Environments that only need the Claude Code integration can build the core without the dashboard; the MCP server and every CLI command except `serve --ui` work without it.
+
 ### Fixes
 
 - **Improvements and tips no longer leak across projects.** Both were mined from every project's session history at once, so a pattern from one project (say, re-reading a file there) could surface as a suggestion — or even an applied CLAUDE.md learning — in a different project. Suggestions for a project now cite only that project's own sessions.

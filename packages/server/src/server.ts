@@ -77,6 +77,14 @@ export interface ServerOptions {
    * direct page loads). Omit to run the server headless (API only).
    */
   webDir?: string | null;
+  /**
+   * Serve the lean server-rendered dashboard (DASH-LEAN-DOC) instead of the
+   * SPA. When true, explicit SSR page routes are registered before the static
+   * fallback, so `/specs`, `/graph`, etc. render server-side from the same
+   * in-process `/api/*` data. Default true — the SSR dashboard is the shipped
+   * UI; the Angular SPA has been retired.
+   */
+  ssr?: boolean;
 }
 
 export interface ServerHandle {
@@ -250,6 +258,15 @@ export async function createServer(options: ServerOptions): Promise<ServerHandle
   await registerMaintainabilityRoutes(app);
   await registerDomainRoutes(app);
   await registerChatRoutes(app);
+
+  // SSR dashboard (DASH-LEAN-DOC / REQ-DASHLEAN-004): explicit page routes
+  // rendered in-process from the /api handlers above (via app.inject), plus the
+  // dashboard's static assets. Registered AFTER /api and BEFORE the SPA
+  // fallback so the explicit page routes win.
+  if (options.ssr) {
+    const { registerSsrRoutes } = await import('./ssr/routes.js');
+    await registerSsrRoutes(app);
+  }
 
   // Optional: serve the built Angular UI from `webDir` and fall back to
   // index.html for client-side routes. Must register AFTER the /api/*

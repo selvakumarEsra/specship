@@ -65,6 +65,8 @@ interface ServerPackage {
     ingest?: boolean;
     /** Built Angular UI dir; when set the server also serves the SPA. */
     webDir?: string | null;
+    /** Serve the lean server-rendered dashboard (DASH-LEAN-DOC). */
+    ssr?: boolean;
     watcher?: { stop: () => void; ingestNow: () => unknown } | null;
     verbose?: boolean;
   }) => Promise<ServerHandleLike>;
@@ -204,54 +206,6 @@ async function pickRecentInitializedProject(): Promise<string | null> {
   }
   candidates.sort((a, b) => b.lastTouched - a.lastTouched);
   return candidates[0]?.decoded ?? null;
-}
-
-/**
- * Locate the built Angular UI for `specship serve --ui`. Mirrors the
- * lookup order in `packages/server/src/cli.ts:locateWebDir` so both entry
- * points behave identically. Returns null when nothing is found — the
- * server then runs API-only.
- */
-function locateWebDir(explicit: string | null): string | null {
-  const envDir = process.env.SPECSHIP_WEB_DIR ?? process.env.SPECSHIP_WEB_DIR;
-  const candidates: string[] = [];
-  if (explicit) candidates.push(path.resolve(explicit));
-  if (envDir) candidates.push(path.resolve(envDir));
-
-  // 1. Bundled mode — `dist/web/` next to this CLI. This is what every
-  //    `npm i -g @specship/specship` install hits.
-  candidates.push(path.resolve(__dirname, '..', 'web'));
-
-  // 2. Legacy / forward-compat: the old `@specship/specship-server`
-  //    used to ship the SPA at <pkg>/public/web.
-  try {
-    const pkgJson = require.resolve('@specship/specship-server/package.json');
-    candidates.push(path.resolve(path.dirname(pkgJson), 'public', 'web'));
-  } catch { /* not installed as separate package — fall through */ }
-
-  // 3. Dev monorepo layouts (running from a checkout).
-  candidates.push(path.resolve(__dirname, '..', '..', 'packages', 'server', 'public', 'web'));
-  candidates.push(path.resolve(__dirname, '..', '..', '..', 'packages', 'server', 'public', 'web'));
-  candidates.push(path.resolve(__dirname, '..', '..', 'packages', 'web-ng', 'dist', 'web-ng', 'browser'));
-  candidates.push(path.resolve(__dirname, '..', '..', '..', 'packages', 'web-ng', 'dist', 'web-ng', 'browser'));
-
-  // 4. Walk up from cwd in case the bin is run inside a checkout.
-  let cur = process.cwd();
-  for (let depth = 0; depth < 6; depth++) {
-    candidates.push(path.join(cur, 'dist', 'web'));
-    candidates.push(path.join(cur, 'packages', 'server', 'public', 'web'));
-    candidates.push(path.join(cur, 'packages', 'web-ng', 'dist', 'web-ng', 'browser'));
-    const parent = path.dirname(cur);
-    if (parent === cur) break;
-    cur = parent;
-  }
-
-  for (const c of candidates) {
-    try {
-      if (fs.existsSync(path.join(c, 'index.html'))) return c;
-    } catch { /* ignore */ }
-  }
-  return null;
 }
 
 // Dynamic import helper — tsc compiles import() to require() in CJS mode,
@@ -1794,10 +1748,10 @@ program
         // sibling packages/server/dist directory.
         const { createServer } = await loadServerPackage();
 
-        // Locate the built Angular UI so the same port serves the SPA at /.
-        // `--no-web` opts out (Commander sets web=false then). Otherwise we
-        // try the explicit --web-dir, then auto-detect.
-        const webDir = options.web === false ? null : locateWebDir(options.webDir ?? null);
+        // The dashboard is the lean server-rendered UI (DASH-LEAN-DOC), served
+        // in-process by the server itself — no separate SPA build. `--no-web`
+        // still opts out to run API-only.
+        const serveUi = options.web !== false;
 
         // The JSONL ingest watcher now starts in-process inside createServer
         // when `ingest: true`. The server owns its lifecycle; CLI just toggles.
@@ -1806,7 +1760,8 @@ program
           host,
           port,
           ingest: options.ingest !== false,
-          webDir,
+          webDir: null,
+          ssr: serveUi,
           verbose: false,
         });
         console.error(chalk.bold('\nSpecShip Desktop server\n'));
@@ -1814,14 +1769,11 @@ program
         if (root) {
           console.error(chalk.dim(`  project: ${root}`));
         } else {
-          console.error(chalk.yellow(getGlyphs().warn) + ' no primary project — pick one in the desktop UI');
+          console.error(chalk.yellow(getGlyphs().warn) + ' no primary project — pick one in the dashboard');
           console.error(chalk.dim('  analytics endpoints will return 409 until one is selected'));
         }
-        if (webDir) {
-          console.error(chalk.green(getGlyphs().ok) + ` SPA:      ${handle.url}/  (from ${webDir})`);
-        } else if (options.web !== false) {
-          console.error(chalk.yellow(getGlyphs().warn) + ' UI not found — running API-only.');
-          console.error(chalk.dim('  Build it first: cd packages/server && npm run build:all'));
+        if (serveUi) {
+          console.error(chalk.green(getGlyphs().ok) + ` Dashboard: ${handle.url}/  (server-rendered)`);
         }
         if (options.ingest !== false) {
           console.error(chalk.dim('  Claude Code transcript ingest watcher active'));
