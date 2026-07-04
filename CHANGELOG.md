@@ -9,6 +9,9 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### New Features
+
+- **Workflow runs now show an estimated time to completion.** Running runs display an honest range (for example "≈4–11 min left") built from that workflow's own past step timings, tightening as steps complete; runs paused at an approval gate show "waiting on you since…" instead, and time spent waiting on you never skews future estimates. New workflows show no estimate until a few runs of history exist, rather than a made-up number.
 
 ## [0.12.0] - 2026-07-04
 

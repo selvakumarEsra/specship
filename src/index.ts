@@ -65,6 +65,8 @@ import {
   ApplyOutcome,
   UndoOutcome,
 } from './reflect';
+import { estimateRunEta as estimateRunEtaImpl, RunEta } from './workflows/eta';
+export type { RunEta, RunEtaAvailable, RunEtaUnavailable } from './workflows/eta';
 import * as os from 'os';
 import * as fs from 'fs';
 import { createHash } from 'crypto';
@@ -447,6 +449,15 @@ export class SpecShip {
 
   private reflectContext() {
     return { projectRoot: this.projectRoot, homeDir: os.homedir() };
+  }
+
+  /**
+   * Estimated time-to-completion for a workflow run (WORKFLOW-ETA-DOC):
+   * a p50–p90 range from this workflow's per-step history, human gate-wait
+   * excluded, no estimate under MIN_HISTORY_RUNS prior completed runs.
+   */
+  estimateWorkflowRunEta(runId: string): RunEta {
+    return estimateRunEtaImpl(this.db.getDb(), runId);
   }
 
   /** Run a reflection pass, persist the batch, return the open proposals. */

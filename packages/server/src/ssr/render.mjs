@@ -325,6 +325,35 @@ export function renderImprovements(reflect) {
   ${SHARED_CSS}`;
 }
 
+/** WORKFLOW-ETA-DOC: compact duration for estimate ranges. */
+function fmtDur(ms) {
+  const m = Math.round(ms / 60000);
+  if (m < 1) return '<1 min';
+  if (m < 60) return `${m} min`;
+  return `${Math.floor(m / 60)}h ${m % 60}m`;
+}
+
+/**
+ * REQ-ETA-005: human text for a run's estimate — a range for running runs,
+ * "waiting on you" for paused ones, empty string otherwise (absence, never a
+ * placeholder number).
+ */
+export function etaText(run) {
+  const eta = run?.eta;
+  if (!eta) return '';
+  if (eta.available) {
+    const low = fmtDur(eta.lowMs);
+    const high = fmtDur(eta.highMs);
+    return low === high ? `≈${low} left` : `≈${low}–${high} left`;
+  }
+  if (eta.reason === 'paused') {
+    return eta.waitingSinceMs
+      ? `waiting on you since ${new Date(eta.waitingSinceMs).toLocaleTimeString()}`
+      : 'waiting on you';
+  }
+  return '';
+}
+
 /** REQ-DASHLEAN-006: workflow runs — read-only run history. */
 export function renderRuns(data) {
   const runs = data?.runs || [];
@@ -332,9 +361,10 @@ export function renderRuns(data) {
     `<a class="mono" href="/runs/${encodeURIComponent(r.id)}" data-nav>${escapeHtml(r.workflowName || '')}</a>`,
     escapeHtml(r.status || ''),
     `<span class="muted">${escapeHtml(String(r.startedAt || r.createdAt || ''))}</span>`,
+    `<span class="muted">${escapeHtml(etaText(r))}</span>`,
   ]);
   return `${pageHead('Runs', `${runs.length} runs`)}
-  ${table(['Workflow', 'Status', 'Started'], rows)}
+  ${table(['Workflow', 'Status', 'Started', 'ETA'], rows)}
   ${SHARED_CSS}`;
 }
 
@@ -342,10 +372,12 @@ export function renderRuns(data) {
 export function renderRunDetail(data) {
   const run = data?.run || {};
   const events = data?.events || [];
+  const remaining = etaText(run);
   const meta = statTiles([
     { label: 'Workflow', value: run.workflowName || '—' },
     { label: 'Status', value: run.status || '—' },
     { label: 'Events', value: events.length },
+    ...(remaining ? [{ label: 'Remaining', value: remaining }] : []),
   ]);
   const rows = events.slice(0, 200).map((e) => [
     `<span class="muted">${escapeHtml(String(e.ts || e.timestamp || e.at || ''))}</span>`,
