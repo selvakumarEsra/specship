@@ -46,16 +46,14 @@ specship workflow list                  # all your recent runs
 
 The CLI is a thin client over SpecShip's runner; an approval issued via CLI and an approval issued from the Web UI hit the same endpoint and have the same effect.
 
-## Desktop Web UI
+## Desktop dashboard
 
-`specship serve --ui` boots Fastify + Angular on `http://127.0.0.1:4242`. Navigate to **Workflows** for a list of every discovered workflow:
+`specship serve --ui` boots a single-process Fastify server that renders the dashboard **server-side** on `http://127.0.0.1:4242`. The dashboard is **read-only** — you launch and approve workflows from the CLI (`specship workflow run`) or the `/specship:*` slash commands, and watch the results here:
 
-- Click **Run** on any workflow → an input form is generated from its `inputs:` declarations → submit → you're routed to `/runs/<id>` with the live timeline.
-- The timeline streams events via SSE — `step_started`, `tool_called`, `artifact_created`, `approval_requested` — with timestamps.
-- Per-step artifacts (`plan.md`, `diff.md`, `test_results.md`) render inline. Diffs get syntax highlighting; tables get formatted.
-- Approval gates surface as a prominent banner with **Approve** / **Reject (reason)** / **Inspect artifacts** buttons. Approving resumes the run server-side.
+- **Runs** lists every discovered run; open one for its persisted event timeline — `step_started`, `tool_called`, `artifact_created`, `approval_requested` — with timestamps.
+- Per-step artifacts (`plan.md`, `diff.md`, `test_results.md`) render inline.
 
-The Web UI is also where you go for **historical** runs — every event and artifact is persisted in SpecShip's SQLite, so you can replay the timeline of a run from a week ago and see exactly what happened.
+Because every event and artifact is persisted in SpecShip's SQLite, you can replay the timeline of a run from a week ago and see exactly what happened.
 
 → Read the full UI walkthrough at [Claude Code — Overview](/claude-code/overview/) (the dashboard) and [the README's Dashboard section](https://github.com/selvakumarEsra/specship#dashboard).
 

@@ -39,6 +39,16 @@ const doorArch = (stroke: string) =>
 
 export const posts: BlogPost[] = [
   {
+    slug: 'lean-dashboard',
+    cat: 'dashboard', catLabel: 'Dashboard', catColor: '#5B93F2',
+    title: 'A dashboard that installs anywhere: retiring Angular for server-rendered HTML',
+    dek: 'The desktop dashboard shipped ~640 npm packages — bleeding-edge Angular, a 73 MB code editor, native build tooling — and choked behind locked-down enterprise registries. We replaced it with a server-rendered UI that ships inside the server itself: well under 250 mainstream packages, no native builds, the same look.',
+    date: 'Jul 4, 2026', read: '7 min', feat: true,
+    tags: ['#dashboard', '#ssr', '#enterprise', '#dependencies'],
+    thumbBg: 'rgba(91,147,242,0.10)',
+    thumb: `<svg viewBox="0 0 360 200" preserveAspectRatio="xMidYMid slice"><rect width="360" height="200" fill="rgba(91,147,242,0.08)"/><rect x="92" y="44" width="58" height="126" rx="6" fill="rgba(248,81,73,0.38)"/><text x="121" y="34" fill="rgba(214,130,130,0.95)" font-family="Geist Mono, monospace" font-size="15" text-anchor="middle">~640</text><rect x="210" y="118" width="58" height="52" rx="6" fill="rgba(70,194,107,0.55)"/><text x="239" y="108" fill="rgba(120,210,150,0.95)" font-family="Geist Mono, monospace" font-size="15" text-anchor="middle">&lt;250</text><path d="M158 100 L204 128" stroke="rgba(150,165,200,0.4)" stroke-width="2" fill="none" stroke-dasharray="5 5"/></svg>`,
+  },
+  {
     slug: 'reads-door',
     cat: 'doors', catLabel: 'Doors', catColor: '#29D2BE',
     title: 'The reads door: one entrance for every “understand the code” question',
