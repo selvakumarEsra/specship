@@ -9,6 +9,9 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+
+## [0.12.0] - 2026-07-04
+
 ### New Features
 
 - **A lean, server-rendered dashboard that installs behind locked-down registries.** The dashboard has moved off its heavy Angular build to a server-rendered UI that ships with the server itself — the dependency tree drops from ~640 packages to well under 250, all mainstream and mirrorable, with no native builds. It renders read-only (specs, graph, drift, maintainability, domain, memory, costs, sessions, and more), so enterprises building SpecShip from source against an internal npm mirror no longer hit missing-dependency failures. `specship serve --ui` serves it directly.
@@ -523,3 +526,4 @@ Thanks @andreinknv for the substantive draft this release was based on.
 [0.11.7]: https://github.com/selvakumarEsra/specship/releases/tag/v0.11.7
 [0.11.8]: https://github.com/selvakumarEsra/specship/releases/tag/v0.11.8
 [0.11.9]: https://github.com/selvakumarEsra/specship/releases/tag/v0.11.9
+[0.12.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.12.0
