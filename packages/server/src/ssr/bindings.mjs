@@ -41,7 +41,9 @@ function esc(s) {
   return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-/** Replace the inner text of the FIRST cell matched by `cellRe` in `unit`. */
+/** Replace the inner text of the FIRST cell matched by `cellRe` in `unit`.
+ *  Uses a replacement FUNCTION so `$` in values is never interpreted as a
+ *  capture-group reference (the `$38.46 → "8.46"` bug). */
 function setCell(unit, cellRe, value) {
   return unit.replace(cellRe, (m, open, _old, close) => open + esc(value) + close);
 }
@@ -80,12 +82,15 @@ export function bindSessions(html, sessions) {
     r = setCell(r, /(<span class="mono muted grow" style="font-size: 11\.5px;">)([^<]*)(<\/span>)/, `${when} · ${model}`);
     const total = (s.total_input_tokens ?? 0) + (s.total_cache_read_tokens ?? 0);
     const cache = total ? Math.round(((s.total_cache_read_tokens ?? 0) / total) * 100) : null;
-    r = r.replace(/(<span class="mono tabular" style="width: 70px; text-align: right; font-size: 12px;">)([^<]*)(<\/span>)/, `$1${s.prompt_count ?? 0}$3`);
-    r = r.replace(/(<span class="mono tabular" style="width: 70px; text-align: right; font-size: 12px; color: var\(--[a-z]+\);">)([^<]*)(<\/span>)/, `$1${cache == null ? '—' : cache + '%'}$3`);
-    r = r.replace(/(<span class="mono tabular" style="width: 70px; text-align: right; font-size: 12\.5px; font-weight: 600;">)([^<]*)(<\/span>)/, `$1$${Number(s.total_cost_usd ?? 0).toFixed(2)}$3`);
+    r = setCell(r, /(<span class="mono tabular" style="width: 70px; text-align: right; font-size: 12px;">)([^<]*)(<\/span>)/, String(s.prompt_count ?? 0));
+    r = setCell(r, /(<span class="mono tabular" style="width: 70px; text-align: right; font-size: 12px; color: var\(--[a-z]+\);">)([^<]*)(<\/span>)/, cache == null ? '—' : cache + '%');
+    r = setCell(r, /(<span class="mono tabular" style="width: 70px; text-align: right; font-size: 12\.5px; font-weight: 600;">)([^<]*)(<\/span>)/, '$' + Number(s.total_cost_usd ?? 0).toFixed(2));
     return r;
   });
-  return swapRows(html, rows, built);
+  html = swapRows(html, rows, built);
+  // Header subtitle: sample "8 sessions · …" → live count.
+  html = html.replace(/>\d+ sessions · across all projects</, `>${sessions.length} sessions · across all projects<`);
+  return html;
 }
 
 // ---------------------------------------------------------------- runs
@@ -111,8 +116,13 @@ export function bindRuns(html, runs) {
     const t1 = r0.lastActivityAt ? Date.parse(r0.lastActivityAt) : null;
     const dur = t0 && t1 && t1 > t0 ? Math.round((t1 - t0) / 1000) : null;
     const durTxt = dur == null ? '—' : (dur >= 60 ? `${Math.floor(dur / 60)}m ${dur % 60}s` : `${dur}s`);
-    r = r.replace(/(<span class="mono tabular muted" style="width: 90px; font-size: 11\.5px;">)([^<]*)(<\/span>)/, `$1${durTxt}$3`);
-    r = r.replace(/(<span class="mono tabular" style="width: 70px; text-align: right; font-size: 12px;">)([^<]*)(<\/span>)/, `$1—$3`);
+    r = setCell(r, /(<span class="mono tabular muted" style="width: 90px; font-size: 11\.5px;">)([^<]*)(<\/span>)/, durTxt);
+    r = setCell(r, /(<span class="mono tabular" style="width: 70px; text-align: right; font-size: 12px;">)([^<]*)(<\/span>)/, '—');
+    // Trailing cell (sample "Worktree") → the run's primary input, when present.
+    const input = r0.inputs && typeof r0.inputs === 'object' ? Object.values(r0.inputs)[0] : null;
+    r = setCell(r, /(<span class="mono muted" style="width: 130px; text-align: right;[^"]*">)([^<]*)(<\/span>)/, input ? String(input) : '');
+    // Artifacts pill (sample "3") — no artifact count on the list API; blank it.
+    r = setCell(r, /(<\/svg>)(\d+)(<\/span><\/div>)/, '');
     return r;
   });
   return swapRows(html, rows, built);
@@ -138,5 +148,8 @@ export function bindDrift(html, links) {
     r = setCell(r, /(<span class="secondary" style="font-size: 12\.5px; overflow: h[^"]*">)([^<]*)(<\/span>)/, `${l.targetQualifiedName ?? ''} · ${l.targetFilePath ?? ''}`);
     return r;
   });
-  return swapRows(html, rows, built);
+  html = swapRows(html, rows, built);
+  // Header subtitle: sample "4 links need attention" → live count.
+  html = html.replace(/>\d+ links need attention</, `>${live.length} links need attention<`);
+  return html;
 }
