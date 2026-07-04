@@ -32,6 +32,9 @@ import { createShimmerProgress } from '../ui/shimmer-progress';
 import { getGlyphs } from '../ui/glyphs';
 
 import { buildNode25BlockBanner, buildNodeTooOldBanner, MIN_NODE_MAJOR } from './node-version-check';
+import { runUpdate, detectInstallMethod, type InstallMethod } from '../update/updater';
+import { resolveLatestVersion } from '../update/resolve-latest';
+import { runInstaller } from '../update/run-installer';
 import { relaunchWithWasmRuntimeFlagsIfNeeded } from '../extraction/wasm-runtime-flags';
 
 // Lazy-load heavy modules (SpecShip, runInstaller) to keep CLI startup fast.
@@ -3068,6 +3071,38 @@ program
     } finally {
       cg.close();
     }
+  });
+
+/**
+ * specship update — self-update to the latest release (CLI-UPDATE-DOC).
+ */
+program
+  .command('update')
+  .description('Update SpecShip to the latest released version')
+  .option('--check', 'Report whether an update is available without installing anything')
+  .action(async (options: { check?: boolean }) => {
+    const installDir = process.env.SPECSHIP_INSTALL_DIR || path.join(os.homedir(), '.specship');
+    const binDir = process.env.SPECSHIP_BIN_DIR || path.join(os.homedir(), '.local', 'bin');
+
+    const result = await runUpdate(
+      {
+        currentVersion: packageJson.version,
+        // __dirname is the resolved location of the running specship.js —
+        // under ~/.specship for a bundle install, under node_modules for npm.
+        detect: (): InstallMethod => detectInstallMethod(__dirname, installDir),
+        resolveLatest: (method) => resolveLatestVersion(method),
+        runInstaller: (method) => runInstaller(method, { installDir, binDir }),
+        installDir,
+        binDir,
+      },
+      { check: options.check },
+    );
+
+    for (const line of result.lines) {
+      if (result.exitCode === 0) info(line);
+      else warn(line);
+    }
+    if (result.exitCode !== 0) process.exit(result.exitCode);
   });
 
 // Parse and run
