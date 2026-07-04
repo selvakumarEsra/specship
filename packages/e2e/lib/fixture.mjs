@@ -104,7 +104,9 @@ function seedTranscripts() {
     const sessionId = `e2e-sess-${s}`;
     for (let p = 1; p <= 3; p++) {
       const promptId = `p-${s}-${p}`;
-      const base = Date.UTC(2026, 5, 20 + s, 9 + p, 0, 0);
+      // Relative to now (session s is 4-s days old) — the sessions API's
+      // default range is `week`, so fixed dates would age out of the window.
+      const base = Date.now() - (4 - s) * 24 * 3600_000 + p * 3600_000;
       const iso = (offsetSec) => new Date(base + offsetSec * 1000).toISOString();
       // user prompt
       lines.push(JSON.stringify({

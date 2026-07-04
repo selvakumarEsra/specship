@@ -58,6 +58,14 @@ function swapRows(html, rows, built) {
   return html.slice(0, start) + built.join('') + html.slice(end);
 }
 
+/** Wrap a rebuilt row in a real link so clicking navigates to the detail
+ *  page. The design gives rows `cursor: pointer` but no href — a block-level
+ *  anchor adds navigation with zero visual delta (the row div keeps every
+ *  design style), and the instant-nav island intercepts it for SPA-feel. */
+function linkRow(row, href) {
+  return `<a href="${esc(href)}" style="display: block; text-decoration: none; color: inherit;">${row}</a>`;
+}
+
 // ---------------------------------------------------------------- status strip
 export function bindStatusStrip(html, { nodes, edges, drift, indexedAgo }) {
   if (nodes != null) html = html.replace('>4,218<', '>' + Number(nodes).toLocaleString() + '<');
@@ -85,7 +93,7 @@ export function bindSessions(html, sessions) {
     r = setCell(r, /(<span class="mono tabular" style="width: 70px; text-align: right; font-size: 12px;">)([^<]*)(<\/span>)/, String(s.prompt_count ?? 0));
     r = setCell(r, /(<span class="mono tabular" style="width: 70px; text-align: right; font-size: 12px; color: var\(--[a-z]+\);">)([^<]*)(<\/span>)/, cache == null ? '—' : cache + '%');
     r = setCell(r, /(<span class="mono tabular" style="width: 70px; text-align: right; font-size: 12\.5px; font-weight: 600;">)([^<]*)(<\/span>)/, '$' + Number(s.total_cost_usd ?? 0).toFixed(2));
-    return r;
+    return s.id != null ? linkRow(r, '/sessions/' + encodeURIComponent(String(s.id))) : r;
   });
   html = swapRows(html, rows, built);
   // Header subtitle: sample "8 sessions · …" → live count.
@@ -123,7 +131,7 @@ export function bindRuns(html, runs) {
     r = setCell(r, /(<span class="mono muted" style="width: 130px; text-align: right;[^"]*">)([^<]*)(<\/span>)/, input ? String(input) : '');
     // Artifacts pill (sample "3") — no artifact count on the list API; blank it.
     r = setCell(r, /(<\/svg>)(\d+)(<\/span><\/div>)/, '');
-    return r;
+    return r0.id != null ? linkRow(r, '/runs/' + encodeURIComponent(String(r0.id))) : r;
   });
   return swapRows(html, rows, built);
 }
@@ -152,7 +160,7 @@ export function bindDrift(html, links) {
     r = r.replace(/>code</, '>' + esc(l.targetNodeKind ?? l.kind ?? 'code') + '<');
     r = setCell(r, /(<span class="mono muted" style="[^"]*text-align: right;">)(tree-sitter)(<\/span>)/, '');
     r = setCell(r, /(<span class="mono muted tabular" style="font-size: 11px; flex-shrink: 0; width: 32px; text-align: right;">)([^<]*)(<\/span>)/, '');
-    return r;
+    return l.specId ? linkRow(r, '/specs/' + encodeURIComponent(l.specId)) : r;
   });
   html = swapRows(html, rows, built);
   // Header subtitle: sample "4 links need attention" → live count.
@@ -381,7 +389,7 @@ export function bindSpecs(html, specsResp, detail) {
         r = r.replace(/(<div class="mono" style="font-size: 11px; color: var\(--[a-z-]+\);">)([^<]*)(<\/div>)/, (m, a, _o, b) => a + esc(s.id) + b);
         r = r.replace(/(<div class="muted" style="font-size: 10\.5px;[^"]*">)([^<]*)(<\/div>)/, (m, a, _o, b) => a + esc((s.title || '').replace(/<!--[\s\S]*?-->/g, '').trim().slice(0, 60)) + b);
         r = r.replace(/(<span class="pill-dot" style="background: )[^;"]*(;)/, `$1${dotFor(s.id)}$2`);
-        return r;
+        return s.id ? linkRow(r, '/specs/' + encodeURIComponent(s.id)) : r;
       }).join('');
       return `<div>${head}<div style="margin-left: 14px; border-left: 1px solid var(--border-subtle); padding-left: 6px;">${rows}</div></div>`;
     }).join('');
