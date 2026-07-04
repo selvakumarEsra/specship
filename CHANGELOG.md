@@ -9,6 +9,9 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+
+## [0.12.1] - 2026-07-04
+
 ### New Features
 
 - **The status line now reads as two lines.** SpecShip's identity (sync state, call count, the active run) stays on the first line — now including the active run's estimated time remaining ("≈4–11m left", or "waiting on you" at an approval gate) — while the capacity bars (context, 5-hour and 7-day usage) move to a second line, so neither crowds the other.
@@ -531,3 +534,4 @@ Thanks @andreinknv for the substantive draft this release was based on.
 [0.11.8]: https://github.com/selvakumarEsra/specship/releases/tag/v0.11.8
 [0.11.9]: https://github.com/selvakumarEsra/specship/releases/tag/v0.11.9
 [0.12.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.12.0
+[0.12.1]: https://github.com/selvakumarEsra/specship/releases/tag/v0.12.1
