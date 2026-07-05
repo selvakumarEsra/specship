@@ -7,11 +7,11 @@
  *
  * Endpoints:
  *   GET /api/claude/projects                 — every indexed Claude project
- *   GET /api/claude/sessions?project=&limit= — sessions list
+ *   GET /api/claude/sessions?project=&limit=&range=&model= — sessions list
  *   GET /api/claude/prompts/recent?project=&limit= — newest user prompts (⌘K palette)
  *   GET /api/claude/session/:id              — session detail (prompts + tools)
- *   GET /api/claude/heatmap?range=           — file/tool/subagent heatmaps
- *   GET /api/claude/costs?range=             — cost rollup, timeseries, per-model
+ *   GET /api/claude/heatmap?range=&project=  — file/tool/subagent heatmaps
+ *   GET /api/claude/costs?range=&project=&model= — cost rollup, timeseries, per-model
  *   GET /api/claude/compare                  — per-project cost comparison
  *   GET /api/claude/tips                     — rule-based tips engine output (minus dismissed)
  *   POST /api/claude/tips/state              — persist a tip's Apply/Dismiss state
@@ -140,21 +140,25 @@ export async function registerClaudeRoutes(app: FastifyInstance): Promise<void> 
     return { projects: rows };
   });
 
-  app.get('/api/claude/sessions', async (req: FastifyRequest<{ Querystring: { project?: string; limit?: string; range?: string } }>, reply) => {
+  app.get('/api/claude/sessions', async (req: FastifyRequest<{ Querystring: { project?: string; limit?: string; range?: string; model?: string } }>, reply) => {
     const cg = requirePrimary(reply); if (!cg) return;
     const db = getDb(cg);
     const limit = Math.min(parseInt(req.query.limit ?? '100', 10) || 100, 500);
     const since = rangeStart(rangeKey(req.query.range));
     const params: unknown[] = [since];
-    let whereProject = '';
+    let where = '';
     if (req.query.project) {
-      whereProject = ' AND project_path = ?';
+      where += ' AND project_path = ?';
       params.push(normalizeProjectFilter(req.query.project));
+    }
+    if (req.query.model) {
+      where += ' AND last_model = ?';
+      params.push(req.query.model);
     }
     params.push(limit);
     const sessions = db.prepare(`
       SELECT * FROM claude_sessions
-      WHERE started_at >= ?${whereProject}
+      WHERE started_at >= ?${where}
       ORDER BY started_at DESC
       LIMIT ?
     `).all(...params);
@@ -434,20 +438,27 @@ export async function registerClaudeRoutes(app: FastifyInstance): Promise<void> 
     };
   });
 
-  app.get('/api/claude/heatmap', async (req: FastifyRequest<{ Querystring: { range?: string } }>, reply) => {
+  app.get('/api/claude/heatmap', async (req: FastifyRequest<{ Querystring: { range?: string; project?: string } }>, reply) => {
     const cg = requirePrimary(reply); if (!cg) return;
     const db = getDb(cg);
     const since = rangeStart(rangeKey(req.query.range));
+
+    // Optional project narrowing (REQ-DESKTOP-024.A2) — tool calls and prompts
+    // carry only session_id, so scope through claude_sessions.project_path.
+    const project = req.query.project ? normalizeProjectFilter(req.query.project) : undefined;
+    const inProject = (col = ''): string =>
+      project ? ` AND ${col}session_id IN (SELECT id FROM claude_sessions WHERE project_path = ?)` : '';
+    const withProject = (...lead: unknown[]): unknown[] => (project ? [...lead, project] : lead);
 
     // Files heatmap — input_summary doubles as the file path for Read/Edit/Write.
     const files = db.prepare(`
       SELECT input_summary as path, COUNT(*) as calls, SUM(result_length) as resultBytes
       FROM claude_tool_calls
-      WHERE ts >= ? AND tool_name IN ('Read','Edit','Write','NotebookEdit') AND input_summary != ''
+      WHERE ts >= ? AND tool_name IN ('Read','Edit','Write','NotebookEdit') AND input_summary != ''${inProject()}
       GROUP BY input_summary
       ORDER BY calls DESC
       LIMIT 100
-    `).all(since) as Array<Record<string, number | string>>;
+    `).all(...withProject(since)) as Array<Record<string, number | string>>;
 
     // Per-file 7-day call trend — one sparkline (oldest→newest) per file cell.
     // Always a fixed 7-day window, independent of `range`, so the trend reads
@@ -457,9 +468,9 @@ export async function registerClaudeRoutes(app: FastifyInstance): Promise<void> 
     const trendRows = db.prepare(`
       SELECT input_summary as path, CAST((ts - ?) / ? AS INTEGER) as bucket, COUNT(*) as calls
       FROM claude_tool_calls
-      WHERE ts >= ? AND tool_name IN ('Read','Edit','Write','NotebookEdit') AND input_summary != ''
+      WHERE ts >= ? AND tool_name IN ('Read','Edit','Write','NotebookEdit') AND input_summary != ''${inProject()}
       GROUP BY input_summary, bucket
-    `).all(trend7Start, dayMs, trend7Start) as Array<{ path: string; bucket: number; calls: number }>;
+    `).all(...withProject(trend7Start, dayMs, trend7Start)) as Array<{ path: string; bucket: number; calls: number }>;
     const trendByPath = new Map<string, number[]>();
     for (const r of trendRows) {
       if (r.bucket < 0 || r.bucket > 6) continue;
@@ -475,10 +486,10 @@ export async function registerClaudeRoutes(app: FastifyInstance): Promise<void> 
     const tools = db.prepare(`
       SELECT tool_name as name, COUNT(*) as calls, SUM(result_length) as resultBytes
       FROM claude_tool_calls
-      WHERE ts >= ?
+      WHERE ts >= ?${inProject()}
       GROUP BY tool_name
       ORDER BY calls DESC
-    `).all(since);
+    `).all(...withProject(since));
 
     // Subagent attribution (is_sidechain at the prompt level — main vs. sidechain rollup).
     const subagents = db.prepare(`
@@ -488,9 +499,9 @@ export async function registerClaudeRoutes(app: FastifyInstance): Promise<void> 
         SUM(p.input_tokens + p.output_tokens + p.cache_creation_tokens + p.cache_read_tokens) as tokens,
         SUM(p.cost_usd) as cost
       FROM claude_prompts p
-      WHERE p.ts >= ?
+      WHERE p.ts >= ?${inProject('p.')}
       GROUP BY type
-    `).all(since);
+    `).all(...withProject(since));
 
     // Subagent breakdown by name — Task tool calls grouped by subagent_type
     // (defaults to 'general-purpose' when unset). Guarded extraction: Task
@@ -502,10 +513,10 @@ export async function registerClaudeRoutes(app: FastifyInstance): Promise<void> 
         MIN(ts) as firstSeen,
         MAX(ts) as lastSeen
       FROM claude_tool_calls
-      WHERE ts >= ? AND tool_name = 'Task'
+      WHERE ts >= ? AND tool_name = 'Task'${inProject()}
       GROUP BY name
       ORDER BY calls DESC
-    `).all(since);
+    `).all(...withProject(since));
 
     return { files, tools, subagents, subagentByName };
   });
@@ -668,35 +679,63 @@ export async function registerClaudeRoutes(app: FastifyInstance): Promise<void> 
     };
   });
 
-  app.get('/api/claude/costs', async (req: FastifyRequest<{ Querystring: { range?: string } }>, reply) => {
+  app.get('/api/claude/costs', async (req: FastifyRequest<{ Querystring: { range?: string; project?: string; model?: string } }>, reply) => {
     const cg = requirePrimary(reply); if (!cg) return;
     const db = getDb(cg);
     const since = rangeStart(rangeKey(req.query.range));
 
-    const total = db.prepare(`SELECT SUM(total_cost_usd) as t FROM claude_sessions WHERE started_at >= ?`).get(since) as { t: number };
+    // Optional narrowing (REQ-DESKTOP-024.A2). Both filters live at the prompt
+    // level (project via the owning session), so every prompt query below
+    // shares one fragment; the sessions join is only added when needed.
+    const project = req.query.project ? normalizeProjectFilter(req.query.project) : undefined;
+    const model = req.query.model || undefined;
+    const filtered = Boolean(project || model);
+    const pJoin = project ? ' JOIN claude_sessions s ON s.id = p.session_id' : '';
+    const pFilter = (project ? ' AND s.project_path = ?' : '') + (model ? ' AND p.model = ?' : '');
+    const pParams = (...lead: unknown[]): unknown[] => {
+      const out = [...lead];
+      if (project) out.push(project);
+      if (model) out.push(model);
+      return out;
+    };
+
+    // Total spend in the window. Unfiltered keeps the session-level rollup
+    // (matches the dashboard's historical numbers, which include prompts with
+    // a NULL model); filtered totals must come from the same prompt rows the
+    // filters apply to, or the headline wouldn't narrow with the breakdowns.
+    const totalOf = (start: number, end: number | null): number => {
+      if (!filtered) {
+        const where = end == null ? 'started_at >= ?' : 'started_at >= ? AND started_at < ?';
+        const row = db.prepare(`SELECT SUM(total_cost_usd) as t FROM claude_sessions WHERE ${where}`)
+          .get(...(end == null ? [start] : [start, end])) as { t: number };
+        return row.t ?? 0;
+      }
+      const where = end == null ? 'p.ts >= ?' : 'p.ts >= ? AND p.ts < ?';
+      const row = db.prepare(`SELECT SUM(p.cost_usd) as t FROM claude_prompts p${pJoin} WHERE ${where}${pFilter}`)
+        .get(...pParams(...(end == null ? [start] : [start, end]))) as { t: number };
+      return row.t ?? 0;
+    };
+    const total = totalOf(since, null);
 
     // Week-over-week spend delta: fractional change in total cost vs the prior
     // equal-length window (e.g. -0.08 → "-8%"). Zero for 'all' or no prior data.
     const prior = priorWindow(rangeKey(req.query.range));
     let wowDelta = 0;
     if (prior.end > prior.start) {
-      const pTotal = db.prepare(
-        `SELECT SUM(total_cost_usd) as t FROM claude_sessions WHERE started_at >= ? AND started_at < ?`,
-      ).get(prior.start, prior.end) as { t: number };
-      const pt = pTotal.t ?? 0;
-      if (pt > 0) wowDelta = ((total.t ?? 0) - pt) / pt;
+      const pt = totalOf(prior.start, prior.end);
+      if (pt > 0) wowDelta = (total - pt) / pt;
     }
 
     // Top prompts by cost. is_sidechain rides along so the dashboard's
     // Recent-prompts module can badge subagent turns (REQ-DESKTOP-020).
     const topPrompts = db.prepare(`
-      SELECT id, session_id, substr(text, 1, 200) as text, model, cost_usd, is_sidechain,
-             input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, ts
-      FROM claude_prompts
-      WHERE ts >= ? AND cost_usd > 0
-      ORDER BY cost_usd DESC
+      SELECT p.id, p.session_id, substr(p.text, 1, 200) as text, p.model, p.cost_usd, p.is_sidechain,
+             p.input_tokens, p.output_tokens, p.cache_creation_tokens, p.cache_read_tokens, p.ts
+      FROM claude_prompts p${pJoin}
+      WHERE p.ts >= ? AND p.cost_usd > 0${pFilter}
+      ORDER BY p.cost_usd DESC
       LIMIT 50
-    `).all(since);
+    `).all(...pParams(since));
 
     // Daily timeseries: bucket by 24h windows.
     const days = 30;
@@ -704,14 +743,14 @@ export async function registerClaudeRoutes(app: FastifyInstance): Promise<void> 
     const dayBoundary = Math.floor(Date.now() / dayMs) * dayMs - (days - 1) * dayMs;
     const series = db.prepare(`
       SELECT
-        CAST((ts - ?) / ? AS INTEGER) as bucket,
-        SUM(cost_usd) as cost,
+        CAST((p.ts - ?) / ? AS INTEGER) as bucket,
+        SUM(p.cost_usd) as cost,
         COUNT(*) as prompts
-      FROM claude_prompts
-      WHERE ts >= ?
+      FROM claude_prompts p${pJoin}
+      WHERE p.ts >= ?${pFilter}
       GROUP BY bucket
       ORDER BY bucket ASC
-    `).all(dayBoundary, dayMs, dayBoundary) as Array<{ bucket: number; cost: number; prompts: number }>;
+    `).all(...pParams(dayBoundary, dayMs, dayBoundary)) as Array<{ bucket: number; cost: number; prompts: number }>;
     // Densify with zeros for missing days.
     const dense: Array<{ day: number; cost: number; prompts: number }> = [];
     for (let i = 0; i < days; i++) {
@@ -721,14 +760,14 @@ export async function registerClaudeRoutes(app: FastifyInstance): Promise<void> 
 
     // By model.
     const byModel = db.prepare(`
-      SELECT model, COUNT(*) as prompts, SUM(cost_usd) as cost
-      FROM claude_prompts
-      WHERE ts >= ? AND model IS NOT NULL
-      GROUP BY model
+      SELECT p.model, COUNT(*) as prompts, SUM(p.cost_usd) as cost
+      FROM claude_prompts p${pJoin}
+      WHERE p.ts >= ? AND p.model IS NOT NULL${pFilter}
+      GROUP BY p.model
       ORDER BY cost DESC
-    `).all(since);
+    `).all(...pParams(since));
 
-    return { total: total.t ?? 0, topPrompts, series: dense, byModel, wowDelta };
+    return { total, topPrompts, series: dense, byModel, wowDelta };
   });
 
   /**

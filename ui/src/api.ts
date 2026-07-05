@@ -401,11 +401,118 @@ export interface ClaudeSession {
   total_cost_usd: number | null;
   prompt_count: number | null;
   last_model: string | null;
+  total_input_tokens?: number;
+  total_output_tokens?: number;
+  total_cache_creation_tokens?: number;
+  total_cache_read_tokens?: number;
   [key: string]: unknown;
 }
 
 export interface ClaudeSessionsResponse {
   sessions: ClaudeSession[];
+}
+
+/** One claude_prompts row from /api/claude/session/:id (+ derived duration). */
+export interface ClaudePrompt {
+  id: string;
+  session_id: string;
+  text: string | null;
+  ts: number;
+  model: string | null;
+  input_tokens: number;
+  output_tokens: number;
+  cache_creation_tokens: number;
+  cache_read_tokens: number;
+  cost_usd: number;
+  is_sidechain: number;
+  durationMs?: number;
+  [key: string]: unknown;
+}
+
+/** One claude_tool_calls row from /api/claude/session/:id. */
+export interface ClaudeToolCall {
+  prompt_id: string | null;
+  session_id: string;
+  tool_name: string;
+  input_summary: string;
+  result_length: number | null;
+  ts: number;
+  [key: string]: unknown;
+}
+
+export interface ClaudeSessionDetailResponse {
+  session: ClaudeSession;
+  prompts: ClaudePrompt[];
+  toolCalls: ClaudeToolCall[];
+}
+
+/** GET /api/claude/session/:id/summary — the Session Detail summary rail. */
+export interface ClaudeSessionSummaryResponse {
+  sessionId: string;
+  byTool: Array<{ name: string; calls: number; totalBytes: number }>;
+  byModel: Array<{ model: string; prompts: number; cost: number }>;
+  slashCommands: Array<{ name: string; count: number }>;
+  skills: Array<{ name: string; count: number }>;
+  filesTouched: Array<{ path: string; ops: number; lastOp: string }>;
+  durationMs: number;
+  specship: { spendTokens: number; savedTokens: number; netTokens: number };
+}
+
+/** One row from GET /api/claude/projects — Claude-cost projects (by cwd). */
+export interface ClaudeProject {
+  path: string;
+  name: string;
+  sessions: number;
+  cost: number;
+  prompts: number;
+  [key: string]: unknown;
+}
+
+export interface ClaudeProjectsResponse {
+  projects: ClaudeProject[];
+}
+
+/** One row from GET /api/claude/compare — per-project cost comparison. */
+export interface ClaudeCompareProject {
+  path: string;
+  name: string;
+  sessions: number;
+  cost: number;
+  avgCost: number;
+  prompts: number;
+  cacheHit: number;
+  drift: number;
+  byModel: Array<{ model: string; cost: number }>;
+  topTools: string[];
+  [key: string]: unknown;
+}
+
+export interface ClaudeCompareResponse {
+  projects: ClaudeCompareProject[];
+}
+
+// ---- Heatmap drill-downs (REQ-DESKTOP-024) ----
+
+/** GET /api/claude/heatmap/file — sessions + tool split for one file path. */
+export interface HeatmapFileDetail {
+  path: string;
+  sessions: Array<{ session_id: string; last_model: string | null; project_path: string | null; calls: number; bytes: number; lastTs: number; firstTs: number }>;
+  byTool: Array<{ name: string; calls: number; bytes: number }>;
+}
+
+/** GET /api/claude/heatmap/tool — totals + top inputs for one tool. */
+export interface HeatmapToolDetail {
+  tool: string;
+  totals: { calls: number; bytes: number; sessions: number };
+  inputs: Array<{ input: string; calls: number; bytes: number; lastTs: number }>;
+  recentSessions: Array<{ session_id: string; last_model: string | null; project_path: string | null; calls: number; lastTs: number }>;
+}
+
+/** GET /api/claude/heatmap/subagent — invocations of one subagent_type. */
+export interface HeatmapSubagentDetail {
+  subagent: string;
+  totals: { calls: number; sessions: number };
+  invocations: Array<{ session_id: string; ts: number; description: string; prompt: string; last_model: string | null }>;
 }
 
 export interface SpecshipImpactResponse {
@@ -447,17 +554,33 @@ export const api = {
     getJson<SearchResponse>(q(`/api/graph/search?q=${encodeURIComponent(qs)}&limit=${limit}`, project)),
   recentPrompts: (project?: string | null, limit = 20) =>
     getJson<RecentPromptsResponse>(q(`/api/claude/prompts/recent?limit=${limit}`, project)),
-  // Claude analytics (REQ-DESKTOP-020). These aggregate the cross-project
-  // claude_* tables on the primary project's DB — no ?project= filter.
+  // Claude analytics (REQ-DESKTOP-020/-024). These aggregate the cross-project
+  // claude_* tables on the primary project's DB; the optional project/model
+  // params narrow them (REQ-DESKTOP-024.A2). `project` here is a Claude
+  // project path (or transcript-dir slug), not a specship project slug.
   claudeStats: (range = 'week') => getJson<ClaudeStatsResponse>(`/api/claude/stats?range=${range}`),
-  claudeCosts: (range = 'week') => getJson<ClaudeCostsResponse>(`/api/claude/costs?range=${range}`),
+  claudeCosts: (range = 'week', project?: string | null, model?: string | null) =>
+    getJson<ClaudeCostsResponse>(q(`/api/claude/costs?range=${range}${model ? `&model=${encodeURIComponent(model)}` : ''}`, project)),
   claudeCache: (range = 'week') => getJson<ClaudeCacheResponse>(`/api/claude/cache?range=${range}`),
-  claudeHeatmap: (range = 'week') => getJson<ClaudeHeatmapResponse>(`/api/claude/heatmap?range=${range}`),
+  claudeHeatmap: (range = 'week', project?: string | null) =>
+    getJson<ClaudeHeatmapResponse>(q(`/api/claude/heatmap?range=${range}`, project)),
+  claudeHeatmapFile: (path: string, range = 'week') =>
+    getJson<HeatmapFileDetail>(`/api/claude/heatmap/file?path=${encodeURIComponent(path)}&range=${range}`),
+  claudeHeatmapTool: (name: string, range = 'week') =>
+    getJson<HeatmapToolDetail>(`/api/claude/heatmap/tool?name=${encodeURIComponent(name)}&range=${range}`),
+  claudeHeatmapSubagent: (type: string, range = 'week') =>
+    getJson<HeatmapSubagentDetail>(`/api/claude/heatmap/subagent?type=${encodeURIComponent(type)}&range=${range}`),
   claudeTips: () => getJson<ClaudeTipsResponse>('/api/claude/tips'),
   setTipState: (id: string, state: 'applied' | 'dismissed') =>
     postJson<{ ok: boolean }>('/api/claude/tips/state', { id, state }),
-  claudeSessions: (project?: string | null, limit = 10) =>
-    getJson<ClaudeSessionsResponse>(q(`/api/claude/sessions?limit=${limit}`, project)),
+  claudeSessions: (project?: string | null, limit = 10, range = 'week', model?: string | null) =>
+    getJson<ClaudeSessionsResponse>(q(`/api/claude/sessions?limit=${limit}&range=${range}${model ? `&model=${encodeURIComponent(model)}` : ''}`, project)),
+  claudeSession: (id: string) =>
+    getJson<ClaudeSessionDetailResponse>(`/api/claude/session/${encodeURIComponent(id)}`),
+  claudeSessionSummary: (id: string) =>
+    getJson<ClaudeSessionSummaryResponse>(`/api/claude/session/${encodeURIComponent(id)}/summary`),
+  claudeProjects: () => getJson<ClaudeProjectsResponse>('/api/claude/projects'),
+  claudeCompare: () => getJson<ClaudeCompareResponse>('/api/claude/compare'),
   specshipImpact: (range = 'week') =>
     getJson<SpecshipImpactResponse>(`/api/claude/specship-impact?range=${range}`),
   ingestNow: () => postJson<{ ok: boolean }>('/api/claude/ingest'),

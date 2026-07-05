@@ -31,7 +31,7 @@ export const fmtTok = (n: number): string =>
 const shortPath = (p: string): string => p.split('/').filter(Boolean).slice(-2).join('/');
 
 /** Prompt text arrives with <command-name>… wrappers; show the words only. */
-const cleanText = (t: string): string => t.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+export const cleanText = (t: string): string => t.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 
 // ---- Shared module chrome ----
 

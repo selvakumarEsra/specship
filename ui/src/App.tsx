@@ -9,13 +9,18 @@ import { Icon, LogoMark } from './components/icons';
 import { useApi, useGlobalShortcuts } from './hooks';
 import { go, usePathRoute } from './router';
 import { applyTheme, getThemePref, type ThemePref } from './theme';
+import { ComparePage } from './pages/compare';
+import { CostsPage } from './pages/costs';
 import { DashboardPage } from './pages/dashboard';
 import { DesignSystemPage } from './pages/designsystem';
 import { DriftPage } from './pages/drift';
 import { GraphPage } from './pages/graph';
+import { HeatmapPage } from './pages/heatmap';
 import { PlaceholderPage } from './pages/placeholder';
 import { RunsPage } from './pages/runs';
+import { SessionsPage } from './pages/sessions';
 import { SpecsPage } from './pages/specs';
+import { TipsPage } from './pages/tips';
 import { WorkflowsPage } from './pages/workflows';
 import type { PageProps } from './pages/types';
 
@@ -74,6 +79,11 @@ const PALETTE_PAGES: PalettePage[] = [
 /** ⌘1–7 targets: the first seven nav items in sidebar order (REQ-DESKTOP-019). */
 const JUMP_PAGE_IDS = NAV.flatMap((g) => g.items.map((it) => it.id)).slice(0, 7);
 
+/**
+ * Routed screens (REQ-DESKTOP-024 lands the five Claude analytics pages).
+ * Tips is wired separately in App — it takes the lifted tips state so
+ * dismissal updates the sidebar badge in the same reload (024.A4).
+ */
 const SCREENS: Record<string, ComponentType<PageProps>> = {
   dashboard: DashboardPage,
   graph: GraphPage,
@@ -82,13 +92,12 @@ const SCREENS: Record<string, ComponentType<PageProps>> = {
   runs: RunsPage,
   workflows: WorkflowsPage,
   designsystem: () => <DesignSystemPage />,
-  sessions: () => <PlaceholderPage title="Sessions" req="REQ-DESKTOP-024" />,
-  heatmap: () => <PlaceholderPage title="Heatmap" req="REQ-DESKTOP-026" />,
-  costs: () => <PlaceholderPage title="Costs" req="REQ-DESKTOP-027" />,
-  compare: () => <PlaceholderPage title="Compare projects" req="REQ-DESKTOP-028" />,
+  sessions: SessionsPage,
+  heatmap: HeatmapPage,
+  costs: CostsPage,
+  compare: ComparePage,
   memory: () => <PlaceholderPage title="Memory" req="REQ-DESKTOP-029" />,
   mcp: () => <PlaceholderPage title="MCP" req="REQ-DESKTOP-030" />,
-  tips: () => <PlaceholderPage title="Tips" req="REQ-DESKTOP-031" />,
   settings: () => <PlaceholderPage title="Settings" req="REQ-DESKTOP-032" />,
 };
 
@@ -129,6 +138,15 @@ export function App() {
 
   const openPalette = useCallback(() => setPaletteOpen(true), []);
 
+  // A4 (REQ-DESKTOP-024): Apply/Dismiss persists server-side, then the SHARED
+  // tips state reloads — the sidebar badge and the Tips screen update from the
+  // same fetch, so a dismissal is reflected in both immediately.
+  const setTipState = useCallback((id: string, state: 'applied' | 'dismissed') => {
+    api.setTipState(id, state)
+      .catch(() => undefined)
+      .finally(() => tips.reload());
+  }, [tips.reload]);
+
   const toggleCollapse = () =>
     setCollapsed((c) => {
       try { localStorage.setItem(NAV_COLLAPSED_KEY, c ? '0' : '1'); } catch { /* ignore */ }
@@ -167,7 +185,9 @@ export function App() {
         />
         <TopBar onToggle={toggleCollapse} onOpenPalette={openPalette} />
         <div key={route + (param ?? '')} style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-          <Screen project={project} param={param} query={query} />
+          {route === 'tips'
+            ? <TipsPage project={project} param={param} query={query} tips={tips} onSetTipState={setTipState} />
+            : <Screen project={project} param={param} query={query} />}
         </div>
       </div>
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} pages={PALETTE_PAGES} project={project} />
