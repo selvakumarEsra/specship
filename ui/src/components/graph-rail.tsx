@@ -17,17 +17,20 @@ const railHead: CSSProperties = { gap: 8, padding: '13px 14px', borderBottom: '1
 const railBody: CSSProperties = { flex: 1, padding: 14, display: 'flex', flexDirection: 'column', gap: 16 };
 const ellipsis: CSSProperties = { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' };
 
+/** Rail list row — interactive ones take the shared .list-row states
+ * (REQ-DESKTOP-013) and are keyboard-operable (014.A1/013.A4). */
 function HoverRow({ onClick, children, bordered }: { onClick?: () => void; children: ReactNode; bordered?: boolean }) {
   return (
     <div
       onClick={onClick}
-      className="row gap-8"
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={onClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } } : undefined}
+      className={'row gap-8' + (onClick ? ' list-row' : '')}
       style={{
         padding: bordered ? '6px 8px' : '5px 8px', borderRadius: 6, cursor: onClick ? 'pointer' : 'default',
         fontSize: 12, border: bordered ? '1px solid var(--border-subtle)' : 'none', marginBottom: bordered ? 5 : 0,
       }}
-      onMouseEnter={(e) => { if (onClick) e.currentTarget.style.background = 'var(--bg-hover)'; }}
-      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
     >
       {children}
     </div>
@@ -185,7 +188,7 @@ export function GraphDetailRail({ id, project, onSelect, onClose }: {
       <div style={railCol}>
         <div className="row" style={railHead}>
           <span className="grow" style={{ fontWeight: 600, fontSize: 13.5 }}>Node</span>
-          <button className="btn btn-ghost btn-xs" onClick={onClose}><Icon name="x" size={14} /></button>
+          <button className="btn btn-ghost btn-xs" aria-label="Close node detail" onClick={onClose}><Icon name="x" size={14} /></button>
         </div>
         <div className="muted" style={{ padding: 14, fontSize: 12 }}>
           {detail.loading ? 'Loading node…' : 'Node not found — it may have been re-indexed away.'}
@@ -208,14 +211,14 @@ export function GraphDetailRail({ id, project, onSelect, onClose }: {
             <Pill color={col} bg={`color-mix(in srgb, ${col} 14%, transparent)`}>{node.kind}</Pill>
           </div>
         </div>
-        <button className="btn btn-ghost btn-xs" onClick={onClose}><Icon name="x" size={14} /></button>
+        <button className="btn btn-ghost btn-xs" aria-label="Close node detail" onClick={onClose}><Icon name="x" size={14} /></button>
       </div>
 
       <div className="scroll-y" style={railBody}>
         <div className="row gap-6" style={{ fontSize: 11.5 }}>
           <Icon name="folder" size={12} style={{ color: 'var(--text-muted)' }} />
           <span className="mono secondary" style={ellipsis}>{node.filePath}</span>
-          <CopyBtn text={node.filePath} />
+          <CopyBtn text={node.filePath} ariaLabel="Copy file path" />
         </div>
 
         {!isSpec && node.signature && (

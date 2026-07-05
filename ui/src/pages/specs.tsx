@@ -3,13 +3,20 @@
  * the design bundle's Specs (specs/specship-desktop/screens-specs.jsx) onto
  * live /api/specs + /api/spec/:id data (REQ-DESKTOP-022).
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { api, isNoProject, type SpecDoc } from '../api';
 import { useApi } from '../hooks';
 import { Icon } from '../components/icons';
-import { SpecDetail } from '../components/spec-detail';
+import { SpecDetail, type SpecDetailCache } from '../components/spec-detail';
 import { Empty, STATE } from '../components/ui';
 import type { PageProps } from './types';
+
+/** Enter/Space activate a focusable row, mirroring its click (REQ-DESKTOP-014.A1). */
+function rowKey(activate: () => void) {
+  return (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activate(); }
+  };
+}
 
 export interface SpecGroup {
   doc: SpecDoc | null;
@@ -57,6 +64,8 @@ export function SpecsPage({ project, param, query }: PageProps) {
     if (target) setSel(target);
   }, [param, query.sel]);
   const [off, setOff] = useState<Set<string>>(new Set());
+  // Details viewed this mount — re-selection swaps in instantly (016.A1).
+  const detailCache = useRef<SpecDetailCache>(new Map()).current;
 
   const groups = useMemo(() => groupSpecs(specsQ.data?.specs ?? []), [specsQ.data]);
   const linkStates = specsQ.data?.linkStates ?? {};
@@ -121,7 +130,7 @@ export function SpecsPage({ project, param, query }: PageProps) {
             );
           })}
         </div>
-        <div className="scroll-y" style={{ flex: 1, padding: 6 }}>
+        <div className="scroll-y" style={{ flex: 1, padding: 6 }} role={groups.length ? 'tree' : undefined} aria-label={groups.length ? 'Spec tree' : undefined}>
           {specsQ.data && !groups.length && (
             <Empty icon="book" title="No specs yet" body="Author one with the spec-author skill — specs/*.md index on sync." />
           )}
@@ -131,12 +140,13 @@ export function SpecsPage({ project, param, query }: PageProps) {
         </div>
       </div>
       <div className="col" style={{ flex: 1, minWidth: 0 }}>
-        <SpecDetail key={sel ?? ''} id={sel} project={project} />
+        <SpecDetail key={sel ?? ''} id={sel} project={project} cache={detailCache} />
       </div>
     </div>
   );
 }
 
+// @implements REQ-DESKTOP-013
 function SpecTreeRow({ group, linkStates, selId, hidden, onSel }: {
   group: SpecGroup;
   linkStates: Record<string, string>;
@@ -149,12 +159,16 @@ function SpecTreeRow({ group, linkStates, selId, hidden, onSel }: {
   const driftCount = group.reqs.filter((r) => ['drifted', 'broken', 'orphaned'].includes(linkStates[r.id] ?? '')).length;
   return (
     <div>
+      {/* Rows take hover/pressed/selected from the shared .list-row states
+          (REQ-DESKTOP-013.A1) and are keyboard-operable (014.A1/013.A4). */}
       <div
         onClick={() => setOpen(!open)}
-        className="row gap-6"
+        onKeyDown={rowKey(() => setOpen(!open))}
+        role="treeitem"
+        aria-expanded={open}
+        tabIndex={0}
+        className="row gap-6 list-row"
         style={{ padding: '6px 8px', borderRadius: 6, cursor: 'pointer', color: 'var(--text-secondary)' }}
-        onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)'; }}
-        onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
       >
         <Icon name={open ? 'chevronDown' : 'chevronRight'} size={12} style={{ color: 'var(--text-muted)' }} />
         <Icon name="book" size={13} style={{ color: 'var(--node-spec)' }} />
@@ -166,7 +180,7 @@ function SpecTreeRow({ group, linkStates, selId, hidden, onSel }: {
         )}
       </div>
       {open && reqs.length > 0 && (
-        <div style={{ marginLeft: 14, borderLeft: '1px solid var(--border-subtle)', paddingLeft: 6 }}>
+        <div role="group" style={{ marginLeft: 14, borderLeft: '1px solid var(--border-subtle)', paddingLeft: 6 }}>
           {reqs.map((r) => {
             const active = selId === r.id;
             const st = STATE[linkStates[r.id] ?? ''] ?? STATE.drafted!;
@@ -174,14 +188,16 @@ function SpecTreeRow({ group, linkStates, selId, hidden, onSel }: {
               <div
                 key={r.id}
                 onClick={() => onSel(r.id)}
-                className="row gap-6"
-                style={{ padding: '5px 8px', borderRadius: 6, cursor: 'pointer', background: active ? 'var(--accent-soft)' : 'transparent' }}
-                onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = 'var(--bg-hover)'; }}
-                onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = 'transparent'; }}
+                onKeyDown={rowKey(() => onSel(r.id))}
+                role="treeitem"
+                aria-selected={active}
+                tabIndex={0}
+                className={'row gap-6 list-row' + (active ? ' selected' : '')}
+                style={{ padding: '5px 8px', borderRadius: 6, cursor: 'pointer' }}
               >
                 <span className="pill-dot" style={{ background: st.color, flexShrink: 0 }} />
                 <div className="grow" style={{ minWidth: 0 }}>
-                  <div className="mono" style={{ fontSize: 11, color: active ? 'var(--accent)' : 'var(--text-primary)' }}>{r.id}</div>
+                  <div className="mono" style={{ fontSize: 11, color: active ? 'var(--accent)' : 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.id}</div>
                   <div className="muted" style={{ fontSize: 10.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.title}</div>
                 </div>
               </div>

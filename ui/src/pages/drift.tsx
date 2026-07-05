@@ -91,11 +91,13 @@ function DriftRow({ link }: { link: DriftLink }) {
   return (
     <div style={{ borderBottom: '1px solid var(--border-subtle)' }}>
       <div
-        className="row gap-10"
+        className="row gap-10 list-row"
+        role="button"
+        aria-expanded={open}
+        tabIndex={0}
         onClick={() => setOpen(!open)}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen(!open); } }}
         style={{ padding: '10px 14px', cursor: 'pointer' }}
-        onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)'; }}
-        onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
       >
         <div style={{ width: 92, flexShrink: 0 }}><StatePill state={link.state} /></div>
         <span className="mono" style={{ fontSize: 12, color: 'var(--node-spec)', flexShrink: 0, width: 130, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{link.specId}</span>

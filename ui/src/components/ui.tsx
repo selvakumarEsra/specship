@@ -2,7 +2,7 @@
  * Shared UI primitives + state-pill config. TSX port of the design bundle's
  * ui.jsx (specs/specship-desktop/ui.jsx).
  */
-import { useState, type CSSProperties, type ReactNode } from 'react';
+import { useState, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react';
 import { Icon } from './icons';
 
 export interface StateStyle {
@@ -61,12 +61,13 @@ export function Pill({ children, color, bg, dot }: { children: ReactNode; color?
   );
 }
 
-export function CopyBtn({ text, label }: { text: string; label?: string }) {
+export function CopyBtn({ text, label, ariaLabel }: { text: string; label?: string; ariaLabel?: string }) {
   const [done, setDone] = useState(false);
   return (
     <button
       className="btn btn-ghost btn-xs"
       title="Copy"
+      aria-label={ariaLabel ?? (label ? undefined : 'Copy ' + text)}
       onClick={(e) => {
         e.stopPropagation();
         void navigator.clipboard?.writeText(text);
@@ -128,24 +129,46 @@ export function Empty({ icon, title, body, action }: { icon?: string; title: Rea
 
 export type SegmentedOption = string | { value: string; label: string };
 
-export function Segmented({ options, value, onChange, size }: { options: SegmentedOption[]; value: string; onChange: (v: string) => void; size?: 'sm' }) {
+/**
+ * Segmented picker with radiogroup semantics (REQ-DESKTOP-014): one group,
+ * one aria-checked member, roving tabindex, arrow keys move selection and
+ * focus. Visual states are the token-driven `.seg*` classes (REQ-DESKTOP-013).
+ */
+// @implements REQ-DESKTOP-013
+// @implements REQ-DESKTOP-014
+export function Segmented({ options, value, onChange, size, label, disabled }: {
+  options: SegmentedOption[]; value: string; onChange: (v: string) => void;
+  size?: 'sm'; label?: string; disabled?: boolean;
+}) {
+  const vals = options.map((o) => (typeof o === 'string' ? o : o.value));
+  const activeIdx = vals.indexOf(value);
+  const onKey = (e: KeyboardEvent<HTMLButtonElement>, i: number) => {
+    const d = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1
+      : e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 0;
+    if (!d) return;
+    e.preventDefault();
+    const j = (i + d + vals.length) % vals.length;
+    onChange(vals[j]!);
+    (e.currentTarget.parentElement?.children[j] as HTMLElement | undefined)?.focus();
+  };
   return (
-    <div style={{ display: 'inline-flex', background: 'var(--bg-canvas)', border: '1px solid var(--border-subtle)', borderRadius: 7, padding: 2, gap: 2 }}>
-      {options.map((o) => {
+    <div className="seg" role="radiogroup" aria-label={label}>
+      {options.map((o, i) => {
         const v = typeof o === 'string' ? o : o.value;
         const lab = typeof o === 'string' ? o : o.label;
         const active = v === value;
         return (
           <button
             key={v}
+            role="radio"
+            aria-checked={active}
+            // Roving tabindex; with no checked member the first option is the
+            // tab stop so the group stays keyboard-reachable.
+            tabIndex={active || (activeIdx === -1 && i === 0) ? 0 : -1}
+            disabled={disabled}
+            className={'seg-btn' + (size === 'sm' ? ' sm' : '') + (active ? ' active' : '')}
             onClick={() => onChange(v)}
-            style={{
-              border: 'none', cursor: 'pointer', borderRadius: 5, padding: size === 'sm' ? '3px 9px' : '5px 12px',
-              fontSize: 'var(--fs-sm)', fontWeight: 500, fontFamily: 'var(--font-ui)',
-              background: active ? 'var(--bg-elevated)' : 'transparent',
-              color: active ? 'var(--text-primary)' : 'var(--text-muted)',
-              boxShadow: active ? '0 1px 2px rgba(0,0,0,0.3)' : 'none', transition: 'all 100ms',
-            }}
+            onKeyDown={(e) => onKey(e, i)}
           >
             {lab}
           </button>
@@ -166,6 +189,7 @@ export function RangeSelector({ value, onChange }: { value: string; onChange: (v
       value={value}
       onChange={onChange}
       size="sm"
+      label="Time range"
     />
   );
 }
