@@ -16,6 +16,7 @@ import { GraphPage } from './pages/graph';
 import { PlaceholderPage } from './pages/placeholder';
 import { RunsPage } from './pages/runs';
 import { SpecsPage } from './pages/specs';
+import { WorkflowsPage } from './pages/workflows';
 import type { PageProps } from './pages/types';
 
 /** Live counts the nav badges derive from (design bundle's app.jsx NAV). */
@@ -58,9 +59,14 @@ const NAV: Array<{ group: string; items: NavEntry[] }> = [
   },
 ];
 
-/** Pages the ⌘K palette jumps to — NAV plus the pinned sidebar items. */
+/**
+ * Pages the ⌘K palette jumps to — NAV plus the pinned sidebar items.
+ * Workflows is deliberately NOT a sidebar entry (REQ-DESKTOP-018 pins the
+ * Project group); it's palette-reachable and launched from the Runs screen.
+ */
 const PALETTE_PAGES: PalettePage[] = [
   ...NAV.flatMap((g) => g.items.map(({ id, label, icon }) => ({ id, label, icon }))),
+  { id: 'workflows', label: 'Workflows', icon: 'workflow' },
   { id: 'designsystem', label: 'Design system', icon: 'layers' },
   { id: 'settings', label: 'Settings', icon: 'settings' },
 ];
@@ -74,6 +80,7 @@ const SCREENS: Record<string, ComponentType<PageProps>> = {
   specs: SpecsPage,
   drift: DriftPage,
   runs: RunsPage,
+  workflows: WorkflowsPage,
   designsystem: () => <DesignSystemPage />,
   sessions: () => <PlaceholderPage title="Sessions" req="REQ-DESKTOP-024" />,
   heatmap: () => <PlaceholderPage title="Heatmap" req="REQ-DESKTOP-026" />,

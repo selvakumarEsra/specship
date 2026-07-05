@@ -37,8 +37,20 @@ export interface RunnerContext {
   emitEvent?: (type: WorkflowEventType, data?: Record<string, unknown>) => void;
 }
 
+/**
+ * Optional execution stats a runner can report with a completed result.
+ * The prompt runner fills these from the agent's stream frames; other
+ * runners leave them unset. All fields optional so old runners/records
+ * keep working (REQ-DESKTOP-023).
+ */
+export interface NodeRunStats {
+  costUsd?: number;
+  durationMs?: number;
+  model?: string;
+}
+
 export type NodeRunResult =
-  | { status: 'completed'; output: NodeOutput }
+  | { status: 'completed'; output: NodeOutput; stats?: NodeRunStats }
   | { status: 'failed'; error: string; transient?: boolean }
   | { status: 'paused'; approval: ApprovalContext }
   | { status: 'cancelled'; reason: string };

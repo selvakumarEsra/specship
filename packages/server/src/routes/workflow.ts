@@ -126,13 +126,35 @@ export async function registerWorkflowRoutes(app: FastifyInstance): Promise<void
     }
   }
 
+  /**
+   * Roll a run's per-node stats (from `step_completed` events) into
+   * list-level `totalCostUsd` / `model` fields so the Runs list can render
+   * its cost/model columns without N+1 detail fetches (REQ-DESKTOP-023).
+   * Additive + best-effort: runs recorded before stats existed simply get
+   * nulls.
+   */
+  function statsRollup(sq: SQ, runId: string): { totalCostUsd: number | null; model: string | null } {
+    let totalCostUsd: number | null = null;
+    let model: string | null = null;
+    try {
+      for (const e of sq.getEventsByRun(runId, 1000)) {
+        if (e.eventType !== 'step_completed') continue;
+        const stats = (e.data as { stats?: { costUsd?: number; model?: string } } | undefined)?.stats;
+        if (typeof stats?.costUsd === 'number') totalCostUsd = (totalCostUsd ?? 0) + stats.costUsd;
+        if (!model && typeof stats?.model === 'string') model = stats.model;
+      }
+    } catch { /* stats are decorative — never fail the list */ }
+    return { totalCostUsd, model };
+  }
+
   app.get('/api/workflows/runs', async (req: FastifyRequest<{ Querystring: ProjectQuery & { limit?: string } }>, reply) => {
     const cg = await resolveCg(app, req, reply); if (!cg) return;
     const { sq } = executorFor(cg);
     const limit = Math.min(parseInt(req.query.limit ?? '50', 10) || 50, 500);
-    const runs = sq.getAllWorkflowRuns(limit).map((r) =>
-      r.status === 'running' || r.status === 'paused' ? { ...r, eta: etaFor(cg, r.id) } : r,
-    );
+    const runs = sq.getAllWorkflowRuns(limit).map((r) => ({
+      ...(r.status === 'running' || r.status === 'paused' ? { ...r, eta: etaFor(cg, r.id) } : r),
+      ...statsRollup(sq, r.id),
+    }));
     return { runs };
   });
 

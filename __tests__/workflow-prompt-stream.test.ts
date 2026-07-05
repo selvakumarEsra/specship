@@ -75,6 +75,26 @@ describe('handleStreamLine (REQ-WFSTREAM-001)', () => {
     expect(events).toEqual([]);
   });
 
+  it('captures cost/duration from the result frame and model from the init frame (REQ-DESKTOP-023)', () => {
+    const { emit } = collector();
+    const state = newStreamState();
+    handleStreamLine(JSON.stringify({ type: 'system', subtype: 'init', model: 'claude-sonnet-5' }), emit, state);
+    handleStreamLine(JSON.stringify({ type: 'result', result: 'done', total_cost_usd: 0.42, duration_ms: 1234 }), emit, state);
+    expect(state.model).toBe('claude-sonnet-5');
+    expect(state.costUsd).toBe(0.42);
+    expect(state.durationMs).toBe(1234);
+  });
+
+  it('leaves stats fields unset when the frames omit them (old-CLI compat)', () => {
+    const { emit } = collector();
+    const state = newStreamState();
+    handleStreamLine(JSON.stringify({ type: 'system', subtype: 'init' }), emit, state);
+    handleStreamLine(JSON.stringify({ type: 'result', result: 'done' }), emit, state);
+    expect(state.model).toBeUndefined();
+    expect(state.costUsd).toBeUndefined();
+    expect(state.durationMs).toBeUndefined();
+  });
+
   it('ignores non-JSON lines and leaves state untouched (fallback path)', () => {
     const { events, emit } = collector();
     const state = newStreamState();
