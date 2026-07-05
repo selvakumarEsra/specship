@@ -155,6 +155,10 @@ describe('ui/src imports only react + its own modules (A2)', () => {
     const offenders: string[] = [];
     for (const file of walk(path.join(uiDir, 'src'))) {
       if (!/\.(ts|tsx|css)$/.test(file)) continue;
+      // Test files never enter the vite bundle (only index.html-reachable
+      // modules do) — their vitest/testing-library devDep imports are not
+      // runtime payload, which is what this guard protects.
+      if (/\.test\.(ts|tsx)$/.test(file) || file.includes(`${path.sep}__tests__${path.sep}`)) continue;
       const body = fs.readFileSync(file, 'utf8');
       const specifiers = [
         ...[...body.matchAll(/(?:^|\n)\s*import\s+(?:[^'"]*?from\s+)?['"]([^'"]+)['"]/g)].map((m) => m[1]!),

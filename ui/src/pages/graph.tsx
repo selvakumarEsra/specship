@@ -33,9 +33,11 @@ function layout(nodes: { id: string; name: string; kind: string; filePath: strin
   });
 }
 
-export function GraphPage({ project }: PageProps) {
+export function GraphPage({ project, query }: PageProps) {
   const graph = useApi(() => api.graphFull(project), [project]);
-  const [selected, setSelected] = useState<string | null>(null);
+  // `?focus=<nodeId>` deep-links a selection — the ⌘K palette lands here
+  // (REQ-DESKTOP-019); full center-and-highlight is REQ-DESKTOP-021's work.
+  const [selected, setSelected] = useState<string | null>(query.focus ?? null);
 
   const nodes = useMemo(() => layout(graph.data?.nodes ?? []), [graph.data]);
   const edges: CanvasEdge[] = useMemo(

@@ -140,6 +140,29 @@ export interface ProjectsResponse {
   projects: ProjectEntry[];
 }
 
+/** One hit from GET /api/graph/search — a scored node match. */
+export interface SearchResult {
+  node: GraphNode & { startLine?: number; endLine?: number };
+  score?: number;
+  [key: string]: unknown;
+}
+
+export interface SearchResponse {
+  results: SearchResult[];
+}
+
+/** One row from GET /api/claude/prompts/recent (text capped at 200 chars). */
+export interface RecentPrompt {
+  id: string;
+  session_id: string;
+  text: string;
+  ts: number;
+}
+
+export interface RecentPromptsResponse {
+  prompts: RecentPrompt[];
+}
+
 // ---- API surface ----
 
 export const api = {
@@ -151,4 +174,8 @@ export const api = {
   drift: (project?: string | null) => getJson<DriftResponse>(q('/api/drift', project)),
   runs: (project?: string | null) => getJson<RunsResponse>(q('/api/workflows/runs', project)),
   projects: () => getJson<ProjectsResponse>('/api/projects'),
+  graphSearch: (qs: string, project?: string | null, limit = 10) =>
+    getJson<SearchResponse>(q(`/api/graph/search?q=${encodeURIComponent(qs)}&limit=${limit}`, project)),
+  recentPrompts: (project?: string | null, limit = 20) =>
+    getJson<RecentPromptsResponse>(q(`/api/claude/prompts/recent?limit=${limit}`, project)),
 };

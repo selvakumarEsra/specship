@@ -4,9 +4,9 @@
  */
 import { useCallback, useEffect, useRef, useState, type ComponentType, type MouseEvent as ReactMouseEvent } from 'react';
 import { api, isNoProject, type ProjectEntry, type StatusResponse } from './api';
-import { CommandPalette, type PaletteEntry } from './components/command-palette';
+import { CommandPalette, type PalettePage } from './components/command-palette';
 import { Icon, LogoMark } from './components/icons';
-import { useApi } from './hooks';
+import { useApi, useGlobalShortcuts } from './hooks';
 import { go, usePathRoute } from './router';
 import { applyTheme, getThemePref, type ThemePref } from './theme';
 import { DashboardPage } from './pages/dashboard';
@@ -59,11 +59,14 @@ const NAV: Array<{ group: string; items: NavEntry[] }> = [
 ];
 
 /** Pages the ⌘K palette jumps to — NAV plus the pinned sidebar items. */
-const PALETTE_PAGES: PaletteEntry[] = [
+const PALETTE_PAGES: PalettePage[] = [
   ...NAV.flatMap((g) => g.items.map(({ id, label, icon }) => ({ id, label, icon }))),
   { id: 'designsystem', label: 'Design system', icon: 'layers' },
   { id: 'settings', label: 'Settings', icon: 'settings' },
 ];
+
+/** ⌘1–7 targets: the first seven nav items in sidebar order (REQ-DESKTOP-019). */
+const JUMP_PAGE_IDS = NAV.flatMap((g) => g.items.map((it) => it.id)).slice(0, 7);
 
 const SCREENS: Record<string, ComponentType<PageProps>> = {
   dashboard: DashboardPage,
@@ -101,17 +104,9 @@ export function App() {
   const projects = useApi(() => api.projects(), []);
   const runs = useApi(() => api.runs(project), [project, route]);
 
-  // ⌘K / Ctrl-K toggles the palette from anywhere in the app.
-  useEffect(() => {
-    const h = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        setPaletteOpen((o) => !o);
-      }
-    };
-    window.addEventListener('keydown', h);
-    return () => window.removeEventListener('keydown', h);
-  }, []);
+  // ⌘K toggle, ⌘1–7 nav jumps, and g-chords (REQ-DESKTOP-019).
+  const togglePalette = useCallback(() => setPaletteOpen((o) => !o), []);
+  useGlobalShortcuts({ onTogglePalette: togglePalette, pageIds: JUMP_PAGE_IDS });
 
   const counts: BadgeCounts = {
     drift: status.data?.drift ?? 0,
@@ -163,7 +158,7 @@ export function App() {
           <Screen project={project} param={param} query={query} />
         </div>
       </div>
-      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} pages={PALETTE_PAGES} />
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} pages={PALETTE_PAGES} project={project} />
     </div>
   );
 }

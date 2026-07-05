@@ -548,6 +548,11 @@ navigating. Command-key + 1–7 jumps to the first seven nav items. The
 g-then-g / g-then-s / g-then-d chords navigate to Graph, Specs, and the
 Drift queue, and are suppressed while focus is in an editable field.
 
+implementations:
+  - ui/src/components/command-palette.tsx:CommandPalette
+  - ui/src/hooks.ts:useGlobalShortcuts
+  - packages/server/src/routes/claude.ts:registerClaudeRoutes
+
 ## Acceptance
 <!-- id: REQ-DESKTOP-019.A1 -->
 - The palette opens on the shortcut, filters across all four result types
