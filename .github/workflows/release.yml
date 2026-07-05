@@ -78,8 +78,14 @@ jobs:
           git push origin "HEAD:${GITHUB_REF#refs/heads/}"
 
       - run: npm ci
-      # The dashboard is server-rendered (packages/server/src/ssr) and built by
-      # the root `npm run build` — no separate UI install/build step.
+      # The desktop SPA (ui/) is a standalone module with its own lockfile.
+      # Build it BEFORE the root build so build-server-bundle.mjs finds
+      # ui/dist and ships it inside dist/ui/ (REQ-DESKTOP-017.A1). Its build
+      # runs scripts/check-ui-deps.mjs — the dependency-allowlist, registry-
+      # safe-lockfile, and zero-external-origin gates fail the release here
+      # if violated.
+      - name: Build desktop SPA
+        run: cd ui && npm ci && npm run build
       - name: Ensure zip/unzip
         run: sudo apt-get update -qq && sudo apt-get install -y -qq zip unzip
 

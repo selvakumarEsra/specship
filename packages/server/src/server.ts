@@ -72,10 +72,16 @@ export interface ServerOptions {
   /** Verbose logging. */
   verbose?: boolean;
   /**
-   * Directory containing the built Angular UI (`index.html` + assets). When
-   * set, the server serves the SPA at `/` and falls back to `index.html`
-   * for any non-API GET (so client-side routes like `/memory` work on
-   * direct page loads). Omit to run the server headless (API only).
+   * Directory containing the built desktop SPA (`index.html` + assets, the
+   * `ui/` module's `dist/`). When set, the server serves the SPA's files and
+   * falls back to `index.html` for any non-API, non-asset GET (so client-side
+   * routes like `/memory` work on direct page loads).
+   *
+   * Leave `undefined` to auto-detect the SPA shipped alongside the server
+   * build (`resolveDefaultWebDir()` — the bundle's `dist/ui/`, or the
+   * workspace's `ui/dist/`). Pass `null` to serve no SPA at all (API/SSR
+   * only) — the `specship serve --ui` CLI does this while the SSR dashboard
+   * remains the shipped surface (REQ-DASHLEAN-004/006).
    */
   webDir?: string | null;
   /**
@@ -111,6 +117,32 @@ export interface ServerHandle {
  *
  * The function caches the resolved module so the lookup only runs once.
  */
+/**
+ * Locate the built desktop SPA (REQ-DESKTOP-017.A1) when the caller didn't
+ * pass an explicit `webDir`. Two delivery shapes, probed relative to this
+ * file so cwd never matters:
+ *
+ *   1. **Bundled** — `build-server-bundle.mjs` copies `ui/dist/**` to the
+ *      root `dist/ui/`, which the platform tarball ships as
+ *      `<bundle>/lib/dist/ui/` next to `dist/server/` (this file).
+ *   2. **Workspace / dev** — `packages/server/{src,dist}/server.*` →
+ *      repo root → `ui/dist/` (present only after `cd ui && npm run build`).
+ *
+ * Returns null when neither exists — the server then simply has no SPA
+ * mount, same as `webDir: null`.
+ */
+export function resolveDefaultWebDir(): string | null {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const candidates = [
+    path.resolve(here, '..', 'ui'), // bundled: dist/server → dist/ui
+    path.resolve(here, '..', '..', '..', 'ui', 'dist'), // workspace: packages/server/dist → <root>/ui/dist
+  ];
+  for (const dir of candidates) {
+    if (existsSync(path.join(dir, 'index.html'))) return dir;
+  }
+  return null;
+}
+
 let cachedSpecShip: typeof import('@specship/specship') | null = null;
 async function loadSpecShip(): Promise<typeof import('@specship/specship')> {
   if (cachedSpecShip) return cachedSpecShip;
@@ -270,11 +302,14 @@ export async function createServer(options: ServerOptions): Promise<ServerHandle
     await registerSsrRoutes(app);
   }
 
-  // Optional: serve the built Angular UI from `webDir` and fall back to
-  // index.html for client-side routes. Must register AFTER the /api/*
-  // routes so they take precedence over the SPA wildcard.
-  if (options.webDir) {
-    const indexPath = path.join(options.webDir, 'index.html');
+  // Optional: serve the built desktop SPA (the `ui/` module) from `webDir`
+  // and fall back to index.html for client-side routes. Must register AFTER
+  // the /api/* routes so they take precedence over the SPA wildcard. When
+  // the caller passed no webDir at all, auto-detect the SPA shipped next to
+  // the server build; `null` explicitly opts out.
+  const webDir = options.webDir === undefined ? resolveDefaultWebDir() : options.webDir;
+  if (webDir) {
+    const indexPath = path.join(webDir, 'index.html');
     let indexBuffer: Buffer | null = null;
     try {
       indexBuffer = await fs.readFile(indexPath);
@@ -285,7 +320,7 @@ export async function createServer(options: ServerOptions): Promise<ServerHandle
     }
     if (indexBuffer) {
       const cachedIndex = indexBuffer;
-      const serveStatic = makeStaticHandler(options.webDir);
+      const serveStatic = makeStaticHandler(webDir);
       // A single 404 handler does both jobs:
       //   1. Try the requested URL as a real file under webDir → serve it
       //      with the right content-type. Covers the SPA's chunk-*.js,
@@ -317,7 +352,7 @@ export async function createServer(options: ServerOptions): Promise<ServerHandle
         }
         reply.code(200).type('text/html').send(cachedIndex);
       });
-      if (verbose) console.error(`[specship-server] serving SPA from ${options.webDir}`);
+      if (verbose) console.error(`[specship-server] serving SPA from ${webDir}`);
     }
   }
 

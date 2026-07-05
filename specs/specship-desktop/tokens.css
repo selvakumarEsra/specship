@@ -1,0 +1,128 @@
+/* ============================================================
+   SpecShip Desktop — Design System
+   Dark-first (light theme below). Graph as hero. Geist + Geist Mono.
+   ============================================================ */
+
+:root {
+  color-scheme: dark;
+  /* ---- Surfaces ---- */
+  --bg-canvas: #0E1014;
+  --bg-canvas-2: #0B0D11;        /* graph void, deepest */
+  --bg-panel: #161A21;
+  --bg-panel-2: #1A1F28;
+  --bg-elevated: #20262F;
+  --bg-hover: rgba(255,255,255,0.04);
+  --bg-active: rgba(255,255,255,0.07);
+
+  /* ---- Borders ---- */
+  --border-subtle: rgba(255,255,255,0.07);
+  --border-strong: rgba(255,255,255,0.12);
+  --border-focus: #3B82F6;
+
+  /* ---- Text ---- */
+  --text-primary: #E8EBF0;
+  --text-secondary: #9AA3B2;
+  --text-muted: #5C6573;
+  --text-faint: #424B59;
+
+  /* ---- Accent (primary / brand) ---- */
+  --accent: #3B82F6;
+  --accent-strong: #2563EB;
+  --accent-soft: rgba(59,130,246,0.14);
+  --accent-line: rgba(59,130,246,0.35);
+
+  /* ---- Node colors (must be distinct at 4px) ---- */
+  --node-code: #A586F5;      /* purple  — functions, classes */
+  --node-spec: #5B93F2;      /* blue    — requirements */
+  --node-test: #46C26B;      /* green   — tests */
+  --node-route: #29D2BE;     /* teal    — routes/endpoints */
+  --node-code-soft: rgba(165,134,245,0.14);
+  --node-spec-soft: rgba(91,147,242,0.14);
+  --node-test-soft: rgba(70,194,107,0.14);
+  --node-route-soft: rgba(41,210,190,0.14);
+  --node-text: #ffffff;          /* label text on graph node fills */
+  --dot-grid: rgba(255,255,255,0.045); /* graph canvas dot grid */
+
+  /* ---- Semantic states ---- */
+  --success: #46C26B;
+  --success-soft: rgba(70,194,107,0.13);
+  --warn: #E5A50A;
+  --warn-soft: rgba(229,165,10,0.14);
+  --error: #F2555A;
+  --error-soft: rgba(242,85,90,0.14);
+  --info: #58A6FF;
+  --info-soft: rgba(88,166,255,0.13);
+
+  /* ---- Typography ---- */
+  --font-ui: "Geist", system-ui, -apple-system, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --fs-title: 22px;
+  --fs-base: 13px;
+  --fs-sm: 12px;
+  --fs-xs: 11px;
+  --fs-big: 28px;
+
+  /* ---- Radius ---- */
+  --r-sm: 5px;
+  --r-md: 8px;
+  --r-lg: 12px;
+  --r-pill: 999px;
+
+  /* ---- Shadow ---- */
+  --shadow-pop: 0 12px 32px -8px rgba(0,0,0,0.6), 0 2px 8px rgba(0,0,0,0.4);
+  --shadow-panel: 0 1px 0 rgba(255,255,255,0.02) inset;
+
+  /* ---- Layout ---- */
+  --sidebar-w: 232px;
+  --sidebar-w-collapsed: 56px;
+  --status-h: 30px;
+}
+
+[data-theme="light"] {
+  color-scheme: light;
+  --bg-canvas: #F4F6F8;
+  --bg-canvas-2: #E9ECF1;        /* graph void */
+  --bg-panel: #FFFFFF;
+  --bg-panel-2: #F8FAFC;
+  --bg-elevated: #FFFFFF;
+  --bg-hover: rgba(15,23,42,0.045);
+  --bg-active: rgba(15,23,42,0.07);
+
+  --border-subtle: rgba(15,23,42,0.10);
+  --border-strong: rgba(15,23,42,0.18);
+  --border-focus: #2563EB;
+
+  --text-primary: #161B22;
+  --text-secondary: #4A5566;
+  --text-muted: #7B8696;
+  --text-faint: #A9B2C0;
+
+  --accent: #2563EB;
+  --accent-strong: #2563EB;
+  --accent-soft: rgba(37,99,235,0.10);
+  --accent-line: rgba(37,99,235,0.30);
+
+  /* nodes darkened for legibility on light fills */
+  --node-code: #7C56E0;
+  --node-spec: #2F6FE0;
+  --node-test: #1E9E4C;
+  --node-route: #0E9C8E;
+  --node-code-soft: rgba(124,86,224,0.12);
+  --node-spec-soft: rgba(47,111,224,0.12);
+  --node-test-soft: rgba(30,158,76,0.12);
+  --node-route-soft: rgba(14,156,142,0.12);
+  --node-text: #1A2230;
+  --dot-grid: rgba(15,23,42,0.07);
+
+  --success: #1E9E4C;
+  --success-soft: rgba(30,158,76,0.12);
+  --warn: #B27500;
+  --warn-soft: rgba(178,117,0,0.13);
+  --error: #DC4A4F;
+  --error-soft: rgba(220,74,79,0.12);
+  --info: #2563EB;
+  --info-soft: rgba(37,99,235,0.11);
+
+  --shadow-pop: 0 12px 32px -10px rgba(15,23,42,0.22), 0 2px 8px rgba(15,23,42,0.10);
+  --shadow-panel: 0 1px 0 rgba(15,23,42,0.02) inset;
+}

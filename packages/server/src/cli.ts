@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 /**
- * Standalone CLI entry for the specship HTTP server + Angular UI.
+ * Standalone CLI entry for the specship HTTP server + desktop SPA.
  *
  *   specship-desktop --project-root /path/to/project [--port 4242]
  *
- * When the bundled web UI is present, the same process serves the SPA at /
- * and the API at /api/*. Pass `--no-web` to run headless (API only) or
+ * When the bundled desktop SPA (the `ui/` module's build) is present, the
+ * same process serves it alongside the API at /api/* — no second process or
+ * port (REQ-DESKTOP-017.A1). Pass `--no-web` to run headless (API only) or
  * `--web-dir <path>` to point at a custom build.
  *
  * The JSONL ingest watcher is started inside `createServer()` by default —
@@ -58,7 +59,7 @@ Options:
   --port <n>                  HTTP port (default: 4242)
   --host <h>                  Bind host (default: 127.0.0.1)
   --no-ingest                 Skip the in-process Claude JSONL transcript watcher
-  --web-dir <path>            Explicit path to a built Angular UI (index.html lives here)
+  --web-dir <path>            Explicit path to a built desktop SPA (index.html lives here; defaults to the bundled ui/dist)
   --no-web                    Run headless — serve the API only, no SPA
   --open                      Open the UI in the default browser once listening
   --verbose, -v               Verbose logs`);
@@ -87,7 +88,8 @@ async function main(): Promise<void> {
     port: args.port,
     ingest: args.ingest,
     verbose: args.verbose,
-    webDir: null,
+    // undefined = auto-detect the bundled ui/dist; --no-web opts out entirely.
+    webDir: args.noWeb ? null : args.webDir ?? undefined,
     ssr: serveUi,
   });
 

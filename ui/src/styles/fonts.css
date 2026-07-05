@@ -1,0 +1,13 @@
+/*
+ * Self-hosted Geist (REQ-DESKTOP-017.A4): the snapshot loaded Geist from
+ * fonts.googleapis.com; the app instead bundles the OFL-licensed variable
+ * fonts from the @fontsource-variable devDependencies (imported in main.tsx,
+ * emitted into dist/ as same-origin assets). Fontsource registers the
+ * families as "Geist Variable" / "Geist Mono Variable", so put those ahead
+ * of the token sheet's CDN-era names — every weight the design uses
+ * (400–700 incl. 450/650) resolves from the variable font.
+ */
+:root {
+  --font-ui: "Geist Variable", "Geist", system-ui, -apple-system, sans-serif;
+  --font-mono: "Geist Mono Variable", "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}

@@ -11,6 +11,7 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### New Features
 
+- **The SpecShip Desktop app now ships as a standalone, registry-safe web app served by the dashboard server itself.** The new React single-page app lives in its own `ui` module, installs from a single npm registry (mirror-friendly: no git or tarball URLs, no install-time compilation), and keeps its runtime dependencies to exactly React — charts, icons, sparklines, and the graph canvas all render from the app's own SVG components, and fonts are bundled rather than fetched from a CDN, so the built app makes zero requests to external origins. `specship-desktop` serves it automatically when present — same process, same port; a build-time dependency check fails the build if anyone adds a runtime dependency beyond the allowlist.
 - **`specship update` upgrades you to the latest release in one command.** It detects how SpecShip was installed — the `install.sh` bundle or an npm global — and runs the matching update, so you no longer have to remember which one you used. `specship update --check` just tells you whether a newer version is available (and exits with a distinct code so scripts and hooks can gate on it) without changing anything. It no-ops cleanly when you're already up to date, leaves your install untouched if anything goes wrong, and reminds you to restart a running dashboard/MCP session to pick up the new version.
 
 ## [0.12.1] - 2026-07-04
