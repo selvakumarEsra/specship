@@ -67,6 +67,21 @@ if (existsSync(ssrSrc)) {
   console.log('[build-server-bundle] copied SSR render modules + assets → dist/server/ssr/');
 }
 
+// Ship the built desktop SPA (REQ-DESKTOP-017.A1): copy ui/dist → dist/ui so
+// the platform tarballs carry it and the server's resolveDefaultWebDir()
+// finds it next to dist/server/. The SPA is a standalone module with its own
+// install (`cd ui && npm ci && npm run build` — the Release workflow runs
+// it); when it hasn't been built, the server still works with the SSR
+// dashboard, so this is a warn-and-continue, not a failure.
+const uiDist = path.join(root, 'ui', 'dist');
+const uiOut = path.join(root, 'dist', 'ui');
+if (existsSync(path.join(uiDist, 'index.html'))) {
+  cpSync(uiDist, uiOut, { recursive: true });
+  console.log('[build-server-bundle] copied desktop SPA → dist/ui/');
+} else {
+  console.warn('[build-server-bundle] ui/dist not built — bundle ships without the desktop SPA (cd ui && npm ci && npm run build)');
+}
+
 // Make the CLI executable (its shebang is preserved by tsc, but the file
 // mode isn't automatic on POSIX).
 import('node:fs').then((m) => {
