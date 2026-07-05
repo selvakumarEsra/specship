@@ -42,6 +42,8 @@ const postJson = <T,>(path: string, body?: unknown) =>
     : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 const putJson = <T,>(path: string, body: unknown) =>
   request<T>(path, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+const patchJson = <T,>(path: string, body: unknown) =>
+  request<T>(path, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 
 /** Append `?project=<slug>` when a non-primary project is selected. */
 function q(path: string, project?: string | null): string {
@@ -555,6 +557,55 @@ export interface MemoryResponse {
   files: MemoryFile[];
 }
 
+// ---- MCP servers (packages/server/src/routes/mcp.ts, REQ-DESKTOP-026) ----
+
+/** Spec vocabulary — see the route's deriveState precedence. */
+export type McpServerState = 'active' | 'connected' | 'idle' | 'failed' | 'disabled';
+
+export interface McpServerTool {
+  name: string;
+  calls: number;
+  resultBytes: number;
+}
+
+/** Latest real call from claude_tool_calls (input_json); args {} = fallback. */
+export interface McpExampleCall {
+  tool: string;
+  args: Record<string, unknown>;
+}
+
+export interface McpServer {
+  id: string;
+  name: string;
+  /** 'unknown' = seen in transcripts but not in any config file. */
+  scope: 'user' | 'project' | 'unknown';
+  state: McpServerState;
+  transport: 'stdio' | 'http';
+  command: string;
+  /** Owning config file path; null for usage-only servers. */
+  configFile: string | null;
+  disabled: boolean;
+  /** The raw config entry, for the detail panel's config JSON. */
+  entry: Record<string, unknown> | null;
+  calls: number;
+  resultBytes: number;
+  lastUsed: string | null;
+  tools: McpServerTool[];
+  exampleCall: McpExampleCall | null;
+}
+
+export interface McpServersResponse {
+  servers: McpServer[];
+}
+
+export interface AddMcpServerPayload {
+  name: string;
+  scope: 'user' | 'project';
+  command?: string;
+  args?: string[];
+  url?: string;
+}
+
 // ---- API surface ----
 
 export const api = {
@@ -618,6 +669,11 @@ export const api = {
     getJson<SpecshipImpactResponse>(`/api/claude/specship-impact?range=${range}`),
   ingestNow: () => postJson<{ ok: boolean }>('/api/claude/ingest'),
   memory: (project?: string | null) => getJson<MemoryResponse>(q('/api/memory', project)),
+  mcpServers: () => getJson<McpServersResponse>('/api/mcp/servers'),
+  setMcpServerEnabled: (name: string, enabled: boolean) =>
+    patchJson<{ ok: boolean; name: string; disabled: boolean }>(`/api/mcp/servers/${encodeURIComponent(name)}`, { enabled }),
+  addMcpServer: (payload: AddMcpServerPayload) =>
+    postJson<{ ok: boolean; name: string }>('/api/mcp/servers', payload),
 };
 
 /**
