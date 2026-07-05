@@ -57,6 +57,8 @@ export interface StatusResponse {
   projectPath: string;
   backend: string;
   journalMode: string;
+  /** Real product version (@specship/specship), for About (REQ-DESKTOP-028.A3). */
+  version: string;
   nodeCount: number;
   edgeCount: number;
   fileCount: number;
@@ -606,6 +608,16 @@ export interface AddMcpServerPayload {
   url?: string;
 }
 
+// ---- Runtime config (packages/server/src/routes/config.ts, REQ-DESKTOP-028) ----
+
+/** GET/PUT /api/config — the server's dashboard-editable runtime knobs. */
+export interface ConfigResponse {
+  /** Claude Code transcript-ingest toggle (persisted server-side). */
+  ingestEnabled: boolean;
+  /** Real product version (@specship/specship). */
+  version: string;
+}
+
 // ---- Chat (packages/server/src/routes/chat.ts + chat-answer.ts, REQ-DESKTOP-027) ----
 
 /** Pointer to one graph symbol inside a chat source's detail. */
@@ -725,6 +737,12 @@ export const api = {
     postJson<{ ok: boolean; name: string }>('/api/mcp/servers', payload),
   chat: (question: string, project?: string | null) =>
     postJson<ChatResponse>(q('/api/chat', project), { question }),
+  // Server runtime config (REQ-DESKTOP-028.A2): the Settings ingest toggle
+  // round-trips through these; analytics screens read `get` to react.
+  config: {
+    get: () => getJson<ConfigResponse>('/api/config'),
+    set: (body: { ingestEnabled: boolean }) => putJson<ConfigResponse>('/api/config', body),
+  },
 };
 
 /**

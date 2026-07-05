@@ -15,6 +15,7 @@
  */
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
+import { productVersion } from '../product-version.js';
 
 interface StatusQuery { project?: string }
 
@@ -33,6 +34,7 @@ export async function registerStatusRoutes(app: FastifyInstance): Promise<void> 
       projectPath: cg.getProjectRoot ? cg.getProjectRoot() : '',
       backend: cg.getBackend(),
       journalMode: cg.getJournalMode(),
+      version: productVersion(),
       nodeCount: stats.nodeCount,
       edgeCount: stats.edgeCount,
       fileCount: stats.fileCount,
@@ -107,6 +109,7 @@ export async function registerStatusRoutes(app: FastifyInstance): Promise<void> 
         projectPath: cg.getProjectRoot ? cg.getProjectRoot() : '',
         backend: cg.getBackend(),
         journalMode: cg.getJournalMode(),
+        version: productVersion(),
         nodeCount: stats.nodeCount,
         edgeCount: stats.edgeCount,
         fileCount: stats.fileCount,

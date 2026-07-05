@@ -4,8 +4,11 @@
  * Sessions / Heatmap / Costs / Compare / Tips pages have in common
  * (ported from specs/specship-desktop/screens-claude.jsx).
  */
-import { useState } from 'react';
+import { useState, type MouseEvent as ReactMouseEvent } from 'react';
 import { api } from '../api';
+import { useIngestConfig } from '../hooks';
+import { go } from '../router';
+import { Icon } from './icons';
 import { Empty } from './ui';
 
 /**
@@ -33,6 +36,29 @@ export function IngestGuidance({ onIngested }: { onIngested?: () => void }) {
         </button>
       }
     />
+  );
+}
+
+/**
+ * Warn strip the analytics screens show while the server-side transcript
+ * ingest toggle is OFF (REQ-DESKTOP-028.A2): the data below is real but
+ * frozen at the last ingest pass. Driven by /api/config via useIngestConfig,
+ * so flipping the Settings toggle updates these screens without a reload.
+ */
+export function IngestDisabledBanner() {
+  const config = useIngestConfig();
+  if (!config.data || config.data.ingestEnabled) return null;
+  const openSettings = (e: ReactMouseEvent<HTMLAnchorElement>) => {
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+    e.preventDefault();
+    go('settings');
+  };
+  return (
+    <div role="status" className="row gap-8" style={{ padding: '8px 12px', borderRadius: 8, background: 'var(--warn-soft)', color: 'var(--warn)', fontSize: 12.5, marginBottom: 14 }}>
+      <Icon name="drift" size={14} style={{ flexShrink: 0 }} />
+      <span className="grow">Transcript ingest is off — this data is frozen at the last ingest pass.</span>
+      <a href="/settings" onClick={openSettings} style={{ color: 'var(--warn)', fontWeight: 600, flexShrink: 0 }}>Turn on in Settings</a>
+    </div>
   );
 }
 

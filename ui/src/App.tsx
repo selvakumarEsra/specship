@@ -22,6 +22,7 @@ import { MemoryPage } from './pages/memory';
 import { PlaceholderPage } from './pages/placeholder';
 import { RunsPage } from './pages/runs';
 import { SessionsPage } from './pages/sessions';
+import { SettingsPage } from './pages/settings';
 import { SpecsPage } from './pages/specs';
 import { TipsPage } from './pages/tips';
 import { WorkflowsPage } from './pages/workflows';
@@ -104,7 +105,7 @@ const SCREENS: Record<string, ComponentType<PageProps>> = {
   compare: ComparePage,
   memory: MemoryPage,
   mcp: McpPage,
-  settings: () => <PlaceholderPage title="Settings" req="REQ-DESKTOP-032" />,
+  settings: (p) => <SettingsPage {...p} />,
 };
 
 const PROJECT_KEY = 'ss_project';

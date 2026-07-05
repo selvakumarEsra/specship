@@ -35,6 +35,8 @@ import { registerMaintainabilityRoutes } from './routes/maintainability.js';
 import { registerDomainRoutes } from './routes/domain.js';
 import { registerChatRoutes } from './routes/chat.js';
 import { registerMcpRoutes } from './routes/mcp.js';
+import { registerConfigRoutes } from './routes/config.js';
+import { readServerConfig } from './server-config.js';
 
 export interface ServerOptions {
   /**
@@ -208,53 +210,68 @@ export async function createServer(options: ServerOptions): Promise<ServerHandle
   // provided one or explicitly opted out. Hooks into the primary project's
   // SQLite handle — when there's no primary, analytics endpoints will return
   // 409 until one is set (typically the next server restart with -p).
+  //
+  // The persisted runtime config (~/.specship/server-config.json) gates the
+  // start too: the Settings ingest toggle must survive a restart
+  // (REQ-DESKTOP-028.A2). CLI `--no-ingest` still wins over everything.
   let watcher: WatcherHandle | null = options.watcher ?? null;
   let ownedWatcher = false;
-  if (!watcher && options.ingest !== false && primaryCg) {
+  let ingestEnabled = watcher != null
+    || (options.ingest !== false && readServerConfig().ingestEnabled !== false);
+
+  const startIngestWatcher = (): boolean => {
+    if (watcher) return true;
+    if (!primaryCg) return false;
     const cgAny = primaryCg as unknown as { db?: { getDb?: () => unknown }; queries?: { db?: unknown } };
     const dbHandle = cgAny.db?.getDb ? cgAny.db.getDb() : cgAny.queries?.db;
-    if (dbHandle) {
-      // Build a sync resolveGraph: for the primary project path return the
-      // already-open SpecShip instance (which satisfies GraphLike).
-      // Sessions from other project paths resolve to null — they'll be left
-      // as 'unresolved' and retried on the next boot when that project is primary.
-      // The stored project_path is the lossy-decoded slug (every '-' → '/'), so
-      // an exact compare against the real primaryPath never matched and savings
-      // stayed 0. primaryProjectMatcher accepts both the real path and its
-      // mangled stored form. Sessions from OTHER projects still resolve to null
-      // (left 'unresolved', retried when that project is primary).
-      const primaryPath = options.projectRoot ?? null;
-      const isPrimary = primaryPath ? primaryProjectMatcher(primaryPath) : () => false;
-      const resolveGraph = (projectPath: string) =>
-        primaryPath && isPrimary(projectPath) ? primaryCg : null;
+    if (!dbHandle) return false;
+    // Build a sync resolveGraph: for the primary project path return the
+    // already-open SpecShip instance (which satisfies GraphLike).
+    // Sessions from other project paths resolve to null — they'll be left
+    // as 'unresolved' and retried on the next boot when that project is primary.
+    // The stored project_path is the lossy-decoded slug (every '-' → '/'), so
+    // an exact compare against the real primaryPath never matched and savings
+    // stayed 0. primaryProjectMatcher accepts both the real path and its
+    // mangled stored form. Sessions from OTHER projects still resolve to null
+    // (left 'unresolved', retried when that project is primary).
+    const primaryPath = options.projectRoot ?? null;
+    const isPrimary = primaryPath ? primaryProjectMatcher(primaryPath) : () => false;
+    const resolveGraph = (projectPath: string) =>
+      primaryPath && isPrimary(projectPath) ? primaryCg : null;
 
-      watcher = startWatcher(dbHandle as Parameters<typeof startWatcher>[0], { verbose, resolveGraph });
-      ownedWatcher = true;
-      if (verbose) console.error('[specship-server] JSONL ingest watcher started');
+    watcher = startWatcher(dbHandle as Parameters<typeof startWatcher>[0], { verbose, resolveGraph });
+    ownedWatcher = true;
+    if (verbose) console.error('[specship-server] JSONL ingest watcher started');
 
-      // Backfill displaced_files / resolution for pre-upgrade rows (is_specship=1,
-      // resolution IS NULL). Idempotent — safe to run on every boot. Non-fatal:
-      // a failure here must never abort server startup.
-      try {
-        backfillDisplaced(dbHandle as Parameters<typeof startWatcher>[0], resolveGraph);
-        if (verbose) console.error('[specship-server] specship-impact backfill complete');
-      } catch (err) {
-        console.error('[specship-server] specship-impact backfill failed (non-fatal):',
-          err instanceof Error ? err.message : String(err));
-      }
-
-      // Re-cost prompts ingested while their model family was unpriced,
-      // e.g. fable sessions stuck at $0 (REQ-DASHINT-001.A2). Idempotent.
-      try {
-        const recosted = recostUnpricedPrompts(dbHandle as Parameters<typeof recostUnpricedPrompts>[0]);
-        if (verbose && recosted > 0) console.error(`[specship-server] re-costed ${recosted} unpriced prompts`);
-      } catch (err) {
-        console.error('[specship-server] pricing backfill failed (non-fatal):',
-          err instanceof Error ? err.message : String(err));
-      }
+    // Backfill displaced_files / resolution for pre-upgrade rows (is_specship=1,
+    // resolution IS NULL). Idempotent — safe to run on every boot. Non-fatal:
+    // a failure here must never abort server startup.
+    try {
+      backfillDisplaced(dbHandle as Parameters<typeof startWatcher>[0], resolveGraph);
+      if (verbose) console.error('[specship-server] specship-impact backfill complete');
+    } catch (err) {
+      console.error('[specship-server] specship-impact backfill failed (non-fatal):',
+        err instanceof Error ? err.message : String(err));
     }
-  } else if (!primaryCg && options.ingest !== false && verbose) {
-    console.error('[specship-server] no primary project — analytics will be empty until one is set');
+
+    // Re-cost prompts ingested while their model family was unpriced,
+    // e.g. fable sessions stuck at $0 (REQ-DASHINT-001.A2). Idempotent.
+    try {
+      const recosted = recostUnpricedPrompts(dbHandle as Parameters<typeof recostUnpricedPrompts>[0]);
+      if (verbose && recosted > 0) console.error(`[specship-server] re-costed ${recosted} unpriced prompts`);
+    } catch (err) {
+      console.error('[specship-server] pricing backfill failed (non-fatal):',
+        err instanceof Error ? err.message : String(err));
+    }
+    return true;
+  };
+
+  if (!watcher && ingestEnabled) {
+    if (primaryCg) {
+      startIngestWatcher();
+    } else if (verbose) {
+      console.error('[specship-server] no primary project — analytics will be empty until one is set');
+    }
   }
 
   // Decorate the Fastify instance so route handlers can access shared state
@@ -262,6 +279,28 @@ export async function createServer(options: ServerOptions): Promise<ServerHandle
   app.decorate('projects', registry);
   app.decorate('primaryCg', primaryCg);
   app.decorate('watcher', watcher);
+  // Runtime ingest control for GET/PUT /api/config (REQ-DESKTOP-028.A2).
+  // `enabled` is the configured intent (round-trips even when no primary
+  // project can host a watcher yet); `active` is whether one is running.
+  // start/stop keep `app.watcher` in sync so /api/refresh always sees the
+  // live handle.
+  app.decorate('ingestControl', {
+    enabled: () => ingestEnabled,
+    active: () => watcher != null,
+    start: () => {
+      ingestEnabled = true;
+      const started = startIngestWatcher();
+      app.watcher = watcher;
+      return started;
+    },
+    stop: () => {
+      ingestEnabled = false;
+      if (watcher) { try { watcher.stop(); } catch { /* ignore */ } }
+      watcher = null;
+      ownedWatcher = false;
+      app.watcher = null;
+    },
+  });
   // activeCg(req): resolve `?project=<slug>` → SpecShip instance, with the
   // primary as fallback. Returns null when nothing is selectable; route
   // handlers respond 409 in that case.
@@ -292,6 +331,7 @@ export async function createServer(options: ServerOptions): Promise<ServerHandle
   await registerDomainRoutes(app);
   await registerChatRoutes(app);
   await registerMcpRoutes(app);
+  await registerConfigRoutes(app);
 
   // SSR dashboard (DASH-LEAN-DOC / REQ-DASHLEAN-004): explicit page routes
   // rendered in-process from the /api handlers above (via app.inject), plus the
@@ -372,6 +412,18 @@ export async function createServer(options: ServerOptions): Promise<ServerHandle
   };
 }
 
+/** Runtime control over the JSONL ingest watcher (GET/PUT /api/config). */
+export interface IngestControl {
+  /** Configured intent — mirrors ~/.specship/server-config.json. */
+  enabled: () => boolean;
+  /** Whether a watcher is actually running right now. */
+  active: () => boolean;
+  /** Record intent = on and start the watcher when a primary DB exists. */
+  start: () => boolean | Promise<boolean>;
+  /** Record intent = off and stop any running watcher. */
+  stop: () => void;
+}
+
 // Fastify type augmentation. Route handlers read shared state via these.
 declare module 'fastify' {
   interface FastifyInstance {
@@ -379,5 +431,6 @@ declare module 'fastify' {
     primaryCg: SpecShipInstance | null;
     activeCg: (req: FastifyRequest) => Promise<SpecShipInstance | null>;
     watcher: WatcherHandle | null;
+    ingestControl: IngestControl;
   }
 }
