@@ -907,6 +907,11 @@ API, the JSON data endpoints) carry forward unchanged under this
 document. Retiring the surface also retires or re-links the sibling SSR
 spec documents so the removal does not fill the drift queue.
 
+implementations:
+  - server/src/server.ts:createServer
+  - server/src/cli.ts
+  - src/bin/specship.ts
+
 ## Acceptance
 <!-- id: REQ-DESKTOP-033.A1 -->
 - The dashboard root serves the SPA; no route serves the server-rendered
