@@ -95,7 +95,9 @@ describe('DriftPage (REQ-DESKTOP-022)', () => {
     render(<DriftPage project={null} query={{}} />);
     await screen.findByText('REQ-A-2');
 
-    const brokenChip = screen.getByRole('button', { name: /broken/i });
+    // Anchored: drift rows are focusable buttons too, and the broken row's
+    // accessible name starts with its "Broken" state pill.
+    const brokenChip = screen.getByRole('button', { name: /^broken \d+$/ });
     expect(brokenChip.textContent).toBe('broken1');
     fireEvent.click(brokenChip);
     expect(screen.queryByText('REQ-A-9')).toBeNull();

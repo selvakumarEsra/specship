@@ -141,10 +141,8 @@ export function StatTile({ icon, label, value, delta, deltaInvert, spark, sparkC
   return (
     <button
       onClick={onClick}
-      className="card"
-      style={{ textAlign: 'left', padding: '11px 13px', cursor: 'pointer', background: 'var(--bg-panel)', display: 'flex', flexDirection: 'column', gap: 6, transition: 'background 100ms, border-color 100ms' }}
-      onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-panel-2)'; e.currentTarget.style.borderColor = 'var(--border-strong)'; }}
-      onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--bg-panel)'; e.currentTarget.style.borderColor = 'var(--border-subtle)'; }}
+      className="card card-btn"
+      style={{ textAlign: 'left', padding: '11px 13px', display: 'flex', flexDirection: 'column', gap: 6 }}
     >
       <div className="row gap-8" style={{ color: 'var(--text-muted)' }}>
         <Icon name={icon} size={13} style={{ color: color || 'var(--text-muted)' }} />
@@ -329,10 +327,11 @@ function PromptRow({ p, max }: { p: CostPrompt; max: number }) {
   return (
     <div
       onClick={() => go('sessions', { query: { sel: p.session_id } })}
-      className="row gap-10"
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go('sessions', { query: { sel: p.session_id } }); } }}
+      className="row gap-10 list-row"
       style={{ padding: '7px 4px', borderRadius: 6, cursor: 'pointer' }}
-      onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)'; }}
-      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
     >
       <div className="grow" style={{ minWidth: 0 }}>
         <div style={{ fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

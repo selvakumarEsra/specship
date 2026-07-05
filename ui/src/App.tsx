@@ -231,16 +231,17 @@ function NavItem({ item, active, collapsed, counts }: { item: NavEntry; active: 
       href={'/' + item.id}
       onClick={onClick}
       title={collapsed ? item.label : undefined}
+      className="list-row"
       style={{
         display: 'flex', alignItems: 'center', gap: 10, height: 32, padding: collapsed ? 0 : '0 10px',
         justifyContent: collapsed ? 'center' : 'flex-start',
         borderRadius: 7, textDecoration: 'none', marginBottom: 1,
         color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
-        background: active ? 'var(--bg-active)' : 'transparent',
-        fontWeight: active ? 600 : 450, fontSize: 13, position: 'relative', transition: 'background 100ms',
+        // Inline only while active so .list-row's hover/pressed states apply
+        // to inactive items (active keeps the bg-active page marker).
+        background: active ? 'var(--bg-active)' : undefined,
+        fontWeight: active ? 600 : 450, fontSize: 13, position: 'relative',
       }}
-      onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = 'var(--bg-hover)'; }}
-      onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = 'transparent'; }}
     >
       {active && <span style={{ position: 'absolute', left: 0, top: 7, bottom: 7, width: 2.5, borderRadius: 2, background: 'var(--accent)' }} />}
       <Icon name={item.icon} size={16} style={{ color: active ? 'var(--accent)' : 'inherit', flexShrink: 0 }} />
@@ -296,7 +297,7 @@ function ProjectSwitcher({ projects, project, projectPath, onPick }: {
         onClick={toggle}
         className="row gap-6"
         title="Switch project"
-        style={{ height: 24, padding: '0 8px', borderRadius: 6, cursor: 'pointer', background: open ? 'var(--bg-hover)' : 'transparent', border: '1px solid ' + (open ? 'var(--border-strong)' : 'transparent'), transition: 'background 100ms, border-color 100ms' }}
+        style={{ height: 24, padding: '0 8px', borderRadius: 6, cursor: 'pointer', background: open ? 'var(--bg-hover)' : 'transparent', border: '1px solid ' + (open ? 'var(--border-strong)' : 'transparent'), transition: 'background var(--motion-fast), border-color var(--motion-fast)' }}
       >
         <Icon name="folder" size={13} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
         <span className="mono" style={{ fontSize: 11.5, color: 'var(--text-primary)', maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
@@ -356,7 +357,7 @@ function StatusStrip({ status, projectless, projects, project, onPick, onRefresh
       {seg('drift', status ? String(status.drift) : '—', status ? (status.drift ? 'var(--warn)' : 'var(--success)') : undefined)}
       <div className="grow" />
       {seg('indexed', freshness)}
-      <button className="btn btn-ghost btn-xs" onClick={onRefresh} title="Refresh now">
+      <button className="btn btn-ghost btn-xs" onClick={onRefresh} title="Refresh now" aria-label="Refresh now">
         <Icon name="refresh" size={12} style={{ animation: refreshing ? 'spin 0.8s linear infinite' : 'none' }} />
       </button>
     </div>
@@ -368,7 +369,7 @@ const KBD_STYLE: React.CSSProperties = { fontFamily: 'var(--font-mono)', fontSiz
 function TopBar({ onToggle, onOpenPalette }: { onToggle: () => void; onOpenPalette: () => void }) {
   return (
     <div style={{ height: 44, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10, padding: '0 14px', borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-canvas)' }}>
-      <button className="btn btn-ghost" onClick={onToggle} style={{ padding: 6 }} title="Toggle sidebar">
+      <button className="btn btn-ghost" onClick={onToggle} style={{ padding: 6 }} title="Toggle sidebar" aria-label="Toggle sidebar">
         <Icon name="menu" size={16} />
       </button>
       <button
@@ -382,7 +383,7 @@ function TopBar({ onToggle, onOpenPalette }: { onToggle: () => void; onOpenPalet
       </button>
       <div className="grow" />
       <ThemeToggle />
-      <button className="btn btn-ghost btn-sm" onClick={onOpenPalette} title="Command palette">
+      <button className="btn btn-ghost btn-sm" onClick={onOpenPalette} title="Command palette" aria-label="Command palette">
         <Icon name="command" size={14} />
       </button>
     </div>
@@ -399,6 +400,7 @@ function ThemeToggle() {
     <button
       className="btn btn-ghost btn-sm"
       title={'Theme: ' + pref + ' — switch to ' + next}
+      aria-label={'Theme: ' + pref + ' — switch to ' + next}
       onClick={() => { applyTheme(next); setPref(next); }}
     >
       <Icon name={ICON[pref]} size={15} />

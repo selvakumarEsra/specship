@@ -24,7 +24,8 @@ function Chip({ label, count, active, onClick, color }: {
         height: 26, padding: '0 10px', borderRadius: 999, fontSize: 11.5, fontWeight: 500, cursor: 'pointer',
         border: '1px solid ' + (active ? 'transparent' : 'var(--border-subtle)'),
         background: active ? (color ? `color-mix(in srgb, ${color} 22%, var(--bg-panel))` : 'var(--accent-soft)') : 'var(--bg-panel)',
-        color: active ? (color || 'var(--accent)') : 'var(--text-secondary)', transition: 'all 100ms',
+        color: active ? (color || 'var(--accent)') : 'var(--text-secondary)',
+        transition: 'background var(--motion-fast), color var(--motion-fast), border-color var(--motion-fast)',
       }}
     >
       {color && <span style={{ width: 7, height: 7, borderRadius: '50%', background: color }} />}
@@ -105,6 +106,7 @@ export function GraphPage({ project, query }: PageProps) {
             value={mode}
             onChange={(v) => { setMode(v); setFitKey((k) => k + 1); }}
             options={[{ value: 'hierarchical', label: 'Hierarchical' }, { value: 'force', label: 'Force' }]}
+            label="Graph layout"
           />
           <div style={{ width: 1, height: 20, background: 'var(--border-subtle)' }} />
           {KIND_CHIPS.filter((k) => counts[k.kind]).map((k) => (

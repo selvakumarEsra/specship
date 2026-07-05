@@ -91,9 +91,17 @@ function stateLabel(state: string): string {
   return STATE[state]?.label ?? state;
 }
 
+/**
+ * Per-page-mount cache of loaded details. Re-selecting an already-viewed spec
+ * swaps its detail in instantly — the skeleton renders only when data is
+ * genuinely absent, never as a routine flash (REQ-DESKTOP-016.A1); the fetch
+ * still runs to revalidate and refresh the cache.
+ */
+export type SpecDetailCache = Map<string, SpecDetailResponse>;
+
 // @implements REQ-DESKTOP-012
-export function SpecDetail({ id, project }: { id: string | null; project: string | null }) {
-  return id ? <SpecDetailLoaded id={id} project={project} /> : <NoSelection />;
+export function SpecDetail({ id, project, cache }: { id: string | null; project: string | null; cache?: SpecDetailCache }) {
+  return id ? <SpecDetailLoaded id={id} project={project} cache={cache} /> : <NoSelection />;
 }
 
 /** No-selection guidance empty state (REQ-DESKTOP-012.A1). */
@@ -116,8 +124,17 @@ function NoSelection() {
 }
 
 // @implements REQ-DESKTOP-006
-function SpecDetailLoaded({ id, project }: { id: string; project: string | null }) {
-  const detail = useApi(() => api.spec(id, project), [id, project]);
+// @implements REQ-DESKTOP-016
+function SpecDetailLoaded({ id, project, cache }: { id: string; project: string | null; cache?: SpecDetailCache }) {
+  const cacheKey = (project ?? '') + '|' + id;
+  const detail = useApi(async () => {
+    const d = await api.spec(id, project);
+    cache?.set(cacheKey, d);
+    return d;
+  }, [id, project]);
+  // Cached detail paints immediately while the revalidating fetch is in
+  // flight — no skeleton flash on re-selection (REQ-DESKTOP-016.A1).
+  const data = detail.data ?? cache?.get(cacheKey) ?? null;
   const [editing, setEditing] = useState(false);
   const [syncNotice, setSyncNotice] = useState<string | null>(null);
 
@@ -126,11 +143,11 @@ function SpecDetailLoaded({ id, project }: { id: string; project: string | null 
   // (006.A3). The editor itself owns the draft, so unmounting drops it.
   useEffect(() => { setEditing(false); setSyncNotice(null); }, [id]);
 
-  if (detail.data) {
+  if (data) {
     if (editing) {
       return (
         <SpecEditor
-          data={detail.data}
+          data={data}
           project={project}
           onCancel={() => setEditing(false)}
           onSaved={(syncError) => {
@@ -143,7 +160,7 @@ function SpecDetailLoaded({ id, project }: { id: string; project: string | null 
     }
     return (
       <SpecRead
-        data={detail.data}
+        data={data}
         notice={syncNotice}
         onEdit={() => { setSyncNotice(null); setEditing(true); }}
       />
@@ -189,6 +206,7 @@ function DetailSkeleton() {
 // @implements REQ-DESKTOP-003
 // @implements REQ-DESKTOP-004
 // @implements REQ-DESKTOP-005
+// @implements REQ-DESKTOP-015
 function SpecRead({ data, notice, onEdit }: {
   data: SpecDetailResponse;
   notice?: string | null;
@@ -245,11 +263,11 @@ function SpecRead({ data, notice, onEdit }: {
 
         {/* ---- breadcrumb ---- */}
         <div className="sp-breadcrumb">
-          <Icon name="book" size={13} style={{ color: 'var(--node-spec)' }} />
-          <span className="mono" style={{ color: 'var(--text-secondary)' }}>{docPath}</span>
-          <Icon name="chevronRight" size={11} />
-          <span className="mono" style={{ color: 'var(--node-spec)', fontWeight: 600 }}>{spec.id}</span>
-          <CopyBtn text={spec.id} />
+          <Icon name="book" size={13} style={{ color: 'var(--node-spec)', flexShrink: 0 }} />
+          <span className="mono sp-path" style={{ color: 'var(--text-secondary)' }}>{docPath}</span>
+          <Icon name="chevronRight" size={11} style={{ flexShrink: 0 }} />
+          <span className="mono" style={{ color: 'var(--node-spec)', fontWeight: 600, flexShrink: 0 }}>{spec.id}</span>
+          <CopyBtn text={spec.id} ariaLabel="Copy spec id" />
         </div>
 
         {/* ---- title ---- */}
@@ -533,7 +551,12 @@ function CriteriaEditor({ criteria, onChange }: {
                 placeholder="Observable, testable condition…"
                 onChange={(e) => setCrit(i, { text: e.target.value })}
               />
-              <button className="sp-icon-btn" title="Remove criterion" onClick={() => onChange(criteria.filter((_, j) => j !== i))}>
+              <button
+                className="sp-icon-btn"
+                title="Remove criterion"
+                aria-label={'Remove criterion A' + (i + 1)}
+                onClick={() => onChange(criteria.filter((_, j) => j !== i))}
+              >
                 <Icon name="trash" size={14} />
               </button>
             </div>
@@ -561,6 +584,7 @@ function CriteriaEditor({ criteria, onChange }: {
 // @implements REQ-DESKTOP-007
 // @implements REQ-DESKTOP-009
 // @implements REQ-DESKTOP-011
+// @implements REQ-DESKTOP-014
 function SpecEditor({ data, project, onCancel, onSaved }: {
   data: SpecDetailResponse;
   project: string | null;
@@ -664,13 +688,13 @@ function SpecEditor({ data, project, onCancel, onSaved }: {
             />
           </Field>
 
-          {/* ---- metadata grid ---- */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 22px', marginBottom: 4 }}>
+          {/* ---- metadata grid (single column at the narrow breakpoint — 015) ---- */}
+          <div className="sp-edit-grid">
             <Field label="Status" hint="Set automatically — saving re-queues this spec as Drafted so the implementation workflow picks it up.">
               <AutoStatus state={currentState} />
             </Field>
             <Field label="Priority">
-              <Segmented options={PRIORITIES} value={d.priority} onChange={(v) => set({ priority: v })} />
+              <Segmented options={PRIORITIES} value={d.priority} onChange={(v) => set({ priority: v })} label="Priority" />
             </Field>
             <Field label="Kind">
               <PlainSelect value={d.kind} onChange={(v) => set({ kind: v })} options={KIND_OPTIONS} label="Kind" />
@@ -700,6 +724,7 @@ function SpecEditor({ data, project, onCancel, onSaved }: {
                 options={[{ value: 'write', label: 'Write' }, { value: 'preview', label: 'Preview' }]}
                 value={tab}
                 onChange={setTab}
+                label="Statement editor mode"
               />
             </div>
             {tab === 'write' ? (

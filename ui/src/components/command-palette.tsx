@@ -161,8 +161,8 @@ export function CommandPalette({ open, onClose, pages, project = null }: {
               aria-selected={i === sel}
               onMouseEnter={() => setSel(i)}
               onClick={() => { r.nav(); onClose(); }}
-              className="row gap-10"
-              style={{ padding: '8px 10px', borderRadius: 7, cursor: 'pointer', background: i === sel ? 'var(--bg-hover)' : 'transparent' }}
+              className="row gap-10 list-row"
+              style={{ padding: '8px 10px', borderRadius: 7, cursor: 'pointer' }}
             >
               <Icon name={r.icon} size={15} style={{ color: i === sel ? 'var(--accent)' : 'var(--text-muted)', flexShrink: 0 }} />
               <div className="grow" style={{ minWidth: 0 }}>
