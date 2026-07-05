@@ -1,42 +1,35 @@
 import { test, expect } from '@playwright/test';
-
-const PORT = Number(process.env.E2E_PORT || 4319);
-const ORIGIN = `http://127.0.0.1:${PORT}`;
+import { captureConsoleErrors } from '../lib/console';
 
 /**
- * The dashboard-renders-live-data guard, for the server-rendered dashboard
- * (DASH-LEAN-DOC). `serve --ui` now renders every page server-side in the same
- * process that serves `/api/*` (data via `app.inject`), so the regression this
- * guards is simpler than the old CORS/blank-SPA class: the page's real values
- * must be present in the *initial HTML* (REQ-DASHLEAN-004.A1), with no Angular
- * SPA and no client framework.
+ * The dashboard-renders-live-data guard, ported to the built SPA. `serve --ui
+ * --no-ssr` serves the real app which fetches `/api/*` same-origin at
+ * 127.0.0.1 — the exact condition the CORS/blank-dashboard class of bug (#55)
+ * regressed on. If those fetches were cross-origin-blocked the KPI tiles would
+ * never fill, so a rendered live cost value IS the regression guard.
  */
-test.describe('SSR dashboard renders live data @ 127.0.0.1', () => {
-  test('the dashboard is server-rendered with real values', async ({ page }) => {
-    // Raw HTML straight from the server — no JS executed. If the KPI values are
-    // here, they were rendered server-side.
-    const res = await page.request.get(`${ORIGIN}/dashboard`);
-    expect(res.ok()).toBeTruthy();
-    const html = await res.text();
+test.describe('SPA dashboard renders live data @ 127.0.0.1', () => {
+  test('the dashboard renders a real cost value from live /api data', async ({ page }) => {
+    const guard = captureConsoleErrors(page);
+    await page.goto('/dashboard');
 
-    expect(html, 'server-rendered shell').toContain('var(--sidebar-w)');
-    expect(html, 'KPI tiles present').toMatch(/Last session cost/i);
-    // A tile's value is a real rendered number, not a skeleton.
-    expect(html, 'live cost value rendered').toMatch(/\$\d+\.\d{2}/);
-    // No Angular SPA, no framework runtime.
-    expect(html, 'no Angular shell').not.toContain('app-root');
-    expect(html, 'no framework version marker').not.toMatch(/ng-version/);
-    // The only client script is the islands enhancement layer.
-    expect(html).toContain('/islands.js');
+    const region = page.locator('[data-screen="dashboard"]');
+    await expect(region).toBeVisible();
+    // A KPI tile shows a real rendered currency value (from /api/claude/stats),
+    // not a skeleton — proof the same-origin fetch resolved and painted.
+    await expect(region.getByText(/\$\d+\.\d{2}/).first()).toBeVisible();
+
+    await page.waitForTimeout(300);
+    expect(guard.errors(), `dashboard console errors:\n${guard.errors().join('\n')}`).toEqual([]);
   });
 
   test('the analytics + graph APIs the dashboard renders from return data', async ({ page }) => {
-    const status = await page.request.get(`${ORIGIN}/api/status`);
+    const status = await page.request.get('/api/status');
     expect(status.ok()).toBeTruthy();
     const { nodeCount } = await status.json();
     expect(nodeCount, 'indexed graph should have nodes').toBeGreaterThan(0);
 
-    const stats = await page.request.get(`${ORIGIN}/api/claude/stats`);
+    const stats = await page.request.get('/api/claude/stats');
     expect(stats.ok()).toBeTruthy();
     const statsBody = await stats.json();
     expect(statsBody?.lastSessionCost?.value, 'seeded transcripts should yield a cost')

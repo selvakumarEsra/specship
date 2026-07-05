@@ -25,6 +25,8 @@ interface CliArgs {
   verbose: boolean;
   webDir: string | null;
   noWeb: boolean;
+  /** Swap the server-rendered dashboard for the built SPA (REQ-DESKTOP-032). */
+  noSsr: boolean;
   open: boolean;
 }
 
@@ -38,6 +40,7 @@ function parseArgs(): CliArgs {
     verbose: false,
     webDir: null,
     noWeb: false,
+    noSsr: false,
     open: false,
   };
   const argv = process.argv.slice(2);
@@ -50,6 +53,7 @@ function parseArgs(): CliArgs {
     else if (a === '--verbose' || a === '-v') args.verbose = true;
     else if (a === '--web-dir') args.webDir = argv[++i] ?? null;
     else if (a === '--no-web') args.noWeb = true;
+    else if (a === '--no-ssr') args.noSsr = true;
     else if (a === '--open') args.open = true;
     else if (a === '--help' || a === '-h') {
       console.log(`Usage: specship-desktop [options]
@@ -61,6 +65,7 @@ Options:
   --no-ingest                 Skip the in-process Claude JSONL transcript watcher
   --web-dir <path>            Explicit path to a built desktop SPA (index.html lives here; defaults to the bundled ui/dist)
   --no-web                    Run headless — serve the API only, no SPA
+  --no-ssr                    Serve the built SPA instead of the server-rendered dashboard (REQ-DESKTOP-032)
   --open                      Open the UI in the default browser once listening
   --verbose, -v               Verbose logs`);
       process.exit(0);
@@ -90,7 +95,8 @@ async function main(): Promise<void> {
     verbose: args.verbose,
     // undefined = auto-detect the bundled ui/dist; --no-web opts out entirely.
     webDir: args.noWeb ? null : args.webDir ?? undefined,
-    ssr: serveUi,
+    // --no-ssr serves the built SPA (via webDir) rather than the SSR dashboard.
+    ssr: serveUi && !args.noSsr,
   });
 
   console.error(`[specship-desktop] listening on ${handle.url}`);
@@ -99,7 +105,7 @@ async function main(): Promise<void> {
   } else {
     console.error(`[specship-desktop] project: (none — pick one in the dashboard)`);
   }
-  console.error(`[specship-desktop] UI:      ${serveUi ? handle.url + '/  (server-rendered)' : '(none — running headless)'}`);
+  console.error(`[specship-desktop] UI:      ${serveUi ? handle.url + `/  (${args.noSsr ? 'SPA' : 'server-rendered'})` : '(none — running headless)'}`);
   if (args.ingest) console.error(`[specship-desktop] Claude Code transcript ingest active`);
 
   if (args.open) tryOpenInBrowser(handle.url);

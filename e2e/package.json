@@ -2,7 +2,7 @@
   "name": "@specship/e2e",
   "version": "0.0.0",
   "private": true,
-  "description": "Browser end-to-end smoke tests for the SpecShip Desktop dashboard. Boots `specship serve --ui` on 127.0.0.1 against a hermetic fixture and asserts the dashboard renders live data (the regression guard for the same-origin / CORS dashboard-blank class of bug).",
+  "description": "Browser end-to-end suite for the SpecShip Desktop dashboard. Boots the real server over the built SPA (`serve --ui --no-ssr --web-dir ui/dist`) on 127.0.0.1 against a hermetic indexed fixture and drives the app's core flows — every routed screen renders with zero console errors, spec edit→save persists, theme persists, command palette navigates (REQ-DESKTOP-032).",
   "type": "module",
   "scripts": {
     "test": "playwright test",

@@ -1,17 +1,20 @@
 name: Dashboard e2e
 
-# Boots the real SpecShip Desktop dashboard in a headless browser against a
-# hermetic fixture and asserts it renders live data at 127.0.0.1 with no
-# cross-origin / CORS-blocked API calls. This is the regression guard for the
-# "dashboard opens blank / shows no data" class of bug (e.g. #55) that the
-# vitest suites can't see because they never boot the Angular SPA in a browser.
+# Boots the REAL dashboard server over the BUILT desktop SPA in a headless
+# browser against a hermetic indexed fixture, then drives the app's core flows
+# (REQ-DESKTOP-032): every routed screen renders its key content with zero
+# console errors, spec edit→save persists to disk, theme persists across reload,
+# and the command palette navigates. This is the guard the vitest suites can't
+# see because they never boot the SPA in a browser — including the
+# "dashboard opens blank / shows no data" CORS class of bug (e.g. #55).
 #
-# Runs on PRs that touch the dashboard, server, CLI, or the harness itself.
+# Runs on PRs that touch the SPA, server, CLI, or the harness itself.
 # The Release workflow runs the same suite as a BLOCKING publish gate.
 on:
   workflow_dispatch: {}
   pull_request:
     paths:
+      - "ui/**"
       - "server/**"
       - "e2e/**"
       - "src/**"
@@ -32,12 +35,15 @@ jobs:
         with:
           node-version: 22
       # Root install compiles the optional better-sqlite3 (ships FTS5), which
-      # the fixture indexer needs; the built-in node:sqlite on Node 22 has no
-      # FTS5. The dashboard is now server-rendered (server/src/ssr),
-      # built by the root `npm run build` — no separate UI install step.
+      # the fixture indexer + the server's on-save re-sync need; the built-in
+      # node:sqlite on Node 22 has no FTS5.
       - run: npm ci
-      - name: Build CLI + server (server-rendered dashboard)
+      - name: Build CLI + server
         run: npm run build
+      # The desktop SPA (ui/) is a standalone module with its own lockfile. The
+      # harness serves this build via `serve --ui --no-ssr --web-dir ui/dist`.
+      - name: Build desktop SPA
+        run: cd ui && npm ci && npm run build
       - name: Install e2e deps + browser
         run: |
           cd e2e

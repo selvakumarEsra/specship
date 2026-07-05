@@ -870,6 +870,18 @@ spec and observe the re-queued state, toggle the theme and observe
 persistence, and open the command palette and navigate. The suite runs
 headless via an npm script and its failure fails the build.
 
+implementations:
+  - e2e/tests/screens-render.spec.ts
+  - e2e/tests/spec-edit-save.spec.ts
+  - e2e/tests/theme-palette.spec.ts
+  - e2e/tests/dashboard-detail-nav.spec.ts
+  - e2e/tests/dashboard-data.spec.ts
+  - e2e/scripts/prepare-and-serve.mjs
+  - e2e/lib/screens.mjs
+  - src/bin/specship.ts
+  - .github/workflows/e2e.yml
+  - .github/workflows/release.yml
+
 ## Acceptance
 <!-- id: REQ-DESKTOP-032.A1 -->
 - The suite boots the server and built app, visits every routed screen,

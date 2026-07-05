@@ -89,11 +89,13 @@ jobs:
       - name: Ensure zip/unzip
         run: sudo apt-get update -qq && sudo apt-get install -y -qq zip unzip
 
-      # Blocking gate: boot the real dashboard in a browser and prove it renders
-      # live data at 127.0.0.1 with no cross-origin/CORS-blocked API calls. This
-      # runs BEFORE the CHANGELOG promotion, bundling, and publish, so a
-      # dashboard-blank regression (e.g. #55) stops the release before any
-      # user-facing artifact or side effect is produced. See e2e.
+      # Blocking gate (REQ-DESKTOP-032.A4): boot the real dashboard server over
+      # the built SPA (built above) and drive its core flows in a browser —
+      # every routed screen renders with zero console errors, spec edit→save
+      # persists, theme persists, the command palette navigates. This runs
+      # BEFORE the CHANGELOG promotion, bundling, and publish, so an E2E failure
+      # (e.g. a dashboard-blank regression like #55) stops the release before
+      # any user-facing artifact or side effect is produced. See e2e.
       - name: Dashboard e2e smoke gate
         run: |
           set -euo pipefail
