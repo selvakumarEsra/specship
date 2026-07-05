@@ -337,6 +337,9 @@ detail fetch renders an error state with a retry affordance. Unknown state
 strings in the data render with the neutral info treatment rather than
 throwing. Route-level not-found remains covered by `DASH-SPECDETAIL-DOC`.
 
+implementations:
+  - ui/src/components/spec-detail.tsx:SpecDetail
+
 ## Acceptance
 <!-- id: REQ-DESKTOP-012.A1 -->
 - With no selection, the empty state shows the guidance heading and the
@@ -590,6 +593,10 @@ heatmap) that navigate to their screens. Every module binds to live
 backend data and follows the shared loading / empty / error pattern
 (REQ-DESKTOP-012 generalized by REQ-DESKTOP-030).
 
+implementations:
+  - ui/src/pages/dashboard.tsx:DashboardPage
+  - ui/src/components/dashboard-modules.tsx:TipsRail
+
 ## Acceptance
 <!-- id: REQ-DESKTOP-020.A1 -->
 - All modules render in the snapshot's arrangement with live values; no
@@ -613,6 +620,11 @@ workflow-gated Implement affordance (REQ-DESKTOP-005's contract). A focus
 query parameter deep-links to a node — the command palette, Show in
 graph, and Reveal all land here. An overview module surfaces
 most-connected and anchored nodes.
+
+implementations:
+  - ui/src/pages/graph.tsx:GraphPage
+  - ui/src/components/graph-rail.tsx:GraphDetailRail
+  - ui/src/components/graph.tsx:forceLayout
 
 ## Acceptance
 <!-- id: REQ-DESKTOP-021.A1 -->
@@ -638,6 +650,10 @@ drifted, broken, and orphaned link with its axis pill and the
 workflow-gated repair actions (REQ-DESKTOP-005), and its count matches the
 sidebar badge.
 
+implementations:
+  - ui/src/pages/specs.tsx:SpecsPage
+  - ui/src/pages/drift.tsx:DriftPage
+
 ## Acceptance
 <!-- id: REQ-DESKTOP-022.A1 -->
 - The tree renders every indexed spec document and requirement with its
@@ -661,6 +677,11 @@ per-node progression and cost, the run event stream, and run-total cost.
 A run paused at an approval gate exposes Approve and Reject; a running
 run exposes Cancel; completed runs expose Inspect artifacts.
 
+implementations:
+  - ui/src/pages/workflows.tsx:WorkflowsPage
+  - ui/src/pages/runs.tsx:RunsPage
+  - ui/src/components/run-detail.tsx:RunDetail
+
 ## Acceptance
 <!-- id: REQ-DESKTOP-023.A1 -->
 - The runs list renders live executions with status pills; opening one
@@ -683,6 +704,13 @@ cross-project comparison table; and the tips list with severity grouping
 and Apply / Dismiss. Model and project filters apply across these
 screens.
 
+implementations:
+  - ui/src/pages/sessions.tsx:SessionsPage
+  - ui/src/pages/heatmap.tsx:HeatmapPage
+  - ui/src/pages/costs.tsx:CostsPage
+  - ui/src/pages/compare.tsx:ComparePage
+  - ui/src/pages/tips.tsx:TipsPage
+
 ## Acceptance
 <!-- id: REQ-DESKTOP-024.A1 -->
 - Each of the five screens renders its snapshot layout from live ingested
@@ -703,6 +731,9 @@ The screen lists the memory sources in scope (global and project
 CLAUDE.md files and their imports) with per-file scope, line count, and
 modified time; renders the composed effective-memory view; and offers
 copy-contents and reload actions.
+
+implementations:
+  - ui/src/pages/memory.tsx:MemoryPage
 
 ## Acceptance
 <!-- id: REQ-DESKTOP-025.A1 -->
@@ -728,6 +759,10 @@ inventory reads Claude Code's configuration surfaces only
 (`~/.claude.json` and the project's `.mcp.json`) — no Claude
 Desktop/Cursor readers, per this fork's Claude-Code-only house rule; the
 snapshot's multi-client column renders only the Claude Code client.
+
+implementations:
+  - ui/src/pages/mcp.tsx:McpPage
+  - server/src/routes/mcp.ts:deriveState
 
 ## Acceptance
 <!-- id: REQ-DESKTOP-026.A1 -->
@@ -776,6 +811,11 @@ information, the Claude Code section (transcript-ingest toggle), Editor
 preferences, and About (real version and backend identity). The Design
 system screen renders the living token gallery — type scale, buttons in
 every state, pills, and semantic colors — sourced from the shared tokens.
+
+implementations:
+  - ui/src/pages/settings.tsx:SettingsPage
+  - ui/src/pages/designsystem.tsx:DesignSystemPage
+  - server/src/routes/config.ts:registerConfigRoutes
 
 ## Acceptance
 <!-- id: REQ-DESKTOP-028.A1 -->
@@ -832,6 +872,11 @@ presented as real, and is excluded from the production build. A failed
 API call renders the module-level error-with-retry treatment while the
 rest of the screen stays functional.
 
+implementations:
+  - ui/src/components/ui.tsx:SampleBadge
+  - scripts/check-ui-deps.mjs:assertNoMockDataset
+  - ui/src/components/dashboard-modules.tsx:Module
+
 ## Acceptance
 <!-- id: REQ-DESKTOP-030.A1 -->
 - On a project with a live index and ingested transcripts, no SAMPLE
@@ -856,6 +901,11 @@ cached, and repeat visits within a session render from cache. Graph and
 heatmap interactions (pan, zoom, hover) sustain smooth motion on a
 repo-scale index; any main-thread stall over 200 milliseconds during
 interaction is a failure.
+
+implementations:
+  - scripts/check-ui-deps.mjs:assertInitialJsBudget
+  - ui/src/hooks.ts:useApi
+  - ui/src/components/graph.tsx:forceLayout
 
 ## Acceptance
 <!-- id: REQ-DESKTOP-031.A1 -->
