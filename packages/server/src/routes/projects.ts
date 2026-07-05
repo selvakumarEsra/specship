@@ -33,6 +33,12 @@ export interface ProjectEntry {
   sessionCount: number;
   /** Epoch ms of the newest transcript mtime (0 if none). */
   lastModifiedMs: number;
+  /**
+   * Drifted/broken/orphaned spec-link count for the project's own graph.
+   * `null` when unknown — the project isn't initialized, its graph failed
+   * to open, or it fell outside the per-request drift sweep bound.
+   */
+  driftCount: number | null;
 }
 
 export interface ProjectsResponse {
@@ -88,7 +94,7 @@ export async function enumerate(claudeRoot: string, resolverOpts?: SlugResolverO
       }
     } catch { /* path missing — OK, still surface it so UI can flag it */ }
 
-    out.push({ slug, path: decoded, exists, initialized, sessionCount, lastModifiedMs });
+    out.push({ slug, path: decoded, exists, initialized, sessionCount, lastModifiedMs, driftCount: null });
   }
 
   // Recent activity first; ties broken by path.
@@ -97,6 +103,44 @@ export async function enumerate(claudeRoot: string, resolverOpts?: SlugResolverO
     return a.path.localeCompare(b.path);
   });
   return out;
+}
+
+// --- Per-project drift counts ------------------------------------------------
+
+/**
+ * Structural slice of `ProjectRegistry.getBySlug` so tests can inject a mock
+ * without opening real SpecShip instances.
+ */
+export type DriftSource = (slug: string) =>
+  Promise<{ getSpecQueries(): { getLinksByState(states: string[]): unknown[] } } | null>;
+
+/**
+ * Bound on how many projects get a live driftCount per request. Mirrors the
+ * /api/events sweep: every lookup opens the project's graph through the
+ * registry LRU (maxOpen 16), so an unbounded pass over a large project list
+ * churns open/close cycles on every GET. enumerate() sorts by recency, so
+ * the bounded prefix is exactly what the switcher surfaces first; the rest
+ * stay `null` (unknown), which the UI renders as no pill.
+ */
+const DRIFT_SWEEP_LIMIT = 10;
+
+/** Fill `driftCount` in place for the most-recent initialized projects. */
+export async function attachDriftCounts(
+  list: ProjectEntry[],
+  source: DriftSource,
+  limit: number = DRIFT_SWEEP_LIMIT,
+): Promise<ProjectEntry[]> {
+  let budget = limit;
+  for (const p of list) {
+    if (!p.initialized || budget <= 0) continue;
+    budget--;
+    try {
+      const cg = await source(p.slug);
+      if (!cg) continue; // open failed — leave null
+      p.driftCount = cg.getSpecQueries().getLinksByState(['drifted', 'broken', 'orphaned']).length;
+    } catch { /* graph unreadable — leave null */ }
+  }
+  return list;
 }
 
 // --- Watcher (singleton across the process) ---------------------------------
@@ -162,8 +206,11 @@ export async function registerProjectsRoutes(app: FastifyInstance): Promise<void
 
   app.addHook('onClose', async () => { stopWatcher(); });
 
+  const driftSource: DriftSource = (slug) => app.projects.getBySlug(slug);
+
   app.get('/api/projects', async (): Promise<ProjectsResponse> => {
-    return { claudeRoot, projects: await enumerate(claudeRoot) };
+    const projects = await attachDriftCounts(await enumerate(claudeRoot), driftSource);
+    return { claudeRoot, projects };
   });
 
   app.get('/api/projects/events', async (req: FastifyRequest, reply: FastifyReply) => {
@@ -187,7 +234,7 @@ export async function registerProjectsRoutes(app: FastifyInstance): Promise<void
       } catch { /* socket gone */ closed = true; }
     };
 
-    const initial = await enumerate(claudeRoot);
+    const initial = await attachDriftCounts(await enumerate(claudeRoot), driftSource);
     lastSlugs = new Set(initial.map((p) => p.slug));
     writeEvent('snapshot', { claudeRoot, projects: initial });
 
