@@ -712,10 +712,11 @@ The screen inventories MCP servers from the machine's client
 configurations with per-server status (connected, active, idle, failed,
 disabled), configuration detail, call statistics, and an example call;
 enable/disable round-trips to the owning configuration file with
-confirmation; Add server opens guided configuration. [needs review: the
-snapshot inventories multiple clients (Claude Code, Claude Desktop,
-Cursor) — this fork is Claude Code only; confirm whether the inventory
-reads other clients' configs read-only or renders Claude Code alone.]
+confirmation; Add server opens guided configuration. Decided: the
+inventory reads Claude Code's configuration surfaces only
+(`~/.claude.json` and the project's `.mcp.json`) — no Claude
+Desktop/Cursor readers, per this fork's Claude-Code-only house rule; the
+snapshot's multi-client column renders only the Claude Code client.
 
 ## Acceptance
 <!-- id: REQ-DESKTOP-026.A1 -->
