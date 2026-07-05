@@ -191,9 +191,11 @@ describe('SpecsPage (REQ-DESKTOP-022)', () => {
     const verify = screen.getByText('Verify').closest('button') as HTMLButtonElement;
     expect(verify.disabled).toBe(true);
     expect(verify.title).toContain('verification workflow');
+    // Edit enables only when the raw source is available (REQ-DESKTOP-005);
+    // these fixtures ship source: null, so it stays disabled with the reason.
     const edit = screen.getByText('Edit spec').closest('button') as HTMLButtonElement;
     expect(edit.disabled).toBe(true);
-    expect(edit.title).toContain('REQ-DESKTOP-006');
+    expect(edit.title).toContain('Source file not available');
     const showInGraph = screen.getByText('Show in graph').closest('button') as HTMLButtonElement;
     expect(showInGraph.disabled).toBe(false);
   });
