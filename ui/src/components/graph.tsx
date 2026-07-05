@@ -52,6 +52,160 @@ export function spiralLayout(nodes: Array<{ id: string; name: string; kind: stri
   });
 }
 
+/**
+ * Deterministic force-directed layout — Fruchterman–Reingold with a fixed
+ * iteration count and spiral seeding (index-based, no randomness), so the same
+ * input always yields the same positions. The O(n²) repulsion pass only ever
+ * runs over the server-capped overview slice (/api/graph/full clamps to ≤400
+ * nodes) and is skipped entirely past FORCE_REPULSION_CAP, so a layout toggle
+ * can never stall the main thread on a repo-scale node set (REQ-DESKTOP-031.A4).
+ */
+const FORCE_ITERATIONS = 120;
+const FORCE_REPULSION_CAP = 600;
+
+export function forceLayout(
+  nodes: Array<{ id: string; name: string; kind: string; filePath: string }>,
+  edges: CanvasEdge[],
+): CanvasNode[] {
+  const out = spiralLayout(nodes);
+  const n = out.length;
+  if (n < 2) return out;
+  const index = new Map<string, number>();
+  out.forEach((p, i) => index.set(p.id, i));
+  const px = out.map((p) => p.x);
+  const py = out.map((p) => p.y);
+  const K = 110; // ideal edge length
+  const repulse = n <= FORCE_REPULSION_CAP;
+  for (let iter = 0; iter < FORCE_ITERATIONS; iter++) {
+    const heat = 1 - iter / FORCE_ITERATIONS;
+    const maxStep = 3 + 26 * heat;
+    const fx = new Array<number>(n).fill(0);
+    const fy = new Array<number>(n).fill(0);
+    if (repulse) {
+      for (let i = 0; i < n; i++) {
+        for (let j = i + 1; j < n; j++) {
+          let dx = px[i]! - px[j]!;
+          let dy = py[i]! - py[j]!;
+          if (dx === 0 && dy === 0) {
+            // coincident nodes separate along an index-derived direction
+            const a = ((i * 7 + j) % 12) * (Math.PI / 6);
+            dx = Math.cos(a);
+            dy = Math.sin(a);
+          }
+          const d2 = dx * dx + dy * dy;
+          const rf = (K * K) / d2;
+          fx[i]! += dx * rf; fy[i]! += dy * rf;
+          fx[j]! -= dx * rf; fy[j]! -= dy * rf;
+        }
+      }
+    }
+    for (const e of edges) {
+      const i = index.get(e.from);
+      const j = index.get(e.to);
+      if (i === undefined || j === undefined || i === j) continue;
+      const dx = px[i]! - px[j]!;
+      const dy = py[i]! - py[j]!;
+      const af = (Math.hypot(dx, dy) || 1) / K;
+      fx[i]! -= dx * af; fy[i]! -= dy * af;
+      fx[j]! += dx * af; fy[j]! += dy * af;
+    }
+    for (let i = 0; i < n; i++) {
+      const len = Math.hypot(fx[i]!, fy[i]!);
+      if (!len) continue;
+      const step = Math.min(len, maxStep);
+      px[i]! += (fx[i]! / len) * step;
+      py[i]! += (fy[i]! / len) * step;
+    }
+  }
+  // slight horizontal stretch — node pills are wide
+  return out.map((p, i) => ({ ...p, x: Math.round(px[i]! * 1.35), y: Math.round(py[i]!) }));
+}
+
+/**
+ * BFS layering into columns: roots (in-degree 0 within the slice) on the left,
+ * each hop one column right; cycle-trapped remainders are appended as new
+ * roots so every node lands in a column. Tall layers wrap into sub-columns so
+ * a mostly-disconnected slice doesn't become one skyscraper column.
+ * Deterministic — layering follows input order, no randomness.
+ */
+export function hierarchicalLayout(
+  nodes: Array<{ id: string; name: string; kind: string; filePath: string }>,
+  edges: CanvasEdge[],
+): CanvasNode[] {
+  const ids = new Set(nodes.map((nd) => nd.id));
+  const indeg = new Map<string, number>();
+  const outEdges = new Map<string, string[]>();
+  nodes.forEach((nd) => { indeg.set(nd.id, 0); outEdges.set(nd.id, []); });
+  edges.forEach((e) => {
+    if (e.from === e.to || !ids.has(e.from) || !ids.has(e.to)) return;
+    outEdges.get(e.from)!.push(e.to);
+    indeg.set(e.to, (indeg.get(e.to) ?? 0) + 1);
+  });
+
+  const layer = new Map<string, number>();
+  const queue: string[] = [];
+  let head = 0;
+  const visit = () => {
+    while (head < queue.length) {
+      const id = queue[head++]!;
+      const l = layer.get(id)!;
+      for (const t of outEdges.get(id) ?? []) {
+        if (!layer.has(t)) { layer.set(t, l + 1); queue.push(t); }
+      }
+    }
+  };
+  nodes.forEach((nd) => { if (indeg.get(nd.id) === 0) { layer.set(nd.id, 0); queue.push(nd.id); } });
+  visit();
+  for (const nd of nodes) {
+    if (!layer.has(nd.id)) { layer.set(nd.id, 0); queue.push(nd.id); visit(); }
+  }
+
+  const byLayer = new Map<number, string[]>();
+  nodes.forEach((nd) => {
+    const l = layer.get(nd.id)!;
+    if (!byLayer.has(l)) byLayer.set(l, []);
+    byLayer.get(l)!.push(nd.id);
+  });
+
+  const COL_W = 250;
+  const ROW_H = 58;
+  const MAX_ROWS = 20;
+  const pos = new Map<string, { x: number; y: number }>();
+  let colX = 0;
+  for (const [, members] of [...byLayer.entries()].sort((a, b) => a[0] - b[0])) {
+    const cols = Math.ceil(members.length / MAX_ROWS);
+    const rows = Math.ceil(members.length / cols);
+    members.forEach((id, i) => {
+      const c = Math.floor(i / rows);
+      const r = i % rows;
+      pos.set(id, { x: colX + c * COL_W, y: Math.round((r - (rows - 1) / 2) * ROW_H) });
+    });
+    colX += cols * COL_W + 40;
+  }
+
+  return nodes.map((nd) => ({
+    id: nd.id,
+    label: nd.name,
+    kind: visualKind(nd.kind, nd.filePath),
+    x: pos.get(nd.id)!.x,
+    y: pos.get(nd.id)!.y,
+    file: nd.filePath,
+  }));
+}
+
+export type EdgeBucket = 'calls' | 'implements' | 'tests' | 'synth';
+
+/**
+ * Legend/filter bucket for an edge: synthesized (heuristic) edges dash,
+ * spec endpoints implement, test endpoints test, everything else calls.
+ */
+export function edgeBucket(a: { kind: string }, b: { kind: string }, edgeKind?: string): EdgeBucket {
+  if (edgeKind === 'synth') return 'synth';
+  if (a.kind === 'spec' || b.kind === 'spec') return 'implements';
+  if (a.kind === 'test' || b.kind === 'test') return 'tests';
+  return 'calls';
+}
+
 interface View {
   tx: number;
   ty: number;
@@ -69,9 +223,9 @@ const labelTip: CSSProperties = {
   whiteSpace: 'nowrap', pointerEvents: 'none', boxShadow: 'var(--shadow-pop)', zIndex: 5,
 };
 
-export function GraphCanvas({ nodes: initialNodes, edges, selectedId, onSelect, hiddenIds, height = '100%', interactive = true, fitKey, dotGrid = true }: {
+export function GraphCanvas({ nodes: initialNodes, edges, selectedId, onSelect, hiddenIds, hiddenEdgeKinds, height = '100%', interactive = true, fitKey, focusId, dotGrid = true }: {
   nodes: CanvasNode[]; edges: CanvasEdge[]; selectedId?: string | null; onSelect?: (id: string) => void;
-  hiddenIds?: Set<string>; height?: number | string; interactive?: boolean; fitKey?: unknown; dotGrid?: boolean;
+  hiddenIds?: Set<string>; hiddenEdgeKinds?: Set<string>; height?: number | string; interactive?: boolean; fitKey?: unknown; focusId?: string | null; dotGrid?: boolean;
 }) {
   const [nodes, setNodes] = useState(initialNodes);
   const [view, setView] = useState<View>({ tx: 0, ty: 0, k: 1 });
@@ -114,6 +268,26 @@ export function GraphCanvas({ nodes: initialNodes, edges, selectedId, onSelect, 
   }, [nodes, fitView]);
   // eslint-style exhaustive-deps intentionally skipped: refit ONLY when fitKey changes.
   useEffect(() => { if (fitKey !== undefined) fitView(); }, [fitKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Center the view on a deep-linked node (REQ-DESKTOP-021.A3). Runs once per
+  // focusId — `nodes` is in the deps only so a focus set before data arrives
+  // centers as soon as the node exists; the ref stops drags from re-centering.
+  const lastFocus = useRef<string | null>(null);
+  useEffect(() => {
+    if (!focusId) { lastFocus.current = null; return; }
+    if (lastFocus.current === focusId) return;
+    const n = nodes.find((x) => x.id === focusId);
+    const el = wrapRef.current;
+    if (!n || !el) return;
+    lastFocus.current = focusId;
+    const { cx, cy } = anchor(n);
+    const W = el.clientWidth;
+    const H = el.clientHeight;
+    setView((v) => {
+      const k = Math.min(1.4, Math.max(0.6, v.k));
+      return { k, tx: W / 2 - cx * k, ty: H / 2 - cy * k };
+    });
+  }, [focusId, nodes]);
 
   const onWheel = (e: React.WheelEvent) => {
     if (!interactive) return;
@@ -169,13 +343,6 @@ export function GraphCanvas({ nodes: initialNodes, edges, selectedId, onSelect, 
     degree[e.to] = (degree[e.to] || 0) + 1;
   });
 
-  // edge relationship type → color (spec links vs tests vs plain calls)
-  function edgeColor(a: CanvasNode, b: CanvasNode): string | null {
-    if (a.kind === 'spec' || b.kind === 'spec') return 'var(--node-spec)';
-    if (a.kind === 'test' || b.kind === 'test') return 'var(--node-test)';
-    return null;
-  }
-
   function nodeBox(n: CanvasNode) {
     if (n.kind === 'route') return { w: 18, h: 18, shape: 'dot' as const };
     const w = Math.max(64, n.label.length * (n.kind === 'spec' ? 7.6 : 7.2) + 26);
@@ -226,11 +393,13 @@ export function GraphCanvas({ nodes: initialNodes, edges, selectedId, onSelect, 
             const a = nodeMap[e.from];
             const b = nodeMap[e.to];
             if (!a || !b) return null;
+            const bucket = edgeBucket(a, b, e.kind);
+            if (hiddenEdgeKinds?.has(bucket)) return null;
             const A = anchor(a);
             const B = anchor(b);
             const dimmed = hiddenIds && (hiddenIds.has(e.from) || hiddenIds.has(e.to));
             const hot = selectedId && (e.from === selectedId || e.to === selectedId);
-            const tcol = edgeColor(a, b);
+            const tcol = bucket === 'implements' ? 'var(--node-spec)' : bucket === 'tests' ? 'var(--node-test)' : null;
             const baseStroke = tcol ? `color-mix(in srgb, ${tcol} 62%, transparent)` : 'rgba(150,160,180,0.32)';
             const mx = (A.cx + B.cx) / 2;
             const d = `M ${A.cx} ${A.cy} C ${mx} ${A.cy}, ${mx} ${B.cy}, ${B.cx} ${B.cy}`;
