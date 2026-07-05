@@ -742,6 +742,9 @@ and a show-context affordance. Messages round-trip through the dashboard
 server's chat API; the sibling chat document's behaviour contract remains
 authoritative for answer semantics.
 
+implementations:
+  - ui/src/pages/chat.tsx:ChatPage
+
 ## Acceptance
 <!-- id: REQ-DESKTOP-027.A1 -->
 - The seeded suggestions render and send as messages when activated.

@@ -606,6 +606,55 @@ export interface AddMcpServerPayload {
   url?: string;
 }
 
+// ---- Chat (packages/server/src/routes/chat.ts + chat-answer.ts, REQ-DESKTOP-027) ----
+
+/** Pointer to one graph symbol inside a chat source's detail. */
+export interface ChatSymbolRef {
+  name: string;
+  qualifiedName: string;
+  filePath: string;
+  line: number;
+}
+
+/** Full retrieved detail for a symbol source — verbatim body + 1-hop trail. */
+export interface ChatSymbolDetail {
+  signature?: string;
+  body: string;
+  callers: ChatSymbolRef[];
+  callees: ChatSymbolRef[];
+}
+
+/** Full detail for a spec source: verbatim body + its links with states. */
+export interface ChatSpecDetail {
+  body: string;
+  links: Array<{ target: string; state: string }>;
+}
+
+/** Full detail for a domain-fact source. */
+export interface ChatDomainDetail {
+  body: string;
+}
+
+/** The `detail` payload on a ChatSource, discriminated by the source's `kind`. */
+export type ChatSourceDetail = ChatSymbolDetail | ChatSpecDetail | ChatDomainDetail;
+
+/** One indexed row the answer was derived from (chat-answer.ts ChatSource). */
+export interface ChatSource {
+  kind: 'symbol' | 'spec' | 'domain';
+  ref: string;
+  label: string;
+  filePath?: string;
+  line?: number;
+  detail?: ChatSourceDetail;
+}
+
+/** POST /api/chat — the fully-composed deterministic answer. */
+export interface ChatResponse {
+  found: boolean;
+  answer: string;
+  sources: ChatSource[];
+}
+
 // ---- API surface ----
 
 export const api = {
@@ -674,6 +723,8 @@ export const api = {
     patchJson<{ ok: boolean; name: string; disabled: boolean }>(`/api/mcp/servers/${encodeURIComponent(name)}`, { enabled }),
   addMcpServer: (payload: AddMcpServerPayload) =>
     postJson<{ ok: boolean; name: string }>('/api/mcp/servers', payload),
+  chat: (question: string, project?: string | null) =>
+    postJson<ChatResponse>(q('/api/chat', project), { question }),
 };
 
 /**
@@ -683,4 +734,14 @@ export const api = {
 export function runEventsUrl(id: string, since?: number, project?: string | null): string {
   const base = `/api/workflows/runs/${encodeURIComponent(id)}/events${since ? `?since=${since}` : ''}`;
   return q(base, project);
+}
+
+/**
+ * SSE stream URL for a chat answer (GET /api/chat/stream): `thinking` →
+ * `tool` → `result_summary` → `chunk`… → `done`. The primary send path —
+ * the `tool` event carries the tool-call context the answer renders
+ * (REQ-DESKTOP-027.A2); `api.chat` is the non-stream fallback.
+ */
+export function chatStreamUrl(question: string, project?: string | null): string {
+  return q(`/api/chat/stream?question=${encodeURIComponent(question)}`, project);
 }
