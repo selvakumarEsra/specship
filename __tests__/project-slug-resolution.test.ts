@@ -6,9 +6,9 @@ import {
   encodeProjectSlug,
   createSlugResolver,
   resolveProjectSlug,
-} from '../packages/server/src/ingest/project-paths';
-import { ProjectRegistry } from '../packages/server/src/project-registry';
-import { enumerate } from '../packages/server/src/routes/projects';
+} from '../server/src/ingest/project-paths';
+import { ProjectRegistry } from '../server/src/project-registry';
+import { enumerate } from '../server/src/routes/projects';
 
 /**
  * REQ-SLUGRES-001..003 (specs/project-slug-resolution.md).
@@ -71,7 +71,7 @@ describe('resolveProjectSlug', () => {
     fs.mkdirSync(slugDir, { recursive: true });
     fs.writeFileSync(
       path.join(slugDir, 's.jsonl'),
-      JSON.stringify({ cwd: `${real}/packages/server` }) + '\n',
+      JSON.stringify({ cwd: `${real}/server` }) + '\n',
     );
     expect(resolveProjectSlug(slug, { claudeJsonPath, claudeRoot })).toBe(real);
   });

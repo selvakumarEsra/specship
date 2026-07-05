@@ -2,8 +2,8 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { encodeProjectSlug } from '../packages/server/src/ingest/project-paths';
-import { enumerate, attachDriftCounts, type DriftSource } from '../packages/server/src/routes/projects';
+import { encodeProjectSlug } from '../server/src/ingest/project-paths';
+import { enumerate, attachDriftCounts, type DriftSource } from '../server/src/routes/projects';
 
 /**
  * REQ-DESKTOP-018 — per-project drift in /api/projects. The switcher shows a

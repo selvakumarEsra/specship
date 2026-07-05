@@ -20,10 +20,10 @@ import * as os from 'node:os';
 import Fastify from 'fastify';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import SpecShip from '../src/index';
-import { registerChatRoutes } from '../packages/server/src/routes/chat';
-import { answerFromKnowledgeBase, answerForIntent, extractSubject, chunkAnswer } from '../packages/server/src/routes/chat-answer';
-import type { SymbolDetail, SpecDetail, DomainDetail } from '../packages/server/src/routes/chat-answer';
-import { classifyIntent } from '../packages/server/src/chat/classify';
+import { registerChatRoutes } from '../server/src/routes/chat';
+import { answerFromKnowledgeBase, answerForIntent, extractSubject, chunkAnswer } from '../server/src/routes/chat-answer';
+import type { SymbolDetail, SpecDetail, DomainDetail } from '../server/src/routes/chat-answer';
+import { classifyIntent } from '../server/src/chat/classify';
 
 // ---------------------------------------------------------------------------
 // FTS5 guard — identical pattern used across the spec test suite. Search-driven
@@ -118,7 +118,7 @@ A ledger is the append-only record of balance changes.
 // ---------------------------------------------------------------------------
 describe('chat modules source (REQ-DASH-CHAT-001.A2)', () => {
   const files = ['chat.ts', 'chat-answer.ts'].map((f) =>
-    path.join(__dirname, '..', 'packages', 'server', 'src', 'routes', f),
+    path.join(__dirname, '..', 'server', 'src', 'routes', f),
   );
 
   it('bare-imports nothing from @specship/specship', () => {

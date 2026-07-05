@@ -50,7 +50,7 @@ export async function registerWorkflowRoutes(app: FastifyInstance): Promise<void
   //      the bundled tarball stages the specship core without a resolvable
   //      `@specship/specship` package on Node's module graph (offline
   //      installs hit this — see scripts/offline-install.sh).
-  //   2. **Workspace / dev** — the `file:../..` workspace dep resolves the
+  //   2. **Workspace / dev** — the `file:..` workspace dep resolves the
   //      named import via Node's normal package resolution.
   let discovery: typeof import('@specship/specship/dist/workflows/discovery.js');
   let executorMod: typeof import('@specship/specship/dist/workflows/executor.js');

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Compile the HTTP server (`packages/server/src/**`) into the root's
+ * Compile the HTTP server (`server/src/**`) into the root's
  * `dist/server/` so it ships as part of the single npm tarball.
  *
  * Why this lives at root scope: the publish pipeline (build-bundle.sh →
@@ -10,7 +10,7 @@
  * server as its own package would mean a second release flow — this avoids
  * it.
  *
- * Runs `tsc` against `packages/server/tsconfig.json` with `--outDir` pointed
+ * Runs `tsc` against `server/tsconfig.json` with `--outDir` pointed
  * at the root's `dist/server/`. The server's own `npm run build` is left
  * untouched so the workspace dev path keeps working.
  */
@@ -21,7 +21,7 @@ import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '..');
-const serverPkg = path.resolve(root, 'packages', 'server');
+const serverPkg = path.resolve(root, 'server');
 const serverTsconfig = path.join(serverPkg, 'tsconfig.json');
 const outDir = path.join(root, 'dist', 'server');
 

@@ -19,8 +19,8 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import { isAssetPath } from '../packages/server/src/static-handler';
-import { createServer, type ServerHandle } from '../packages/server/src/server';
+import { isAssetPath } from '../server/src/static-handler';
+import { createServer, type ServerHandle } from '../server/src/server';
 
 describe('isAssetPath', () => {
   it('recognizes asset extensions', () => {

@@ -3,8 +3,8 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import Fastify, { type FastifyInstance } from 'fastify';
-import { readServerConfig, writeServerConfig, serverConfigPath } from '../packages/server/src/server-config';
-import { registerConfigRoutes } from '../packages/server/src/routes/config';
+import { readServerConfig, writeServerConfig, serverConfigPath } from '../server/src/server-config';
+import { registerConfigRoutes } from '../server/src/routes/config';
 
 /**
  * REQ-DESKTOP-028.A2/.A3 — GET/PUT /api/config: the transcript-ingest toggle

@@ -14,7 +14,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createServer, resolveDefaultWebDir, type ServerHandle } from '../packages/server/src/server';
+import { createServer, resolveDefaultWebDir, type ServerHandle } from '../server/src/server';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const uiDist = path.join(root, 'ui', 'dist');

@@ -12,8 +12,8 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { classifyIntent } from '../packages/server/src/chat/classify';
-import type { ChatIntent } from '../packages/server/src/chat/classify';
+import { classifyIntent } from '../server/src/chat/classify';
+import type { ChatIntent } from '../server/src/chat/classify';
 
 // ---------------------------------------------------------------------------
 // A1: slash commands route explicitly.

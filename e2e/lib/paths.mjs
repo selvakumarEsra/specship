@@ -16,10 +16,10 @@ export const HOST = '127.0.0.1';
  *  exact condition the same-origin/CORS dashboard-blank bug regressed on. */
 export const BASE_URL = `http://${HOST}:${PORT}`;
 
-/** packages/e2e */
+/** e2e */
 export const E2E_DIR = path.resolve(here, '..');
-/** repo root (packages/e2e/lib -> ../../..) */
-export const REPO_ROOT = path.resolve(here, '..', '..', '..');
+/** repo root (e2e/lib -> ../..) */
+export const REPO_ROOT = path.resolve(here, '..', '..');
 /** the built CLI the harness drives — `npm run build` must have run. */
 export const BIN = path.join(REPO_ROOT, 'dist', 'bin', 'specship.js');
 

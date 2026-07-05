@@ -163,7 +163,7 @@ describe('maintainability — thresholds config (REQ-MAINT-002)', () => {
 describe('maintainability — exclude scope (index-noise filter)', () => {
   it('drops generated/vendored files by default (.d.ts, bundled chunks)', () => {
     fn('decl', 'src/types.d.ts'); // unexported → would be dead code, but .d.ts excluded
-    fn('chunk', 'packages/server/public/web/chunk-ABC.js'); // would be a coupling hub
+    fn('chunk', 'server/public/web/chunk-ABC.js'); // would be a coupling hub
     for (let i = 0; i < 21; i++) { fn(`c${i}`, `c${i}.ts`, { exported: true }); edge(`c${i}`, 'chunk', 'calls'); }
     const r = computeMaintainability(q); // default exclude
     expect(r.deadCode.find((d) => d.nodeId === 'decl')).toBeUndefined();
@@ -173,7 +173,7 @@ describe('maintainability — exclude scope (index-noise filter)', () => {
   });
 
   it('includes the same files when exclude is disabled', () => {
-    fn('chunk', 'packages/server/public/web/chunk-ABC.js');
+    fn('chunk', 'server/public/web/chunk-ABC.js');
     for (let i = 0; i < 21; i++) { fn(`c${i}`, `c${i}.ts`, { exported: true }); edge(`c${i}`, 'chunk', 'calls'); }
     const r = computeMaintainability(q, DEFAULT_THRESHOLDS, []); // exclude off
     expect(r.coupling.find((c) => c.nodeId === 'chunk')).toBeTruthy();

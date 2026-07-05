@@ -1,7 +1,7 @@
 /**
  * Memory — the CLAUDE.md hierarchy + memory-tool notes (REQ-DESKTOP-025).
  * TSX port of specs/specship-desktop/screens-memory.jsx bound to live
- * GET /api/memory data (packages/server/src/routes/memory.ts): a grouped
+ * GET /api/memory data (server/src/routes/memory.ts): a grouped
  * sources rail with per-file detail (scope, lines, modified — A1), the
  * composed effective-memory view in load order (A1), copy-contents with a
  * confirmed state (A2), Reload re-reading from disk (A3), and an explicit

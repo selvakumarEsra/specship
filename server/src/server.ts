@@ -114,8 +114,8 @@ export interface ServerHandle {
  *      resolution finding `@specship/specship` (it won't, the
  *      bundle stages a single package by name `@specship/specship`).
  *
- *   2. **Workspace / dev** — `packages/server/dist/server.js` imports via
- *      the workspace `file:../..` dep. Falls through to the named import.
+ *   2. **Workspace / dev** — `server/dist/server.js` imports via
+ *      the workspace `file:..` dep. Falls through to the named import.
  *
  * The function caches the resolved module so the lookup only runs once.
  */
@@ -127,7 +127,7 @@ export interface ServerHandle {
  *   1. **Bundled** — `build-server-bundle.mjs` copies `ui/dist/**` to the
  *      root `dist/ui/`, which the platform tarball ships as
  *      `<bundle>/lib/dist/ui/` next to `dist/server/` (this file).
- *   2. **Workspace / dev** — `packages/server/{src,dist}/server.*` →
+ *   2. **Workspace / dev** — `server/{src,dist}/server.*` →
  *      repo root → `ui/dist/` (present only after `cd ui && npm run build`).
  *
  * Returns null when neither exists — the server then simply has no SPA
@@ -137,7 +137,7 @@ export function resolveDefaultWebDir(): string | null {
   const here = path.dirname(fileURLToPath(import.meta.url));
   const candidates = [
     path.resolve(here, '..', 'ui'), // bundled: dist/server → dist/ui
-    path.resolve(here, '..', '..', '..', 'ui', 'dist'), // workspace: packages/server/dist → <root>/ui/dist
+    path.resolve(here, '..', '..', 'ui', 'dist'), // workspace: server/dist → <root>/ui/dist
   ];
   for (const dir of candidates) {
     if (existsSync(path.join(dir, 'index.html'))) return dir;

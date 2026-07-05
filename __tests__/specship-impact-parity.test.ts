@@ -1,11 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import * as lib from '../src/analytics/specship-impact';
-import * as srv from '../packages/server/src/ingest/specship-classify';
+import * as srv from '../server/src/ingest/specship-classify';
 
 /**
  * The classify logic is duplicated: the canonical copy lives in the lib
  * (src/analytics/specship-impact.ts) and a server-local copy lives in
- * packages/server/src/ingest/specship-classify.ts (so the server carries no
+ * server/src/ingest/specship-classify.ts (so the server carries no
  * runtime `@specship/specship` import). This test asserts the two stay
  * behaviourally identical — if you edit one, edit both, and this fails until
  * they match again.

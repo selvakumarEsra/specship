@@ -21,7 +21,7 @@
   },
   "dependencies": {
     "@fastify/cors": "^9.0.1",
-    "@specship/specship": "file:../..",
+    "@specship/specship": "file:..",
     "fastify": "^4.28.1"
   },
   "devDependencies": {

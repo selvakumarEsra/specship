@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Sync `packages/specship-shim/package.json` against the root version.
+ * Sync `npm-shim/package.json` against the root version.
  *
  * The unscoped `specship-cli` shim has one dependency — `@specship/specship`
  * pinned to a specific version (NOT a range, because the shim's whole job is
@@ -25,7 +25,7 @@ import { fileURLToPath } from 'node:url';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, '..');
 const rootPkgPath = path.join(repoRoot, 'package.json');
-const shimPkgPath = path.join(repoRoot, 'packages', 'specship-shim', 'package.json');
+const shimPkgPath = path.join(repoRoot, 'npm-shim', 'package.json');
 
 function readJson(p) { return JSON.parse(readFileSync(p, 'utf-8')); }
 function writeJson(p, obj) { writeFileSync(p, JSON.stringify(obj, null, 2) + '\n'); }
@@ -53,12 +53,12 @@ if (changes.length === 0) {
 }
 
 writeJson(shimPkgPath, shimPkg);
-console.log(`[sync-shim] updated packages/specship-shim/package.json:`);
+console.log(`[sync-shim] updated npm-shim/package.json:`);
 for (const c of changes) console.log(`           - ${c}`);
 
 // Stage the change so `npm version` rolls it into the same commit.
 try {
-  execSync('git add packages/specship-shim/package.json', { cwd: repoRoot, stdio: 'inherit' });
+  execSync('git add npm-shim/package.json', { cwd: repoRoot, stdio: 'inherit' });
 } catch {
   // Not in a git repo (or git unavailable) — fine; sync still happened on disk.
 }

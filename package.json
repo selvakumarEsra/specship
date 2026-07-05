@@ -32,7 +32,7 @@
     "clean": "node -e \"const fs=require('fs');fs.rmSync('dist',{recursive:true,force:true})\"",
     "sync:shim": "node scripts/sync-shim-version.mjs",
     "version": "npm run sync:shim",
-    "release:shim": "node scripts/sync-shim-version.mjs && cd packages/specship-shim && npm publish --access public"
+    "release:shim": "node scripts/sync-shim-version.mjs && cd npm-shim && npm publish --access public"
   },
   "keywords": [
     "code-intelligence",

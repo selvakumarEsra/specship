@@ -792,7 +792,7 @@ this work, and its remaining residents (the SSR-era e2e package, the npm
 shim) are relocated or retired with it.
 
 implementations:
-  - packages/server
+  - server
 
 ## Acceptance
 <!-- id: REQ-DESKTOP-029.A1 -->
