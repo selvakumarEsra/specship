@@ -9,7 +9,7 @@ import { SqliteDatabase } from './sqlite-adapter';
 /**
  * Current schema version
  */
-export const CURRENT_SCHEMA_VERSION = 10;
+export const CURRENT_SCHEMA_VERSION = 11;
 
 /**
  * Migration definition
@@ -441,6 +441,22 @@ const migrations: Migration[] = [
         );
         CREATE INDEX IF NOT EXISTS idx_reflect_proposals_state ON reflect_proposals(state);
         CREATE INDEX IF NOT EXISTS idx_reflect_proposals_severity ON reflect_proposals(severity);
+      `);
+    },
+  },
+  {
+    version: 11,
+    description:
+      'Dashboard tip state (REQ-DESKTOP-020.A2): claude_tip_state persists Apply / Dismiss per deterministic tip id so dismissed tips stay hidden and applied ones stay annotated across reloads',
+    up: (db) => {
+      // Mirrors the claude_tip_state block in schema.sql so existing databases
+      // pick up the table. Starts empty; the first Apply/Dismiss populates it.
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS claude_tip_state (
+          tip_id          TEXT PRIMARY KEY,
+          state           TEXT NOT NULL CHECK (state IN ('applied', 'dismissed')),
+          ts              INTEGER NOT NULL
+        );
       `);
     },
   },

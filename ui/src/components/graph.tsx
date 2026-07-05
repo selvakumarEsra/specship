@@ -24,6 +24,34 @@ export interface CanvasEdge {
   kind?: string;
 }
 
+/** Map server node kinds onto the canvas's visual families. */
+export function visualKind(kind: string, filePath: string): string {
+  if (kind === 'route') return 'route';
+  if (/\.(test|spec)\.|__tests__\//.test(filePath)) return 'test';
+  return 'code';
+}
+
+/**
+ * Deterministic golden-angle spiral layout, first node in the center. Server
+ * nodes carry no coordinates; a physics layout is later screens' work — the
+ * spiral keeps renders stable across reloads. Callers order the input (by
+ * degree, recency, …) to choose what sits at the center.
+ */
+export function spiralLayout(nodes: Array<{ id: string; name: string; kind: string; filePath: string }>): CanvasNode[] {
+  return nodes.map((n, i) => {
+    const r = 46 * Math.sqrt(i + 0.6);
+    const th = i * 2.399963229728653;
+    return {
+      id: n.id,
+      label: n.name,
+      kind: visualKind(n.kind, n.filePath),
+      x: Math.round(r * Math.cos(th) * 2.2),
+      y: Math.round(r * Math.sin(th)),
+      file: n.filePath,
+    };
+  });
+}
+
 interface View {
   tx: number;
   ty: number;
