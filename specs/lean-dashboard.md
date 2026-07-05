@@ -128,10 +128,9 @@ framework; client-side JavaScript MUST be limited to self-contained interactive
 islands (e.g. graph pan/zoom, heatmap hover), so pages with no island need no
 framework runtime.
 
-implementations:
-  - packages/server/src/ssr/routes.ts:registerSsrRoutes
-  - packages/server/src/ssr/render.mjs:layout
-  - packages/server/src/ssr/render.mjs:renderGraph
+> **Superseded by REQ-DESKTOP-033.** The server-rendered dashboard retired in
+> favour of the built SPA; the SSR routes and render modules that satisfied
+> this requirement were removed, so it carries no implementation link.
 
 ## Acceptance
 <!-- id: REQ-DASHLEAN-004.A1 -->
@@ -178,8 +177,9 @@ Every page in the kept read-only set MUST remain reachable and render its data;
 the four dropped write/interactive pages MUST NOT be served. Each kept page MUST
 show the same data it shows today.
 
-implementations:
-  - packages/server/src/ssr/routes.ts:registerSsrRoutes
+> **Superseded by REQ-DESKTOP-033.** The read-only page set is now served by the
+> built SPA rather than the retired server-rendered routes; the SSR
+> implementation was removed, so this requirement carries no implementation link.
 
 ## Acceptance
 <!-- id: REQ-DASHLEAN-006.A1 -->

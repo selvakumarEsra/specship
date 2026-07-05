@@ -98,6 +98,8 @@ absence, not a placeholder number.
 <!-- id: REQ-ETA-005.A2 -->
 - A paused run shows the waiting-on-you signal in place of a range.
 
-implementations:
-  - packages/server/src/ssr/bindings.mjs:bindRuns
-  - packages/server/src/ssr/render.mjs:renderRunDetail
+> **Implementation retired under REQ-DESKTOP-033.** The runs-surface estimate was
+> rendered only by the server-rendered dashboard; that surface (and its
+> `bindRuns` / `renderRunDetail` modules) was removed when the SPA replaced it,
+> so this requirement carries no implementation link until the SPA runs surfaces
+> render the estimate.

@@ -29,7 +29,7 @@ Inside any `CLAUDE.md`, a line starting with `@` is treated as an import:
 # SpecShip — project memory
 
 ## Architecture
-- Server-rendered dashboard in `packages/server/src/ssr`.
+- Desktop SPA in `ui/`, served by the dashboard server in `server/`.
 - MCP server in `src/mcp`, graph engine in `src/graph`.
 
 @docs/conventions.md

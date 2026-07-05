@@ -18,9 +18,10 @@ data" same-origin/CORS class of bug (e.g. #55).
    transcript JSONL under a throwaway `$HOME` (→ cost / tool-call / heatmap
    analytics). Nothing touches your real project or `~/.claude`.
 3. Boots the real server over the SPA:
-   `specship serve --ui --no-ssr --web-dir <repo>/ui/dist --path <fixture>`.
-   `--no-ssr` disables the server-rendered dashboard so the server serves the
-   built SPA with its client-side-routing fallback.
+   `specship serve --ui --web-dir <repo>/ui/dist --path <fixture>`.
+   The SPA is the dashboard's only surface (REQ-DESKTOP-033 — the
+   server-rendered dashboard retired), served with its client-side-routing
+   fallback; no flag is needed to select it.
 
 The specs then drive the app at `127.0.0.1` (the exact condition #55 regressed
 on):

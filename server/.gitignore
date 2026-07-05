@@ -4,6 +4,3 @@ src/**/*.js
 src/**/*.js.map
 src/**/*.d.ts
 src/**/*.d.ts.map
-
-# …but the SSR dashboard's client islands are SOURCE, not build output
-!src/ssr/public/**/*.js

@@ -41,7 +41,7 @@ jobs:
       - name: Build CLI + server
         run: npm run build
       # The desktop SPA (ui/) is a standalone module with its own lockfile. The
-      # harness serves this build via `serve --ui --no-ssr --web-dir ui/dist`.
+      # harness serves this build via `serve --ui --web-dir ui/dist`.
       - name: Build desktop SPA
         run: cd ui && npm ci && npm run build
       - name: Install e2e deps + browser

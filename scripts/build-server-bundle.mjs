@@ -49,30 +49,13 @@ execFileSync(
   { stdio: 'inherit', cwd: serverPkg },
 );
 
-// Copy the SSR dashboard's server-local assets that tsc does NOT emit: the
-// `.mjs` render modules (plain JS emitting HTML strings — intentionally not
-// tsc-compiled, keeping the dashboard dependency-free per REQ-DASHLEAN-002)
-// and the static assets (CSS + island JS) served by the SSR routes.
-const ssrSrc = path.join(serverPkg, 'src', 'ssr');
-const ssrOut = path.join(outDir, 'ssr');
-if (existsSync(ssrSrc)) {
-  for (const f of ['render.mjs', 'md.mjs', 'design.mjs', 'bindings.mjs']) {
-    const from = path.join(ssrSrc, f);
-    if (existsSync(from)) cpSync(from, path.join(ssrOut, f));
-  }
-  for (const dir of ['public', 'templates']) {
-    const from = path.join(ssrSrc, dir);
-    if (existsSync(from)) cpSync(from, path.join(ssrOut, dir), { recursive: true });
-  }
-  console.log('[build-server-bundle] copied SSR render modules + assets → dist/server/ssr/');
-}
-
 // Ship the built desktop SPA (REQ-DESKTOP-017.A1): copy ui/dist → dist/ui so
 // the platform tarballs carry it and the server's resolveDefaultWebDir()
-// finds it next to dist/server/. The SPA is a standalone module with its own
-// install (`cd ui && npm ci && npm run build` — the Release workflow runs
-// it); when it hasn't been built, the server still works with the SSR
-// dashboard, so this is a warn-and-continue, not a failure.
+// finds it next to dist/server/. The SPA is the dashboard's only surface
+// (REQ-DESKTOP-033); it's a standalone module with its own install (`cd ui &&
+// npm ci && npm run build` — the Release workflow runs it). When it hasn't
+// been built the server still boots (headless / API only), so this is a
+// warn-and-continue, not a failure.
 const uiDist = path.join(root, 'ui', 'dist');
 const uiOut = path.join(root, 'dist', 'ui');
 if (existsSync(path.join(uiDist, 'index.html'))) {

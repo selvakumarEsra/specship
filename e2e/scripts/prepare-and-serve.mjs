@@ -7,10 +7,10 @@
  *      so Playwright owns the lifecycle (it polls /api/status for readiness and
  *      SIGTERMs us on teardown).
  *
- * The suite drives the built SPA (REQ-DESKTOP-032), not the server-rendered
- * dashboard: `serve --ui --no-ssr --web-dir <ui/dist>` disables the SSR page
- * routes so the server serves ui/dist with its SPA fallback. `--no-ssr` is
- * forward-compatible with REQ-DESKTOP-033 (where the SPA becomes the default).
+ * The suite drives the built SPA (REQ-DESKTOP-032): `serve --ui --web-dir
+ * <ui/dist>` serves ui/dist with its SPA fallback. The SPA is the dashboard's
+ * only surface (REQ-DESKTOP-033 — the server-rendered dashboard retired), so
+ * no flag is needed to select it.
  */
 import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -49,7 +49,7 @@ const child = spawn(
   'node',
   [
     BIN, 'serve', '--ui',
-    '--no-ssr', '--web-dir', WEB_DIR,
+    '--web-dir', WEB_DIR,
     '--host', HOST, '--port', String(PORT),
     '--path', FIXTURE, '--ingest', '--no-watch',
   ],
