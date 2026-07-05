@@ -61,6 +61,25 @@ export function Pill({ children, color, bg, dot }: { children: ReactNode; color?
   );
 }
 
+/**
+ * SAMPLE badge (REQ-DESKTOP-030.A2) — marks a module whose backend is not yet
+ * implemented, so its data is illustrative reference, never presented as your
+ * project's truth. A module backed by a real endpoint MUST NOT render this;
+ * the design bundle's mock dataset never ships (guarded in check-ui-deps.mjs).
+ */
+export function SampleBadge({ title }: { title?: string }) {
+  return (
+    <span
+      className="pill"
+      data-sample-badge
+      title={title ?? 'Illustrative reference data — not from your project'}
+      style={{ color: 'var(--warn)', background: 'var(--warn-soft)', fontWeight: 700, letterSpacing: '0.04em' }}
+    >
+      SAMPLE
+    </span>
+  );
+}
+
 export function CopyBtn({ text, label, ariaLabel }: { text: string; label?: string; ariaLabel?: string }) {
   const [done, setDone] = useState(false);
   return (

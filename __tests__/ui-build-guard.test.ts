@@ -22,6 +22,7 @@ import {
   assertRuntimeDepsAllowlist,
   assertRegistryLockfile,
   assertNoExternalOrigins,
+  assertNoMockDataset,
 } from '../scripts/check-ui-deps.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -135,6 +136,31 @@ describe('zero external origins in built assets (A4)', () => {
     const dist = path.join(uiDir, 'dist');
     if (!fs.existsSync(path.join(dist, 'index.html'))) return; // not built in this checkout — the ui build itself enforces this
     expect(assertNoExternalOrigins(dist)).toEqual([]);
+  });
+});
+
+describe('no mock dataset in ui/src (REQ-DESKTOP-030.A4)', () => {
+  it('passes on the real ui/src — the design bundle mock dataset is never wired in', () => {
+    expect(assertNoMockDataset(path.join(uiDir, 'src'))).toEqual([]);
+  });
+
+  it('flags a fixture that imports the design bundle mock data.js', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mockimport-'));
+    fs.writeFileSync(path.join(dir, 'bad.tsx'), `import { DATA } from '../specs/specship-desktop/data.js';\nexport const x = DATA;\n`);
+    const errors = assertNoMockDataset(dir);
+    expect(errors.length).toBe(1);
+    expect(errors[0]).toMatch(/mock dataset/);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('flags a fixture that reads window.DATA (the mock global) but not a doc comment', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mockglobal-'));
+    fs.writeFileSync(path.join(dir, 'bad.ts'), `export const n = window.DATA.status.nodes;\n`);
+    fs.writeFileSync(path.join(dir, 'ok.ts'), `// historical note: the design bundle attached window.DATA\nexport const n = 1;\n`);
+    const errors = assertNoMockDataset(dir);
+    expect(errors.length).toBe(1);
+    expect(errors[0]).toMatch(/window\.DATA/);
+    fs.rmSync(dir, { recursive: true, force: true });
   });
 });
 

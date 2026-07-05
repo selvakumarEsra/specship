@@ -136,6 +136,37 @@ export function assertNoExternalOrigins(distDir) {
   return errors;
 }
 
+/**
+ * REQ-DESKTOP-030.A4: the design bundle's mock dataset (specs/specship-desktop's
+ * `data.js`, attached to `window.DATA`) must never reach the production bundle.
+ * The SPA binds to live APIs; the mock dataset is a design reference only. Scan
+ * ui/src for any import of that dataset or a `window.DATA` read — either would
+ * pull the mock values into the vite bundle and present them as real.
+ */
+export function assertNoMockDataset(srcDir) {
+  const errors = [];
+  const importRe = /(?:^|\n)\s*import\s+(?:[^'"]*?from\s+)?['"]([^'"]+)['"]/g;
+  for (const file of walk(srcDir)) {
+    if (!/\.(ts|tsx)$/.test(file)) continue;
+    if (/\.test\.(ts|tsx)$/.test(file) || file.includes(`${path.sep}__tests__${path.sep}`)) continue;
+    const body = readFileSync(file, 'utf8');
+    const rel = path.relative(srcDir, file);
+    for (const m of body.matchAll(importRe)) {
+      const spec = m[1];
+      if (/(^|\/)(specship-desktop|design)\/data(\.js)?$/.test(spec) || /\/data\.js$/.test(spec)) {
+        errors.push(`${rel}: imports the design bundle's mock dataset "${spec}"`);
+      }
+    }
+    // Reading window.DATA wires the mock dataset in at runtime (the design
+    // bundle's global). Comments are stripped first so a doc reference is fine.
+    const codeOnly = body.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|\s)\/\/[^\n]*/g, '');
+    if (/\bwindow\s*\.\s*DATA\b/.test(codeOnly)) {
+      errors.push(`${rel}: reads window.DATA (the design bundle's mock global)`);
+    }
+  }
+  return errors;
+}
+
 function fail(stage, errors) {
   console.error(`[check-ui-deps] ${stage} FAILED:`);
   for (const e of errors) console.error(`  - ${e}`);
@@ -159,6 +190,9 @@ function main() {
   const depErrors = assertRuntimeDepsAllowlist(path.join(uiDir, 'package.json'));
   if (depErrors.length) fail('runtime dependency allowlist (REQ-DESKTOP-017.A2)', depErrors);
 
+  const mockErrors = assertNoMockDataset(path.join(uiDir, 'src'));
+  if (mockErrors.length) fail('mock-dataset guard (REQ-DESKTOP-030.A4)', mockErrors);
+
   const lockPath = path.join(uiDir, 'package-lock.json');
   let lockErrors = [];
   try {
@@ -169,7 +203,7 @@ function main() {
   }
   if (lockErrors.length) fail('registry-safe lockfile (REQ-DESKTOP-017.A3)', lockErrors);
 
-  console.log('[check-ui-deps] OK — runtime deps are exactly [react, react-dom]; lockfile is registry-safe');
+  console.log('[check-ui-deps] OK — runtime deps are exactly [react, react-dom]; lockfile is registry-safe; no mock dataset in ui/src');
 }
 
 // Only run the CLI when invoked directly (the test suite imports the fns).

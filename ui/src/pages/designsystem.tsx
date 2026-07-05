@@ -10,7 +10,7 @@
 import { useState } from 'react';
 import { Donut, HBars, LineChart, Sparkline, StackedBars, Treemap } from '../components/charts';
 import { GraphCanvas } from '../components/graph';
-import { PageHead, Pill, Segmented, StatePill } from '../components/ui';
+import { PageHead, Pill, SampleBadge, Segmented, StatePill } from '../components/ui';
 import {
   BUTTON_VARIANTS,
   FORCED_STATE_CLASS,
@@ -170,7 +170,12 @@ const GEDGES = [
 function Primitives() {
   const [seg, setSeg] = useState('week');
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 12, marginTop: 12 }}>
+    <>
+    <div className="row gap-8" style={{ margin: '20px 0 8px' }}>
+      <div className="eyebrow">Chart & graph primitives</div>
+      <SampleBadge title="Illustrative reference data — these primitives have no backend; every data screen binds to your live project." />
+    </div>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 12 }}>
       <div className="card card-pad">
         <div className="eyebrow" style={{ marginBottom: 12 }}>Segmented</div>
         <Segmented options={[{ value: 'today', label: 'Today' }, { value: 'week', label: 'This week' }, { value: 'month', label: 'This month' }]} value={seg} onChange={setSeg} size="sm" />
@@ -197,6 +202,7 @@ function Primitives() {
         <div style={{ height: 220 }}><GraphCanvas nodes={GNODES} edges={GEDGES} /></div>
       </div>
     </div>
+    </>
   );
 }
 
