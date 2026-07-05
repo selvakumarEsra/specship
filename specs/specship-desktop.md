@@ -522,6 +522,17 @@ deep-linkable URL; the active nav item renders the accent-bar treatment.
 Theme (dark / light / system) and nav collapse state persist across
 sessions.
 
+implementations:
+  - ui/src/App.tsx:App
+  - ui/src/App.tsx:Sidebar
+  - ui/src/App.tsx:NavItem
+  - ui/src/App.tsx:ProjectSwitcher
+  - ui/src/App.tsx:StatusStrip
+  - ui/src/App.tsx:TopBar
+  - ui/src/App.tsx:ThemeToggle
+  - ui/src/components/command-palette.tsx:CommandPalette
+  - server/src/routes/projects.ts:attachDriftCounts
+
 ## Acceptance
 <!-- id: REQ-DESKTOP-018.A1 -->
 - Every screen is reachable from the sidebar; the active item shows the
