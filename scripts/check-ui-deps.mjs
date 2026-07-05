@@ -25,6 +25,7 @@
  * build script.
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { gzipSync } from 'node:zlib';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -167,6 +168,43 @@ export function assertNoMockDataset(srcDir) {
   return errors;
 }
 
+/**
+ * REQ-DESKTOP-031.A1: the initial JS payload must stay at or under budget
+ * (250 KB gzipped by default). The SPA ships a single entry chunk plus any
+ * code-split chunks the index eagerly loads; sum the gzipped size of every
+ * top-level `.js` in dist/assets (vite emits the entry + shared chunks here)
+ * — that is what the browser downloads before the app is interactive. Returns
+ * `{ totalGzip, perFile }` so callers can report, and throws when over budget.
+ */
+export const INITIAL_JS_BUDGET_BYTES = 250 * 1024;
+
+export function measureInitialJsGzip(distDir) {
+  const assetsDir = path.join(distDir, 'assets');
+  const perFile = [];
+  let totalGzip = 0;
+  let files = [];
+  try { files = readdirSync(assetsDir); } catch { return { totalGzip: 0, perFile: [] }; }
+  for (const name of files) {
+    if (!name.endsWith('.js')) continue;
+    const bytes = gzipSync(readFileSync(path.join(assetsDir, name))).length;
+    perFile.push({ name, gzip: bytes });
+    totalGzip += bytes;
+  }
+  return { totalGzip, perFile };
+}
+
+export function assertInitialJsBudget(distDir, budgetBytes = INITIAL_JS_BUDGET_BYTES) {
+  const { totalGzip, perFile } = measureInitialJsGzip(distDir);
+  if (totalGzip > budgetBytes) {
+    const kb = (n) => (n / 1024).toFixed(1) + ' KB';
+    const breakdown = perFile.map((f) => `${f.name} (${kb(f.gzip)})`).join(', ');
+    throw new Error(
+      `initial JS payload ${kb(totalGzip)} gzipped exceeds the ${kb(budgetBytes)} budget — ${breakdown}`,
+    );
+  }
+  return { totalGzip, perFile };
+}
+
 function fail(stage, errors) {
   console.error(`[check-ui-deps] ${stage} FAILED:`);
   for (const e of errors) console.error(`  - ${e}`);
@@ -183,7 +221,14 @@ function main() {
     const distDir = path.resolve(process.cwd(), args[distIdx + 1] ?? path.join(uiDir, 'dist'));
     const errors = assertNoExternalOrigins(distDir);
     if (errors.length) fail('external-origin scan (REQ-DESKTOP-017.A4)', errors);
-    console.log(`[check-ui-deps] OK — no external origins in ${distDir}`);
+    let budget;
+    try {
+      budget = assertInitialJsBudget(distDir);
+    } catch (e) {
+      fail('initial JS budget (REQ-DESKTOP-031.A1)', [e.message]);
+    }
+    const kb = (budget.totalGzip / 1024).toFixed(1);
+    console.log(`[check-ui-deps] OK — no external origins in ${distDir}; initial JS ${kb} KB gz (≤250 KB budget)`);
     return;
   }
 

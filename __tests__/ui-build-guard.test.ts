@@ -23,6 +23,8 @@ import {
   assertRegistryLockfile,
   assertNoExternalOrigins,
   assertNoMockDataset,
+  assertInitialJsBudget,
+  measureInitialJsGzip,
 } from '../scripts/check-ui-deps.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -136,6 +138,39 @@ describe('zero external origins in built assets (A4)', () => {
     const dist = path.join(uiDir, 'dist');
     if (!fs.existsSync(path.join(dist, 'index.html'))) return; // not built in this checkout — the ui build itself enforces this
     expect(assertNoExternalOrigins(dist)).toEqual([]);
+  });
+});
+
+describe('initial JS budget (REQ-DESKTOP-031.A1)', () => {
+  function distWith(jsFiles: Record<string, string>): string {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jsbudget-'));
+    const assets = path.join(dir, 'assets');
+    fs.mkdirSync(assets);
+    for (const [name, body] of Object.entries(jsFiles)) fs.writeFileSync(path.join(assets, name), body);
+    return dir;
+  }
+
+  it('passes a small bundle and reports the gzipped total', () => {
+    const dir = distWith({ 'index-abc.js': 'console.log("small app")\n'.repeat(50) });
+    const { totalGzip } = assertInitialJsBudget(dir, 250 * 1024);
+    expect(totalGzip).toBeGreaterThan(0);
+    expect(totalGzip).toBeLessThan(250 * 1024);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('throws when the gzipped initial JS exceeds the budget', () => {
+    // Any real JS file blows a 10-byte budget — asserts the guard fires and
+    // names the overage, independent of how well the fixture compresses.
+    const dir = distWith({ 'index-big.js': 'export const app = () => "hello world";\n'.repeat(20) });
+    expect(() => assertInitialJsBudget(dir, 10)).toThrow(/exceeds the .* budget/);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('the real built ui/dist is within budget (when built)', () => {
+    const distAssets = path.join(uiDir, 'dist', 'assets');
+    if (!fs.existsSync(distAssets)) return; // ui not built in this run — skip
+    const { totalGzip } = measureInitialJsGzip(path.join(uiDir, 'dist'));
+    expect(totalGzip).toBeLessThanOrEqual(250 * 1024);
   });
 });
 

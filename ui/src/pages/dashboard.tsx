@@ -25,13 +25,16 @@ const fmtInt = (n: number) => n.toLocaleString();
 // @implements REQ-DESKTOP-020
 export function DashboardPage({ project }: PageProps) {
   const [range, setRange] = useState('week');
-  const status = useApi(() => api.status(project), [project]);
-  const stats = useApi(() => api.claudeStats(range), [range]);
-  const costs = useApi(() => api.claudeCosts(range), [range]);
-  const cache = useApi(() => api.claudeCache(range), [range]);
-  const heatmap = useApi(() => api.claudeHeatmap(range), [range]);
-  const tips = useApi(() => api.claudeTips(), []);
-  const graph = useApi(() => api.graphFull(project), [project]);
+  // cacheKey → screen-switch session cache (REQ-DESKTOP-031.A3): revisiting the
+  // Dashboard within the TTL paints instantly with no duplicate fetches.
+  const pk = project ?? '_';
+  const status = useApi(() => api.status(project), [project], { cacheKey: `status:${pk}` });
+  const stats = useApi(() => api.claudeStats(range), [range], { cacheKey: `stats:${pk}:${range}` });
+  const costs = useApi(() => api.claudeCosts(range), [range], { cacheKey: `costs:${pk}:${range}` });
+  const cache = useApi(() => api.claudeCache(range), [range], { cacheKey: `cache:${pk}:${range}` });
+  const heatmap = useApi(() => api.claudeHeatmap(range), [range], { cacheKey: `heatmap:${pk}:${range}` });
+  const tips = useApi(() => api.claudeTips(), [], { cacheKey: `tips:${pk}` });
+  const graph = useApi(() => api.graphFull(project), [project], { cacheKey: `graphfull:${pk}` });
 
   if (isNoProject(status.error)) {
     return <Empty icon="folder" title="No project selected" body="Pick an indexed project from the switcher in the status strip." />;

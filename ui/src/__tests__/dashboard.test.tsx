@@ -8,6 +8,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DashboardPage } from '../pages/dashboard';
+import { __clearApiCache } from '../hooks';
 import type { ClaudeTip } from '../api';
 
 const TIP: ClaudeTip = {
@@ -111,6 +112,7 @@ function mockFetch(routes: Record<string, unknown>, tips: ClaudeTip[]): Recorded
 
 beforeEach(() => {
   history.replaceState(null, '', '/dashboard');
+  __clearApiCache(); // isolate the screen-switch session cache between cases
 });
 
 afterEach(() => {
