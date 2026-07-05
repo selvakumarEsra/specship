@@ -194,9 +194,17 @@ export interface DriftResponse {
 export interface WorkflowRun {
   id: string;
   workflowId?: string;
+  workflowName?: string;
   status: string;
   startedAt?: string | number | null;
+  completedAt?: string | number | null;
   finishedAt?: string | number | null;
+  errorMessage?: string;
+  /** Run-level metadata: nodeStates, approval context, outputs (executor-owned). */
+  metadata?: Record<string, unknown>;
+  /** List-level stats roll-up (null on runs recorded before stats existed). */
+  totalCostUsd?: number | null;
+  model?: string | null;
   eta?: unknown;
   [key: string]: unknown;
 }
@@ -204,6 +212,64 @@ export interface WorkflowRun {
 export interface RunsResponse {
   runs: WorkflowRun[];
 }
+
+// ---- Workflows + run detail (REQ-DESKTOP-023) ----
+
+/** One DAG node of a workflow definition (src/workflows/schemas/workflow.ts). */
+export interface WorkflowDagNode {
+  id: string;
+  kind: string;
+  depends_on?: string[];
+  output_type?: string;
+  [key: string]: unknown;
+}
+
+export interface WorkflowDefinition {
+  name: string;
+  description?: string;
+  requires?: string[];
+  inputs?: Array<{ name: string; description?: string; required?: boolean; default?: string }>;
+  nodes: WorkflowDagNode[];
+  [key: string]: unknown;
+}
+
+/** GET /api/workflows — discovery result (bundled/global/project precedence). */
+export interface WorkflowsResponse {
+  workflows: Array<{ workflow: WorkflowDefinition; scope: string; sourcePath: string }>;
+  errors: Array<{ scope: string; sourcePath: string; errors: unknown[] }>;
+}
+
+/** One workflow_events row (src/types.ts WorkflowEvent). */
+export interface RunEvent {
+  id: number;
+  workflowRunId: string;
+  eventType: string;
+  stepId?: string;
+  stepKind?: string;
+  data?: Record<string, unknown>;
+  createdAt: number;
+}
+
+/** GET /api/workflows/runs/:id — run row + its event log. */
+export interface RunDetailResponse {
+  run: WorkflowRun;
+  events: RunEvent[];
+}
+
+export interface RunArtifact {
+  nodeId: string;
+  name: string;
+  kind?: string;
+  outputType?: string;
+  length: number;
+  body: string;
+}
+
+export interface RunArtifactsResponse {
+  artifacts: RunArtifact[];
+}
+
+export type RunAction = 'approve' | 'reject' | 'cancel' | 'resume';
 
 export interface ProjectEntry {
   slug: string;
@@ -367,6 +433,15 @@ export const api = {
     putJson<SpecSaveResponse>(q(`/api/spec/${encodeURIComponent(id)}`, project), { content }),
   drift: (project?: string | null) => getJson<DriftResponse>(q('/api/drift', project)),
   runs: (project?: string | null) => getJson<RunsResponse>(q('/api/workflows/runs', project)),
+  workflows: (project?: string | null) => getJson<WorkflowsResponse>(q('/api/workflows', project)),
+  launchRun: (workflowName: string, inputs: Record<string, string>, project?: string | null) =>
+    postJson<{ runId: string; status: string }>(q('/api/workflows/runs', project), { workflowName, inputs }),
+  run: (id: string, project?: string | null) =>
+    getJson<RunDetailResponse>(q(`/api/workflows/runs/${encodeURIComponent(id)}`, project)),
+  runArtifacts: (id: string, project?: string | null) =>
+    getJson<RunArtifactsResponse>(q(`/api/workflows/runs/${encodeURIComponent(id)}/artifacts`, project)),
+  runAction: (id: string, action: RunAction, body?: { comment?: string; reason?: string }, project?: string | null) =>
+    postJson<{ ok: boolean }>(q(`/api/workflows/runs/${encodeURIComponent(id)}/${action}`, project), body),
   projects: () => getJson<ProjectsResponse>('/api/projects'),
   graphSearch: (qs: string, project?: string | null, limit = 10) =>
     getJson<SearchResponse>(q(`/api/graph/search?q=${encodeURIComponent(qs)}&limit=${limit}`, project)),
@@ -387,3 +462,12 @@ export const api = {
     getJson<SpecshipImpactResponse>(`/api/claude/specship-impact?range=${range}`),
   ingestNow: () => postJson<{ ok: boolean }>('/api/claude/ingest'),
 };
+
+/**
+ * SSE stream URL for a run's live events (EventSource takes a URL, not a
+ * fetch). `since` skips events already fetched via api.run.
+ */
+export function runEventsUrl(id: string, since?: number, project?: string | null): string {
+  const base = `/api/workflows/runs/${encodeURIComponent(id)}/events${since ? `?since=${since}` : ''}`;
+  return q(base, project);
+}

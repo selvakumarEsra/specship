@@ -448,6 +448,10 @@ export class WorkflowExecutor {
             stepId: nodeId,
             output_type: node.output_type,
             outputSize: result.output.text.length,
+            // Per-node cost/model/duration when the runner reported them
+            // (prompt nodes do; others don't). Optional-field additive so
+            // old run records render without stats (REQ-DESKTOP-023).
+            ...(result.stats ? { stats: result.stats } : {}),
           });
           await this.writeArtifact(artifactsDir, node, result.output);
           break;
