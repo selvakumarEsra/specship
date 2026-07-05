@@ -843,6 +843,8 @@ this work, and its remaining residents (the SSR-era e2e package, the npm
 shim) are relocated or retired with it.
 
 implementations:
+  - server/src/server.ts:createServer
+  - server/src/routes/status.ts:registerStatusRoutes
   - server
 
 ## Acceptance
@@ -932,6 +934,7 @@ persistence, and open the command palette and navigate. The suite runs
 headless via an npm script and its failure fails the build.
 
 implementations:
+  - server/src/cli.ts:parseArgs
   - e2e/tests/screens-render.spec.ts
   - e2e/tests/spec-edit-save.spec.ts
   - e2e/tests/theme-palette.spec.ts
