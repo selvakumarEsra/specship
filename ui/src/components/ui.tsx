@@ -179,6 +179,16 @@ export function Bar({ frac, color, height }: { frac: number; color?: string; hei
   );
 }
 
+/** Compact relative age for link rows and metalines — "5m", "3h", "2d". */
+export function timeAgo(ms?: number): string | null {
+  if (!ms) return null;
+  const s = Math.max(0, Math.floor((Date.now() - ms) / 1000));
+  if (s < 60) return 'now';
+  if (s < 3600) return Math.floor(s / 60) + 'm';
+  if (s < 86400) return Math.floor(s / 3600) + 'h';
+  return Math.floor(s / 86400) + 'd';
+}
+
 export function nodeColor(kind: string, state?: string): string {
   if (kind === 'spec') {
     if (state === 'drifted') return 'var(--warn)';

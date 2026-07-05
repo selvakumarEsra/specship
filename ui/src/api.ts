@@ -105,6 +105,10 @@ export interface LinkedSpec {
   state: string;
   targetFilePath?: string;
   targetQualifiedName?: string;
+  driftAxis?: string | null;
+  provenance?: string;
+  resolvedNodeId?: string;
+  updatedAt?: number;
   [key: string]: unknown;
 }
 
@@ -134,6 +138,11 @@ export interface SpecDoc {
   state?: string;
   priority?: string;
   kind?: string;
+  sourcePath?: string;
+  parentId?: string;
+  owner?: string;
+  body?: string;
+  metadata?: Record<string, unknown>;
   [key: string]: unknown;
 }
 
@@ -142,12 +151,29 @@ export interface SpecsResponse {
   linkStates: Record<string, string>;
 }
 
+/** GET /api/spec/:id — the full detail contract for one requirement. */
+export interface SpecDetailResponse {
+  spec: SpecDoc;
+  parent: SpecDoc | null;
+  siblings: SpecDoc[];
+  children: SpecDoc[];
+  links: LinkedSpec[];
+  /** Per-child (acceptance criterion) links, for the N/M-met rollup. */
+  childLinks: Record<string, LinkedSpec[]>;
+  source: string | null;
+}
+
+/** One /api/drift row — a spread SpecLink plus its spec's title. */
 export interface DriftLink {
   specId: string;
   state: string;
   specTitle: string | null;
-  targetFile?: string;
-  targetSymbol?: string;
+  targetFilePath?: string;
+  targetQualifiedName?: string;
+  driftAxis?: string | null;
+  provenance?: string;
+  resolvedNodeId?: string;
+  updatedAt?: number;
   [key: string]: unknown;
 }
 
@@ -325,6 +351,8 @@ export const api = {
   graphHealth: (project?: string | null) =>
     getJson<GraphHealthResponse>(q('/api/graph/health', project)),
   specs: (project?: string | null) => getJson<SpecsResponse>(q('/api/specs', project)),
+  spec: (id: string, project?: string | null) =>
+    getJson<SpecDetailResponse>(q(`/api/spec/${encodeURIComponent(id)}`, project)),
   drift: (project?: string | null) => getJson<DriftResponse>(q('/api/drift', project)),
   runs: (project?: string | null) => getJson<RunsResponse>(q('/api/workflows/runs', project)),
   projects: () => getJson<ProjectsResponse>('/api/projects'),

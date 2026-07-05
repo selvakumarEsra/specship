@@ -104,13 +104,16 @@ export function App() {
   const projects = useApi(() => api.projects(), []);
   const runs = useApi(() => api.runs(project), [project, route]);
   const tips = useApi(() => api.claudeTips(), [route]);
+  const drift = useApi(() => api.drift(project), [project, route]);
 
   // ⌘K toggle, ⌘1–7 nav jumps, and g-chords (REQ-DESKTOP-019).
   const togglePalette = useCallback(() => setPaletteOpen((o) => !o), []);
   useGlobalShortcuts({ onTogglePalette: togglePalette, pageIds: JUMP_PAGE_IDS });
 
   const counts: BadgeCounts = {
-    drift: status.data?.drift ?? 0,
+    // The badge equals the drift queue's actual row count (REQ-DESKTOP-022.A4);
+    // the status roll-up only bridges the gap until /api/drift answers.
+    drift: drift.data?.links.length ?? status.data?.drift ?? 0,
     runs: runs.data?.runs.filter((r) => r.status === 'running').length ?? 0,
     // Actionable tips only — applied ones no longer need attention, and
     // dismissed ones never come back from the server (REQ-DESKTOP-020.A2).
