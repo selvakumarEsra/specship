@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { primaryProjectMatcher } from '../packages/server/src/ingest/ingestor';
+import { primaryProjectMatcher } from '../server/src/ingest/ingestor';
 
 /**
  * Regression: Claude Code stores transcripts under a slug dir

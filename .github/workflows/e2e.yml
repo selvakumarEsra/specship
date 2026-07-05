@@ -12,8 +12,8 @@ on:
   workflow_dispatch: {}
   pull_request:
     paths:
-      - "packages/server/**"
-      - "packages/e2e/**"
+      - "server/**"
+      - "e2e/**"
       - "src/**"
       - "scripts/build-*.mjs"
       - "scripts/build-*.sh"
@@ -33,22 +33,22 @@ jobs:
           node-version: 22
       # Root install compiles the optional better-sqlite3 (ships FTS5), which
       # the fixture indexer needs; the built-in node:sqlite on Node 22 has no
-      # FTS5. The dashboard is now server-rendered (packages/server/src/ssr),
+      # FTS5. The dashboard is now server-rendered (server/src/ssr),
       # built by the root `npm run build` — no separate UI install step.
       - run: npm ci
       - name: Build CLI + server (server-rendered dashboard)
         run: npm run build
       - name: Install e2e deps + browser
         run: |
-          cd packages/e2e
+          cd e2e
           npm ci
           npx playwright install --with-deps chromium
       - name: Run dashboard e2e
-        run: cd packages/e2e && CI=1 npm test
+        run: cd e2e && CI=1 npm test
       - name: Upload report on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report
-          path: packages/e2e/playwright-report
+          path: e2e/playwright-report
           retention-days: 7

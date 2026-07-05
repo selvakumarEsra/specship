@@ -1,6 +1,6 @@
 /**
  * Same-origin fetch wrappers over the dashboard server's /api routes
- * (packages/server/src/routes/*). The SPA is served by that same server —
+ * (server/src/routes/*). The SPA is served by that same server —
  * no host, no port, no CORS (REQ-DESKTOP-017.A1): every call is a relative
  * URL against the app's own origin.
  */
@@ -51,7 +51,7 @@ function q(path: string, project?: string | null): string {
   return path + (path.includes('?') ? '&' : '?') + 'project=' + encodeURIComponent(project);
 }
 
-// ---- Response shapes (mirroring packages/server/src/routes/*) ----
+// ---- Response shapes (mirroring server/src/routes/*) ----
 
 export interface StatusResponse {
   projectPath: string;
@@ -314,7 +314,7 @@ export interface RecentPromptsResponse {
   prompts: RecentPrompt[];
 }
 
-// ---- Claude analytics shapes (packages/server/src/routes/claude.ts) ----
+// ---- Claude analytics shapes (server/src/routes/claude.ts) ----
 
 /** One dashboard stat-tile metric: value + WoW delta + 7-point sparkline. */
 export interface StatMetric {
@@ -526,7 +526,7 @@ export interface SpecshipImpactResponse {
   [key: string]: unknown;
 }
 
-// ---- Memory (packages/server/src/routes/memory.ts, REQ-DESKTOP-025) ----
+// ---- Memory (server/src/routes/memory.ts, REQ-DESKTOP-025) ----
 
 export type MemoryLevel = 'enterprise' | 'user' | 'project' | 'subdir' | 'import' | 'note';
 export type MemoryType = 'instruction' | 'note' | 'import';
@@ -559,7 +559,7 @@ export interface MemoryResponse {
   files: MemoryFile[];
 }
 
-// ---- MCP servers (packages/server/src/routes/mcp.ts, REQ-DESKTOP-026) ----
+// ---- MCP servers (server/src/routes/mcp.ts, REQ-DESKTOP-026) ----
 
 /** Spec vocabulary — see the route's deriveState precedence. */
 export type McpServerState = 'active' | 'connected' | 'idle' | 'failed' | 'disabled';
@@ -608,7 +608,7 @@ export interface AddMcpServerPayload {
   url?: string;
 }
 
-// ---- Runtime config (packages/server/src/routes/config.ts, REQ-DESKTOP-028) ----
+// ---- Runtime config (server/src/routes/config.ts, REQ-DESKTOP-028) ----
 
 /** GET/PUT /api/config — the server's dashboard-editable runtime knobs. */
 export interface ConfigResponse {
@@ -618,7 +618,7 @@ export interface ConfigResponse {
   version: string;
 }
 
-// ---- Chat (packages/server/src/routes/chat.ts + chat-answer.ts, REQ-DESKTOP-027) ----
+// ---- Chat (server/src/routes/chat.ts + chat-answer.ts, REQ-DESKTOP-027) ----
 
 /** Pointer to one graph symbol inside a chat source's detail. */
 export interface ChatSymbolRef {

@@ -1049,7 +1049,7 @@ export async function registerClaudeRoutes(app: FastifyInstance): Promise<void> 
    * Aggregate SpecShip token-impact metrics: how many tokens specship calls
    * spent vs. how many tokens' worth of Read calls they displaced (saved),
    * with per-prompt dedup so a file referenced by two specship calls in the
-   * same prompt counts only once. See packages/server/src/ingest/impact-query.ts
+   * same prompt counts only once. See server/src/ingest/impact-query.ts
    * for the full algorithm.
    *
    * Query params:

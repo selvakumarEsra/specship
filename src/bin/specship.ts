@@ -54,7 +54,7 @@ async function loadSpecShip(): Promise<typeof import('../index')> {
 /**
  * Lazy-load the HTTP server package. Tries (in order):
  *   1. Installed npm dependency `@specship/specship-server`
- *   2. Dev sibling at `<repoRoot>/packages/server/dist/index.js`
+ *   2. Dev sibling at `<repoRoot>/server/dist/index.js`
  *
  * Errors are surfaced with a hint about which install/build step is missing.
  */
@@ -84,13 +84,13 @@ async function loadServerPackage(): Promise<ServerPackage> {
   //   2. npm dep `@specship/specship-server` if some downstream
   //      consumer ever wires it as a separate package (kept for forward
   //      compatibility — not the shipped path).
-  //   3. Dev/workspace sibling: `packages/server/dist/index.js` for
+  //   3. Dev/workspace sibling: `server/dist/index.js` for
   //      running from a checkout without a prior `npm run build`.
   const candidates: string[] = [
     path.resolve(__dirname, '..', 'server', 'index.js'),
     '@specship/specship-server',
-    path.resolve(__dirname, '..', '..', 'packages', 'server', 'dist', 'index.js'),
-    path.resolve(__dirname, '..', '..', '..', 'packages', 'server', 'dist', 'index.js'),
+    path.resolve(__dirname, '..', '..', 'server', 'dist', 'index.js'),
+    path.resolve(__dirname, '..', '..', '..', 'server', 'dist', 'index.js'),
   ];
   let lastErr: unknown = null;
   for (const c of candidates) {
@@ -114,7 +114,7 @@ async function loadServerPackage(): Promise<ServerPackage> {
  * hyphens/dots/underscores. Recover real paths from `~/.claude.json` (its
  * `projects` object is keyed by real absolute paths), then from a `"cwd"`
  * value in the slug's newest transcript, before falling back to the lossy
- * decode. Mirrors `packages/server/src/ingest/project-paths.ts`
+ * decode. Mirrors `server/src/ingest/project-paths.ts`
  * (REQ-SLUGRES-004) — the server package depends on this one, so the CLI
  * can't import it.
  */
@@ -1748,7 +1748,7 @@ program
         // Lazy-load the server package via dist path. The npm bin is
         // packaged with the server already built under
         // node_modules/@specship/specship-server, OR (dev) the
-        // sibling packages/server/dist directory.
+        // sibling server/dist directory.
         const { createServer } = await loadServerPackage();
 
         // The dashboard is the lean server-rendered UI (DASH-LEAN-DOC), served

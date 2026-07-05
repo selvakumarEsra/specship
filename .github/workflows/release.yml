@@ -93,12 +93,12 @@ jobs:
       # live data at 127.0.0.1 with no cross-origin/CORS-blocked API calls. This
       # runs BEFORE the CHANGELOG promotion, bundling, and publish, so a
       # dashboard-blank regression (e.g. #55) stops the release before any
-      # user-facing artifact or side effect is produced. See packages/e2e.
+      # user-facing artifact or side effect is produced. See e2e.
       - name: Dashboard e2e smoke gate
         run: |
           set -euo pipefail
           npm run build
-          cd packages/e2e
+          cd e2e
           npm ci
           npx playwright install --with-deps chromium
           CI=1 npm test

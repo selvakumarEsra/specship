@@ -15,7 +15,7 @@
 import { describe, it, expect } from 'vitest';
 import { openMemoryDb } from './helpers/memory-db';
 import type { GraphLike } from '../src/analytics/specship-impact';
-import { backfillDisplaced } from '../packages/server/src/ingest/impact-backfill';
+import { backfillDisplaced } from '../server/src/ingest/impact-backfill';
 
 // ---------------------------------------------------------------------------
 // Minimal schema builder (mirrors what the real migrations create)

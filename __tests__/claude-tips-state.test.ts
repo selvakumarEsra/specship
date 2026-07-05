@@ -4,7 +4,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import Fastify, { type FastifyInstance } from 'fastify';
 import Database from 'better-sqlite3';
-import { registerClaudeRoutes } from '../packages/server/src/routes/claude';
+import { registerClaudeRoutes } from '../server/src/routes/claude';
 import { runMigrations } from '../src/db/migrations';
 
 /**

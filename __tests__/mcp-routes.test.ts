@@ -11,7 +11,7 @@ import {
   probeServer,
   setServerEnabled,
   type McpConfigPaths,
-} from '../packages/server/src/routes/mcp';
+} from '../server/src/routes/mcp';
 
 /**
  * REQ-DESKTOP-026 — MCP route helpers. The inventory merges Claude Code's

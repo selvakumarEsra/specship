@@ -27,6 +27,6 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/selvakumarEsra/specship.git",
-    "directory": "packages/specship-shim"
+    "directory": "npm-shim"
   }
 }

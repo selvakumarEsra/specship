@@ -9,7 +9,7 @@ frontend server — one binary, two URLs.
 After `npm run build:all` (see below), launch:
 
 ```bash
-node packages/server/dist/cli.js \
+node server/dist/cli.js \
   --project-root /path/to/your/project \
   --port 4242 \
   --open
@@ -52,7 +52,7 @@ builds the server's TypeScript, copies the SPA into `public/web/` so it
 ships with the npm tarball.
 
 ```bash
-cd packages/server
+cd server
 npm run build:all
 ```
 

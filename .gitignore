@@ -67,9 +67,9 @@ release/
 tmux-web/
 
 # Generated dashboard build for the server package (produced by
-# packages/server/scripts/copy-web.mjs / `npm run build:web`). A build artifact,
+# server/scripts/copy-web.mjs / `npm run build:web`). A build artifact,
 # not source — don't commit it (it goes stale). Regenerate on demand.
-packages/server/public/web/
+server/public/web/
 
 assets/__pycache__/
 

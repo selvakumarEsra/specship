@@ -6,7 +6,7 @@
  * both delivery shapes under the product package:
  *
  *   1. **Bundled** — `<bundle>/lib/dist/server/…` → `<bundle>/lib/package.json`.
- *   2. **Workspace / dev** — `packages/server/{src,dist}/…` → repo root
+ *   2. **Workspace / dev** — `server/{src,dist}/…` → repo root
  *      `package.json` (the walk skips the private `@specship/specship-server`
  *      manifest because its name doesn't match).
  */

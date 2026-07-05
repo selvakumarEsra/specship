@@ -20,8 +20,8 @@
     // only resolved on the maintainer's box via a global install.
     "baseUrl": ".",
     "paths": {
-      "@specship/specship": ["../../dist/index.d.ts"],
-      "@specship/specship/*": ["../../*"]
+      "@specship/specship": ["../dist/index.d.ts"],
+      "@specship/specship/*": ["../*"]
     }
   },
   "include": ["src/**/*"]

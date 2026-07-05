@@ -26,7 +26,7 @@ succeeded, and that the graph/analytics endpoints return populated payloads.
 
 ```bash
 npm run build                     # from repo root — produces dist/bin + dist/web
-cd packages/e2e
+cd e2e
 npm install
 npx playwright install chromium
 npm test                          # or: npm run test:headed

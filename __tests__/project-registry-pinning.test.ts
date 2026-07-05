@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ProjectRegistry } from '../packages/server/src/project-registry';
+import { ProjectRegistry } from '../server/src/project-registry';
 
 /**
  * Regression: the /api/events cross-project sweep opens many projects

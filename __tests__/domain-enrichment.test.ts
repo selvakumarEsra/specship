@@ -28,7 +28,7 @@ import { generateNodeId } from '../src/extraction/tree-sitter-helpers';
 import {
   collapseInheritedState,
   toGovernedRefs,
-} from '../packages/server/src/routes/domain';
+} from '../server/src/routes/domain';
 
 // ---------------------------------------------------------------------------
 // Synthetic inherited links for the pure-helper unit tests. The helpers only

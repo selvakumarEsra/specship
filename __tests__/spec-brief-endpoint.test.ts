@@ -18,7 +18,7 @@ import * as os from 'node:os';
 import Fastify from 'fastify';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import SpecShip from '../src/index';
-import { parseBriefField, registerSpecRoutes } from '../packages/server/src/routes/spec';
+import { parseBriefField, registerSpecRoutes } from '../server/src/routes/spec';
 
 // ---------------------------------------------------------------------------
 // FTS5 guard — identical pattern used across the spec test suite.

@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { openMemoryDb } from './helpers/memory-db';
-import { ingestAll } from '../packages/server/src/ingest/ingestor';
+import { ingestAll } from '../server/src/ingest/ingestor';
 import SpecShip from '../src/index';
 
 // ---------------------------------------------------------------------------
