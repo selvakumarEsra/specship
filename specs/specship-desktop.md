@@ -309,7 +309,7 @@ in the error tokens; a write that succeeds but fails to re-index surfaces
 a "saved but not yet indexed" hint rather than claiming full success.
 
 implementations:
-  - packages/server/src/routes/spec.ts
+  - server/src/routes/spec.ts
 
 ## Acceptance
 <!-- id: REQ-DESKTOP-011.A1 -->
@@ -484,7 +484,7 @@ implementations:
   - ui/src/components/graph.tsx:GraphCanvas
   - scripts/check-ui-deps.mjs:assertRuntimeDepsAllowlist
   - scripts/check-ui-deps.mjs:assertNoExternalOrigins
-  - packages/server/src/server.ts:resolveDefaultWebDir
+  - server/src/server.ts:resolveDefaultWebDir
 
 ## Acceptance
 <!-- id: REQ-DESKTOP-017.A1 -->
@@ -551,7 +551,7 @@ Drift queue, and are suppressed while focus is in an editable field.
 implementations:
   - ui/src/components/command-palette.tsx:CommandPalette
   - ui/src/hooks.ts:useGlobalShortcuts
-  - packages/server/src/routes/claude.ts:registerClaudeRoutes
+  - server/src/routes/claude.ts:registerClaudeRoutes
 
 ## Acceptance
 <!-- id: REQ-DESKTOP-019.A1 -->
