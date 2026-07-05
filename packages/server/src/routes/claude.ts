@@ -8,6 +8,7 @@
  * Endpoints:
  *   GET /api/claude/projects                 — every indexed Claude project
  *   GET /api/claude/sessions?project=&limit= — sessions list
+ *   GET /api/claude/prompts/recent?project=&limit= — newest user prompts (⌘K palette)
  *   GET /api/claude/session/:id              — session detail (prompts + tools)
  *   GET /api/claude/heatmap?range=           — file/tool/subagent heatmaps
  *   GET /api/claude/costs?range=             — cost rollup, timeseries, per-model
@@ -104,6 +105,7 @@ function getDb(cg: SpecShipInstance): DbHandle {
   throw new Error('specship DB handle not accessible from server context');
 }
 
+// @implements REQ-DESKTOP-019 (GET /api/claude/prompts/recent — ⌘K palette prompts source)
 export async function registerClaudeRoutes(app: FastifyInstance): Promise<void> {
   /**
    * Analytics routes share one SQLite — the boot-time "primary" project's
@@ -156,6 +158,35 @@ export async function registerClaudeRoutes(app: FastifyInstance): Promise<void> 
       LIMIT ?
     `).all(...params);
     return { sessions };
+  });
+
+  /**
+   * Newest user prompts across sessions — feeds the ⌘K command palette's
+   * "recent prompts" results (REQ-DESKTOP-019). Main-chain prompts with
+   * non-empty text only: sidechain rows are subagent task bodies, and blank
+   * rows would render as empty palette entries. Text is capped at 200 chars —
+   * the palette shows a one-line label, never the full prompt.
+   */
+  app.get('/api/claude/prompts/recent', async (req: FastifyRequest<{ Querystring: { project?: string; limit?: string } }>, reply) => {
+    const cg = requirePrimary(reply); if (!cg) return;
+    const db = getDb(cg);
+    const limit = Math.min(parseInt(req.query.limit ?? '20', 10) || 20, 50);
+    const params: unknown[] = [];
+    let whereProject = '';
+    if (req.query.project) {
+      whereProject = ' AND s.project_path = ?';
+      params.push(normalizeProjectFilter(req.query.project));
+    }
+    params.push(limit);
+    const prompts = db.prepare(`
+      SELECT p.id, p.session_id, substr(p.text, 1, 200) as text, p.ts
+      FROM claude_prompts p
+      JOIN claude_sessions s ON s.id = p.session_id
+      WHERE p.is_sidechain = 0 AND p.text IS NOT NULL AND TRIM(p.text) != ''${whereProject}
+      ORDER BY p.ts DESC
+      LIMIT ?
+    `).all(...params);
+    return { prompts };
   });
 
   app.get('/api/claude/session/:id', async (req: FastifyRequest<{ Params: { id: string } }>, reply) => {
