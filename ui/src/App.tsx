@@ -103,6 +103,7 @@ export function App() {
   const status = useApi(() => api.status(project), [project, route]);
   const projects = useApi(() => api.projects(), []);
   const runs = useApi(() => api.runs(project), [project, route]);
+  const tips = useApi(() => api.claudeTips(), [route]);
 
   // ⌘K toggle, ⌘1–7 nav jumps, and g-chords (REQ-DESKTOP-019).
   const togglePalette = useCallback(() => setPaletteOpen((o) => !o), []);
@@ -111,8 +112,9 @@ export function App() {
   const counts: BadgeCounts = {
     drift: status.data?.drift ?? 0,
     runs: runs.data?.runs.filter((r) => r.status === 'running').length ?? 0,
-    // TODO(REQ-DESKTOP-024): live count once the tips API exists; 0 hides the badge.
-    tips: 0,
+    // Actionable tips only — applied ones no longer need attention, and
+    // dismissed ones never come back from the server (REQ-DESKTOP-020.A2).
+    tips: tips.data?.tips.filter((t) => t.state !== 'applied').length ?? 0,
   };
 
   const openPalette = useCallback(() => setPaletteOpen(true), []);

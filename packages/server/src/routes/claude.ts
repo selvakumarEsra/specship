@@ -13,7 +13,8 @@
  *   GET /api/claude/heatmap?range=           — file/tool/subagent heatmaps
  *   GET /api/claude/costs?range=             — cost rollup, timeseries, per-model
  *   GET /api/claude/compare                  — per-project cost comparison
- *   GET /api/claude/tips                     — rule-based tips engine output
+ *   GET /api/claude/tips                     — rule-based tips engine output (minus dismissed)
+ *   POST /api/claude/tips/state              — persist a tip's Apply/Dismiss state
  *   GET /api/claude/specship-impact?range=&project= — SpecShip token-impact aggregation
  *   POST /api/claude/ingest                  — force a one-shot ingest pass
  */
@@ -686,9 +687,10 @@ export async function registerClaudeRoutes(app: FastifyInstance): Promise<void> 
       if (pt > 0) wowDelta = ((total.t ?? 0) - pt) / pt;
     }
 
-    // Top prompts by cost.
+    // Top prompts by cost. is_sidechain rides along so the dashboard's
+    // Recent-prompts module can badge subagent turns (REQ-DESKTOP-020).
     const topPrompts = db.prepare(`
-      SELECT id, session_id, substr(text, 1, 200) as text, model, cost_usd,
+      SELECT id, session_id, substr(text, 1, 200) as text, model, cost_usd, is_sidechain,
              input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, ts
       FROM claude_prompts
       WHERE ts >= ? AND cost_usd > 0
@@ -800,7 +802,12 @@ export async function registerClaudeRoutes(app: FastifyInstance): Promise<void> 
     const driftCount = cg.getSpecQueries().getLinksByState(['drifted', 'broken', 'orphaned']).length;
     const drift = { value: driftCount, delta: 0, series: [] as number[] };
 
-    return { lastSessionCost, toolCalls, subagentPct, drift };
+    // Total ingested sessions (all time, unfiltered). Zero means "nothing
+    // ingested yet" — the dashboard renders enable-ingest guidance instead of
+    // presenting $0 / 0-call zeros as truth (REQ-DESKTOP-020.A4).
+    const sessionCount = countSince(`SELECT COUNT(*) c FROM claude_sessions`);
+
+    return { lastSessionCost, toolCalls, subagentPct, drift, sessionCount };
   });
 
   app.get('/api/claude/compare', async (_req, reply) => {
@@ -963,7 +970,38 @@ export async function registerClaudeRoutes(app: FastifyInstance): Promise<void> 
     const order: Record<string, number> = { error: 0, warn: 1, info: 2 };
     tips.sort((a, b) => (order[a.severity as string] ?? 9) - (order[b.severity as string] ?? 9));
 
-    return { tips };
+    // Apply persisted tip state (REQ-DESKTOP-020.A2): dismissed tips never
+    // resurface even though the rule re-mines the pattern; applied ones stay
+    // in the list annotated so the UI can render their applied treatment.
+    const states = db.prepare(`SELECT tip_id, state FROM claude_tip_state`).all() as Array<{ tip_id: string; state: string }>;
+    const stateById = new Map(states.map((s) => [s.tip_id, s.state]));
+    const visible = tips.filter((t) => stateById.get(t.id as string) !== 'dismissed');
+    for (const t of visible) {
+      if (stateById.get(t.id as string) === 'applied') t.state = 'applied';
+    }
+
+    return { tips: visible };
+  });
+
+  /**
+   * Persist a tip's Apply / Dismiss state (REQ-DESKTOP-020.A2). Tip ids embed
+   * `/` and `:` (rule + session + file), so the id travels in the JSON body
+   * rather than a path param. Upsert: re-applying or re-dismissing converges
+   * to one row per tip.
+   */
+  app.post('/api/claude/tips/state', async (req: FastifyRequest<{ Body: { id?: string; state?: string } }>, reply) => {
+    const cg = requirePrimary(reply); if (!cg) return;
+    const { id, state } = req.body ?? {};
+    if (!id || typeof id !== 'string') return reply.code(400).send({ error: 'id required' });
+    if (state !== 'applied' && state !== 'dismissed') {
+      return reply.code(400).send({ error: "state must be 'applied' or 'dismissed'" });
+    }
+    const db = getDb(cg);
+    db.prepare(`
+      INSERT INTO claude_tip_state (tip_id, state, ts) VALUES (?, ?, ?)
+      ON CONFLICT(tip_id) DO UPDATE SET state = excluded.state, ts = excluded.ts
+    `).run(id, state, Date.now());
+    return { ok: true, id, state };
   });
 
   /**

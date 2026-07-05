@@ -1,36 +1,13 @@
 import { useMemo, useState } from 'react';
 import { api, isNoProject } from '../api';
 import { useApi } from '../hooks';
-import { GraphCanvas, type CanvasEdge, type CanvasNode } from '../components/graph';
+import { GraphCanvas, spiralLayout, visualKind, type CanvasEdge, type CanvasNode } from '../components/graph';
 import { Empty, PageHead, Pill, nodeColor } from '../components/ui';
 import type { PageProps } from './types';
 
-/** Map server node kinds onto the canvas's visual families. */
-function visualKind(kind: string, filePath: string): string {
-  if (kind === 'route') return 'route';
-  if (/\.(test|spec)\.|__tests__\//.test(filePath)) return 'test';
-  return 'code';
-}
-
-/**
- * Deterministic golden-angle spiral layout, hubs (highest degree) in the
- * center. Server nodes carry no coordinates; a physics layout is later
- * screens' work — the spiral keeps this screen stable across reloads.
- */
+/** Spiral layout with hubs (highest degree) in the center. */
 function layout(nodes: { id: string; name: string; kind: string; filePath: string; degree: number }[]): CanvasNode[] {
-  const sorted = [...nodes].sort((a, b) => b.degree - a.degree);
-  return sorted.map((n, i) => {
-    const r = 46 * Math.sqrt(i + 0.6);
-    const th = i * 2.399963229728653;
-    return {
-      id: n.id,
-      label: n.name,
-      kind: visualKind(n.kind, n.filePath),
-      x: Math.round(r * Math.cos(th) * 2.2),
-      y: Math.round(r * Math.sin(th)),
-      file: n.filePath,
-    };
-  });
+  return spiralLayout([...nodes].sort((a, b) => b.degree - a.degree));
 }
 
 export function GraphPage({ project, query }: PageProps) {

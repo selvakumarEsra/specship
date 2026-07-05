@@ -155,6 +155,21 @@ export function Segmented({ options, value, onChange, size }: { options: Segment
   );
 }
 
+/** Range selector shared by the analytics screens (design bundle's ui.jsx). */
+export function RangeSelector({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <Segmented
+      options={[
+        { value: 'today', label: 'Today' }, { value: 'week', label: 'This week' },
+        { value: 'month', label: 'This month' }, { value: 'all', label: 'All time' },
+      ]}
+      value={value}
+      onChange={onChange}
+      size="sm"
+    />
+  );
+}
+
 /** Mini horizontal bar (for cost rows etc.). */
 export function Bar({ frac, color, height }: { frac: number; color?: string; height?: number }) {
   return (

@@ -426,6 +426,16 @@ CREATE TABLE IF NOT EXISTS claude_pricing (
     updated_at      INTEGER NOT NULL
 );
 
+-- Tip state (REQ-DESKTOP-020.A2): Apply / Dismiss on a dashboard tip must
+-- persist across reloads and server restarts. Tip ids are deterministic
+-- (rule + evidence key), so a dismissed pattern stays hidden when the tips
+-- engine re-mines it and an applied one stays annotated.
+CREATE TABLE IF NOT EXISTS claude_tip_state (
+    tip_id          TEXT PRIMARY KEY,
+    state           TEXT NOT NULL CHECK (state IN ('applied', 'dismissed')),
+    ts              INTEGER NOT NULL
+);
+
 -- Reflection engine (REFLECT-DOC): self-improvement proposals mined from the
 -- ingested claude_* transcript tables. Each row is one durable, human-gated
 -- proposal keyed by a stable content_hash so a re-mine of the same pattern
