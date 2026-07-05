@@ -3,7 +3,10 @@
    Dark-first (light theme below). Graph as hero. Geist + Geist Mono.
    ============================================================ */
 
-:root {
+/* [data-theme="dark"] is listed alongside :root so a scoped wrapper (the
+   design-system gallery renders both themes side by side) can re-assert the
+   dark tokens inside a light-themed app, not just inherit them. */
+:root, [data-theme="dark"] {
   color-scheme: dark;
   /* ---- Surfaces ---- */
   --bg-canvas: #0E1014;
@@ -133,6 +136,18 @@
   --shadow-panel: 0 1px 0 rgba(15,23,42,0.02) inset;
 }
 
+/* ============================================================
+   DENSITY — data-density="compact" on <html> tightens the shell
+   (REQ-DESKTOP-028.A1). Comfortable is the default; compact re-points
+   the same tokens so every consumer follows without per-component work.
+   ============================================================ */
+[data-density="compact"] {
+  --fs-title: 19px;
+  --status-h: 26px;
+  --sidebar-w: 204px;
+}
+[data-density="compact"] .card-pad { padding: 10px; }
+
 * { box-sizing: border-box; }
 
 html, body {
@@ -187,17 +202,20 @@ html, body {
 .btn svg { width: 14px; height: 14px; flex-shrink: 0; }
 /* Hover is guarded on :not(:disabled) so disabled controls never react to it
    (REQ-DESKTOP-013.A3); :active (pressed) rules come after hover so pressing
-   wins while hovering. */
+   wins while hovering. The .is-hover/.is-active companions share each rule so
+   the design-system gallery can render every state statically from the same
+   single source (REQ-DESKTOP-028.A4) — they are gallery-only, never applied
+   by app code. */
 .btn-primary { background: var(--accent-strong); color: #fff; }
-.btn-primary:hover:not(:disabled) { background: var(--accent); }
+.btn-primary.is-hover, .btn-primary:hover:not(:disabled) { background: var(--accent); }
 .btn-secondary { background: var(--bg-elevated); color: var(--text-primary); border-color: var(--border-subtle); }
-.btn-secondary:hover:not(:disabled) { background: var(--bg-elevated); border-color: var(--border-strong); }
-.btn-secondary:active:not(:disabled) { background: var(--bg-active); }
+.btn-secondary.is-hover, .btn-secondary:hover:not(:disabled) { background: var(--bg-elevated); border-color: var(--border-strong); }
+.btn-secondary.is-active, .btn-secondary:active:not(:disabled) { background: var(--bg-active); }
 .btn-ghost { background: transparent; color: var(--text-secondary); }
-.btn-ghost:hover:not(:disabled) { background: var(--bg-hover); color: var(--text-primary); }
-.btn-ghost:active:not(:disabled) { background: var(--bg-active); }
+.btn-ghost.is-hover, .btn-ghost:hover:not(:disabled) { background: var(--bg-hover); color: var(--text-primary); }
+.btn-ghost.is-active, .btn-ghost:active:not(:disabled) { background: var(--bg-active); }
 .btn-destructive { background: var(--error-soft); color: var(--error); border-color: rgba(242,85,90,0.3); }
-.btn-destructive:hover:not(:disabled) { background: rgba(242,85,90,0.22); }
+.btn-destructive.is-hover, .btn-destructive:hover:not(:disabled) { background: rgba(242,85,90,0.22); }
 .btn-sm { padding: 4px 9px; font-size: var(--fs-sm); }
 .btn-xs { padding: 2px 7px; font-size: var(--fs-xs); border-radius: 4px; }
 .btn:disabled { opacity: 0.4; cursor: not-allowed; }
