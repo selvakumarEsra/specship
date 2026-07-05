@@ -16,6 +16,7 @@ import { DesignSystemPage } from './pages/designsystem';
 import { DriftPage } from './pages/drift';
 import { GraphPage } from './pages/graph';
 import { HeatmapPage } from './pages/heatmap';
+import { MemoryPage } from './pages/memory';
 import { PlaceholderPage } from './pages/placeholder';
 import { RunsPage } from './pages/runs';
 import { SessionsPage } from './pages/sessions';
@@ -96,7 +97,7 @@ const SCREENS: Record<string, ComponentType<PageProps>> = {
   heatmap: HeatmapPage,
   costs: CostsPage,
   compare: ComparePage,
-  memory: () => <PlaceholderPage title="Memory" req="REQ-DESKTOP-029" />,
+  memory: MemoryPage,
   mcp: () => <PlaceholderPage title="MCP" req="REQ-DESKTOP-030" />,
   settings: () => <PlaceholderPage title="Settings" req="REQ-DESKTOP-032" />,
 };

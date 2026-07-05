@@ -522,6 +522,39 @@ export interface SpecshipImpactResponse {
   [key: string]: unknown;
 }
 
+// ---- Memory (packages/server/src/routes/memory.ts, REQ-DESKTOP-025) ----
+
+export type MemoryLevel = 'enterprise' | 'user' | 'project' | 'subdir' | 'import' | 'note';
+export type MemoryType = 'instruction' | 'note' | 'import';
+
+/** One memory source: a CLAUDE.md tier, an @path import, or a saved note. */
+export interface MemoryFile {
+  id: string;
+  level: MemoryLevel;
+  type: MemoryType;
+  name: string;
+  scope: string;
+  path: string;
+  tokens: number;
+  lines: number;
+  modified: string;
+  body: string;
+  readOnly?: boolean;
+  /** ids of the import files this instruction file pulls in via @path. */
+  imports?: string[];
+  session?: string;
+  tags?: string[];
+}
+
+/** GET /api/memory — files arrive in Claude Code's load order. */
+export interface MemoryResponse {
+  totalTokens: number;
+  instructionCount: number;
+  noteCount: number;
+  importCount: number;
+  files: MemoryFile[];
+}
+
 // ---- API surface ----
 
 export const api = {
@@ -584,6 +617,7 @@ export const api = {
   specshipImpact: (range = 'week') =>
     getJson<SpecshipImpactResponse>(`/api/claude/specship-impact?range=${range}`),
   ingestNow: () => postJson<{ ok: boolean }>('/api/claude/ingest'),
+  memory: (project?: string | null) => getJson<MemoryResponse>(q('/api/memory', project)),
 };
 
 /**
