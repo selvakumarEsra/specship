@@ -191,7 +191,7 @@ export function App() {
           refreshing={refreshing}
         />
         <TopBar onToggle={toggleCollapse} onOpenPalette={openPalette} />
-        <div key={route + (param ?? '')} style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+        <div key={route + (param ?? '')} data-screen={route} style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
           {route === 'tips'
             ? <TipsPage project={project} param={param} query={query} tips={tips} onSetTipState={setTipState} />
             : <Screen project={project} param={param} query={query} />}

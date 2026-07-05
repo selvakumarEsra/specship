@@ -1703,10 +1703,11 @@ program
   .option('--port <n>', 'HTTP port when --ui is set (default 4242)')
   .option('--host <h>', 'HTTP bind host when --ui is set (default 127.0.0.1)')
   .option('--ingest', 'Enable Claude Code JSONL transcript watcher (only when --ui is set)')
-  .option('--web-dir <path>', 'Path to a built Angular UI (index.html lives here); auto-detected by default')
+  .option('--web-dir <path>', 'Path to a built desktop SPA (index.html lives here); auto-detected by default when --no-ssr')
   .option('--no-web', 'Run --ui headless (API only, no SPA)')
+  .option('--no-ssr', 'Serve the built desktop SPA instead of the server-rendered dashboard (uses --web-dir, else the bundled ui/dist)')
   .option('--no-watch', 'Disable the file watcher (no auto-sync; useful on slow filesystems like WSL2 /mnt drives)')
-  .action(async (options: { path?: string; mcp?: boolean; ui?: boolean; port?: string; host?: string; ingest?: boolean; webDir?: string; web?: boolean; watch?: boolean }) => {
+  .action(async (options: { path?: string; mcp?: boolean; ui?: boolean; port?: string; host?: string; ingest?: boolean; webDir?: string; web?: boolean; ssr?: boolean; watch?: boolean }) => {
     const projectPath = options.path ? resolveProjectPath(options.path) : undefined;
 
     // Commander sets watch=false when --no-watch is passed. Route it through
@@ -1751,10 +1752,24 @@ program
         // sibling server/dist directory.
         const { createServer } = await loadServerPackage();
 
-        // The dashboard is the lean server-rendered UI (DASH-LEAN-DOC), served
-        // in-process by the server itself — no separate SPA build. `--no-web`
-        // still opts out to run API-only.
+        // The dashboard is the lean server-rendered UI (DASH-LEAN-DOC) by
+        // default, served in-process by the server itself. `--no-web` opts out
+        // to run API-only; `--no-ssr` swaps SSR for the built desktop SPA
+        // (REQ-DESKTOP-032, forward-compatible with 033 where the SPA becomes
+        // the default surface).
         const serveUi = options.web !== false;
+        const ssr = serveUi && options.ssr !== false;
+        // Resolve the SPA static dir:
+        //   - headless (--no-web): no SPA.
+        //   - SSR default: only an explicitly-passed --web-dir (the SSR page
+        //     routes still win; the SPA just backs assets/unknown GETs).
+        //   - --no-ssr: the built SPA — explicit --web-dir, else auto-detect
+        //     the bundled ui/dist (webDir === undefined triggers the probe).
+        const webDir = !serveUi
+          ? null
+          : ssr
+            ? (options.webDir ?? null)
+            : (options.webDir ?? undefined);
 
         // The JSONL ingest watcher now starts in-process inside createServer
         // when `ingest: true`. The server owns its lifecycle; CLI just toggles.
@@ -1763,8 +1778,8 @@ program
           host,
           port,
           ingest: options.ingest !== false,
-          webDir: null,
-          ssr: serveUi,
+          webDir,
+          ssr,
           verbose: false,
         });
         console.error(chalk.bold('\nSpecShip Desktop server\n'));
@@ -1776,7 +1791,7 @@ program
           console.error(chalk.dim('  analytics endpoints will return 409 until one is selected'));
         }
         if (serveUi) {
-          console.error(chalk.green(getGlyphs().ok) + ` Dashboard: ${handle.url}/  (server-rendered)`);
+          console.error(chalk.green(getGlyphs().ok) + ` Dashboard: ${handle.url}/  (${ssr ? 'server-rendered' : 'SPA'})`);
         }
         if (options.ingest !== false) {
           console.error(chalk.dim('  Claude Code transcript ingest watcher active'));
