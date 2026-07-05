@@ -177,6 +177,7 @@ export async function registerGraphRoutes(app: FastifyInstance): Promise<void> {
    *   - linkHealth: spec-link counts per state (verified/drifted/broken/orphaned/…)
    *   - edgeKinds:  edge counts grouped into calls / implements-documents / tests
    *   - hubs:       the most-connected nodes (by total degree), for the "Most connected" list
+   *   - anchored:   nodes that are spec_links targets (by degree), for the "Anchored" list
    */
   app.get('/api/graph/health', async (req: FastifyRequest<{ Querystring: ProjectQuery }>, reply) => {
     const cg = await resolveCg(app, req, reply); if (!cg) return;
@@ -228,7 +229,28 @@ export async function registerGraphRoutes(app: FastifyInstance): Promise<void> {
       ORDER BY deg.degree DESC
     `).all() as Array<{ id: string; name: string; kind: string; filePath: string; degree: number }>;
 
-    return { linkHealth, edgeKinds: edgeKindMap, hubs };
+    // Anchored nodes — code that specs point at (resolved spec_links targets),
+    // most-connected first. Degree is LEFT-joined: an anchored leaf with no
+    // edges still shows up, at degree 0.
+    const anchored = db.prepare(`
+      SELECT n.id, n.name, n.kind, n.file_path as filePath, COALESCE(deg.degree, 0) as degree
+      FROM (
+        SELECT DISTINCT resolved_node_id AS node FROM spec_links
+        WHERE resolved_node_id IS NOT NULL
+      ) sl
+      JOIN nodes n ON n.id = sl.node
+      LEFT JOIN (
+        SELECT node, COUNT(*) as degree FROM (
+          SELECT source as node FROM edges
+          UNION ALL
+          SELECT target as node FROM edges
+        ) GROUP BY node
+      ) deg ON deg.node = n.id
+      ORDER BY degree DESC
+      LIMIT 8
+    `).all() as Array<{ id: string; name: string; kind: string; filePath: string; degree: number }>;
+
+    return { linkHealth, edgeKinds: edgeKindMap, hubs, anchored };
   });
 
   /**

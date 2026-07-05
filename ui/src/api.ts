@@ -85,6 +85,48 @@ export interface GraphFullResponse {
   shown: number;
 }
 
+/** A node as it appears inside /api/graph/node responses (no degree). */
+export interface NodeRef {
+  id: string;
+  name: string;
+  kind: string;
+  filePath: string;
+  startLine?: number;
+  endLine?: number;
+  signature?: string;
+  docstring?: string;
+  [key: string]: unknown;
+}
+
+/** One spec_links row attached to a node (src/types.ts SpecLink, camelCased). */
+export interface LinkedSpec {
+  specId: string;
+  kind: string;
+  state: string;
+  targetFilePath?: string;
+  targetQualifiedName?: string;
+  [key: string]: unknown;
+}
+
+/** One match from GET /api/graph/node — node + its caller/callee/spec context. */
+export interface GraphNodeDetail extends NodeRef {
+  callers: NodeRef[];
+  callees: NodeRef[];
+  linkedSpecs: LinkedSpec[];
+}
+
+export interface GraphNodeResponse {
+  matches: GraphNodeDetail[];
+}
+
+/** GET /api/graph/health — the Graph overview rail's data. */
+export interface GraphHealthResponse {
+  linkHealth: Record<string, number>;
+  edgeKinds: Record<string, number>;
+  hubs: GraphNode[];
+  anchored: GraphNode[];
+}
+
 export interface SpecDoc {
   id: string;
   title: string;
@@ -278,6 +320,10 @@ export const api = {
   refresh: (project?: string | null) => postJson<StatusResponse>(q('/api/refresh', project)),
   graphFull: (project?: string | null, limit = 250) =>
     getJson<GraphFullResponse>(q(`/api/graph/full?limit=${limit}`, project)),
+  graphNode: (id: string, project?: string | null) =>
+    getJson<GraphNodeResponse>(q(`/api/graph/node?id=${encodeURIComponent(id)}`, project)),
+  graphHealth: (project?: string | null) =>
+    getJson<GraphHealthResponse>(q('/api/graph/health', project)),
   specs: (project?: string | null) => getJson<SpecsResponse>(q('/api/specs', project)),
   drift: (project?: string | null) => getJson<DriftResponse>(q('/api/drift', project)),
   runs: (project?: string | null) => getJson<RunsResponse>(q('/api/workflows/runs', project)),
