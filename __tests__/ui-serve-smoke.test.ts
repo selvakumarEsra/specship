@@ -69,11 +69,13 @@ describe.skipIf(!built)('serving the built ui/ SPA (REQ-DESKTOP-017.A1)', () => 
     expect(res.headers['content-type']).not.toContain('text/html');
   });
 
-  it('falls back to index.html for deep links', async () => {
-    const res = await handle.app.inject({ method: 'GET', url: '/specs/REQ-DESKTOP-017' });
-    expect(res.statusCode).toBe(200);
-    expect(res.headers['content-type']).toContain('text/html');
-    expect(res.body).toContain('<div id="root">');
+  it('falls back to index.html for deep links (REQ-DESKTOP-018.A2)', async () => {
+    for (const url of ['/specs/REQ-DESKTOP-017', '/settings']) {
+      const res = await handle.app.inject({ method: 'GET', url });
+      expect(res.statusCode, url).toBe(200);
+      expect(res.headers['content-type'], url).toContain('text/html');
+      expect(res.body, url).toContain('<div id="root">');
+    }
   });
 
   it('keeps /api/* out of the SPA fallback', async () => {

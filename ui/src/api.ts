@@ -131,6 +131,8 @@ export interface ProjectEntry {
   initialized: boolean;
   sessionCount: number;
   lastModifiedMs: number;
+  /** Drifted/broken/orphaned spec-link count; null/absent = unknown. */
+  driftCount?: number | null;
 }
 
 export interface ProjectsResponse {

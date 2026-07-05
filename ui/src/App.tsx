@@ -2,12 +2,13 @@
  * App shell — sidebar, status strip, top bar, routed screens. Ported from the
  * design bundle's app.jsx onto history-API routing and live /api data.
  */
-import { useEffect, useState, type ComponentType, type MouseEvent as ReactMouseEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type ComponentType, type MouseEvent as ReactMouseEvent } from 'react';
 import { api, isNoProject, type ProjectEntry, type StatusResponse } from './api';
+import { CommandPalette, type PaletteEntry } from './components/command-palette';
 import { Icon, LogoMark } from './components/icons';
 import { useApi } from './hooks';
 import { go, usePathRoute } from './router';
-import { applyTheme, effectiveTheme, getThemePref } from './theme';
+import { applyTheme, getThemePref, type ThemePref } from './theme';
 import { DashboardPage } from './pages/dashboard';
 import { DesignSystemPage } from './pages/designsystem';
 import { DriftPage } from './pages/drift';
@@ -17,10 +18,19 @@ import { RunsPage } from './pages/runs';
 import { SpecsPage } from './pages/specs';
 import type { PageProps } from './pages/types';
 
+/** Live counts the nav badges derive from (design bundle's app.jsx NAV). */
+interface BadgeCounts {
+  drift: number;
+  runs: number;
+  tips: number;
+}
+
 interface NavEntry {
   id: string;
   label: string;
   icon: string;
+  badge?: (c: BadgeCounts) => number;
+  badgeKind?: 'warn' | 'error';
 }
 
 const NAV: Array<{ group: string; items: NavEntry[] }> = [
@@ -30,8 +40,8 @@ const NAV: Array<{ group: string; items: NavEntry[] }> = [
       { id: 'dashboard', label: 'Dashboard', icon: 'dashboard' },
       { id: 'graph', label: 'Graph', icon: 'graph' },
       { id: 'specs', label: 'Specs', icon: 'book' },
-      { id: 'drift', label: 'Drift queue', icon: 'drift' },
-      { id: 'runs', label: 'Runs', icon: 'play' },
+      { id: 'drift', label: 'Drift queue', icon: 'drift', badge: (c) => c.drift },
+      { id: 'runs', label: 'Runs', icon: 'play', badge: (c) => c.runs, badgeKind: 'warn' },
     ],
   },
   {
@@ -43,9 +53,16 @@ const NAV: Array<{ group: string; items: NavEntry[] }> = [
       { id: 'compare', label: 'Compare projects', icon: 'compare' },
       { id: 'memory', label: 'Memory', icon: 'memory' },
       { id: 'mcp', label: 'MCP', icon: 'plug' },
-      { id: 'tips', label: 'Tips', icon: 'tips' },
+      { id: 'tips', label: 'Tips', icon: 'tips', badge: (c) => c.tips, badgeKind: 'error' },
     ],
   },
+];
+
+/** Pages the ⌘K palette jumps to — NAV plus the pinned sidebar items. */
+const PALETTE_PAGES: PaletteEntry[] = [
+  ...NAV.flatMap((g) => g.items.map(({ id, label, icon }) => ({ id, label, icon }))),
+  { id: 'designsystem', label: 'Design system', icon: 'layers' },
+  { id: 'settings', label: 'Settings', icon: 'settings' },
 ];
 
 const SCREENS: Record<string, ComponentType<PageProps>> = {
@@ -78,9 +95,32 @@ export function App() {
     try { return localStorage.getItem(PROJECT_KEY); } catch { return null; }
   });
   const [refreshing, setRefreshing] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
 
   const status = useApi(() => api.status(project), [project, route]);
   const projects = useApi(() => api.projects(), []);
+  const runs = useApi(() => api.runs(project), [project, route]);
+
+  // ⌘K / Ctrl-K toggles the palette from anywhere in the app.
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setPaletteOpen((o) => !o);
+      }
+    };
+    window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
+  }, []);
+
+  const counts: BadgeCounts = {
+    drift: status.data?.drift ?? 0,
+    runs: runs.data?.runs.filter((r) => r.status === 'running').length ?? 0,
+    // TODO(REQ-DESKTOP-024): live count once the tips API exists; 0 hides the badge.
+    tips: 0,
+  };
+
+  const openPalette = useCallback(() => setPaletteOpen(true), []);
 
   const toggleCollapse = () =>
     setCollapsed((c) => {
@@ -107,7 +147,7 @@ export function App() {
 
   return (
     <div style={{ display: 'flex', height: '100%', position: 'relative' }}>
-      <Sidebar route={route} collapsed={collapsed} onToggleCollapse={toggleCollapse} />
+      <Sidebar route={route} collapsed={collapsed} counts={counts} onToggleCollapse={toggleCollapse} />
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         <StatusStrip
           status={status.data}
@@ -118,16 +158,17 @@ export function App() {
           onRefresh={refresh}
           refreshing={refreshing}
         />
-        <TopBar onToggle={toggleCollapse} />
+        <TopBar onToggle={toggleCollapse} onOpenPalette={openPalette} />
         <div key={route + (param ?? '')} style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
           <Screen project={project} param={param} query={query} />
         </div>
       </div>
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} pages={PALETTE_PAGES} />
     </div>
   );
 }
 
-function Sidebar({ route, collapsed, onToggleCollapse }: { route: string; collapsed: boolean; onToggleCollapse: () => void }) {
+function Sidebar({ route, collapsed, counts, onToggleCollapse }: { route: string; collapsed: boolean; counts: BadgeCounts; onToggleCollapse: () => void }) {
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
     try { return (JSON.parse(localStorage.getItem(NAV_GROUPS_KEY) || 'null') as Record<string, boolean>) || {}; } catch { return {}; }
   });
@@ -165,7 +206,7 @@ function Sidebar({ route, collapsed, onToggleCollapse }: { route: string; collap
                 <Icon name={isOpen(g.group) ? 'chevronDown' : 'chevronRight'} size={12} style={{ color: 'var(--text-muted)' }} />
               </button>
             )}
-            {(collapsed || isOpen(g.group)) && g.items.map((it) => <NavItem key={it.id} item={it} active={route === it.id} collapsed={collapsed} />)}
+            {(collapsed || isOpen(g.group)) && g.items.map((it) => <NavItem key={it.id} item={it} active={route === it.id} collapsed={collapsed} counts={counts} />)}
           </div>
         ))}
       </div>
@@ -177,12 +218,14 @@ function Sidebar({ route, collapsed, onToggleCollapse }: { route: string; collap
   );
 }
 
-function NavItem({ item, active, collapsed }: { item: NavEntry; active: boolean; collapsed: boolean }) {
+function NavItem({ item, active, collapsed, counts }: { item: NavEntry; active: boolean; collapsed: boolean; counts?: BadgeCounts }) {
   const onClick = (e: ReactMouseEvent<HTMLAnchorElement>) => {
     if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return; // keep open-in-new-tab
     e.preventDefault();
     go(item.id);
   };
+  const badge = item.badge && counts ? item.badge(counts) : 0;
+  const bk = item.badgeKind;
   return (
     <a
       href={'/' + item.id}
@@ -202,6 +245,21 @@ function NavItem({ item, active, collapsed }: { item: NavEntry; active: boolean;
       {active && <span style={{ position: 'absolute', left: 0, top: 7, bottom: 7, width: 2.5, borderRadius: 2, background: 'var(--accent)' }} />}
       <Icon name={item.icon} size={16} style={{ color: active ? 'var(--accent)' : 'inherit', flexShrink: 0 }} />
       {!collapsed && <span className="grow" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.label}</span>}
+      {!collapsed && badge > 0 && (
+        <span
+          className="pill tabular"
+          style={{
+            fontSize: 10, fontWeight: 700, padding: '1px 6px', minWidth: 18, justifyContent: 'center',
+            color: bk === 'error' ? 'var(--error)' : bk === 'warn' ? 'var(--warn)' : 'var(--text-secondary)',
+            background: bk === 'error' ? 'var(--error-soft)' : bk === 'warn' ? 'var(--warn-soft)' : 'rgba(255,255,255,0.06)',
+          }}
+        >
+          {badge}
+        </span>
+      )}
+      {collapsed && badge > 0 && (
+        <span style={{ position: 'absolute', top: 5, right: 9, width: 6, height: 6, borderRadius: '50%', background: bk === 'error' ? 'var(--error)' : 'var(--warn)' }} />
+      )}
     </a>
   );
 }
@@ -210,6 +268,18 @@ function ProjectSwitcher({ projects, project, projectPath, onPick }: {
   projects: ProjectEntry[]; project: string | null; projectPath: string | null; onPick: (slug: string | null) => void;
 }) {
   const [open, setOpen] = useState(false);
+  // The status strip clips overflow, so an absolutely-positioned dropdown
+  // inside it would be invisible — anchor a fixed-position dropdown to the
+  // trigger button instead (fixed elements escape ancestor overflow clips).
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const [anchor, setAnchor] = useState<{ top: number; left: number } | null>(null);
+  const toggle = () => {
+    if (!open) {
+      const r = btnRef.current?.getBoundingClientRect();
+      setAnchor(r ? { top: r.bottom + 5, left: r.left } : null);
+    }
+    setOpen((o) => !o);
+  };
   useEffect(() => {
     if (!open) return;
     const h = (e: MouseEvent) => { if (!(e.target as HTMLElement).closest('[data-projsw]')) setOpen(false); };
@@ -222,7 +292,8 @@ function ProjectSwitcher({ projects, project, projectPath, onPick }: {
   return (
     <div data-projsw="1" style={{ position: 'relative', flexShrink: 0 }}>
       <button
-        onClick={() => setOpen((o) => !o)}
+        ref={btnRef}
+        onClick={toggle}
         className="row gap-6"
         title="Switch project"
         style={{ height: 24, padding: '0 8px', borderRadius: 6, cursor: 'pointer', background: open ? 'var(--bg-hover)' : 'transparent', border: '1px solid ' + (open ? 'var(--border-strong)' : 'transparent'), transition: 'background 100ms, border-color 100ms' }}
@@ -232,7 +303,7 @@ function ProjectSwitcher({ projects, project, projectPath, onPick }: {
         <Icon name="chevronDown" size={12} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
       </button>
       {open && (
-        <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 5, minWidth: 264, background: 'var(--bg-elevated)', border: '1px solid var(--border-strong)', borderRadius: 9, boxShadow: 'var(--shadow-pop)', padding: 5, zIndex: 60 }}>
+        <div style={{ position: 'fixed', top: anchor?.top ?? 34, left: anchor?.left ?? 8, minWidth: 264, background: 'var(--bg-elevated)', border: '1px solid var(--border-strong)', borderRadius: 9, boxShadow: 'var(--shadow-pop)', padding: 5, zIndex: 60 }}>
           <div className="eyebrow" style={{ padding: '5px 8px 6px' }}>Indexed projects</div>
           <button className="row gap-8" onClick={() => { onPick(null); setOpen(false); }} style={switcherRow(current === '')}>
             <Icon name="folder" size={13} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
@@ -245,6 +316,9 @@ function ProjectSwitcher({ projects, project, projectPath, onPick }: {
               <button key={p.slug} className="row gap-8" onClick={() => { onPick(p.slug); setOpen(false); }} style={switcherRow(active)}>
                 <Icon name="folder" size={13} style={{ color: active ? 'var(--accent)' : 'var(--text-muted)', flexShrink: 0 }} />
                 <span className="grow mono" style={{ textAlign: 'left', fontSize: 11.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.path}</span>
+                {(p.driftCount ?? 0) > 0 && (
+                  <span className="pill tabular" style={{ fontSize: 9.5, color: 'var(--warn)', background: 'var(--warn-soft)', flexShrink: 0 }}>{p.driftCount} drift</span>
+                )}
                 {active && <Icon name="check" size={13} style={{ color: 'var(--accent)', flexShrink: 0 }} />}
               </button>
             );
@@ -289,29 +363,45 @@ function StatusStrip({ status, projectless, projects, project, onPick, onRefresh
   );
 }
 
-function TopBar({ onToggle }: { onToggle: () => void }) {
+const KBD_STYLE: React.CSSProperties = { fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', background: 'var(--bg-canvas)', border: '1px solid var(--border-subtle)', borderRadius: 4, padding: '2px 6px' };
+
+function TopBar({ onToggle, onOpenPalette }: { onToggle: () => void; onOpenPalette: () => void }) {
   return (
     <div style={{ height: 44, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10, padding: '0 14px', borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-canvas)' }}>
       <button className="btn btn-ghost" onClick={onToggle} style={{ padding: 6 }} title="Toggle sidebar">
         <Icon name="menu" size={16} />
       </button>
+      <button
+        onClick={onOpenPalette}
+        className="row gap-8"
+        style={{ flex: 1, maxWidth: 380, height: 30, padding: '0 11px', background: 'var(--bg-panel)', border: '1px solid var(--border-subtle)', borderRadius: 8, cursor: 'text', color: 'var(--text-muted)', fontSize: 12.5 }}
+      >
+        <Icon name="search" size={14} />
+        <span className="grow" style={{ textAlign: 'left' }}>Search or jump to…</span>
+        <kbd style={KBD_STYLE}>⌘K</kbd>
+      </button>
       <div className="grow" />
       <ThemeToggle />
+      <button className="btn btn-ghost btn-sm" onClick={onOpenPalette} title="Command palette">
+        <Icon name="command" size={14} />
+      </button>
     </div>
   );
 }
 
+/** Tri-state theme cycle: dark → light → system (system tracks the OS live). */
 function ThemeToggle() {
-  const [pref, setPref] = useState(getThemePref());
-  const eff = effectiveTheme(pref);
-  const next = eff === 'dark' ? 'light' : 'dark';
+  const [pref, setPref] = useState<ThemePref>(getThemePref());
+  const NEXT: Record<ThemePref, ThemePref> = { dark: 'light', light: 'system', system: 'dark' };
+  const ICON: Record<ThemePref, string> = { dark: 'moon', light: 'sun', system: 'monitor' };
+  const next = NEXT[pref];
   return (
     <button
       className="btn btn-ghost btn-sm"
-      title={'Switch to ' + next + ' mode'}
+      title={'Theme: ' + pref + ' — switch to ' + next}
       onClick={() => { applyTheme(next); setPref(next); }}
     >
-      <Icon name={eff === 'dark' ? 'sun' : 'moon'} size={15} />
+      <Icon name={ICON[pref]} size={15} />
     </button>
   );
 }
