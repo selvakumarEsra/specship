@@ -1,19 +1,30 @@
 /**
- * Spec detail read view — TSX port of the design bundle's SpecRead
- * (specs/specship-desktop/screens-specs.jsx; pixel authority snapshot.html).
+ * Spec detail read view + inline structured editor — TSX port of the design
+ * bundle's SpecRead/SpecEditor (specs/specship-desktop/screens-specs.jsx;
+ * pixel authority snapshot.html).
  * Covers the read-view contract of REQ-DESKTOP-001…005 and 012:
  *   001 section order + copy-id + state-accent hero + neutral placeholders,
  *   002 escaped RFC-2119 keyword/code/bold decoration,
  *   003 criterion marks + segment bar + N/M-met rollup,
  *   004 linked-code rows + orphaned alarm card,
- *   005 workflow-gated actions (editor arrives with REQ-DESKTOP-006),
+ *   005 workflow-gated actions + the enabled Edit affordance,
  *   012 guidance empty / skeleton / error-with-retry / unknown-state safety.
+ * And the editor contract of REQ-DESKTOP-006…011:
+ *   006 in-place read/edit swap, draft scoped to the selected spec,
+ *   007 dirty-by-value tracking gating Save,
+ *   008 system-managed status (read-only, re-queued as Drafted on save),
+ *   009 structured fields + Write/Preview reusing renderProse + keyword legend,
+ *   010 criteria add/edit/remove with positional A-renumbering,
+ *   011 section-scoped serialization (ui/src/spec-source.ts) through the
+ *       existing spec write API, with keep-draft failure + sync-lag hints.
  */
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { api, isNoProject, type LinkedSpec, type SpecDetailResponse, type SpecDoc } from '../api';
 import { useApi } from '../hooks';
 import { go } from '../router';
+import { normalizeSectionDraft, parseRequirementSection, serializeRequirementSection, type ParsedSection } from '../spec-source';
 import { Icon } from './icons';
-import { CopyBtn, Empty, Pill, STATE, StatePill, timeAgo } from './ui';
+import { CopyBtn, Empty, Pill, Segmented, STATE, StatePill, timeAgo } from './ui';
 
 /**
  * Inline markdown + RFC-2119 keyword highlighting (REQ-DESKTOP-002).
@@ -104,10 +115,40 @@ function NoSelection() {
   );
 }
 
+// @implements REQ-DESKTOP-006
 function SpecDetailLoaded({ id, project }: { id: string; project: string | null }) {
   const detail = useApi(() => api.spec(id, project), [id, project]);
+  const [editing, setEditing] = useState(false);
+  const [syncNotice, setSyncNotice] = useState<string | null>(null);
 
-  if (detail.data) return <SpecRead data={detail.data} />;
+  // The working copy is scoped to the spec being edited: a tree click while
+  // editing discards the draft and renders the new selection's read view
+  // (006.A3). The editor itself owns the draft, so unmounting drops it.
+  useEffect(() => { setEditing(false); setSyncNotice(null); }, [id]);
+
+  if (detail.data) {
+    if (editing) {
+      return (
+        <SpecEditor
+          data={detail.data}
+          project={project}
+          onCancel={() => setEditing(false)}
+          onSaved={(syncError) => {
+            setEditing(false);
+            setSyncNotice(syncError);
+            detail.reload();
+          }}
+        />
+      );
+    }
+    return (
+      <SpecRead
+        data={detail.data}
+        notice={syncNotice}
+        onEdit={() => { setSyncNotice(null); setEditing(true); }}
+      />
+    );
+  }
   if (detail.loading) return <DetailSkeleton />;
   if (isNoProject(detail.error)) {
     return <Empty icon="folder" title="No project selected" body="Pick an indexed project from the switcher in the status strip." />;
@@ -148,9 +189,21 @@ function DetailSkeleton() {
 // @implements REQ-DESKTOP-003
 // @implements REQ-DESKTOP-004
 // @implements REQ-DESKTOP-005
-function SpecRead({ data }: { data: SpecDetailResponse }) {
+function SpecRead({ data, notice, onEdit }: {
+  data: SpecDetailResponse;
+  notice?: string | null;
+  onEdit?: () => void;
+}) {
   const { spec, parent, children, links, childLinks } = data;
   const docPath = parent?.sourcePath ?? spec.sourcePath ?? '';
+  // Editable only when the raw source is available AND this requirement's
+  // marker + heading section can be located in it (REQ-DESKTOP-005/006).
+  const editable = data.source != null && parseRequirementSection(data.source, spec.id) != null;
+  const editTitle = editable
+    ? 'Edit this requirement in place'
+    : data.source == null
+      ? 'Source file not available'
+      : 'Couldn’t locate this requirement’s section in the source file';
   const criteria = children.filter((c) => c.kind === 'acceptance');
   const critState = (c: SpecDoc) => rollupState(childLinks[c.id], 'pending');
   const state = rollupState(links, 'drafted');
@@ -181,6 +234,14 @@ function SpecRead({ data }: { data: SpecDetailResponse }) {
   return (
     <div className="scroll-y" style={{ flex: 1, padding: '28px 32px 56px' }}>
       <div className="sp-doc">
+
+        {/* ---- post-save sync-lag hint (REQ-DESKTOP-011.A3) ---- */}
+        {notice != null && (
+          <div className="card card-pad row gap-8" style={{ color: 'var(--warn)', borderColor: 'var(--warn)', marginBottom: 20, fontSize: 12.5 }}>
+            <Icon name="drift" size={14} style={{ flexShrink: 0 }} />
+            <span>Saved, but not yet indexed — re-sync failed ({notice}). The file is on disk; the next sync picks it up.</span>
+          </div>
+        )}
 
         {/* ---- breadcrumb ---- */}
         <div className="sp-breadcrumb">
@@ -298,12 +359,398 @@ function SpecRead({ data }: { data: SpecDetailResponse }) {
           <button className="btn btn-secondary btn-sm" disabled title="Run automatically by the verification workflow">
             <Icon name="check" size={13} />Verify
           </button>
-          <button className="btn btn-secondary btn-sm" disabled title="Read-only for now — the inline editor lands with REQ-DESKTOP-006">
+          <button className="btn btn-secondary btn-sm" disabled={!editable} title={editTitle} onClick={editable ? onEdit : undefined}>
             <Icon name="reveal" size={13} />Edit spec
           </button>
           <button className="btn btn-secondary btn-sm" onClick={() => go('graph', { query: { focus: 'spec:' + spec.id } })}>
             <Icon name="graph" size={13} />Show in graph
           </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// SPEC EDITOR (REQ-DESKTOP-006…011)
+// ============================================================
+
+const CRIT_STATES = ['pending', 'implementing', 'implemented', 'verified', 'drifted', 'broken'];
+const PRIORITIES = ['P0', 'P1', 'P2', 'P3'];
+const KIND_OPTIONS = ['requirement', 'constraint', 'guideline', 'invariant', 'non-functional'];
+
+/** The editor's working copy. Persisted fields are title/statement/criteria
+ * text — the rest render from available data but the spec format carries no
+ * per-requirement slot for them yet (see the field hints). */
+interface EditorDraft {
+  title: string;
+  priority: string;
+  kind: string;
+  owner: string;
+  statement: string;
+  rationale: string;
+  criteria: Array<{ id: string; state: string; text: string }>;
+}
+
+function seedDraft(data: SpecDetailResponse, section: ParsedSection): EditorDraft {
+  const { spec, childLinks } = data;
+  const rationale =
+    typeof spec.metadata?.rationale === 'string' ? spec.metadata.rationale
+    : typeof spec.rationale === 'string' ? spec.rationale
+    : '';
+  return {
+    title: section.title,
+    priority: spec.priority ?? '',
+    kind: spec.kind ?? 'requirement',
+    owner: spec.owner ?? '',
+    statement: section.statement,
+    rationale,
+    criteria: section.criteria.map((c) => ({
+      id: c.id,
+      state: rollupState(childLinks[c.id], 'pending'),
+      text: c.text,
+    })),
+  };
+}
+
+const EMPTY_DRAFT: EditorDraft = {
+  title: '', priority: '', kind: 'requirement', owner: '', statement: '', rationale: '', criteria: [],
+};
+
+function Field({ label, hint, children }: { label: string; hint?: ReactNode; children: ReactNode }) {
+  return (
+    <div style={{ marginBottom: 22 }}>
+      <label className="sp-fl">{label}</label>
+      {children}
+      {hint && <div className="muted" style={{ fontSize: 11, marginTop: 6 }}>{hint}</div>}
+    </div>
+  );
+}
+
+function PlainSelect({ value, onChange, options, label }: {
+  value: string; onChange: (v: string) => void; options: string[]; label: string;
+}) {
+  const opts = options.includes(value) ? options : [value, ...options];
+  return (
+    <select
+      className="input sp-select"
+      aria-label={label}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      style={{ width: '100%', textTransform: 'capitalize' }}
+    >
+      {opts.map((s) => <option key={s} value={s}>{s}</option>)}
+    </select>
+  );
+}
+
+/** Dot-coded state select for criterion rows (REQ-DESKTOP-010.A3). */
+function StateSelect({ value, onChange, options, width, label }: {
+  value: string; onChange: (v: string) => void; options: string[]; width?: number; label: string;
+}) {
+  const c = STATE[value] ?? STATE.info!;
+  return (
+    <div className="row" style={{ position: 'relative', width: width ?? 'auto', flexShrink: 0 }}>
+      <span className="pill-dot" data-testid="crit-state-dot" style={{ background: c.color, position: 'absolute', left: 11, pointerEvents: 'none', zIndex: 1 }} />
+      <select
+        className="input sp-select"
+        aria-label={label}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        style={{ width: '100%', paddingLeft: 26, textTransform: 'capitalize' }}
+      >
+        {options.map((s) => <option key={s} value={s}>{STATE[s]?.label ?? s}</option>)}
+      </select>
+    </div>
+  );
+}
+
+/**
+ * Read-only status field: no user-operable control, visibly locked. Saving
+ * re-enters the spec into the lifecycle at Drafted, so a non-drafted spec
+ * shows the current-state → drafted transition.
+ */
+// @implements REQ-DESKTOP-008
+function AutoStatus({ state }: { state: string }) {
+  return (
+    <div className="sp-status-auto">
+      {state === 'drafted' ? (
+        <>
+          <StatePill state="drafted" />
+          <span className="muted" style={{ fontSize: 12 }}>queued for implementation</span>
+        </>
+      ) : (
+        <>
+          <StatePill state={state} />
+          <Icon name="arrowRight" size={13} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+          <StatePill state="drafted" />
+        </>
+      )}
+      <span className="grow" />
+      <Icon name="lock" size={12} style={{ color: 'var(--text-faint)', flexShrink: 0 }} />
+    </div>
+  );
+}
+
+/** Per-row criteria editor: state dot-picker, text, remove; positional
+ * A-numbering renumbers on add/delete (REQ-DESKTOP-010). */
+// @implements REQ-DESKTOP-010
+function CriteriaEditor({ criteria, onChange }: {
+  criteria: EditorDraft['criteria'];
+  onChange: (next: EditorDraft['criteria']) => void;
+}) {
+  const setCrit = (i: number, patch: Partial<{ state: string; text: string }>) =>
+    onChange(criteria.map((c, j) => (j === i ? { ...c, ...patch } : c)));
+  return (
+    <>
+      <div className="row" style={{ marginBottom: 10, gap: 10 }}>
+        <span className="eyebrow">Acceptance criteria</span>
+        <span style={{ flex: 1, height: 1, background: 'var(--border-subtle)' }} />
+        <span className="mono tabular muted" style={{ fontSize: 11.5 }}>{criteria.length + ' total'}</span>
+      </div>
+      <div className="card" style={{ overflow: 'hidden', marginBottom: 12 }}>
+        {criteria.length === 0 ? (
+          <div className="muted" style={{ fontSize: 12.5, textAlign: 'center', padding: '18px 14px' }}>
+            No criteria yet — add one below.
+          </div>
+        ) : (
+          criteria.map((c, i) => (
+            <div key={i} className="sp-crit-edit">
+              <span className="sp-crit-grip"><Icon name="grip" size={14} /></span>
+              <span className="sp-crit-num">{'A' + (i + 1)}</span>
+              <StateSelect
+                value={c.state}
+                onChange={(v) => setCrit(i, { state: v })}
+                options={CRIT_STATES}
+                width={156}
+                label={'Criterion A' + (i + 1) + ' state'}
+              />
+              <input
+                className="input grow"
+                style={{ fontSize: 13 }}
+                value={c.text}
+                aria-label={'Criterion A' + (i + 1) + ' text'}
+                placeholder="Observable, testable condition…"
+                onChange={(e) => setCrit(i, { text: e.target.value })}
+              />
+              <button className="sp-icon-btn" title="Remove criterion" onClick={() => onChange(criteria.filter((_, j) => j !== i))}>
+                <Icon name="trash" size={14} />
+              </button>
+            </div>
+          ))
+        )}
+      </div>
+      <button
+        className="btn btn-secondary btn-sm"
+        onClick={() => onChange([...criteria, { id: '', state: 'pending', text: '' }])}
+      >
+        <Icon name="plus" size={13} />Add criterion
+      </button>
+    </>
+  );
+}
+
+/**
+ * Inline structured editor. The draft seeds once from the fetched raw source
+ * (no extra network round-trip — REQ-DESKTOP-016.A2) and lives only in this
+ * component's state: Cancel or a tree click unmounts it and the draft is
+ * gone; re-entering Edit reseeds from the persisted values (006.A2–A4).
+ * Dirtiness is by value against the open-time snapshot (007).
+ */
+// @implements REQ-DESKTOP-006
+// @implements REQ-DESKTOP-007
+// @implements REQ-DESKTOP-009
+// @implements REQ-DESKTOP-011
+function SpecEditor({ data, project, onCancel, onSaved }: {
+  data: SpecDetailResponse;
+  project: string | null;
+  onCancel: () => void;
+  onSaved: (syncError: string | null) => void;
+}) {
+  const { spec } = data;
+  const docPath = data.parent?.sourcePath ?? spec.sourcePath ?? '';
+  const section = useMemo(
+    () => parseRequirementSection(data.source ?? '', spec.id),
+    [data.source, spec.id],
+  );
+
+  const [d, setD] = useState<EditorDraft>(() => (section ? seedDraft(data, section) : EMPTY_DRAFT));
+  const snapshot = useRef(JSON.stringify(d));
+  const dirty = JSON.stringify(d) !== snapshot.current;
+  const [tab, setTab] = useState('write');
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const set = (patch: Partial<EditorDraft>) => setD((p) => ({ ...p, ...patch }));
+
+  const currentState = rollupState(data.links, 'drafted');
+  const accent = (STATE[currentState] ?? STATE.info!).color;
+
+  // Belt-and-braces: SpecRead only enables Edit when the section parses.
+  if (!section) {
+    return <Empty icon="drift" title="Can’t edit this spec" body="Its requirement section couldn’t be located in the source file." />;
+  }
+
+  const save = async () => {
+    if (!dirty || saving) return;
+    // Normalize at save time only (REQ-DESKTOP-011.A4 / 010.A4): trimmed
+    // fields, empty criteria dropped, contiguous A-renumbering.
+    const norm = normalizeSectionDraft({ title: d.title, statement: d.statement, criteria: d.criteria });
+    const content = serializeRequirementSection(data.source ?? '', spec.id, norm);
+    if (content === null) {
+      setSaveError('Could not locate this requirement’s section in the source file.');
+      return;
+    }
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const res = await api.specSave(spec.id, content, project);
+      onSaved(res.syncError ?? null);
+    } catch (e) {
+      // A rejected or failed write keeps the editor open with the draft
+      // intact and surfaces the error (011.A2).
+      setSaveError(e instanceof Error ? e.message : String(e));
+      setSaving(false);
+    }
+  };
+
+  const saveBtn = (
+    <button className="btn btn-primary btn-sm" disabled={!dirty || saving} onClick={save}>
+      <Icon name="check" size={13} />{saving ? 'Saving…' : 'Save changes'}
+    </button>
+  );
+
+  return (
+    <div className="col" style={{ flex: 1, minHeight: 0 }}>
+      {/* ---- sticky edit bar (accent edge via .sp-edit-bar::before) ---- */}
+      <div className="sp-edit-bar">
+        <Icon name="reveal" size={15} style={{ color: 'var(--accent)', flexShrink: 0 }} />
+        <div className="col" style={{ gap: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 600 }}>Editing spec</div>
+          <div className="mono muted" style={{ fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {docPath + ' · ' + spec.id}
+          </div>
+        </div>
+        <div className="grow" />
+        {dirty && (
+          <div className="row gap-6" style={{ marginRight: 4 }}>
+            <span className="sp-dirty-dot" />
+            <span className="muted" style={{ fontSize: 11.5 }}>Unsaved changes</span>
+          </div>
+        )}
+        <button className="btn btn-ghost btn-sm" onClick={onCancel}>
+          <Icon name="x" size={13} />Cancel
+        </button>
+        {saveBtn}
+      </div>
+
+      <div className="scroll-y" style={{ flex: 1, padding: '24px 28px 56px' }}>
+        <div style={{ maxWidth: 780 }}>
+
+          {saveError && (
+            <div className="card card-pad row gap-8" role="alert" style={{ color: 'var(--error)', borderColor: 'rgba(242,85,90,0.35)', marginBottom: 18, fontSize: 12.5 }}>
+              <Icon name="cancel" size={14} style={{ flexShrink: 0 }} />
+              <span>Save failed — {saveError} Your draft is intact.</span>
+            </div>
+          )}
+
+          {/* ---- title ---- */}
+          <Field label="Title">
+            <input
+              className="input sp-input-lg"
+              value={d.title}
+              aria-label="Title"
+              placeholder="Short, imperative requirement title"
+              onChange={(e) => set({ title: e.target.value })}
+            />
+          </Field>
+
+          {/* ---- metadata grid ---- */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 22px', marginBottom: 4 }}>
+            <Field label="Status" hint="Set automatically — saving re-queues this spec as Drafted so the implementation workflow picks it up.">
+              <AutoStatus state={currentState} />
+            </Field>
+            <Field label="Priority">
+              <Segmented options={PRIORITIES} value={d.priority} onChange={(v) => set({ priority: v })} />
+            </Field>
+            <Field label="Kind">
+              <PlainSelect value={d.kind} onChange={(v) => set({ kind: v })} options={KIND_OPTIONS} label="Kind" />
+            </Field>
+            <Field label="Owner">
+              <input
+                className="input mono"
+                style={{ width: '100%' }}
+                value={d.owner}
+                aria-label="Owner"
+                placeholder="unassigned"
+                onChange={(e) => set({ owner: e.target.value })}
+              />
+            </Field>
+          </div>
+          <div className="muted" style={{ fontSize: 11, margin: '-8px 0 22px' }}>
+            Priority, kind, and owner are document-level in the current spec format — they render from available data but aren’t persisted per-requirement yet.
+          </div>
+
+          {/* ---- normative statement w/ write / preview ---- */}
+          <div style={{ marginBottom: 22 }}>
+            <div className="row" style={{ marginBottom: 7 }}>
+              <label className="sp-fl" style={{ marginBottom: 0 }}>Normative statement</label>
+              <div className="grow" />
+              <Segmented
+                size="sm"
+                options={[{ value: 'write', label: 'Write' }, { value: 'preview', label: 'Preview' }]}
+                value={tab}
+                onChange={setTab}
+              />
+            </div>
+            {tab === 'write' ? (
+              <textarea
+                className="input sp-textarea"
+                value={d.statement}
+                spellCheck={false}
+                aria-label="Normative statement"
+                placeholder="The server MUST validate …  (use MUST / SHOULD / MAY, **bold**, and `code`)"
+                onChange={(e) => set({ statement: e.target.value })}
+              />
+            ) : (
+              // Preview reuses exactly the read view's decoration (002.A4).
+              <div className="sp-statement" style={{ '--sp-accent': accent } as React.CSSProperties}>
+                {d.statement.trim()
+                  ? <div className="sp-prose" dangerouslySetInnerHTML={{ __html: renderProse(d.statement) }} />
+                  : <div className="muted" style={{ fontSize: 13 }}>Nothing to preview yet.</div>}
+              </div>
+            )}
+            <div className="sp-kw-legend">
+              <span className="label">Keywords:</span>
+              <span className="sp-kw sp-kw-must">MUST</span>
+              <span className="sp-kw sp-kw-should">SHOULD</span>
+              <span className="sp-kw sp-kw-may">MAY</span>
+              <span className="label" style={{ marginLeft: 4 }}>auto-highlight as you type</span>
+            </div>
+          </div>
+
+          {/* ---- rationale ---- */}
+          <Field label="Rationale" hint="Optional — why this requirement exists. Presentation-only today: the spec format carries no per-requirement rationale field.">
+            <textarea
+              className="input sp-textarea"
+              value={d.rationale}
+              spellCheck={false}
+              style={{ minHeight: 84 }}
+              aria-label="Rationale"
+              placeholder="Why does this matter? What breaks without it?"
+              onChange={(e) => set({ rationale: e.target.value })}
+            />
+          </Field>
+
+          {/* ---- acceptance criteria ---- */}
+          <CriteriaEditor criteria={d.criteria} onChange={(next) => set({ criteria: next })} />
+
+          {/* ---- footer actions ---- */}
+          <div className="row" style={{ gap: 10, marginTop: 32, paddingTop: 20, borderTop: '1px solid var(--border-subtle)' }}>
+            {saveBtn}
+            <button className="btn btn-ghost btn-sm" onClick={onCancel}>Cancel</button>
+            <div className="grow" />
+            <span className="mono muted" style={{ fontSize: 11 }}>{dirty ? 'edited' : 'no changes'}</span>
+          </div>
         </div>
       </div>
     </div>

@@ -40,6 +40,8 @@ const postJson = <T,>(path: string, body?: unknown) =>
   request<T>(path, body === undefined
     ? { method: 'POST' }
     : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+const putJson = <T,>(path: string, body: unknown) =>
+  request<T>(path, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 
 /** Append `?project=<slug>` when a non-primary project is selected. */
 function q(path: string, project?: string | null): string {
@@ -161,6 +163,14 @@ export interface SpecDetailResponse {
   /** Per-child (acceptance criterion) links, for the N/M-met rollup. */
   childLinks: Record<string, LinkedSpec[]>;
   source: string | null;
+}
+
+/** PUT /api/spec/:id — whole-file overwrite + re-sync (REQ-DESKTOP-011). */
+export interface SpecSaveResponse {
+  ok: boolean;
+  spec: SpecDoc;
+  /** Set when the write landed but the re-index pass failed. */
+  syncError?: string;
 }
 
 /** One /api/drift row — a spread SpecLink plus its spec's title. */
@@ -353,6 +363,8 @@ export const api = {
   specs: (project?: string | null) => getJson<SpecsResponse>(q('/api/specs', project)),
   spec: (id: string, project?: string | null) =>
     getJson<SpecDetailResponse>(q(`/api/spec/${encodeURIComponent(id)}`, project)),
+  specSave: (id: string, content: string, project?: string | null) =>
+    putJson<SpecSaveResponse>(q(`/api/spec/${encodeURIComponent(id)}`, project), { content }),
   drift: (project?: string | null) => getJson<DriftResponse>(q('/api/drift', project)),
   runs: (project?: string | null) => getJson<RunsResponse>(q('/api/workflows/runs', project)),
   projects: () => getJson<ProjectsResponse>('/api/projects'),
