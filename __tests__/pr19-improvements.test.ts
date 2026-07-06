@@ -690,7 +690,9 @@ describe('Tree-sitter WASM Setup', () => {
     const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
 
     expect(pkg.dependencies['tree-sitter']).toBeUndefined();
-    expect(pkg.overrides).toBeUndefined();
+    // `overrides` may exist (e.g. pinning build tooling like rollup for
+    // reproducible installs) but must never smuggle in native tree-sitter.
+    expect(pkg.overrides?.['tree-sitter']).toBeUndefined();
   });
 });
 
