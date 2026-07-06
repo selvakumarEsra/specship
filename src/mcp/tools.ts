@@ -404,6 +404,7 @@ import {
 import {
   jiraToolDefinitions,
   handleSpecshipJiraIssues,
+  handleSpecshipJiraIssue,
 } from './jira-tools';
 
 export const tools: ToolDefinition[] = [
@@ -590,8 +591,9 @@ export const tools: ToolDefinition[] = [
   // Designer tools: claude.ai/design driving, vendored from @pro-vi/designer.
   // See ./designer-tools.ts for handlers. Drives a debug Chrome over CDP.
   ...designerToolDefinitions,
-  // JIRA tools (REQ-JIRA-002): list issues assigned to the authenticated user.
-  // See ./jira-tools.ts for handlers. Independent of the code graph.
+  // JIRA tools (REQ-JIRA-002/003): list issues assigned to the authenticated
+  // user + fetch one issue by key. See ./jira-tools.ts for handlers.
+  // Independent of the code graph.
   ...jiraToolDefinitions,
 ];
 
@@ -1130,6 +1132,8 @@ export class ToolHandler {
         // worktree/staleness wrappers.
         case 'specship_jira_issues':
           return await handleSpecshipJiraIssues(args);
+        case 'specship_jira_issue':
+          return await handleSpecshipJiraIssue(args);
         default:
           return this.errorResult(`Unknown tool: ${toolName}`);
       }
