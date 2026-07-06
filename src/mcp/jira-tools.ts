@@ -15,11 +15,13 @@
  * `specship jira configure`, never a partial or fabricated result.
  */
 
+import * as path from 'path';
 import type { ToolDefinition, ToolResult } from './tools';
 import { loadJiraConfig, resolveJiraCredentials } from '../jira/config';
 import { JiraClient } from '../jira/client';
 import { JiraError, type JiraIssue } from '../jira/types';
-import { writeSpecFromIssue } from '../jira/spec-writer';
+import { writeSpecFromIssue, findSpecForIssueKey } from '../jira/spec-writer';
+import { reqIdForIssue } from '../jira/spec-generator';
 
 function textResult(text: string): ToolResult {
   return { content: [{ type: 'text', text }] };
@@ -81,7 +83,76 @@ export const jiraToolDefinitions: ToolDefinition[] = [
       required: ['key'],
     },
   },
+  {
+    name: 'specship_jira_start',
+    description:
+      'Start implementing a picked JIRA issue: run the bundled spec-implement ' +
+      'workflow on the spec that specship_jira_pick authored for the key, in an ' +
+      'isolated worktree. Runs to the plan/approve gate and stops there — review ' +
+      'the plan, then approve to proceed. Pick the issue first if no spec exists.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        key: {
+          type: 'string',
+          description:
+            'The issue key to start, e.g., "PROJ-123". Required. A spec for it ' +
+            'must already exist (run specship_jira_pick first).',
+        },
+      },
+      required: ['key'],
+    },
+  },
 ];
+
+/**
+ * Dependencies for `handleSpecshipJiraStart`. The DB handle (`specQueries`) and
+ * the project root are threaded in from the MCP session's open SpecShip
+ * (DOM-SPECSHIP-004: the JIRA tools never `import` the SpecShip package
+ * directly). The workflow loader + isolation/executor constructors are seams so
+ * tests can stub them and never spawn a real nested spec-implement run.
+ */
+export interface JiraStartDeps {
+  /** SpecQueries handle from the MCP session's open SpecShip. */
+  specQueries: unknown;
+  /** The SpecShip project root the spec + worktree live under. */
+  projectRoot: string;
+  /** Loader for the bundled workflow (default: ../workflows/discovery). */
+  loadWorkflowByName?: (
+    projectRoot: string,
+    name: string,
+  ) => { workflow: unknown } | null | undefined;
+  /** Worktree-provider constructor (default: ../isolation/worktree). */
+  WorktreeProvider?: new (specQueries: unknown) => unknown;
+  /** Workflow-executor constructor (default: ../workflows/executor). */
+  WorkflowExecutor?: new (
+    specQueries: unknown,
+    worktrees: unknown,
+    projectRoot: string,
+  ) => JiraStartExecutorLike;
+  /** Resolver for the .specship dir (default: ../directory). */
+  getSpecShipDir?: (projectRoot: string) => string;
+}
+
+/** Minimal shape of a workflow run the executor returns/persists. */
+interface JiraStartRunLike {
+  id: string;
+  status: string;
+  errorMessage?: string;
+  metadata?: unknown;
+}
+
+/** Minimal shape of the executor's `start` result. */
+interface JiraStartExecutorLike {
+  start(
+    workflow: unknown,
+    opts: {
+      projectRoot: string;
+      inputs?: Record<string, string>;
+      variables?: Record<string, string>;
+    },
+  ): Promise<{ run: JiraStartRunLike }>;
+}
 
 /** Render the issue list as compact markdown, or an explicit empty line. */
 function formatIssues(issues: JiraIssue[]): string {
@@ -251,7 +322,7 @@ export async function handleSpecshipJiraPick(
     return textResult(
       `${verb} spec for ${result.issue.key} at ${written.path}. ` +
         'Run "specship sync" (or let the watcher pick it up) to index it, then ' +
-        'implement it with the spec-implement workflow.',
+        `run specship_jira_start for ${result.issue.key} to implement it.`,
     );
   } catch (err) {
     // JiraError messages (incl. JiraNotFoundError for a missing/no-access key)
@@ -261,5 +332,142 @@ export async function handleSpecshipJiraPick(
     }
     // Defensive: never let an unexpected error leak internals.
     return errorResult('Failed to pick the JIRA issue.');
+  }
+}
+
+/** Read `metadata.approval.message` off a run, tolerating any metadata shape. */
+function approvalMessageOf(run: JiraStartRunLike): string | undefined {
+  const approval = (run.metadata as { approval?: { message?: string } } | undefined)
+    ?.approval;
+  return typeof approval?.message === 'string' ? approval.message : undefined;
+}
+
+/**
+ * Re-read the persisted run so we see the settled status + approval metadata.
+ * `executor.start` returns the pre-finalize in-memory run whose status still
+ * reads "running" even after it paused at the approval gate; the DB row carries
+ * the real "paused" status + the approval message. Falls back to the returned
+ * run when the handle can't look it up (e.g. a stubbed executor in tests).
+ */
+function reloadRun(specQueries: unknown, run: JiraStartRunLike): JiraStartRunLike {
+  const getById = (specQueries as {
+    getWorkflowRunById?: (id: string) => JiraStartRunLike | undefined | null;
+  } | undefined)?.getWorkflowRunById;
+  if (typeof getById !== 'function') return run;
+  try {
+    return getById.call(specQueries, run.id) ?? run;
+  } catch {
+    return run;
+  }
+}
+
+/**
+ * Handle `specship_jira_start` (REQ-JIRA-005). Drives the bundled
+ * `spec-implement` workflow on the spec `specship_jira_pick` authored for the
+ * issue key, in an isolated worktree, and runs it to the first pause — the
+ * plan/approve gate (A1). It does NOT block for the full implementation.
+ *
+ * A2 (failed/rejected → no PR, not past "in progress") falls out for free: this
+ * handler never transitions the JIRA issue, and PR-raise (REQ-JIRA-006) + the
+ * "in review" transition (REQ-JIRA-007) only fire once the run reaches
+ * `completed`. REQ-JIRA-007's "in progress" start-transition is a separate,
+ * later dependency and is intentionally NOT built here.
+ *
+ * SECURITY: no credential is handled or echoed (REQ-JIRA-009). This handler
+ * talks to no JIRA host — the spec is already on disk.
+ */
+export async function handleSpecshipJiraStart(
+  args: Record<string, unknown>,
+  deps: JiraStartDeps,
+): Promise<ToolResult> {
+  // Not configured → a clear pointer, never an error stack or a started run.
+  const notConfigured = notConfiguredResult();
+  if (notConfigured) return notConfigured;
+
+  // A missing/blank key is a user mistake, not an internal fault.
+  const key =
+    typeof args.key === 'string' && args.key.trim() ? args.key.trim() : undefined;
+  if (!key) {
+    return textResult(
+      'An issue key is required (e.g., "PROJ-123"). Pass it as the "key" argument.',
+    );
+  }
+
+  const projectRoot = deps.projectRoot;
+  const specId = reqIdForIssue(key);
+
+  // The spec must already exist — start never silently authors one. If it's
+  // absent, point the caller at specship_jira_pick (which writes the spec keyed
+  // on this exact issue key, so start then targets the same SPEC_ID).
+  if (!findSpecForIssueKey(key, projectRoot)) {
+    return textResult(
+      `No spec for ${key} was found under specs/. Run specship_jira_pick for ` +
+        `${key} first to author it, then run specship_jira_start again.`,
+    );
+  }
+
+  try {
+    const loadWorkflowByName =
+      deps.loadWorkflowByName ??
+      (await import('../workflows/discovery')).loadWorkflowByName;
+    const WorktreeProvider =
+      deps.WorktreeProvider ??
+      ((await import('../isolation/worktree')).WorktreeProvider as unknown as
+        NonNullable<JiraStartDeps['WorktreeProvider']>);
+    const WorkflowExecutor =
+      deps.WorkflowExecutor ??
+      ((await import('../workflows/executor')).WorkflowExecutor as unknown as
+        NonNullable<JiraStartDeps['WorkflowExecutor']>);
+    const getSpecShipDir =
+      deps.getSpecShipDir ?? (await import('../directory')).getSpecShipDir;
+
+    const loaded = loadWorkflowByName(projectRoot, 'spec-implement');
+    if (!loaded) {
+      return errorResult(
+        'The bundled "spec-implement" workflow was not found. Reinstall ' +
+          'SpecShip or check `specship workflow list`.',
+      );
+    }
+
+    const worktrees = new WorktreeProvider(deps.specQueries);
+    const executor = new WorkflowExecutor(deps.specQueries, worktrees, projectRoot);
+    const started = await executor.start(loaded.workflow, {
+      projectRoot,
+      inputs: { SPEC_ID: specId },
+      variables: {
+        ARTIFACTS_DIR: path.join(getSpecShipDir(projectRoot), 'artifacts'),
+        CONTEXT: projectRoot,
+      },
+    });
+
+    const run = reloadRun(deps.specQueries, started.run);
+
+    if (run.status === 'failed') {
+      // A2: a failed run raises no PR and never advances the issue past
+      // "in progress" — the issue is not transitioned by this handler.
+      const why = run.errorMessage ? ` ${run.errorMessage}` : '';
+      return errorResult(
+        `Implementation run for ${key} (${specId}) failed and no pull request ` +
+          `was raised.${why}`,
+      );
+    }
+
+    // A1: the run reached the plan/approve gate and paused. Surface the
+    // approval message + runId; the caller approves (or rejects) to continue.
+    const gate = approvalMessageOf(run);
+    return textResult(
+      `Started spec-implement for ${key} (${specId}). Run ${run.id} is paused ` +
+        `at the plan/approve gate — review the plan and approve to proceed.` +
+        (gate ? `\n\n${gate}` : '') +
+        `\n\nApprove with: specship workflow approve ${run.id}` +
+        `\nOr reject with feedback: specship workflow reject ${run.id} --comment "…"`,
+    );
+  } catch (err) {
+    // Defensive: never let an unexpected error leak internals.
+    return errorResult(
+      `Failed to start implementation for ${key}: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    );
   }
 }

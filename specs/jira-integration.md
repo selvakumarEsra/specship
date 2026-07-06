@@ -147,6 +147,9 @@ already uses. The JIRA flow reuses that pipeline rather than implementing raw
 issue text, so the work carries acceptance-criteria verification and spec→code
 links like any other SpecShip implementation.
 
+implementations:
+  - src/mcp/jira-tools.ts:handleSpecshipJiraStart
+
 ## Acceptance
 <!-- id: REQ-JIRA-005.A1 -->
 - Starting an issue runs the spec-implement workflow against the generated

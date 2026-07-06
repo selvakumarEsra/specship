@@ -50,6 +50,40 @@ function readJiraIssueKey(content: string): string | null {
   return null;
 }
 
+/**
+ * Find the spec file (if any) whose frontmatter records `issueKey`, scanning
+ * `<projectRoot>/specs/`. Returns the absolute path, or `null` when no spec for
+ * the key exists. Keyed on the parsed `jira_issue:` frontmatter value — never a
+ * body match — so it locates the exact file a pick wrote even if it was renamed.
+ * Shared by `writeSpecFromIssue` (idempotent overwrite) and `specship_jira_start`
+ * (does a spec for this key exist yet?).
+ */
+export function findSpecForIssueKey(
+  issueKey: string,
+  projectRoot: string,
+): string | null {
+  const specsDir = path.join(projectRoot, 'specs');
+  let entries: string[] = [];
+  try {
+    entries = fs.readdirSync(specsDir);
+  } catch {
+    return null;
+  }
+  for (const name of entries) {
+    if (!name.toLowerCase().endsWith('.md')) continue;
+    const full = path.join(specsDir, name);
+    try {
+      if (!fs.statSync(full).isFile()) continue;
+      if (readJiraIssueKey(fs.readFileSync(full, 'utf8')) === issueKey) {
+        return full;
+      }
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+
 /** A filesystem-safe slug for the default filename, from the issue key. */
 function slugForKey(key: string): string {
   return (
@@ -76,28 +110,7 @@ export function writeSpecFromIssue(
   const markdown = generateSpecMarkdown(issue);
 
   // Idempotency (A3): find an existing spec whose frontmatter records this key.
-  let existing: string | undefined;
-  let entries: string[] = [];
-  try {
-    entries = fs.readdirSync(specsDir);
-  } catch {
-    entries = [];
-  }
-  for (const name of entries) {
-    if (!name.toLowerCase().endsWith('.md')) continue;
-    const full = path.join(specsDir, name);
-    let content: string;
-    try {
-      if (!fs.statSync(full).isFile()) continue;
-      content = fs.readFileSync(full, 'utf8');
-    } catch {
-      continue;
-    }
-    if (readJiraIssueKey(content) === issue.key) {
-      existing = full;
-      break;
-    }
-  }
+  const existing = findSpecForIssueKey(issue.key, projectRoot);
 
   if (existing) {
     fs.writeFileSync(existing, markdown, 'utf8');
