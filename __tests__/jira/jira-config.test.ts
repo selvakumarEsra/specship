@@ -198,6 +198,39 @@ describe('resolveJiraCredentials', () => {
     fs.writeFileSync(cfgPath, 'not json at all');
     expect(() => resolveJiraCredentials()).toThrow(JiraConfigError);
   });
+
+  // REQ-JIRA-009.A1 — even when a secret IS on disk, a resolution failure must
+  // not echo it back. A base-URL-less config still carries the apiToken, so a
+  // naive "here's your config" message could leak it.
+  it('never echoes the apiToken when the base URL is missing', () => {
+    writeCfg({ email: 'jane@acme.com', apiToken: 'tok-super-secret' });
+    try {
+      resolveJiraCredentials();
+      throw new Error('should have thrown');
+    } catch (err) {
+      expect(err).toBeInstanceOf(JiraConfigError);
+      expect((err as Error).message).not.toContain('tok-super-secret');
+    }
+  });
+
+  it('never echoes the token on a deployment/credential mismatch', () => {
+    // Explicit datacenter but only an email+token pair on disk → the PAT check
+    // throws while the apiToken sits in the resolved config; it must stay out
+    // of the message.
+    writeCfg({
+      baseUrl: 'https://jira.acme.internal',
+      deployment: 'datacenter',
+      email: 'jane@acme.com',
+      apiToken: 'tok-super-secret',
+    });
+    try {
+      resolveJiraCredentials();
+      throw new Error('should have thrown');
+    } catch (err) {
+      expect(err).toBeInstanceOf(JiraConfigError);
+      expect((err as Error).message).not.toContain('tok-super-secret');
+    }
+  });
 });
 
 describe('saveJiraConfig', () => {
