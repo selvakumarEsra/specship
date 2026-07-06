@@ -106,6 +106,17 @@ export function resolveJiraCredentials(): JiraCredentials {
     );
   }
 
+  // Lifecycle transition names (REQ-JIRA-007): env overrides file, per field;
+  // an unconfigured project keeps the defaults so status-push still works.
+  const inProgress =
+    process.env.SPECSHIP_JIRA_TRANSITION_IN_PROGRESS ??
+    file?.transitions?.inProgress ??
+    'In Progress';
+  const inReview =
+    process.env.SPECSHIP_JIRA_TRANSITION_IN_REVIEW ??
+    file?.transitions?.inReview ??
+    'In Review';
+
   const deployment = inferDeployment({
     deployment: explicitDeployment,
     email,
@@ -126,7 +137,14 @@ export function resolveJiraCredentials(): JiraCredentials {
     );
   }
 
-  return { baseUrl, deployment, email, apiToken, pat };
+  return {
+    baseUrl,
+    deployment,
+    email,
+    apiToken,
+    pat,
+    transitions: { inProgress, inReview },
+  };
 }
 
 /**

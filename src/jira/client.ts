@@ -22,6 +22,8 @@ import {
   JiraIssue,
   JiraIssueListResult,
   JiraIssueResult,
+  JiraTransition,
+  JiraTransitionResult,
   JiraConfigError,
   JiraAuthError,
   JiraNotFoundError,
@@ -34,6 +36,7 @@ export class JiraClient {
   private readonly baseUrl: string;
   private readonly host: string;
   private readonly authHeader: string;
+  private readonly deployment: JiraCredentials['deployment'];
 
   constructor(creds: JiraCredentials) {
     // Normalize: strip trailing slashes so path joins are clean.
@@ -46,6 +49,7 @@ export class JiraClient {
       );
     }
     this.authHeader = buildAuthHeader(creds);
+    this.deployment = creds.deployment;
   }
 
   /**
@@ -161,28 +165,184 @@ export class JiraClient {
   }
 
   /**
-   * Shared, credentialed GET against the configured host. Every security
-   * guard lives here so no call path can skip one:
-   *  - `redirect: 'manual'` — the `Authorization` header is never replayed
-   *    across a redirect; any 3xx / opaqueredirect is refused, not followed.
-   *  - 401 / 403 → `JiraAuthError`; 404 → `JiraNotFoundError`; network /
-   *    non-200 / non-JSON → `JiraConfigError`.
-   *  - No thrown message ever contains the credential — only the host.
+   * List the transitions the issue's current workflow state offers
+   * (REQ-JIRA-007). `GET /issue/{key}/transitions`. Used to resolve a
+   * configured transition name/id to an executable id before writing.
+   */
+  async listTransitions(key: string): Promise<JiraTransition[]> {
+    const trimmed = (key ?? '').trim();
+    if (!trimmed) {
+      throw new JiraConfigError('An issue key is required (e.g., "PROJ-123").');
+    }
+    const body = await this.request(
+      `/rest/api/2/issue/${encodeURIComponent(trimmed)}/transitions`,
+    );
+    const raw: any[] = Array.isArray(body?.transitions) ? body.transitions : [];
+    return raw.map(t => ({ id: String(t?.id ?? ''), name: String(t?.name ?? '') }));
+  }
+
+  /**
+   * Drive the issue toward a target state (REQ-JIRA-007). `nameOrId` is
+   * matched against the issue's available transitions by exact id first, then
+   * case-insensitively by name. On a match it POSTs `/transitions`. When NO
+   * transition matches — because this project's workflow doesn't offer it —
+   * it returns `{ ok, skipped, reason }` and NEVER throws (A3): a missing
+   * transition is an expected, recoverable state, and the caller still
+   * comments the PR link and reports the skip. Auth/network faults on the
+   * write still throw like any other credentialed call.
+   */
+  async transitionIssue(
+    key: string,
+    nameOrId: string,
+  ): Promise<JiraTransitionResult> {
+    const trimmed = (key ?? '').trim();
+    if (!trimmed) {
+      throw new JiraConfigError('An issue key is required (e.g., "PROJ-123").');
+    }
+    const target = (nameOrId ?? '').trim();
+    if (!target) {
+      return {
+        ok: true,
+        skipped: nameOrId,
+        reason: 'no transition name/id was configured',
+      };
+    }
+
+    const available = await this.listTransitions(trimmed);
+    const wanted = target.toLowerCase();
+    const match = available.find(
+      t => t.id === target || t.name.toLowerCase() === wanted,
+    );
+    if (!match) {
+      const names = available.map(t => t.name).join(', ') || 'none';
+      return {
+        ok: true,
+        skipped: target,
+        reason: `no "${target}" transition on this issue's workflow (available: ${names})`,
+      };
+    }
+
+    await this.write(
+      `/rest/api/2/issue/${encodeURIComponent(trimmed)}/transitions`,
+      { transition: { id: match.id } },
+    );
+    return { ok: true, transitioned: match.name };
+  }
+
+  /**
+   * Assign the issue (REQ-JIRA-007). Cloud keys assignment by `accountId`;
+   * Data Center by `name`. `PUT /issue/{key}/assignee`. A 204 (no body) is the
+   * success shape — the `write` helper tolerates an empty response.
+   */
+  async assignIssue(key: string, accountId: string): Promise<void> {
+    const trimmed = (key ?? '').trim();
+    if (!trimmed) {
+      throw new JiraConfigError('An issue key is required (e.g., "PROJ-123").');
+    }
+    const body =
+      this.deployment === 'datacenter'
+        ? { name: accountId }
+        : { accountId };
+    await this.write(
+      `/rest/api/2/issue/${encodeURIComponent(trimmed)}/assignee`,
+      body,
+      'PUT',
+    );
+  }
+
+  /**
+   * Add a comment to the issue (REQ-JIRA-007) — used to record the PR link.
+   * `POST /issue/{key}/comment`. api/2 takes a plain-string body.
    *
-   * Returns the parsed JSON body on success.
+   * SECURITY: the caller only ever passes the public PR URL / issue key here,
+   * never a credential (REQ-JIRA-009).
+   */
+  async addComment(key: string, body: string): Promise<void> {
+    const trimmed = (key ?? '').trim();
+    if (!trimmed) {
+      throw new JiraConfigError('An issue key is required (e.g., "PROJ-123").');
+    }
+    await this.write(
+      `/rest/api/2/issue/${encodeURIComponent(trimmed)}/comment`,
+      { body },
+    );
+  }
+
+  /**
+   * Shared, credentialed GET against the configured host. Delegates to
+   * `send()` for the security guards, then parses JSON. Returns the parsed
+   * JSON body on success; a non-JSON body is a `JiraConfigError`.
    */
   private async request(path: string): Promise<any> {
+    const res = await this.send(path, 'GET');
+    try {
+      return await res.json();
+    } catch {
+      throw new JiraConfigError(
+        `JIRA at ${this.host} returned a non-JSON response.`,
+      );
+    }
+  }
+
+  /**
+   * Shared, credentialed write (POST/PUT) against the configured host
+   * (REQ-JIRA-007). Carries EVERY guard `request()` does via `send()` —
+   * `redirect: 'manual'`, host-lock, 401/403 → auth, 404 → not-found,
+   * non-2xx → config, credential-free messages. A JSON body is sent with
+   * `Content-Type: application/json`; a success with no/empty body (204, the
+   * common transition/assignee shape) resolves to `null` rather than erroring
+   * on the missing JSON.
+   */
+  private async write(
+    path: string,
+    body: unknown,
+    method: 'POST' | 'PUT' = 'POST',
+  ): Promise<any> {
+    const res = await this.send(path, method, JSON.stringify(body ?? {}));
+    // 204 No Content (assignee/transition) has no body — don't force JSON.
+    if (res.status === 204) return null;
+    try {
+      return await res.json();
+    } catch {
+      // A 2xx write with an empty/non-JSON body is still a success.
+      return null;
+    }
+  }
+
+  /**
+   * The single fetch + guard chokepoint shared by `request` and `write`. Every
+   * security guard lives here so no call path can skip one:
+   *  - `redirect: 'manual'` — the `Authorization` header is never replayed
+   *    across a redirect; any 3xx / opaqueredirect is refused, not followed.
+   *  - only ever talks to the configured host.
+   *  - 401 / 403 → `JiraAuthError`; 404 → `JiraNotFoundError`; network /
+   *    non-2xx → `JiraConfigError`.
+   *  - No thrown message ever contains the credential — only the host.
+   *
+   * Returns the raw `Response` on a 2xx; the caller parses the body.
+   */
+  private async send(
+    path: string,
+    method: 'GET' | 'POST' | 'PUT',
+    jsonBody?: string,
+  ): Promise<Response> {
     const url = `${this.baseUrl}${path}`;
+
+    const headers: Record<string, string> = {
+      Authorization: this.authHeader,
+      Accept: 'application/json',
+    };
+    if (jsonBody !== undefined) {
+      headers['Content-Type'] = 'application/json';
+    }
 
     let res: Response;
     try {
       res = await fetch(url, {
-        method: 'GET',
+        method,
         redirect: 'manual',
-        headers: {
-          Authorization: this.authHeader,
-          Accept: 'application/json',
-        },
+        headers,
+        ...(jsonBody !== undefined ? { body: jsonBody } : {}),
       });
     } catch (err) {
       // Network / DNS — the message is fetch's own (no credential in it),
@@ -227,12 +387,6 @@ export class JiraClient {
       );
     }
 
-    try {
-      return await res.json();
-    } catch {
-      throw new JiraConfigError(
-        `JIRA at ${this.host} returned a non-JSON response.`,
-      );
-    }
+    return res;
   }
 }

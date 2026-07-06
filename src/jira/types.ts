@@ -14,6 +14,20 @@
 export type JiraDeployment = 'cloud' | 'datacenter';
 
 /**
+ * Names (or ids) of the workflow transitions SpecShip drives at lifecycle
+ * moments (REQ-JIRA-007). JIRA workflows differ per project, so these are
+ * configurable; each is matched case-insensitively against the transitions
+ * the issue actually offers, and an unconfigured project keeps the sensible
+ * defaults ("In Progress" on start, "In Review" on PR raised).
+ */
+export interface JiraTransitionNames {
+  /** Transition applied on start (default "In Progress"). */
+  inProgress?: string;
+  /** Transition applied when a PR is raised (default "In Review"). */
+  inReview?: string;
+}
+
+/**
  * Fully-resolved credentials used to build a request against a JIRA
  * instance. `deployment` is always resolved (inferred if not explicit).
  */
@@ -28,6 +42,12 @@ export interface JiraCredentials {
   apiToken?: string;
   /** Data Center only: the personal access token. */
   pat?: string;
+  /**
+   * Resolved lifecycle transition names (REQ-JIRA-007).
+   * `resolveJiraCredentials` always fills the defaults; optional here so
+   * hand-built credentials (tests, direct callers) needn't supply it.
+   */
+  transitions?: JiraTransitionNames;
 }
 
 /**
@@ -41,6 +61,11 @@ export interface JiraConfig {
   email?: string;
   apiToken?: string;
   pat?: string;
+  /**
+   * Optional per-project transition names (REQ-JIRA-007). Omitted → the
+   * built-in "In Progress" / "In Review" defaults apply.
+   */
+  transitions?: JiraTransitionNames;
 }
 
 /**
@@ -97,6 +122,28 @@ export interface JiraIssueResult {
   ok: true;
   issue: JiraIssue;
 }
+
+/**
+ * A single transition offered by an issue's current workflow state
+ * (REQ-JIRA-007). Returned by `GET /issue/{key}/transitions`.
+ */
+export interface JiraTransition {
+  /** The transition id used to execute it (`POST /transitions`). */
+  id: string;
+  /** The transition's human-facing name, e.g. "In Progress". */
+  name: string;
+}
+
+/**
+ * Outcome of attempting a lifecycle transition (REQ-JIRA-007). Never a thrown
+ * error for a *missing* transition — a workflow that lacks the configured
+ * transition returns `{ ok, skipped, reason }` so the flow can still comment
+ * the PR link and report the skip (A3). A genuine auth/network fault on the
+ * write still throws, like every other credentialed call.
+ */
+export type JiraTransitionResult =
+  | { ok: true; transitioned: string }
+  | { ok: true; skipped: string; reason: string };
 
 /**
  * Base class for JIRA errors. Mirrors `McpConfigError` in
