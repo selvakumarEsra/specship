@@ -55,9 +55,10 @@ export interface JiraConnectionResult {
 }
 
 /**
- * A single JIRA issue as surfaced by the list path (REQ-JIRA-002). Carries
- * only the four fields the requirement names — key/id, summary, status, and
- * issue type — never any credential-adjacent data.
+ * A single JIRA issue. The list path (REQ-JIRA-002) populates only the four
+ * always-present fields — key/id, summary, status, and issue type. The detail
+ * path (REQ-JIRA-003) additionally fills `description` and `subtasks`; both are
+ * optional so the list path is unaffected. Never any credential-adjacent data.
  */
 export interface JiraIssue {
   /** Human-facing key, e.g. `PROJ-123`. */
@@ -70,6 +71,10 @@ export interface JiraIssue {
   status: string;
   /** Issue type name, e.g. `Bug`, `Story`. */
   issueType: string;
+  /** Detail path only (REQ-JIRA-003): the issue body, empty string if none. */
+  description?: string;
+  /** Detail path only (REQ-JIRA-003): child subtasks, if any. */
+  subtasks?: Array<{ key: string; summary: string; status: string }>;
 }
 
 /**
@@ -81,6 +86,16 @@ export interface JiraIssue {
 export interface JiraIssueListResult {
   ok: true;
   issues: JiraIssue[];
+}
+
+/**
+ * Result of fetching a single issue by key (REQ-JIRA-003). The single-issue
+ * analog of `JiraIssueListResult`. A missing / no-access issue throws
+ * `JiraNotFoundError` rather than returning an empty result (A2).
+ */
+export interface JiraIssueResult {
+  ok: true;
+  issue: JiraIssue;
 }
 
 /**
@@ -112,5 +127,18 @@ export class JiraAuthError extends JiraError {
   constructor(message: string) {
     super(message, 'JIRA_AUTH_ERROR');
     this.name = 'JiraAuthError';
+  }
+}
+
+/**
+ * The requested issue does not exist or the user can't see it (HTTP 404)
+ * — REQ-JIRA-003 A2. Distinct from config/auth errors so the caller can
+ * surface a clear "no such issue / no access" message and do no downstream
+ * work, rather than silently returning an empty spec.
+ */
+export class JiraNotFoundError extends JiraError {
+  constructor(message: string) {
+    super(message, 'JIRA_NOT_FOUND');
+    this.name = 'JiraNotFoundError';
   }
 }
