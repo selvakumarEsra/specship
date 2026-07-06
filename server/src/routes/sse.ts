@@ -9,7 +9,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
  * `origin: true`) never gets to add the CORS header. Without this, a
  * cross-origin `EventSource` is blocked: e.g. the dashboard opened at
  * `127.0.0.1:<port>` calling the API host `localhost` (different origins to the
- * browser), or the Angular dev server on `:4200`. Echoing the request origin
+ * browser), or the Vite dev server on `:5173`. Echoing the request origin
  * mirrors what `origin: true` does for the non-raw routes.
  */
 export function writeSseHead(req: FastifyRequest, reply: FastifyReply): void {

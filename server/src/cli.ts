@@ -56,7 +56,7 @@ function parseArgs(): CliArgs {
       console.log(`Usage: specship-desktop [options]
 
 Options:
-  --project-root, -p <path>   Project root (default: $SPECSHIP_PROJECT_ROOT, $SPECSHIP_PROJECT_ROOT, or cwd)
+  --project-root, -p <path>   Project root (default: $SPECSHIP_PROJECT_ROOT or cwd)
   --port <n>                  HTTP port (default: 4242)
   --host <h>                  Bind host (default: 127.0.0.1)
   --no-ingest                 Skip the in-process Claude JSONL transcript watcher

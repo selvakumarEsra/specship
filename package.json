@@ -50,17 +50,13 @@
     "@fastify/cors": "^9.0.1",
     "commander": "^14.0.2",
     "cross-spawn": "^7.0.6",
-    "fast-string-width": "^3.0.2",
-    "fast-wrap-ansi": "^0.2.0",
     "fastify": "^4.28.1",
     "fflate": "^0.8.3",
     "ignore": "^7.0.5",
-    "jsonc-parser": "^3.3.1",
     "picomatch": "^4.0.3",
-    "sisteransi": "^1.0.5",
     "tree-sitter-wasms": "^0.1.11",
     "web-tree-sitter": "^0.25.3",
-    "yaml": "^2.5.0"
+    "yaml": "2.5.0"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.0",

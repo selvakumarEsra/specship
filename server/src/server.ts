@@ -349,7 +349,7 @@ export async function createServer(options: ServerOptions): Promise<ServerHandle
       //   1. Try the requested URL as a real file under webDir → serve it
       //      with the right content-type. Covers the SPA's chunk-*.js,
       //      styles.css, favicons, fonts, etc.
-      //   2. Fall through to index.html for any other GET so Angular's
+      //   2. Fall through to index.html for any other GET so the SPA's
       //      client-side router can take over (`/memory`, `/graph`, …).
       // Non-GET methods and `/api/*` paths still 404 cleanly so the UI
       // can surface them. A MISSING asset path (e.g. a stale build's old
