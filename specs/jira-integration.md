@@ -76,8 +76,8 @@ actionable items surface first. "Assigned to me" resolves to the authenticated
 account, so the user never types their own name.
 
 implementations:
-  - src/jira/client.ts:JiraClient.listMyIssues
   - src/mcp/jira-tools.ts:handleSpecshipJiraIssues
+  - src/mcp/jira-tools.ts:jiraToolDefinitions
 
 ## Acceptance
 <!-- id: REQ-JIRA-002.A1 -->
@@ -99,6 +99,9 @@ presents the detail needed to act on it: summary, full description, status,
 type, and acceptance/subtask information when present. An id that does not
 exist, or that the user cannot access, is reported clearly rather than silently
 producing an empty spec.
+
+implementations:
+  - src/mcp/jira-tools.ts:handleSpecshipJiraIssue
 
 ## Acceptance
 <!-- id: REQ-JIRA-003.A1 -->
