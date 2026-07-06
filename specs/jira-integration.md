@@ -1,7 +1,7 @@
 ---
 id: JIRA-DOC
 title: JIRA integration for solo developers
-owner: "[needs review]"
+owner: core
 priority: medium
 brief: integrate-jira-into-specship/brief.md
 ---
@@ -18,15 +18,20 @@ This is SpecShip's first outbound integration — every requirement below assume
 the app is otherwise local-first, so credential handling and network-failure
 behaviour are first-class concerns, not afterthoughts.
 
-Design decisions taken while authoring (confirm at review):
+Design decisions (settled):
 
 - **Spec-driven bridge.** A picked issue is authored into a SpecShip spec (a
   low-ceremony auto-draft from the issue), then the existing spec-implement
   pipeline runs on that spec. This keeps the spec-as-contract ethos, drift
   tracking, and acceptance criteria rather than implementing raw issue text.
-- **Agent-native surface.** List/pick are MCP tools the agent calls in
-  conversation ("list my JIRA issues", "start PROJ-123"). A terminal CLI is a
-  follow-up, not part of this document [needs review: promote CLI into v1?].
+- **Surface split.** The issue-driving flow — list, fetch, pick, start — is
+  **agent-native MCP tools** (`specship_jira_issues` / `_issue` / `_pick` /
+  `_start`) the agent calls in conversation ("list my JIRA issues",
+  "start PROJ-123"). The **setup and tracking** surfaces ship as terminal
+  **CLI subcommands** in v1 too — `specship jira configure` / `jira test`
+  (connection) and `jira track` (status view) — because those are naturally
+  terminal-and-script-friendly. CLI wrappers for list/pick/start are a
+  follow-up, not v1.
 - **Both deployments.** JIRA Cloud (email + API token, basic auth) and Data
   Center / Server (Personal Access Token, bearer) are both supported.
 
