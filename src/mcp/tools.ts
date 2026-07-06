@@ -407,6 +407,7 @@ import {
   handleSpecshipJiraIssue,
   handleSpecshipJiraPick,
   handleSpecshipJiraStart,
+  handleSpecshipJiraTrack,
 } from './jira-tools';
 
 export const tools: ToolDefinition[] = [
@@ -1146,6 +1147,14 @@ export class ToolHandler {
           return await handleSpecshipJiraStart(args, {
             specQueries: cg.getSpecQueries(),
             projectRoot: cg.getProjectRoot(),
+          });
+        }
+        case 'specship_jira_track': {
+          // track joins each picked issue's SpecShip work-state (from the
+          // session's workflow runs) with its live JIRA status — read-only.
+          const cg = this.getSpecShip(args.projectPath as string | undefined);
+          return await handleSpecshipJiraTrack(args, {
+            specQueries: cg.getSpecQueries(),
           });
         }
         default:

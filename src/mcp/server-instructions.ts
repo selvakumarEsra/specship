@@ -74,6 +74,7 @@ When the user works from JIRA issues, the tools chain in this order:
 - **"Show me issue PROJ-123"** → \`specship_jira_issue\` with the \`key\`.
 - **"Pick / work on PROJ-123"** → \`specship_jira_pick\` with the \`key\` — fetches the issue and authors a SpecShip spec under \`specs/\` (idempotent on the key).
 - **"Start / implement it"** → \`specship_jira_start\` with the same \`key\` — runs the bundled \`spec-implement\` workflow on the spec pick authored, in an isolated worktree. It runs to the **plan/approve gate** and pauses there, returning the run ID; review the plan, then approve (\`specship workflow approve <runId>\`) to continue. A failed run raises no PR. If no spec exists for the key yet, start points you back to \`specship_jira_pick\`.
+- **"How's my JIRA work going? / status of my picked issues"** → \`specship_jira_track\` — a read-only table joining each picked issue's SpecShip work-state (spec authored → implementing → PR raised → verified) with its **live** JIRA status (read fresh each time, so an issue moved outside SpecShip reflects its current status). It never re-picks or re-starts anything; pass an optional \`project\` to narrow the JIRA read.
 
 ## Limitations
 

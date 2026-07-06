@@ -24,6 +24,8 @@ import { JiraClient } from '../jira/client';
 import {
   JiraError,
   type JiraIssue,
+  type JiraIssueListResult,
+  type JiraIssueResult,
   type JiraConnectionResult,
   type JiraTransitionNames,
   type JiraTransitionResult,
@@ -247,6 +249,26 @@ export const jiraToolDefinitions: ToolDefinition[] = [
         },
       },
       required: ['key'],
+    },
+  },
+  {
+    name: 'specship_jira_track',
+    description:
+      'Show a read-only tracking view of every JIRA issue you have brought into ' +
+      "SpecShip: each row joins the issue's SpecShip work-state (spec authored → " +
+      'implementing → PR raised → verified) with its LIVE JIRA status (a fresh ' +
+      'read at track time, so an issue moved outside SpecShip reflects its current ' +
+      'status). Read-only — it never re-picks or re-starts anything. Optionally ' +
+      'narrow the JIRA read to a project.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project: {
+          type: 'string',
+          description:
+            'Optional project key to narrow the live JIRA read (e.g., "PROJ"). Omit to read all your assigned issues.',
+        },
+      },
     },
   },
 ];
@@ -841,4 +863,186 @@ export async function handleSpecshipJiraStart(
       }`,
     );
   }
+}
+
+/**
+ * The subset of `JiraClient` the tracking view (REQ-JIRA-008) reads through. A
+ * seam so tests inject a fake and the suite NEVER hits a real host (and no token
+ * is handled in tests). Both methods are the same live reads the list/detail
+ * tools use.
+ */
+export interface JiraTrackClient {
+  listMyIssues(opts?: { project?: string }): Promise<JiraIssueListResult>;
+  getIssue(key: string): Promise<JiraIssueResult>;
+}
+
+/**
+ * Dependencies for `handleSpecshipJiraTrack`. `specQueries` (the MCP session's
+ * open SpecShip handle) enumerates the workflow runs that record which issues
+ * entered the pipeline; `makeJiraClient` is the injectable live-read seam
+ * (default resolves creds + a real `JiraClient`). `limit` bounds how many recent
+ * runs are scanned.
+ */
+export interface JiraTrackDeps {
+  /** SpecQueries handle from the MCP session's open SpecShip. */
+  specQueries: unknown;
+  /** Live-read client factory (default: resolve creds + new JiraClient). */
+  makeJiraClient?: () => JiraTrackClient;
+  /** How many recent runs to scan for JIRA-picked issues (default 200). */
+  limit?: number;
+}
+
+/** The SpecShip lifecycle work-state derived from a run (REQ-JIRA-008). */
+export type JiraWorkState =
+  | 'spec authored'
+  | 'implementing'
+  | 'PR raised'
+  | 'verified';
+
+/**
+ * Map a workflow run to its SpecShip lifecycle work-state (REQ-JIRA-008). Pure
+ * — reads only the run's status + metadata, most-advanced stage first:
+ *   - verify ran and passed → `verified` (the terminal success),
+ *   - a raised-PR marker on the run → `PR raised`,
+ *   - running/paused → `implementing`,
+ *   - anything else (pending/failed/cancelled/completed-without-markers) → the
+ *     spec exists but no implementation has landed → `spec authored`.
+ */
+export function deriveWorkState(run: {
+  status?: string;
+  metadata?: unknown;
+}): JiraWorkState {
+  if (verifyPassed(run)) return 'verified';
+  const jira = jiraMetaOf(run) as (JiraRunMeta & { prUrl?: unknown }) | undefined;
+  if (jira && typeof jira.prUrl === 'string' && jira.prUrl.trim()) {
+    return 'PR raised';
+  }
+  const status = run.status;
+  if (status === 'running' || status === 'paused') return 'implementing';
+  return 'spec authored';
+}
+
+/** Factory seam that builds a live track client from the resolved credentials. */
+function defaultMakeTrackClient(): JiraTrackClient {
+  const creds = resolveJiraCredentials();
+  return new JiraClient(creds);
+}
+
+/** One row of the tracking view: an issue's SpecShip + live-JIRA state. */
+interface JiraTrackRow {
+  issueKey: string;
+  title: string;
+  workState: JiraWorkState;
+  /** The live JIRA status, or a degraded marker when the read failed. */
+  jiraStatus: string;
+}
+
+const JIRA_UNREACHABLE = '— (JIRA unreachable)';
+
+/** Render the tracking rows as a compact markdown table (REQ-JIRA-008). */
+function formatTrack(rows: JiraTrackRow[]): string {
+  if (rows.length === 0) {
+    return 'No picked issues yet — run specship_jira_pick first.';
+  }
+  const lines = [
+    '| Issue | SpecShip | JIRA |',
+    '| --- | --- | --- |',
+    ...rows.map(
+      (r) => `| **${r.issueKey}** — ${r.title} | ${r.workState} | ${r.jiraStatus} |`,
+    ),
+  ];
+  return `Tracking ${rows.length} picked issue${rows.length === 1 ? '' : 's'}:\n\n${lines.join('\n')}`;
+}
+
+/**
+ * Handle `specship_jira_track` (REQ-JIRA-008). A read-only view joining each
+ * picked issue's SpecShip work-state (from its workflow run) with its LIVE JIRA
+ * status (a fresh read at track time — never the pick-time cached metadata, so
+ * an issue moved outside SpecShip shows its current status). It never re-picks
+ * or re-starts anything.
+ *
+ * Runs are enumerated newest-first and deduped by issue key keeping the
+ * most-recent run. A JIRA read failure degrades PER ROW to a clear "unreachable"
+ * marker and never fails the whole view (degrade-gracefully, matching the
+ * sibling status tools).
+ *
+ * SECURITY: no token appears in any output or error (REQ-JIRA-009) — only public
+ * issue keys, titles, and statuses.
+ */
+export async function handleSpecshipJiraTrack(
+  args: Record<string, unknown>,
+  deps: JiraTrackDeps,
+): Promise<ToolResult> {
+  // Not configured → a clear pointer, never an error stack or a fabricated view.
+  const notConfigured = notConfiguredResult();
+  if (notConfigured) return notConfigured;
+
+  const project =
+    typeof args.project === 'string' && args.project.trim()
+      ? args.project.trim()
+      : undefined;
+
+  // Enumerate the runs that record which issues entered the SpecShip pipeline,
+  // keeping only JIRA-started runs and deduping by key (newest-first, so the
+  // first occurrence is the most-recent run — reinforcement 3).
+  const limit = typeof deps.limit === 'number' && deps.limit > 0 ? deps.limit : 200;
+  const getAll = (deps.specQueries as {
+    getAllWorkflowRuns?: (n: number) => Array<{ status?: string; metadata?: unknown }>;
+  }).getAllWorkflowRuns;
+  const runs = typeof getAll === 'function' ? getAll.call(deps.specQueries, limit) ?? [] : [];
+
+  const picked: Array<{ issueKey: string; title: string; workState: JiraWorkState }> = [];
+  const seen = new Set<string>();
+  for (const run of runs) {
+    const jira = jiraMetaOf(run);
+    const issueKey = jira?.issueKey;
+    if (!issueKey || seen.has(issueKey)) continue;
+    seen.add(issueKey);
+    picked.push({
+      issueKey,
+      title: jira?.title?.trim() || issueKey,
+      workState: deriveWorkState(run),
+    });
+  }
+
+  if (picked.length === 0) {
+    return textResult(formatTrack([]));
+  }
+
+  // Fresh JIRA read (reinforcement 1: the JIRA column is ALWAYS from this live
+  // read, never the pick-time cached metadata). A whole-read failure degrades
+  // every row; a per-key fallback failure degrades only that row.
+  const make = deps.makeJiraClient ?? defaultMakeTrackClient;
+  let client: JiraTrackClient | undefined;
+  let listStatuses: Map<string, string> | undefined;
+  try {
+    client = make();
+    const listed = await client.listMyIssues({ project });
+    listStatuses = new Map(listed.issues.map((i: JiraIssue) => [i.key, i.status]));
+  } catch {
+    // The assigned-issues read failed entirely — every row degrades (per-row).
+    listStatuses = undefined;
+  }
+
+  const rows: JiraTrackRow[] = [];
+  for (const p of picked) {
+    let jiraStatus = JIRA_UNREACHABLE;
+    if (listStatuses) {
+      const live = listStatuses.get(p.issueKey);
+      if (live !== undefined) {
+        jiraStatus = live;
+      } else if (client) {
+        // No longer in the assigned list — a single live read still tracks it.
+        try {
+          const single = await client.getIssue(p.issueKey);
+          jiraStatus = single.issue.status;
+        } catch {
+          jiraStatus = JIRA_UNREACHABLE;
+        }
+      }
+    }
+    rows.push({ ...p, jiraStatus });
+  }
+
+  return textResult(formatTrack(rows));
 }
