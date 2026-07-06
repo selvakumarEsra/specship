@@ -64,7 +64,26 @@ export interface ExecuteOptions {
   verbose?: boolean;
   /** Override the run ID (mostly for resume). Defaults to a fresh UUID. */
   runId?: string;
+  /**
+   * Override the worktree branch name (default: the WorktreeProvider's
+   * `specship/wf-<name>-<shortRunId>`). Callers that need the branch to carry a
+   * ticket key (JIRA REQ-JIRA-006) pass it here.
+   */
+  branchName?: string;
+  /**
+   * Extra key/values merged into the new run's `metadata` at start. Survives
+   * finalize so a completion hook can recover it (e.g. `{ jira: { issueKey } }`).
+   */
+  runMetadata?: Record<string, unknown>;
 }
+
+/**
+ * Invoked once a run settles to `completed` (never paused/failed/cancelled).
+ * Kept generic so callers (e.g. the JIRA flow) can react to completion without
+ * the executor knowing anything domain-specific. Errors are swallowed — a
+ * completion hook must never corrupt the run it observes.
+ */
+export type RunCompletedHook = (run: WorkflowRun) => void | Promise<void>;
 
 export interface ExecuteResult {
   run: WorkflowRun;
@@ -85,11 +104,23 @@ export class WorkflowExecutor {
    * is simply not written.
    */
   private projectRoot?: string;
+  /**
+   * Optional hook fired when a run settles to `completed`. Wired by callers
+   * that need to react to completion (JIRA REQ-JIRA-006 raises a PR here);
+   * absent for plain runs.
+   */
+  private onRunCompleted?: RunCompletedHook;
 
-  constructor(specQueries: SpecQueries, worktrees: WorktreeProvider, projectRoot?: string) {
+  constructor(
+    specQueries: SpecQueries,
+    worktrees: WorktreeProvider,
+    projectRoot?: string,
+    onRunCompleted?: RunCompletedHook,
+  ) {
     this.specQueries = specQueries;
     this.worktrees = worktrees;
     this.projectRoot = projectRoot;
+    this.onRunCompleted = onRunCompleted;
     this.runners = new Map<DagNode['kind'], NodeRunner>([
       ['prompt', new PromptRunner()],
       ['bash', new BashRunner()],
@@ -126,6 +157,7 @@ export class WorkflowExecutor {
           workflowName: workflow.name,
           workflowRunId: runId,
           baseBranch: workflow.worktree.base_branch,
+          branchName: opts.branchName,
         });
         cwd = env.workingPath;
         isolationEnvId = env.id;
@@ -176,6 +208,7 @@ export class WorkflowExecutor {
       metadata: {
         nodeStates: {},
         completedNodes: [],
+        ...(opts.runMetadata ?? {}),
       },
     };
     this.specQueries.insertWorkflowRun(run);
@@ -650,15 +683,20 @@ export class WorkflowExecutor {
       completedNodes: [...nodeStates.entries()].filter(([, s]) => s === 'completed').map(([id]) => id),
     };
     if (approval) meta.approval = approval;
+    // Preserve caller-seeded run metadata (e.g. `jira`) across finalize — the
+    // completion hook recovers it from here (REQ-JIRA-006).
+    const prevMeta = (run.metadata as Record<string, unknown> | undefined) ?? {};
+    if (prevMeta.jira !== undefined) meta.jira = prevMeta.jira;
 
-    this.specQueries.updateWorkflowRun({
+    const updated: WorkflowRun = {
       ...run,
       status,
       completedAt: status === 'paused' ? undefined : now,
       lastActivityAt: now,
       errorMessage,
       metadata: meta,
-    });
+    };
+    this.specQueries.updateWorkflowRun(updated);
     this.syncActiveRunMarker(status, run.inputs, run.id);
 
     if (status === 'completed') {
@@ -666,6 +704,15 @@ export class WorkflowExecutor {
       if (run.isolationEnvId) {
         // Successful runs leave the worktree for inspection by default.
         // A `specship workflow gc` command can clean these up later.
+      }
+      // Fire the completion hook LAST (after the run row + events are durable),
+      // guarded so a hook failure can never corrupt the settled run.
+      if (this.onRunCompleted) {
+        try {
+          await this.onRunCompleted(updated);
+        } catch {
+          /* a completion hook must never break the run it observes */
+        }
       }
     } else if (status === 'failed') {
       this.event(run.id, 'run_failed', { error: errorMessage });

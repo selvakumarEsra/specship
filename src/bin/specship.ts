@@ -2872,12 +2872,27 @@ program
     const { discoverWorkflows, loadWorkflowByName } = await import('../workflows/discovery');
     const { WorkflowExecutor } = await import('../workflows/executor');
     const { WorktreeProvider } = await import('../isolation/worktree');
+    const { handleJiraRunCompletion } = await import('../mcp/jira-tools');
 
     const cg = await SpecShip.open(projectRoot);
     try {
       const specQueries = cg.getSpecQueries();
       const worktrees = new WorktreeProvider(specQueries);
-      const executor = new WorkflowExecutor(specQueries, worktrees, projectRoot);
+      // On completion, a JIRA-started run raises its PR (REQ-JIRA-006); the hook
+      // is a silent no-op for any run without `metadata.jira`.
+      const executor = new WorkflowExecutor(
+        specQueries,
+        worktrees,
+        projectRoot,
+        async (run) => {
+          await handleJiraRunCompletion(run, {
+            getIsolationEnvById: (id) => specQueries.getIsolationEnvById(id),
+            projectRoot,
+            // eslint-disable-next-line no-console
+            log: (m) => console.log(m),
+          });
+        },
+      );
 
       switch (action) {
         case 'list': {
