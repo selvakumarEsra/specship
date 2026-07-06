@@ -1,11 +1,13 @@
 /**
- * JIRA MCP tools (REQ-JIRA-002, REQ-JIRA-003).
+ * JIRA MCP tools (REQ-JIRA-002, REQ-JIRA-003, REQ-JIRA-004).
  *
  * `specship_jira_issues` lists the issues assigned to the authenticated user
  * (identity resolved from the token, never a typed name), optionally narrowed
  * to a project. `specship_jira_issue` fetches a single issue by key with its
- * full detail (description + subtasks). Both read the user-level config,
- * resolve credentials, and drive `JiraClient`.
+ * full detail (description + subtasks). `specship_jira_pick` fetches an issue
+ * and authors a well-formed SpecShip spec from it under `specs/` (idempotent on
+ * the issue key). All read the user-level config, resolve credentials, and
+ * drive `JiraClient`.
  *
  * SECURITY (REQ-JIRA-009): the token is never surfaced. Every error path
  * returns only the JiraError's own message — which by construction contains
@@ -17,6 +19,7 @@ import type { ToolDefinition, ToolResult } from './tools';
 import { loadJiraConfig, resolveJiraCredentials } from '../jira/config';
 import { JiraClient } from '../jira/client';
 import { JiraError, type JiraIssue } from '../jira/types';
+import { writeSpecFromIssue } from '../jira/spec-writer';
 
 function textResult(text: string): ToolResult {
   return { content: [{ type: 'text', text }] };
@@ -54,6 +57,25 @@ export const jiraToolDefinitions: ToolDefinition[] = [
           type: 'string',
           description:
             'The issue key to fetch, e.g., "PROJ-123". Required.',
+        },
+      },
+      required: ['key'],
+    },
+  },
+  {
+    name: 'specship_jira_pick',
+    description:
+      'Pick a JIRA issue by key (e.g., "PROJ-123") and author a SpecShip spec ' +
+      'from it under specs/ — summary becomes the title, description the ' +
+      'requirement body, subtasks the acceptance criteria. Re-picking the same ' +
+      'issue updates its spec in place rather than creating a duplicate.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        key: {
+          type: 'string',
+          description:
+            'The issue key to pick, e.g., "PROJ-123". Required.',
         },
       },
       required: ['key'],
@@ -183,5 +205,61 @@ export async function handleSpecshipJiraIssue(
     }
     // Defensive: never let an unexpected error leak internals.
     return errorResult('Failed to fetch the JIRA issue.');
+  }
+}
+
+/**
+ * Handle `specship_jira_pick` (REQ-JIRA-004). Fetches a single issue by key
+ * (reusing the REQ-JIRA-003 path) and authors a well-formed SpecShip spec from
+ * it under `specs/`, idempotent on the issue key (A3). Independent of the code
+ * graph — talks only to the configured JIRA host. A missing/no-access key
+ * surfaces as a `JiraNotFoundError` → tool error, never a written empty spec.
+ *
+ * SECURITY: the issue summary/description/subtasks are untrusted content; the
+ * generator neutralizes any injected spec structure before embedding. No token
+ * appears in any output or error (REQ-JIRA-009).
+ */
+export async function handleSpecshipJiraPick(
+  args: Record<string, unknown>,
+): Promise<ToolResult> {
+  // Not configured → a clear pointer, never an error stack or a written spec.
+  const notConfigured = notConfiguredResult();
+  if (notConfigured) return notConfigured;
+
+  // A missing/blank key is a user mistake, not an internal fault.
+  const key =
+    typeof args.key === 'string' && args.key.trim() ? args.key.trim() : undefined;
+  if (!key) {
+    return textResult(
+      'An issue key is required (e.g., "PROJ-123"). Pass it as the "key" argument.',
+    );
+  }
+
+  // The project whose specs/ directory receives the spec. Threaded through the
+  // handler args like the other tools' context, falling back to the cwd.
+  const projectRoot =
+    typeof args.projectPath === 'string' && args.projectPath.trim()
+      ? args.projectPath.trim()
+      : process.cwd();
+
+  try {
+    const creds = resolveJiraCredentials();
+    const client = new JiraClient(creds);
+    const result = await client.getIssue(key);
+    const written = writeSpecFromIssue(result.issue, projectRoot);
+    const verb = written.created ? 'Created' : 'Updated';
+    return textResult(
+      `${verb} spec for ${result.issue.key} at ${written.path}. ` +
+        'Run "specship sync" (or let the watcher pick it up) to index it, then ' +
+        'implement it with the spec-implement workflow.',
+    );
+  } catch (err) {
+    // JiraError messages (incl. JiraNotFoundError for a missing/no-access key)
+    // are credential-free by construction (REQ-JIRA-009).
+    if (err instanceof JiraError) {
+      return errorResult(err.message);
+    }
+    // Defensive: never let an unexpected error leak internals.
+    return errorResult('Failed to pick the JIRA issue.');
   }
 }

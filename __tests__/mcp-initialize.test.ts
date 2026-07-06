@@ -114,9 +114,9 @@ describe('REQ-DOMAIN-005 — no new MCP tool; instructions pointer present', () 
     // + 4 spec (spec/link_assert/link_verify/drifted)
     // + 2 harness (maintainability/fitness — MAINT-DOC/FITNESS-DOC)
     // + 6 designer
-    // + 2 jira (specship_jira_issues — REQ-JIRA-002; specship_jira_issue —
-    //   REQ-JIRA-003) = 22.
-    expect(tools.length).toBe(22);
+    // + 3 jira (specship_jira_issues — REQ-JIRA-002; specship_jira_issue —
+    //   REQ-JIRA-003; specship_jira_pick — REQ-JIRA-004) = 23.
+    expect(tools.length).toBe(23);
     expect(tools.some((t) => /domain/i.test(t.name))).toBe(false);
   });
 
