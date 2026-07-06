@@ -406,6 +406,7 @@ import {
   handleSpecshipJiraIssues,
   handleSpecshipJiraIssue,
   handleSpecshipJiraPick,
+  handleSpecshipJiraStart,
 } from './jira-tools';
 
 export const tools: ToolDefinition[] = [
@@ -1137,6 +1138,16 @@ export class ToolHandler {
           return await handleSpecshipJiraIssue(args);
         case 'specship_jira_pick':
           return await handleSpecshipJiraPick(args);
+        case 'specship_jira_start': {
+          // start drives the spec-implement workflow, so it needs the DB
+          // handle + project root from the session's open SpecShip (threaded
+          // in — the JIRA tools never import the SpecShip package directly).
+          const cg = this.getSpecShip(args.projectPath as string | undefined);
+          return await handleSpecshipJiraStart(args, {
+            specQueries: cg.getSpecQueries(),
+            projectRoot: cg.getProjectRoot(),
+          });
+        }
         default:
           return this.errorResult(`Unknown tool: ${toolName}`);
       }

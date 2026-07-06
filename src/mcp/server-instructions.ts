@@ -66,6 +66,15 @@ typically one to a few calls; a grep/read exploration is dozens.
 - **Don't loop \`specship_node\` over many symbols** — one \`specship_explore\` call returns them all grouped by file, while each separate call re-reads the whole context and costs far more. Use \`specship_node\` for a single symbol.
 - **After editing, check the staleness banner.** When a tool response starts with "⚠️ Some files referenced below were edited since the last index sync…", the listed files are pending re-index — Read those specific files for accurate content. Every file NOT in that banner is fresh, so still trust specship. \`specship_status\` also lists pending files under "Pending sync".
 
+## JIRA integration
+
+When the user works from JIRA issues, the tools chain in this order:
+
+- **"What's assigned to me?" / list issues** → \`specship_jira_issues\` (identity comes from the configured token — the user never types their own name).
+- **"Show me issue PROJ-123"** → \`specship_jira_issue\` with the \`key\`.
+- **"Pick / work on PROJ-123"** → \`specship_jira_pick\` with the \`key\` — fetches the issue and authors a SpecShip spec under \`specs/\` (idempotent on the key).
+- **"Start / implement it"** → \`specship_jira_start\` with the same \`key\` — runs the bundled \`spec-implement\` workflow on the spec pick authored, in an isolated worktree. It runs to the **plan/approve gate** and pauses there, returning the run ID; review the plan, then approve (\`specship workflow approve <runId>\`) to continue. A failed run raises no PR. If no spec exists for the key yet, start points you back to \`specship_jira_pick\`.
+
 ## Limitations
 
 - If a tool reports the project isn't initialized, \`.specship/\` doesn't exist yet — offer to run \`specship init -i\` to build the index.
