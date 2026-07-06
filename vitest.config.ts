@@ -19,6 +19,15 @@ export default defineConfig({
     environment: 'node',
     include: ['__tests__/**/*.test.ts'],
     /**
+     * Retry twice in CI only. A few process-lifecycle tests (mcp-daemon,
+     * mcp-ppid-watchdog) are load-sensitive and flake under a saturated CI
+     * runner, yet pass in isolation. Retrying lets a genuine flake go green
+     * while a real regression — which fails deterministically on every
+     * attempt — still fails the run. Locally (`CI` unset) there is no retry,
+     * so flakiness stays visible during development.
+     */
+    retry: process.env.CI ? 2 : 0,
+    /**
      * Several MCP integration tests (mcp-daemon, mcp-initialize, mcp-ppid-watchdog,
      * mcp-roots) spawn `dist/bin/specship.js serve --mcp` with `process.execPath`
      * and rely on the child inheriting `process.env`. On a Node >= 25 dev machine

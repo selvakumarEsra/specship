@@ -1,0 +1,57 @@
+name: Unit tests
+
+# Runs the full root vitest suite on every push to main and every PR that
+# touches source, tests, scripts, or the harness. This is the guard that keeps
+# main green between releases — the Release workflow runs the SAME suite as a
+# blocking publish gate, but this job catches a regression the moment it lands
+# (including on a direct push to main), rather than at release time.
+#
+# A dependency-override regression shipped in 0.13.1 because nothing ran the
+# unit suite before publish; this workflow + the release gate close that gap.
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "__tests__/**"
+      - "server/**"
+      - "scripts/**"
+      - "package.json"
+      - "package-lock.json"
+      - "vitest.config.ts"
+      - ".github/workflows/test.yml"
+  pull_request:
+    paths:
+      - "src/**"
+      - "__tests__/**"
+      - "server/**"
+      - "scripts/**"
+      - "package.json"
+      - "package-lock.json"
+      - "vitest.config.ts"
+      - ".github/workflows/test.yml"
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      # Root install compiles the optional better-sqlite3 (ships FTS5), which
+      # the DB-backed tests need; the built-in node:sqlite on Node 22 has none.
+      - run: npm ci
+      # The CLI-spawning tests (mcp-daemon, status-json, …) exec dist/bin, so
+      # the suite needs a real build first.
+      - name: Build CLI + server
+        run: npm run build
+      # CI=1 enables the vitest retry that absorbs the known load-flakes
+      # (mcp-daemon, mcp-ppid-watchdog) while a real regression still fails.
+      - name: Full unit suite
+        run: CI=1 npm test

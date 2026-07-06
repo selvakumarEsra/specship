@@ -105,6 +105,17 @@ jobs:
           npx playwright install --with-deps chromium
           CI=1 npm test
 
+      # Blocking gate: the full root unit suite (vitest). Runs BEFORE the
+      # CHANGELOG promotion, bundling, and publish, so a unit regression stops
+      # the release before any user-facing artifact or side effect is produced.
+      # `npm ci` above built the optional better-sqlite3 (FTS5), and the e2e
+      # step's `npm run build` produced dist/ for the CLI-spawning tests.
+      # `CI=1` enables the vitest retry that absorbs the known load-flakes.
+      # (Added after a dependency-override regression shipped in 0.13.1 because
+      # only the e2e suite gated the release, not the unit tests.)
+      - name: Full unit suite gate
+        run: CI=1 npm test
+
       - name: Resolve version
         id: ver
         run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
