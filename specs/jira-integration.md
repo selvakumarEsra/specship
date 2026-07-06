@@ -229,6 +229,11 @@ written into the project tree. All JIRA requests go only to the configured base
 URL; SpecShip makes no other outbound calls with the credential. This holds
 across the list, pick, PR, and status-write paths.
 
+implementations:
+  - src/jira/client.ts:JiraClient
+  - src/jira/auth.ts:buildAuthHeader
+  - src/jira/config.ts:resolveJiraCredentials
+
 ## Acceptance
 <!-- id: REQ-JIRA-009.A1 -->
 - No log, error message, workflow artifact, or committed file contains the
