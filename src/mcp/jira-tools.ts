@@ -21,7 +21,13 @@ import { randomUUID } from 'crypto';
 import type { ToolDefinition, ToolResult } from './tools';
 import { loadJiraConfig, resolveJiraCredentials } from '../jira/config';
 import { JiraClient } from '../jira/client';
-import { JiraError, type JiraIssue } from '../jira/types';
+import {
+  JiraError,
+  type JiraIssue,
+  type JiraConnectionResult,
+  type JiraTransitionNames,
+  type JiraTransitionResult,
+} from '../jira/types';
 import { writeSpecFromIssue, findSpecForIssueKey } from '../jira/spec-writer';
 import { reqIdForIssue } from '../jira/spec-generator';
 import {
@@ -36,6 +42,138 @@ function textResult(text: string): ToolResult {
 }
 function errorResult(message: string): ToolResult {
   return { content: [{ type: 'text', text: message }], isError: true };
+}
+
+/**
+ * The subset of `JiraClient` the status-push paths (REQ-JIRA-007) use. A
+ * seam interface so tests inject a fake client and the suite NEVER hits a real
+ * JIRA host (and no token is handled in tests).
+ */
+export interface JiraStatusClient {
+  testConnection(): Promise<JiraConnectionResult>;
+  assignIssue(key: string, accountId: string): Promise<void>;
+  transitionIssue(key: string, nameOrId: string): Promise<JiraTransitionResult>;
+  addComment(key: string, body: string): Promise<void>;
+}
+
+/** A built status client paired with the resolved transition names. */
+export interface JiraStatusContext {
+  client: JiraStatusClient;
+  transitions: JiraTransitionNames;
+}
+
+/**
+ * Factory seam that resolves credentials and builds a live `JiraClient` for the
+ * status-push paths. The default resolves the user-level config; tests pass a
+ * `makeJiraClient` dep returning a fake so no host is contacted. Throws only if
+ * credentials are unresolvable — callers wrap it and degrade to a note, never a
+ * blocked workflow (REQ-JIRA-007, degrade-gracefully).
+ */
+function defaultMakeJiraClient(): JiraStatusContext {
+  const creds = resolveJiraCredentials();
+  return {
+    client: new JiraClient(creds),
+    transitions: creds.transitions ?? {},
+  };
+}
+
+/**
+ * Push the "start" status to JIRA (REQ-JIRA-007.A1): assign the issue to the
+ * authenticated user and transition it toward "in progress". Returns a short
+ * human note describing what happened (assigned, moved, or skipped) — or `null`
+ * when there's nothing to say. NEVER throws: a JIRA hiccup (auth, network, a
+ * missing transition) must not block the local workflow from starting — the
+ * note simply reports the skip (reinforcement 4).
+ */
+async function pushJiraStartStatus(
+  key: string,
+  make: () => JiraStatusContext,
+): Promise<string | null> {
+  let ctx: JiraStatusContext;
+  try {
+    ctx = make();
+  } catch (err) {
+    return `Note: couldn't push start status to JIRA — ${errMsg(err)}`;
+  }
+  const notes: string[] = [];
+
+  // Assign to the authenticated user (identity resolved from the token).
+  try {
+    const conn = await ctx.client.testConnection();
+    if (conn.accountId) {
+      await ctx.client.assignIssue(key, conn.accountId);
+      notes.push(`assigned ${key} to you`);
+    }
+  } catch (err) {
+    notes.push(`couldn't assign ${key} (${errMsg(err)})`);
+  }
+
+  // Transition toward "in progress" — a missing transition is a skip, not a
+  // failure (A3), and never blocks the run.
+  try {
+    const target = ctx.transitions.inProgress ?? 'In Progress';
+    const res = await ctx.client.transitionIssue(key, target);
+    if ('transitioned' in res) {
+      notes.push(`moved ${key} to "${res.transitioned}"`);
+    } else {
+      notes.push(`didn't transition ${key} — ${res.reason}`);
+    }
+  } catch (err) {
+    notes.push(`couldn't transition ${key} (${errMsg(err)})`);
+  }
+
+  return notes.length ? `JIRA: ${notes.join('; ')}.` : null;
+}
+
+/**
+ * Push the "PR raised" status to JIRA (REQ-JIRA-007.A2): transition the issue
+ * toward "in review" and comment the PR link on it. When the configured
+ * transition doesn't exist for this workflow, it still comments the PR link and
+ * reports the skip (A3) rather than erroring. Returns a human note. NEVER
+ * throws — a JIRA-side failure must not undo the raised PR.
+ *
+ * SECURITY: only the public PR URL + issue key are sent (REQ-JIRA-009).
+ */
+async function pushJiraReviewStatus(
+  key: string,
+  prUrl: string,
+  make: () => JiraStatusContext,
+): Promise<string | null> {
+  let ctx: JiraStatusContext;
+  try {
+    ctx = make();
+  } catch (err) {
+    return `Note: couldn't push review status to JIRA — ${errMsg(err)}`;
+  }
+  const notes: string[] = [];
+
+  try {
+    const target = ctx.transitions.inReview ?? 'In Review';
+    const res = await ctx.client.transitionIssue(key, target);
+    if ('transitioned' in res) {
+      notes.push(`moved ${key} to "${res.transitioned}"`);
+    } else {
+      // A3: the transition is unavailable — still comment, report the skip.
+      notes.push(`didn't transition ${key} — ${res.reason}`);
+    }
+  } catch (err) {
+    notes.push(`couldn't transition ${key} (${errMsg(err)})`);
+  }
+
+  // The PR-link comment is posted regardless of the transition outcome (A3).
+  try {
+    await ctx.client.addComment(key, `SpecShip raised a pull request: ${prUrl}`);
+    notes.push(`commented the PR link on ${key}`);
+  } catch (err) {
+    notes.push(`couldn't comment the PR link on ${key} (${errMsg(err)})`);
+  }
+
+  return notes.length ? `JIRA: ${notes.join('; ')}.` : null;
+}
+
+/** Extract a credential-free message from an unknown error (REQ-JIRA-009). */
+function errMsg(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
 }
 
 export const jiraToolDefinitions: ToolDefinition[] = [
@@ -151,6 +289,13 @@ export interface JiraStartDeps {
    * Resolves the run's worktree branch + path at completion.
    */
   getIsolationEnvById?: (id: string) => IsolationEnvLike | null | undefined;
+  /**
+   * JIRA status-client factory (default: resolve creds + new JiraClient).
+   * Stubbed in tests so the start-status push (assign + in-progress
+   * transition, REQ-JIRA-007.A1) never hits a real host. Threaded through to
+   * the completion hook for the PR-raised status push too.
+   */
+  makeJiraClient?: () => JiraStatusContext;
 }
 
 /** Minimal shape of an isolation env the completion handler needs. */
@@ -170,6 +315,12 @@ export interface JiraCompletionDeps {
   projectRoot?: string;
   /** Where to surface the outcome (default: console.log). */
   log?: (message: string) => void;
+  /**
+   * JIRA status-client factory (default: resolve creds + new JiraClient).
+   * Stubbed in tests so the PR-raised status push (in-review transition + PR
+   * comment, REQ-JIRA-007.A2) never hits a real host.
+   */
+  makeJiraClient?: () => JiraStatusContext;
 }
 
 /** Minimal shape of a workflow run the executor returns/persists. */
@@ -517,8 +668,16 @@ export async function handleJiraRunCompletion(
 
   if (outcome.ok) {
     log(`Raised pull request for ${issueKey}: ${outcome.url}`);
+    // A2: PR raised → transition toward "in review" and comment the PR link.
+    // Only on a raised PR — a failed raise never advances the issue (below),
+    // matching REQ-JIRA-005.A2 (leave it in-progress). Never throws.
+    const make = deps.makeJiraClient ?? defaultMakeJiraClient;
+    const note = await pushJiraReviewStatus(issueKey, outcome.url, make);
+    if (note) log(note);
   } else {
-    // A3: report the reason; the branch + worktree are left intact upstream.
+    // A3 (of REQ-JIRA-006) / A2 (of REQ-JIRA-005): report the reason; the
+    // branch + worktree are left intact upstream and the issue is NOT
+    // transitioned (it stays in-progress).
     log(outcome.message);
   }
   return outcome;
@@ -530,14 +689,16 @@ export async function handleJiraRunCompletion(
  * issue key, in an isolated worktree, and runs it to the first pause — the
  * plan/approve gate (A1). It does NOT block for the full implementation.
  *
- * A2 (failed/rejected → no PR, not past "in progress") falls out for free: this
- * handler never transitions the JIRA issue, and PR-raise (REQ-JIRA-006) + the
- * "in review" transition (REQ-JIRA-007) only fire once the run reaches
- * `completed`. REQ-JIRA-007's "in progress" start-transition is a separate,
- * later dependency and is intentionally NOT built here.
+ * On the non-failed path it pushes the "start" status back to JIRA
+ * (REQ-JIRA-007.A1): assigns the issue and transitions it toward "in progress".
+ * That push NEVER blocks the workflow — a JIRA hiccup (auth, network, a missing
+ * transition) is surfaced as a note, not an error. A failed/rejected run
+ * (REQ-JIRA-005.A2) raises no PR and is never advanced past "in progress"; the
+ * "in review" transition + PR comment (REQ-JIRA-007.A2) fire only once the run
+ * reaches `completed` with a verified, raised PR.
  *
- * SECURITY: no credential is handled or echoed (REQ-JIRA-009). This handler
- * talks to no JIRA host — the spec is already on disk.
+ * SECURITY: the credential is handled only inside `JiraClient` and never
+ * echoed (REQ-JIRA-009); only the public issue key / PR URL are surfaced.
  */
 export async function handleSpecshipJiraStart(
   args: Record<string, unknown>,
@@ -612,6 +773,7 @@ export async function handleSpecshipJiraStart(
           }).getIsolationEnvById?.(id)),
       raisePullRequest: deps.raisePullRequest,
       projectRoot,
+      makeJiraClient: deps.makeJiraClient,
     };
 
     const worktrees = new WorktreeProvider(deps.specQueries);
@@ -647,12 +809,23 @@ export async function handleSpecshipJiraStart(
       );
     }
 
+    // A1 (REQ-JIRA-007): the run started, so push the "start" status —
+    // assign the issue + transition it toward "in progress". This runs only on
+    // the non-failed path (the run reached the gate); a JIRA hiccup here NEVER
+    // blocks the workflow — pushJiraStartStatus never throws and its note is
+    // surfaced in the returned text (reinforcement 4).
+    const startNote = await pushJiraStartStatus(
+      key,
+      deps.makeJiraClient ?? defaultMakeJiraClient,
+    );
+
     // A1: the run reached the plan/approve gate and paused. Surface the
     // approval message + runId; the caller approves (or rejects) to continue.
     const gate = approvalMessageOf(run);
     return textResult(
       `Started spec-implement for ${key} (${specId}). Run ${run.id} is paused ` +
         `at the plan/approve gate — review the plan and approve to proceed.` +
+        (startNote ? `\n\n${startNote}` : '') +
         (gate ? `\n\n${gate}` : '') +
         `\n\nApprove with: specship workflow approve ${run.id}` +
         `\nOr reject with feedback: specship workflow reject ${run.id} --comment "…"` +

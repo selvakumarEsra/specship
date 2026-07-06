@@ -217,7 +217,9 @@ describe('handleSpecshipJiraStart', () => {
     expect(calls).toHaveLength(1);
     const out = text(result);
     expect(out).toMatch(/no pull request|no pr/i);
-    // No transition call exists yet (REQ-JIRA-007) — assert nothing hit JIRA.
+    // A failed run pushes no status (REQ-JIRA-005.A2 / REQ-JIRA-007) — the
+    // issue is never transitioned, so nothing hits JIRA. (Status-push wiring
+    // itself is covered in jira-mcp-status-tool.test.ts with a stubbed client.)
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
