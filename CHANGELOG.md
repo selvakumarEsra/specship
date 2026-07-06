@@ -9,6 +9,9 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+
+## [0.13.0] - 2026-07-06
+
 ### New Features
 
 - **The desktop app stays fast, and the build keeps it that way.** The initial JavaScript payload is now budget-checked at build time — the build fails if it ever exceeds 250 KB gzipped (it currently sits around 107 KB) — so the app can't quietly bloat. Switching between screens you've already visited is instant: their data is served from an in-session cache with no duplicate network round-trip, and revisiting a screen no longer flashes a loading skeleton. The graph's force layout is bounded so even a large node set can't lock up the main thread.
@@ -559,3 +562,4 @@ Thanks @andreinknv for the substantive draft this release was based on.
 [0.11.9]: https://github.com/selvakumarEsra/specship/releases/tag/v0.11.9
 [0.12.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.12.0
 [0.12.1]: https://github.com/selvakumarEsra/specship/releases/tag/v0.12.1
+[0.13.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.13.0
