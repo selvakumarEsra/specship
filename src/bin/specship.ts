@@ -3107,6 +3107,153 @@ program
     if (result.exitCode !== 0) process.exit(result.exitCode);
   });
 
+/**
+ * specship jira — connect SpecShip to a JIRA instance (REQ-JIRA-001).
+ *
+ * Two subcommands:
+ *   - `configure` — collect base URL + credentials, infer the deployment,
+ *     save to `~/.specship/jira.json` (0600, user-level only), then probe.
+ *   - `test` — resolve the stored/env credentials and probe `/myself`.
+ *
+ * SECURITY: the token/PAT is NEVER echoed — not in a confirmation, not in
+ * `test` output, not in an error message. On success we print only
+ * "connected as <displayName>". Errors from the jira module are already
+ * scrubbed of secrets (REQ-JIRA-009 builds on this).
+ */
+const jira = program
+  .command('jira')
+  .description('Connect SpecShip to a JIRA instance (Cloud or Data Center).');
+
+jira
+  .command('configure')
+  .description('Save JIRA credentials to ~/.specship/jira.json (0600) and test the connection.')
+  .option('--base-url <url>', 'JIRA base URL, e.g. https://acme.atlassian.net')
+  .option('--email <email>', 'Cloud: account email (paired with --api-token)')
+  .option('--api-token <token>', 'Cloud: API token (paired with --email)')
+  .option('--pat <token>', 'Data Center: personal access token')
+  .option('--deployment <kind>', 'Deployment kind: "cloud" or "datacenter" (inferred if omitted)')
+  .action(async (opts: {
+    baseUrl?: string;
+    email?: string;
+    apiToken?: string;
+    pat?: string;
+    deployment?: string;
+  }) => {
+    const {
+      saveJiraConfig,
+      resolveJiraCredentials,
+      inferDeployment,
+      jiraConfigPath,
+      JiraClient,
+      JiraAuthError,
+    } = await import('../jira');
+    type JiraConfigShape = import('../jira').JiraConfig;
+
+    const clack = await importESM('@clack/prompts');
+    const cancelled = (v: unknown): boolean => clack.isCancel(v);
+
+    // Fully-flagged (non-interactive) path: base URL + a complete credential set.
+    const flagged = Boolean(
+      opts.baseUrl && (opts.pat || (opts.email && opts.apiToken)),
+    );
+
+    clack.intro('Configure JIRA');
+    try {
+      let config: JiraConfigShape;
+
+      if (flagged) {
+        const deployment = inferDeployment({
+          deployment: opts.deployment as any,
+          email: opts.email,
+          apiToken: opts.apiToken,
+          pat: opts.pat,
+        });
+        config = {
+          baseUrl: opts.baseUrl!.trim(),
+          deployment,
+          email: opts.email,
+          apiToken: opts.apiToken,
+          pat: opts.pat,
+        };
+      } else {
+        const baseUrl = opts.baseUrl ?? (await clack.text({
+          message: 'JIRA base URL',
+          placeholder: 'https://acme.atlassian.net',
+          validate: (v: string) => (v && v.trim() ? undefined : 'Required'),
+        }));
+        if (cancelled(baseUrl)) { clack.cancel('Cancelled — nothing saved.'); return; }
+
+        const deployment = (opts.deployment ?? (await clack.select({
+          message: 'Deployment',
+          options: [
+            { value: 'cloud', label: 'Cloud (email + API token)' },
+            { value: 'datacenter', label: 'Data Center / Server (personal access token)' },
+          ],
+        }))) as 'cloud' | 'datacenter';
+        if (cancelled(deployment)) { clack.cancel('Cancelled — nothing saved.'); return; }
+
+        config = { baseUrl: String(baseUrl).trim(), deployment };
+
+        if (deployment === 'cloud') {
+          const email = opts.email ?? (await clack.text({
+            message: 'Account email',
+            validate: (v: string) => (v && v.trim() ? undefined : 'Required'),
+          }));
+          if (cancelled(email)) { clack.cancel('Cancelled — nothing saved.'); return; }
+          const apiToken = opts.apiToken ?? (await clack.password({
+            message: 'API token (input hidden, never printed)',
+            validate: (v: string) => (v ? undefined : 'Required'),
+          }));
+          if (cancelled(apiToken)) { clack.cancel('Cancelled — nothing saved.'); return; }
+          config.email = String(email).trim();
+          config.apiToken = String(apiToken);
+        } else {
+          const pat = opts.pat ?? (await clack.password({
+            message: 'Personal access token (input hidden, never printed)',
+            validate: (v: string) => (v ? undefined : 'Required'),
+          }));
+          if (cancelled(pat)) { clack.cancel('Cancelled — nothing saved.'); return; }
+          config.pat = String(pat);
+        }
+      }
+
+      saveJiraConfig(config);
+      // NOTE: never print the credential — only the path.
+      clack.log.success(`Saved credentials to ${jiraConfigPath()} (permissions 0600).`);
+
+      // Probe the connection so the user knows immediately whether it works.
+      const client = new JiraClient(resolveJiraCredentials());
+      const result = await client.testConnection();
+      clack.outro(`Connected as ${result.displayName ?? 'unknown user'}.`);
+    } catch (err) {
+      // Messages from the jira module are already scrubbed of the secret.
+      const msg = err instanceof Error ? err.message : String(err);
+      const label = err instanceof JiraAuthError ? 'Authentication failed' : 'Connection failed';
+      clack.log.error(`${label}: ${msg}`);
+      process.exit(1);
+    }
+  });
+
+jira
+  .command('test')
+  .description('Test the configured JIRA connection (uses ~/.specship/jira.json or SPECSHIP_JIRA_* env).')
+  .action(async () => {
+    const { resolveJiraCredentials, JiraClient, JiraAuthError } = await import('../jira');
+    try {
+      const creds = resolveJiraCredentials();
+      const client = new JiraClient(creds);
+      const result = await client.testConnection();
+      const kind = creds.deployment === 'cloud' ? 'JIRA Cloud' : 'JIRA Data Center';
+      // Never print the credential — only the resolved identity.
+      success(`Connected to ${kind} as ${result.displayName ?? 'unknown user'}.`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const label = err instanceof JiraAuthError ? 'Authentication failed' : 'Connection failed';
+      error(`${label}: ${msg}`);
+      process.exit(1);
+    }
+  });
+
 // Parse and run
 program.parse();
 

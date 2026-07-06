@@ -9,6 +9,10 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### New Features
+
+- **Connect SpecShip to JIRA.** A new `specship jira configure` command walks you through pointing SpecShip at your JIRA instance — both Cloud (email + API token) and Data Center / Server (personal access token) are supported, and the deployment is inferred from the credentials you give. Your credentials are saved to `~/.specship/jira.json` with owner-only (`0600`) permissions and never to your project tree. `specship jira test` verifies the connection at any time. Your token is never printed — on success you just see "connected as <your name>". Credentials can also come from `SPECSHIP_JIRA_BASE_URL`, `SPECSHIP_JIRA_EMAIL`, `SPECSHIP_JIRA_API_TOKEN`, `SPECSHIP_JIRA_PAT`, and `SPECSHIP_JIRA_DEPLOYMENT` for headless setups.
+
 
 ## [0.13.1] - 2026-07-06
 
