@@ -9,6 +9,9 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixes
+
+- **Leaner, more reproducible install.** Trimmed unused packages from the dependency tree and pinned build tooling to exact versions, so a clean install resolves the same way every time — including on mirrored or private registries.
 
 ## [0.13.0] - 2026-07-06
 
