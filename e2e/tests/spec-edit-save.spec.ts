@@ -25,9 +25,9 @@ test('spec edit → save persists to disk and re-queues (REQ-DESKTOP-032.A2)', a
 
   try {
     // ---- select the fixture spec from the tree → its detail (read view) ----
-    // Reached by selecting the row (the flow REQ-DESKTOP-032 describes), which
-    // keeps the app on `/specs`; the SPA's relative asset base makes a fresh
-    // load of a deeper `/specs/:id` URL a separate concern (REQ-DESKTOP-018).
+    // Reached by selecting the row (the flow REQ-DESKTOP-032 describes). A
+    // fresh full-page load of the deeper `/specs/:id` URL is covered
+    // separately by deep-link-reload.spec.ts (REQ-DESKTOP-018.A2).
     await page.goto('/specs');
     await expect(page.locator('[data-screen="specs"]')).toBeVisible();
     await page.getByRole('treeitem').filter({ hasText: FIXTURE_SPEC_ID }).click();

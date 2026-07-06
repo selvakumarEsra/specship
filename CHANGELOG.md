@@ -30,6 +30,10 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **The dashboard server now lives in a clean top-level `server/` module beside `ui/`.** The old `packages/` nesting is dissolved — the HTTP API and dashboard server sit at the repository root next to the desktop app, with the npm shim and end-to-end tests relocated alongside — so building SpecShip from source is one less layer to navigate. Installed users see no change: the published package and every command behave exactly as before.
 - **The desktop dashboard is now the single-page app, full stop.** The older server-rendered dashboard has been retired: `specship serve --ui` serves the React app directly, so there's nothing to opt into — the now-redundant `--no-ssr` flag is gone and the app is what you get by default.
 
+### Fixes
+
+- **Reloading the dashboard on a deep page — or opening a shared link to one — now works.** Loading a URL like a specific spec's detail page directly (instead of clicking into it) previously failed to start the app because it looked for its assets in the wrong place; the app now loads correctly from any page on a fresh visit or refresh.
+
 ## [0.12.1] - 2026-07-04
 
 ### New Features
