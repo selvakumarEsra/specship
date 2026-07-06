@@ -111,8 +111,11 @@ interface StartCall {
   workflow: unknown;
   opts: {
     projectRoot: string;
+    runId?: string;
+    branchName?: string;
     inputs?: Record<string, string>;
     variables?: Record<string, string>;
+    runMetadata?: Record<string, unknown>;
   };
 }
 
@@ -185,6 +188,14 @@ describe('handleSpecshipJiraStart', () => {
     expect(calls[0]!.opts.inputs).toEqual({ SPEC_ID: reqIdForIssue('PROJ-1') });
     expect(calls[0]!.opts.projectRoot).toBe(projectDir);
     expect(calls[0]!.opts.variables?.CONTEXT).toBe(projectDir);
+    // REQ-JIRA-006: the issue key rides the branch name (JIRA dev-panel match),
+    // and the run is stamped with jira metadata so completion can raise the PR.
+    expect(calls[0]!.opts.branchName).toMatch(/^specship\/PROJ-1-/);
+    expect(
+      (calls[0]!.opts.runMetadata as { jira?: { issueKey?: string } })?.jira?.issueKey,
+    ).toBe('PROJ-1');
+    // The gate message tells the user a PR is raised on approval + verify.
+    expect(text(result)).toMatch(/pull request for PROJ-1 is raised/i);
     // A1: the run id + plan/approve gate are surfaced; not blocked to completion.
     const out = text(result);
     expect(out).toContain('run-abc');

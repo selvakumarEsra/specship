@@ -15,13 +15,21 @@
  * `specship jira configure`, never a partial or fabricated result.
  */
 
+import * as fs from 'fs';
 import * as path from 'path';
+import { randomUUID } from 'crypto';
 import type { ToolDefinition, ToolResult } from './tools';
 import { loadJiraConfig, resolveJiraCredentials } from '../jira/config';
 import { JiraClient } from '../jira/client';
 import { JiraError, type JiraIssue } from '../jira/types';
 import { writeSpecFromIssue, findSpecForIssueKey } from '../jira/spec-writer';
 import { reqIdForIssue } from '../jira/spec-generator';
+import {
+  raisePullRequest as defaultRaisePullRequest,
+  buildPrTitle,
+  buildPrBody,
+  type PullRequestOutcome,
+} from '../jira/pull-request';
 
 function textResult(text: string): ToolResult {
   return { content: [{ type: 'text', text }] };
@@ -129,9 +137,39 @@ export interface JiraStartDeps {
     specQueries: unknown,
     worktrees: unknown,
     projectRoot: string,
+    onRunCompleted?: (run: JiraStartRunLike) => void | Promise<void>,
   ) => JiraStartExecutorLike;
   /** Resolver for the .specship dir (default: ../directory). */
   getSpecShipDir?: (projectRoot: string) => string;
+  /**
+   * PR-raise seam (default: ../jira/pull-request). Stubbed in tests so the
+   * suite NEVER runs a real `git push` / `gh pr create` (REQ-JIRA-006).
+   */
+  raisePullRequest?: typeof defaultRaisePullRequest;
+  /**
+   * Isolation-env lookup seam (default: specQueries.getIsolationEnvById).
+   * Resolves the run's worktree branch + path at completion.
+   */
+  getIsolationEnvById?: (id: string) => IsolationEnvLike | null | undefined;
+}
+
+/** Minimal shape of an isolation env the completion handler needs. */
+export interface IsolationEnvLike {
+  branchName: string;
+  workingPath: string;
+  metadata?: unknown;
+}
+
+/** Dependencies for `handleJiraRunCompletion` — all stubbable, no real shell. */
+export interface JiraCompletionDeps {
+  /** Resolve the run's worktree (branch + path) by isolation-env id. */
+  getIsolationEnvById: (id: string) => IsolationEnvLike | null | undefined;
+  /** PR-raise seam (default: ../jira/pull-request). */
+  raisePullRequest?: typeof defaultRaisePullRequest;
+  /** Repo root fallback when the env metadata omits it. */
+  projectRoot?: string;
+  /** Where to surface the outcome (default: console.log). */
+  log?: (message: string) => void;
 }
 
 /** Minimal shape of a workflow run the executor returns/persists. */
@@ -139,6 +177,7 @@ interface JiraStartRunLike {
   id: string;
   status: string;
   errorMessage?: string;
+  isolationEnvId?: string;
   metadata?: unknown;
 }
 
@@ -148,8 +187,11 @@ interface JiraStartExecutorLike {
     workflow: unknown,
     opts: {
       projectRoot: string;
+      runId?: string;
+      branchName?: string;
       inputs?: Record<string, string>;
       variables?: Record<string, string>;
+      runMetadata?: Record<string, unknown>;
     },
   ): Promise<{ run: JiraStartRunLike }>;
 }
@@ -361,6 +403,127 @@ function reloadRun(specQueries: unknown, run: JiraStartRunLike): JiraStartRunLik
   }
 }
 
+/** Read the H1 title out of a spec file, falling back to `fallback`. */
+function readSpecTitle(specPath: string | null, fallback: string): string {
+  if (!specPath) return fallback;
+  try {
+    const content = fs.readFileSync(specPath, 'utf8');
+    for (const raw of content.split(/\r?\n/)) {
+      const line = raw.trim();
+      const m = line.match(/^#\s+(.+)$/);
+      if (m) return m[1]!.trim() || fallback;
+    }
+  } catch {
+    /* fall through to the fallback */
+  }
+  return fallback;
+}
+
+/** The `jira` block a JIRA-started run carries in its metadata. */
+interface JiraRunMeta {
+  issueKey?: string;
+  specId?: string;
+  title?: string;
+}
+
+/** Recover the `jira` metadata block off a run, tolerating any metadata shape. */
+function jiraMetaOf(run: { metadata?: unknown }): JiraRunMeta | undefined {
+  const jira = (run.metadata as { jira?: JiraRunMeta } | undefined)?.jira;
+  return jira && typeof jira === 'object' ? jira : undefined;
+}
+
+/**
+ * True when the run's verify leg RAN AND PASSED — the only state that raises a
+ * PR (REQ-JIRA-006.A1; aligns with REQ-JIRA-005.A2). A verify that FAILED halts
+ * the run before completion (status `failed`), and a SKIPPED verify
+ * (`VERIFY_RESULT=skipped`) completes the run but must NOT raise a PR — tests
+ * that did not run are never treated as a pass.
+ */
+function verifyPassed(run: { metadata?: unknown }): boolean {
+  const meta = (run.metadata as Record<string, unknown> | undefined) ?? {};
+  const states = meta.nodeStates as Record<string, string> | undefined;
+  if (states && states.verify && states.verify !== 'completed') return false;
+  const outputs = meta.outputs as Record<string, { text?: string }> | undefined;
+  const verifyText = outputs?.verify?.text ?? '';
+  return /VERIFY_RESULT=ran-and-passed/.test(verifyText);
+}
+
+/**
+ * Completion hook for a JIRA-started run (REQ-JIRA-006). Fires only once the
+ * run has settled to `completed`. Raises a PR — traceable to the issue via the
+ * key in the branch name, PR title, AND body — ONLY when the run's verify leg
+ * ran and passed. On any PR-tooling failure it surfaces the reason and leaves
+ * the branch + worktree fully intact for a manual PR (A3); it NEVER auto-merges
+ * or closes the PR (the human owns "done"). A non-JIRA run is a silent no-op.
+ *
+ * SECURITY: no JIRA token/secret appears in the PR title/body/logs — only the
+ * public issue key (REQ-JIRA-009).
+ */
+export async function handleJiraRunCompletion(
+  run: JiraStartRunLike,
+  deps: JiraCompletionDeps,
+): Promise<PullRequestOutcome | null> {
+  const jira = jiraMetaOf(run);
+  const issueKey = jira?.issueKey;
+  if (!issueKey) return null; // not a JIRA-started run — nothing to do.
+
+  const log = deps.log ?? ((m: string) => {
+    // eslint-disable-next-line no-console
+    console.log(m);
+  });
+
+  // A1: a completed-but-unverified run (verify skipped) raises NO PR.
+  if (!verifyPassed(run)) {
+    log(
+      `Run for ${issueKey} completed but its verification did not pass — no ` +
+        'pull request was raised.',
+    );
+    return null;
+  }
+
+  if (!run.isolationEnvId) {
+    log(
+      `Run for ${issueKey} completed but has no worktree on record — no pull ` +
+        'request was raised.',
+    );
+    return null;
+  }
+
+  const env = deps.getIsolationEnvById(run.isolationEnvId);
+  if (!env) {
+    log(
+      `Run for ${issueKey} completed but its worktree could not be resolved — ` +
+        'no pull request was raised.',
+    );
+    return null;
+  }
+
+  const meta = (env.metadata as Record<string, unknown> | undefined) ?? {};
+  const repoRoot =
+    (typeof meta.repoRoot === 'string' ? meta.repoRoot : undefined) ??
+    deps.projectRoot ??
+    process.cwd();
+
+  const specTitle = jira.title ?? jira.specId ?? issueKey;
+  const raise = deps.raisePullRequest ?? defaultRaisePullRequest;
+  const outcome = await raise({
+    repoRoot,
+    branchName: env.branchName,
+    worktreePath: env.workingPath,
+    issueKey,
+    title: buildPrTitle(issueKey, specTitle),
+    body: buildPrBody(issueKey, specTitle),
+  });
+
+  if (outcome.ok) {
+    log(`Raised pull request for ${issueKey}: ${outcome.url}`);
+  } else {
+    // A3: report the reason; the branch + worktree are left intact upstream.
+    log(outcome.message);
+  }
+  return outcome;
+}
+
 /**
  * Handle `specship_jira_start` (REQ-JIRA-005). Drives the bundled
  * `spec-implement` workflow on the spec `specship_jira_pick` authored for the
@@ -399,12 +562,14 @@ export async function handleSpecshipJiraStart(
   // The spec must already exist — start never silently authors one. If it's
   // absent, point the caller at specship_jira_pick (which writes the spec keyed
   // on this exact issue key, so start then targets the same SPEC_ID).
-  if (!findSpecForIssueKey(key, projectRoot)) {
+  const specPath = findSpecForIssueKey(key, projectRoot);
+  if (!specPath) {
     return textResult(
       `No spec for ${key} was found under specs/. Run specship_jira_pick for ` +
         `${key} first to author it, then run specship_jira_start again.`,
     );
   }
+  const specTitle = readSpecTitle(specPath, specId);
 
   try {
     const loadWorkflowByName =
@@ -429,15 +594,45 @@ export async function handleSpecshipJiraStart(
       );
     }
 
+    // Carry the issue key in the branch name too (specship/<key>-<shortRunId>)
+    // so JIRA's dev panel matches on branch + PR title + PR body (REQ-JIRA-006).
+    const runId = randomUUID();
+    const shortRunId = runId.substring(0, 8);
+    const branchSlug = key.replace(/[^A-Za-z0-9._/-]/g, '-').replace(/-+/g, '-');
+    const branchName = `specship/${branchSlug}-${shortRunId}`;
+
+    // Completion deps: the PR is raised only when the run later resumes to
+    // `completed` with a passing verify. Non-JIRA runs no-op this hook.
+    const completionDeps: JiraCompletionDeps = {
+      getIsolationEnvById:
+        deps.getIsolationEnvById ??
+        ((id: string) =>
+          (deps.specQueries as {
+            getIsolationEnvById?: (id: string) => IsolationEnvLike | null;
+          }).getIsolationEnvById?.(id)),
+      raisePullRequest: deps.raisePullRequest,
+      projectRoot,
+    };
+
     const worktrees = new WorktreeProvider(deps.specQueries);
-    const executor = new WorkflowExecutor(deps.specQueries, worktrees, projectRoot);
+    const executor = new WorkflowExecutor(
+      deps.specQueries,
+      worktrees,
+      projectRoot,
+      async (completedRun) => {
+        await handleJiraRunCompletion(completedRun, completionDeps);
+      },
+    );
     const started = await executor.start(loaded.workflow, {
+      runId,
+      branchName,
       projectRoot,
       inputs: { SPEC_ID: specId },
       variables: {
         ARTIFACTS_DIR: path.join(getSpecShipDir(projectRoot), 'artifacts'),
         CONTEXT: projectRoot,
       },
+      runMetadata: { jira: { issueKey: key, specId, title: specTitle } },
     });
 
     const run = reloadRun(deps.specQueries, started.run);
@@ -460,7 +655,10 @@ export async function handleSpecshipJiraStart(
         `at the plan/approve gate — review the plan and approve to proceed.` +
         (gate ? `\n\n${gate}` : '') +
         `\n\nApprove with: specship workflow approve ${run.id}` +
-        `\nOr reject with feedback: specship workflow reject ${run.id} --comment "…"`,
+        `\nOr reject with feedback: specship workflow reject ${run.id} --comment "…"` +
+        `\n\nOnce approved and the implementation completes and verifies, a pull ` +
+        `request for ${key} is raised automatically (its key is carried on the ` +
+        `branch, PR title, and body so JIRA links it back).`,
     );
   } catch (err) {
     // Defensive: never let an unexpected error leak internals.
