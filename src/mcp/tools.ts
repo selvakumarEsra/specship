@@ -405,6 +405,7 @@ import {
   jiraToolDefinitions,
   handleSpecshipJiraIssues,
   handleSpecshipJiraIssue,
+  handleSpecshipJiraPick,
 } from './jira-tools';
 
 export const tools: ToolDefinition[] = [
@@ -1134,6 +1135,8 @@ export class ToolHandler {
           return await handleSpecshipJiraIssues(args);
         case 'specship_jira_issue':
           return await handleSpecshipJiraIssue(args);
+        case 'specship_jira_pick':
+          return await handleSpecshipJiraPick(args);
         default:
           return this.errorResult(`Unknown tool: ${toolName}`);
       }

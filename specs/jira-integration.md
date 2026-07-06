@@ -122,6 +122,11 @@ authoring interview — but still well-formed (id markers, RFC 2119 keywords,
 acceptance bullets) so it indexes cleanly and the existing pipeline can run on
 it.
 
+implementations:
+  - src/mcp/jira-tools.ts:handleSpecshipJiraPick
+  - src/jira/spec-generator.ts:generateSpecMarkdown
+  - src/jira/spec-writer.ts:writeSpecFromIssue
+
 ## Acceptance
 <!-- id: REQ-JIRA-004.A1 -->
 - A picked issue produces a spec whose title, body, and acceptance criteria are
