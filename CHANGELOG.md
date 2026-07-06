@@ -9,6 +9,9 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+
+## [0.13.1] - 2026-07-06
+
 ### Fixes
 
 - **Leaner, more reproducible install.** Trimmed unused packages from the dependency tree and pinned build tooling to exact versions, so a clean install resolves the same way every time — including on mirrored or private registries.
@@ -566,3 +569,4 @@ Thanks @andreinknv for the substantive draft this release was based on.
 [0.12.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.12.0
 [0.12.1]: https://github.com/selvakumarEsra/specship/releases/tag/v0.12.1
 [0.13.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.13.0
+[0.13.1]: https://github.com/selvakumarEsra/specship/releases/tag/v0.13.1
