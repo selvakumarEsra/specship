@@ -1,9 +1,11 @@
 /**
  * Minimal JIRA REST client (REQ-JIRA-001, A3).
  *
- * Wraps `fetch` with the base URL + auth header. Only surface today is
- * `testConnection()`, which probes `/rest/api/2/myself` (available on
- * both Cloud and Data Center).
+ * Wraps `fetch` with the base URL + auth header. `testConnection()` probes
+ * `/rest/api/2/myself` (available on both Cloud and Data Center);
+ * `listMyIssues()` (REQ-JIRA-002) searches the current user's issues. Both
+ * go through the private `request()` helper so the security guards below
+ * apply to every credentialed call.
  *
  * SECURITY (foundation for REQ-JIRA-009):
  *  - `redirect: 'manual'` — we never auto-follow a redirect, so the
@@ -17,9 +19,14 @@ import { buildAuthHeader } from './auth';
 import {
   JiraCredentials,
   JiraConnectionResult,
+  JiraIssue,
+  JiraIssueListResult,
   JiraConfigError,
   JiraAuthError,
 } from './types';
+
+/** Upper bound on issues fetched in one list call — never unbounded. */
+const MAX_ISSUE_RESULTS = 50;
 
 export class JiraClient {
   private readonly baseUrl: string;
@@ -47,7 +54,68 @@ export class JiraClient {
    *  - network / DNS failure → `JiraConfigError`.
    */
   async testConnection(): Promise<JiraConnectionResult> {
-    const url = `${this.baseUrl}/rest/api/2/myself`;
+    const body = await this.request('/rest/api/2/myself');
+    return {
+      ok: true,
+      // Cloud → accountId; Data Center → key/name. Prefer the most stable.
+      accountId: body?.accountId ?? body?.key ?? body?.name,
+      displayName: body?.displayName ?? body?.name,
+    };
+  }
+
+  /**
+   * List the issues assigned to the authenticated user (REQ-JIRA-002).
+   * Identity comes from the token via JQL `currentUser()` — the user never
+   * types their own name (A1). An optional `project` narrows the search
+   * (A2); the value is quote-escaped to prevent JQL injection. Ordered
+   * most-actionable-first (recently updated). Bounded by `MAX_ISSUE_RESULTS`.
+   *
+   *  - 200 → `{ ok: true, issues }`; an empty list is a valid success (A3).
+   *  - 401 / 403 → `JiraAuthError`; redirect / network / non-200 →
+   *    `JiraConfigError` (A4) — never a partial or fabricated list.
+   */
+  async listMyIssues(opts?: { project?: string }): Promise<JiraIssueListResult> {
+    let jql = 'assignee = currentUser()';
+    if (opts?.project && opts.project.trim()) {
+      // Quote-escape the project so an embedded quote can't break out of the
+      // JQL string literal (injection guard). JQL escapes `"` as `\"`.
+      const escaped = opts.project.trim().replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+      jql = `project = "${escaped}" AND ${jql}`;
+    }
+    jql += ' ORDER BY updated DESC';
+
+    const params = new URLSearchParams({
+      jql,
+      fields: 'summary,status,issuetype',
+      maxResults: String(MAX_ISSUE_RESULTS),
+    });
+    const body = await this.request(`/rest/api/2/search?${params.toString()}`);
+
+    const rawIssues: any[] = Array.isArray(body?.issues) ? body.issues : [];
+    const issues: JiraIssue[] = rawIssues.map(issue => ({
+      key: String(issue?.key ?? ''),
+      id: String(issue?.id ?? ''),
+      summary: String(issue?.fields?.summary ?? ''),
+      status: String(issue?.fields?.status?.name ?? ''),
+      issueType: String(issue?.fields?.issuetype?.name ?? ''),
+    }));
+
+    return { ok: true, issues };
+  }
+
+  /**
+   * Shared, credentialed GET against the configured host. Every security
+   * guard lives here so no call path can skip one:
+   *  - `redirect: 'manual'` — the `Authorization` header is never replayed
+   *    across a redirect; any 3xx / opaqueredirect is refused, not followed.
+   *  - 401 / 403 → `JiraAuthError`; network / non-200 / non-JSON →
+   *    `JiraConfigError`.
+   *  - No thrown message ever contains the credential — only the host.
+   *
+   * Returns the parsed JSON body on success.
+   */
+  private async request(path: string): Promise<any> {
+    const url = `${this.baseUrl}${path}`;
 
     let res: Response;
     try {
@@ -92,20 +160,12 @@ export class JiraClient {
       );
     }
 
-    let body: any;
     try {
-      body = await res.json();
+      return await res.json();
     } catch {
       throw new JiraConfigError(
         `JIRA at ${this.host} returned a non-JSON response.`,
       );
     }
-
-    return {
-      ok: true,
-      // Cloud → accountId; Data Center → key/name. Prefer the most stable.
-      accountId: body?.accountId ?? body?.key ?? body?.name,
-      displayName: body?.displayName ?? body?.name,
-    };
   }
 }

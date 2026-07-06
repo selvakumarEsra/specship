@@ -75,6 +75,10 @@ issue, its key/id, summary, status, and issue type, ordered so the most
 actionable items surface first. "Assigned to me" resolves to the authenticated
 account, so the user never types their own name.
 
+implementations:
+  - src/jira/client.ts:JiraClient.listMyIssues
+  - src/mcp/jira-tools.ts:handleSpecshipJiraIssues
+
 ## Acceptance
 <!-- id: REQ-JIRA-002.A1 -->
 - Listing returns exactly the issues assigned to the authenticated user, each

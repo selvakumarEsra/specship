@@ -55,6 +55,35 @@ export interface JiraConnectionResult {
 }
 
 /**
+ * A single JIRA issue as surfaced by the list path (REQ-JIRA-002). Carries
+ * only the four fields the requirement names — key/id, summary, status, and
+ * issue type — never any credential-adjacent data.
+ */
+export interface JiraIssue {
+  /** Human-facing key, e.g. `PROJ-123`. */
+  key: string;
+  /** Numeric/opaque internal id. */
+  id: string;
+  /** One-line summary of the issue. */
+  summary: string;
+  /** Current workflow status name, e.g. `In Progress`. */
+  status: string;
+  /** Issue type name, e.g. `Bug`, `Story`. */
+  issueType: string;
+}
+
+/**
+ * Result of listing the current user's issues (REQ-JIRA-002). An empty
+ * `issues` array is a valid success (A3) — a user with nothing assigned is
+ * not an error. Any auth/network/non-200 failure throws instead of returning
+ * a partial or fabricated list (A4).
+ */
+export interface JiraIssueListResult {
+  ok: true;
+  issues: JiraIssue[];
+}
+
+/**
  * Base class for JIRA errors. Mirrors `McpConfigError` in
  * `server/src/routes/mcp.ts` — a plain `Error` subclass with a code.
  *

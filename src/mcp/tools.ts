@@ -401,6 +401,10 @@ import {
   handleDesignerSnapshot,
   handleDesignerHandoff,
 } from './designer-tools';
+import {
+  jiraToolDefinitions,
+  handleSpecshipJiraIssues,
+} from './jira-tools';
 
 export const tools: ToolDefinition[] = [
   {
@@ -586,6 +590,9 @@ export const tools: ToolDefinition[] = [
   // Designer tools: claude.ai/design driving, vendored from @pro-vi/designer.
   // See ./designer-tools.ts for handlers. Drives a debug Chrome over CDP.
   ...designerToolDefinitions,
+  // JIRA tools (REQ-JIRA-002): list issues assigned to the authenticated user.
+  // See ./jira-tools.ts for handlers. Independent of the code graph.
+  ...jiraToolDefinitions,
 ];
 
 /**
@@ -1118,6 +1125,11 @@ export class ToolHandler {
           return await handleDesignerSnapshot(args);
         case 'designer_handoff':
           return await handleDesignerHandoff(args);
+        // JIRA tools are independent of the code graph — talk to the
+        // configured JIRA host and return directly, bypassing the
+        // worktree/staleness wrappers.
+        case 'specship_jira_issues':
+          return await handleSpecshipJiraIssues(args);
         default:
           return this.errorResult(`Unknown tool: ${toolName}`);
       }
