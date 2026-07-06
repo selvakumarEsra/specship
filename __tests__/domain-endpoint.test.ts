@@ -19,8 +19,8 @@ import * as os from 'node:os';
 import Fastify from 'fastify';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import SpecShip from '../src/index';
-import { registerDomainRoutes } from '../packages/server/src/routes/domain';
-import { registerSpecRoutes } from '../packages/server/src/routes/spec';
+import { registerDomainRoutes } from '../server/src/routes/domain';
+import { registerSpecRoutes } from '../server/src/routes/spec';
 
 // ---------------------------------------------------------------------------
 // FTS5 guard — identical pattern used across the spec test suite.
@@ -75,7 +75,7 @@ async function buildTestApp(cg: SpecShip | null): Promise<FastifyInstance> {
 describe('domain route source (REQ-DOMAIN-007.A2)', () => {
   it('contains no runtime import from @specship/specship', () => {
     const source = fs.readFileSync(
-      path.join(__dirname, '..', 'packages', 'server', 'src', 'routes', 'domain.ts'),
+      path.join(__dirname, '..', 'server', 'src', 'routes', 'domain.ts'),
       'utf-8',
     );
     // A value import would be `import { x } from '@specship/specship'`.

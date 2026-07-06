@@ -1,0 +1,31 @@
+{
+  "name": "@specship/specship-server",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Fastify HTTP API + server-rendered SpecShip dashboard around specship core, the spec graph, workflow engine, and Claude Code transcript analytics.",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "specship-desktop": "dist/cli.js",
+    "specship-server": "dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json && chmod +x dist/cli.js",
+    "build:all": "npm run build",
+    "dev": "tsc -w -p tsconfig.json",
+    "start": "node dist/cli.js"
+  },
+  "dependencies": {
+    "@fastify/cors": "^9.0.1",
+    "@specship/specship": "file:..",
+    "fastify": "^4.28.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.30",
+    "typescript": "^5.0.0"
+  }
+}

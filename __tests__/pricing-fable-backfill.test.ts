@@ -3,10 +3,10 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import Database from 'better-sqlite3';
-import { resolvePricing, computeCost } from '../packages/server/src/ingest/pricing';
-import type { PricingRow } from '../packages/server/src/ingest/types';
-import { recostUnpricedPrompts } from '../packages/server/src/ingest/pricing-backfill';
-import type { IngestDb } from '../packages/server/src/ingest/ingestor';
+import { resolvePricing, computeCost } from '../server/src/ingest/pricing';
+import type { PricingRow } from '../server/src/ingest/types';
+import { recostUnpricedPrompts } from '../server/src/ingest/pricing-backfill';
+import type { IngestDb } from '../server/src/ingest/ingestor';
 
 /**
  * REQ-DASHINT-001 (specs/dashboard-data-integrity.md): sessions from unpriced

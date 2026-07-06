@@ -23,9 +23,9 @@ import * as os from 'node:os';
 import Fastify from 'fastify';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import SpecShip from '../src/index';
-import { registerChatRoutes } from '../packages/server/src/routes/chat';
-import { answerForIntent } from '../packages/server/src/routes/chat-answer';
-import { classifyIntent } from '../packages/server/src/chat/classify';
+import { registerChatRoutes } from '../server/src/routes/chat';
+import { answerForIntent } from '../server/src/routes/chat-answer';
+import { classifyIntent } from '../server/src/chat/classify';
 
 // ---------------------------------------------------------------------------
 // FTS5 guard — the streamed answer is search-driven, so skip the integration

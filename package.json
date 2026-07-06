@@ -29,10 +29,11 @@
     "test:watch": "vitest",
     "test:eval": "vitest run __tests__/evaluation/",
     "eval": "npm run build && npx tsx __tests__/evaluation/runner.ts",
+    "e2e": "npm run build && npm --prefix ui ci && npm --prefix ui run build && npm --prefix e2e ci && npm --prefix e2e run install:browser && npm --prefix e2e test",
     "clean": "node -e \"const fs=require('fs');fs.rmSync('dist',{recursive:true,force:true})\"",
     "sync:shim": "node scripts/sync-shim-version.mjs",
     "version": "npm run sync:shim",
-    "release:shim": "node scripts/sync-shim-version.mjs && cd packages/specship-shim && npm publish --access public"
+    "release:shim": "node scripts/sync-shim-version.mjs && cd npm-shim && npm publish --access public"
   },
   "keywords": [
     "code-intelligence",

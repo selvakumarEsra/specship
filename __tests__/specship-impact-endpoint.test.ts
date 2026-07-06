@@ -7,7 +7,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { openMemoryDb } from './helpers/memory-db';
-import { computeSpecshipImpact } from '../packages/server/src/ingest/impact-query';
+import { computeSpecshipImpact } from '../server/src/ingest/impact-query';
 
 // ---------------------------------------------------------------------------
 // Schema builder — mirrors the real schema (v9) for the tables we touch.

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Compile the HTTP server (`packages/server/src/**`) into the root's
+ * Compile the HTTP server (`server/src/**`) into the root's
  * `dist/server/` so it ships as part of the single npm tarball.
  *
  * Why this lives at root scope: the publish pipeline (build-bundle.sh →
@@ -10,7 +10,7 @@
  * server as its own package would mean a second release flow — this avoids
  * it.
  *
- * Runs `tsc` against `packages/server/tsconfig.json` with `--outDir` pointed
+ * Runs `tsc` against `server/tsconfig.json` with `--outDir` pointed
  * at the root's `dist/server/`. The server's own `npm run build` is left
  * untouched so the workspace dev path keeps working.
  */
@@ -21,7 +21,7 @@ import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '..');
-const serverPkg = path.resolve(root, 'packages', 'server');
+const serverPkg = path.resolve(root, 'server');
 const serverTsconfig = path.join(serverPkg, 'tsconfig.json');
 const outDir = path.join(root, 'dist', 'server');
 
@@ -49,22 +49,20 @@ execFileSync(
   { stdio: 'inherit', cwd: serverPkg },
 );
 
-// Copy the SSR dashboard's server-local assets that tsc does NOT emit: the
-// `.mjs` render modules (plain JS emitting HTML strings — intentionally not
-// tsc-compiled, keeping the dashboard dependency-free per REQ-DASHLEAN-002)
-// and the static assets (CSS + island JS) served by the SSR routes.
-const ssrSrc = path.join(serverPkg, 'src', 'ssr');
-const ssrOut = path.join(outDir, 'ssr');
-if (existsSync(ssrSrc)) {
-  for (const f of ['render.mjs', 'md.mjs', 'design.mjs', 'bindings.mjs']) {
-    const from = path.join(ssrSrc, f);
-    if (existsSync(from)) cpSync(from, path.join(ssrOut, f));
-  }
-  for (const dir of ['public', 'templates']) {
-    const from = path.join(ssrSrc, dir);
-    if (existsSync(from)) cpSync(from, path.join(ssrOut, dir), { recursive: true });
-  }
-  console.log('[build-server-bundle] copied SSR render modules + assets → dist/server/ssr/');
+// Ship the built desktop SPA (REQ-DESKTOP-017.A1): copy ui/dist → dist/ui so
+// the platform tarballs carry it and the server's resolveDefaultWebDir()
+// finds it next to dist/server/. The SPA is the dashboard's only surface
+// (REQ-DESKTOP-033); it's a standalone module with its own install (`cd ui &&
+// npm ci && npm run build` — the Release workflow runs it). When it hasn't
+// been built the server still boots (headless / API only), so this is a
+// warn-and-continue, not a failure.
+const uiDist = path.join(root, 'ui', 'dist');
+const uiOut = path.join(root, 'dist', 'ui');
+if (existsSync(path.join(uiDist, 'index.html'))) {
+  cpSync(uiDist, uiOut, { recursive: true });
+  console.log('[build-server-bundle] copied desktop SPA → dist/ui/');
+} else {
+  console.warn('[build-server-bundle] ui/dist not built — bundle ships without the desktop SPA (cd ui && npm ci && npm run build)');
 }
 
 // Make the CLI executable (its shebang is preserved by tsc, but the file

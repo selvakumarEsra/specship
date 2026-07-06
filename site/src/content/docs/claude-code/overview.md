@@ -43,7 +43,7 @@ Most teams running Claude Code at scale don't measure any of this. SpecShip surf
 
 When `specship serve --ui` starts, three things happen in parallel:
 
-1. The Fastify HTTP server binds `127.0.0.1:4242` and serves both the API and the server-rendered dashboard.
+1. The Fastify HTTP server binds `127.0.0.1:4242` and serves both the API and the desktop SPA.
 2. The codegraph engine opens the project's SQLite (or the picker's selected project, if you boot projectless).
 3. The **ingest watcher** does a one-shot reconciliation pass against `~/.claude/projects/`, then registers an `fs.watch` on that directory.
 

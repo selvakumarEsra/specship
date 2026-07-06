@@ -48,6 +48,12 @@ export interface StreamParseState {
   resultText: string | null;
   /** Concatenated assistant text turns (fallback when there's no result event). */
   assistantText: string;
+  /** `total_cost_usd` from the terminal `result` frame, if present. */
+  costUsd?: number;
+  /** `duration_ms` from the terminal `result` frame, if present. */
+  durationMs?: number;
+  /** `model` from the `system` init frame, if present. */
+  model?: string;
 }
 
 export function newStreamState(): StreamParseState {
@@ -111,8 +117,11 @@ export function handleStreamLine(
   } else if (e.type === 'result') {
     state.sawStream = true;
     if (typeof e.result === 'string') state.resultText = e.result;
+    if (typeof e.total_cost_usd === 'number') state.costUsd = e.total_cost_usd;
+    if (typeof e.duration_ms === 'number') state.durationMs = e.duration_ms;
   } else if (e.type === 'system') {
     state.sawStream = true; // init/system frame — confirms we're on the stream path
+    if (typeof e.model === 'string' && e.model) state.model = e.model;
   }
 }
 
@@ -231,9 +240,14 @@ export class PromptRunner implements NodeRunner {
         // to what `--output-format json` produced.
         if (state.sawStream) {
           const text = state.resultText ?? state.assistantText ?? stdout;
+          const stats =
+            state.costUsd !== undefined || state.durationMs !== undefined || state.model !== undefined
+              ? { costUsd: state.costUsd, durationMs: state.durationMs, model: state.model }
+              : undefined;
           resolve({
             status: 'completed',
             output: { text, structured: state.resultText !== null ? { result: state.resultText } : undefined },
+            stats,
           });
           return;
         }
