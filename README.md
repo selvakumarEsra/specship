@@ -35,7 +35,7 @@ cd specship-<target>
 ./install.sh                        # .\install.ps1 on Windows
 ```
 
-That symlinks `specship` onto your `PATH` and wires Claude Code using only the bundled runtime — nothing is compiled on the target. From a checkout, `./scripts/offline-install.sh <bundle>` (`.ps1` on Windows) does the same given a downloaded bundle. See [Offline / air-gapped install](https://specship.dev/getting-started/installation/#offline--air-gapped-install) for the full walkthrough.
+That symlinks `specship` onto your `PATH` and wires Claude Code using only the bundled runtime — nothing is compiled on the target. From a checkout, `./scripts/offline-install.sh <bundle>` (`.ps1` on Windows) does the same given a downloaded bundle. See [Offline / air-gapped install](https://specship.cc/getting-started/installation/#offline--air-gapped-install) for the full walkthrough.
 
 ### 2. Wire up Claude Code
 
@@ -397,6 +397,9 @@ specship callers <symbol>        # Find what calls a function/method (--limit, -
 specship callees <symbol>        # Find what a function/method calls (--limit, --json)
 specship impact <symbol>         # Analyze what code is affected by changing a symbol (--depth, --json)
 specship affected [files...]     # Find test files affected by changes (see below)
+specship jira configure          # Connect to JIRA (--base-url, --email/--api-token or --pat, --deployment)
+specship jira test               # Verify the JIRA connection
+specship jira track              # Status of issues SpecShip has picked (--project, --path)
 specship serve --mcp             # Start MCP server
 ```
 
@@ -444,6 +447,58 @@ When running as an MCP server, SpecShip exposes these tools to Claude Code:
 | `specship_node` | Get one specific symbol's details + full source (returns every overload for an ambiguous name) |
 | `specship_files` | Get indexed file structure (faster than filesystem scanning) |
 | `specship_status` | Check index health and statistics |
+
+The JIRA integration adds five more (`specship_jira_issues`, `_issue`, `_pick`, `_start`, `_track`) — see below.
+
+---
+
+## JIRA Integration
+
+Drive work straight from your JIRA board without leaving the agent: list the
+issues assigned to you, pick one by its key, and let SpecShip turn it into a
+spec, run the implement-and-verify workflow, raise the pull request, and push
+the status back to the ticket — so the board stays the source of truth. It works
+with both **JIRA Cloud** (email + Atlassian API token) and **Data Center /
+Server** (Personal Access Token).
+
+**Connect once.** Credentials are stored at `~/.specship/jira.json` (owner-only,
+`0600`) — never in your project tree, never committed:
+
+```bash
+# Cloud
+specship jira configure --base-url https://your-org.atlassian.net --email you@example.com --api-token <token>
+# Data Center / Server
+specship jira configure --base-url https://jira.your-company.com --pat <token>
+
+specship jira test    # "connected as <your name>" — the token itself is never printed
+```
+
+For headless / CI setups, every field can come from an environment variable
+instead (`SPECSHIP_JIRA_BASE_URL`, `SPECSHIP_JIRA_EMAIL`,
+`SPECSHIP_JIRA_API_TOKEN`, `SPECSHIP_JIRA_PAT`, `SPECSHIP_JIRA_DEPLOYMENT`).
+
+**Then drive it from the agent.** You ask Claude Code in conversation and it
+calls the JIRA MCP tools:
+
+| Tool | What it does |
+|------|--------------|
+| `specship_jira_issues` | List the issues assigned to you (resolved from your token — you never type your name); key, summary, status, type. Optional project filter. |
+| `specship_jira_issue` | Fetch one issue by key. |
+| `specship_jira_pick` | Draft a well-formed spec from an issue under `specs/` (summary → title, description → body, subtasks → acceptance criteria). Re-picking updates it in place. |
+| `specship_jira_start` | Run the spec-implement workflow on the generated spec; pauses at its plan/approve gate. |
+| `specship_jira_track` | A read-only table joining each picked issue's SpecShip work-state with its live JIRA status. |
+
+When the plan is approved **and** the implementation's tests pass, SpecShip
+raises a pull request with the GitHub CLI — the issue key rides the branch,
+title, and body so JIRA's development panel links it back. A failing run raises
+no PR, and the PR is never auto-merged or auto-closed (you decide Done). On start
+it assigns the issue to you and moves it toward "In Progress"; on PR raised it
+moves it toward "In Review" and comments the PR link. Transition names are
+configurable and it degrades gracefully when one doesn't exist. The token is
+never logged and every request is locked to the host you configured.
+
+See the [JIRA integration guide](https://specship.cc/guides/jira/) for the full
+walkthrough.
 
 ---
 

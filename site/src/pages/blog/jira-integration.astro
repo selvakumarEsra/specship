@@ -1,0 +1,105 @@
+---
+import Article from '../../layouts/Article.astro';
+---
+<Article slug="jira-integration">
+  <svg slot="figure" viewBox="0 0 980 440" preserveAspectRatio="xMidYMid slice">
+    <defs><radialGradient id="ji" cx="50%" cy="18%" r="72%"><stop offset="0" stop-color="rgba(38,132,255,0.16)"/><stop offset="1" stop-color="rgba(38,132,255,0)"/></radialGradient></defs>
+    <rect width="980" height="440" fill="url(#ji)"/>
+    <!-- JIRA issue card -->
+    <rect x="120" y="150" width="180" height="150" rx="14" fill="rgba(10,12,16,0.55)" stroke="rgba(38,132,255,0.45)" stroke-width="1.6"/>
+    <rect x="120" y="150" width="8" height="150" rx="4" fill="#2684FF"/>
+    <g font-family="Geist Mono, monospace">
+      <text x="152" y="190" font-size="14" fill="rgba(120,170,255,0.95)">PROJ-142</text>
+      <text x="152" y="222" font-size="13" fill="rgba(150,165,200,0.72)">assigned to you</text>
+      <rect x="152" y="240" width="118" height="8" rx="4" fill="rgba(150,165,200,0.25)"/>
+      <rect x="152" y="262" width="94" height="8" rx="4" fill="rgba(150,165,200,0.18)"/>
+    </g>
+    <!-- spec doc -->
+    <rect x="440" y="150" width="120" height="150" rx="12" fill="rgba(91,147,242,0.92)"/>
+    <g stroke="#0A0C10" stroke-width="3.4" stroke-linecap="round"><path d="M462 184 h76"/><path d="M462 208 h76"/><path d="M462 232 h50"/></g>
+    <g stroke="#0A0C10" stroke-width="3.4" stroke-linecap="round" opacity="0.5"><path d="M462 262 h62"/><path d="M462 282 h40"/></g>
+    <!-- linked code node -->
+    <circle cx="560" cy="300" r="12" fill="#A586F5"/>
+    <!-- verified PR node -->
+    <circle cx="800" cy="222" r="46" fill="rgba(10,12,16,0.55)" stroke="rgba(70,194,107,0.6)" stroke-width="2"/>
+    <path d="M778 222 L795 240 L826 202" fill="none" stroke="#46C26B" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- connectors -->
+    <path d="M300 224 L440 224" stroke="rgba(150,165,200,0.4)" stroke-width="2" fill="none" stroke-dasharray="6 7"/>
+    <polyline points="428 217 440 224 428 231" fill="none" stroke="rgba(150,165,200,0.5)" stroke-width="2"/>
+    <path d="M560 226 L752 224" stroke="rgba(70,194,107,0.55)" stroke-width="2" fill="none" stroke-dasharray="6 7"/>
+    <polyline points="740 217 752 224 740 231" fill="none" stroke="rgba(70,194,107,0.6)" stroke-width="2"/>
+    <g font-family="Geist Mono, monospace" font-size="15" fill="rgba(170,185,220,0.72)">
+      <text x="152" y="120">issues · issue · pick</text>
+      <text x="470" y="120">start</text>
+      <text x="742" y="152">verified PR</text>
+      <text x="152" y="362">track — live JIRA status</text>
+    </g>
+  </svg>
+
+  <p>Your JIRA board is where the work actually lives — the tickets, the priorities, the thing you check to see what's left. But the bridge from a ticket to shipped code has always been manual: you read the issue, paste its text into a prompt, and let the agent vibe-code from a paragraph of prose that carries no contract and no acceptance criteria. When the code lands, nothing links it back; the ticket has no idea it was built. SpecShip's JIRA integration closes that gap. It's the first outbound integration we've shipped — and it lets a solo dev drive work straight from the board without leaving SpecShip or the terminal.</p>
+  <p>The shape of it is one loop: <strong>pick an id, get a reviewed PR, and the board stays in sync.</strong> It's local-first and secret-safe by construction — your token never leaves your machine and never lands in a commit, a comment, or the graph.</p>
+
+  <h2>Connect once, and locally</h2>
+  <p>You wire it up with <code>specship jira configure</code>. It saves your credentials to <code>~/.specship/jira.json</code> — mode <code>0600</code>, user-level, <strong>never inside the project</strong>, so there's nothing that can ride along into a commit. Both hosting models work: JIRA <strong>Cloud</strong> authenticates with your email plus an API token over HTTP basic; JIRA <strong>Data Center / Server</strong> uses a personal access token as a bearer. SpecShip infers which deployment you're on from the credentials you give it, or you can be explicit with <code>--deployment</code>.</p>
+  <div class="codeblock">
+    <div class="cb-bar"><div class="traffic"><i style="background:#F2555A"></i><i style="background:#E5A50A"></i><i style="background:#46C26B"></i></div><span class="fn">connect once</span></div>
+    <pre><span class="c-com"># JIRA Cloud — email + API token</span>
+specship jira configure --base-url https://acme.atlassian.net --email you@acme.com --api-token &lt;token&gt;
+
+<span class="c-com"># JIRA Data Center / Server — personal access token</span>
+specship jira configure --base-url https://jira.internal --pat &lt;token&gt;
+
+<span class="c-com"># verify — prints "connected as &lt;name&gt;", never the token</span>
+specship jira test</pre>
+  </div>
+  <p><code>specship jira test</code> confirms the connection. It resolves who you are from the token and prints <code>connected as &lt;name&gt;</code> — the token itself is never echoed back. For headless or CI use, every setting has an environment override — <code>SPECSHIP_JIRA_BASE_URL</code>, <code>SPECSHIP_JIRA_EMAIL</code>, <code>SPECSHIP_JIRA_API_TOKEN</code>, <code>SPECSHIP_JIRA_PAT</code>, <code>SPECSHIP_JIRA_DEPLOYMENT</code>, and <code>SPECSHIP_JIRA_CONFIG</code> — so you can run it without a credentials file on disk at all.</p>
+
+  <h2>The loop, in five tools</h2>
+  <p>Once you're connected, the integration is agent-native: it's a set of MCP tools Claude Code calls, not a CLI you drive by hand. Five of them cover the whole path from board to PR.</p>
+  <ul>
+    <li><strong>issues</strong> — lists the issues assigned to you. Your identity is resolved from your token, so you never type your name; an optional project filter narrows it down.</li>
+    <li><strong>issue</strong> — fetches a single issue by its key, so you can read it in full before committing to it.</li>
+    <li><strong>pick</strong> — fetches an issue and authors a well-formed SpecShip spec from it under <code>specs/</code>. It's idempotent and records the issue key, so picking the same ticket twice doesn't fork it.</li>
+    <li><strong>start</strong> — runs the bundled spec-implement workflow on that spec, pausing at its plan/approve gate before any code is written.</li>
+    <li><strong>track</strong> — a read-only table that joins each picked issue's SpecShip work-state with a <em>live</em> JIRA status read, so one glance tells you where everything actually stands.</li>
+  </ul>
+  <div class="codeblock">
+    <div class="cb-bar"><div class="traffic"><i style="background:#F2555A"></i><i style="background:#E5A50A"></i><i style="background:#46C26B"></i></div><span class="fn">the JIRA loop</span></div>
+    <pre><span class="c-com"># what's assigned to me? (resolved from my token)</span>
+specship_jira_issues
+
+<span class="c-com"># turn PROJ-142 into a SpecShip spec under specs/</span>
+specship_jira_pick PROJ-142
+
+<span class="c-com"># implement it — pauses at the plan gate, raises a PR when tests pass</span>
+specship_jira_start PROJ-142
+
+<span class="c-com"># where does every picked issue stand? (live JIRA status)</span>
+specship_jira_track</pre>
+  </div>
+
+  <h2>A ticket becomes a real spec, not a prompt</h2>
+  <p>The heart of this is <code>pick</code>. A JIRA issue is raw text; a SpecShip spec is a contract. <code>pick</code> does the translation: the issue's <strong>summary becomes the spec title</strong>, its <strong>description becomes the body</strong>, and its <strong>subtasks become acceptance criteria</strong>. What you get out is a well-formed spec that indexes into the graph like any other — with a body you can review, acceptance criteria you can check independently, and a link back to the exact code that satisfies it once it's built.</p>
+  <div class="pullquote">
+    <p>The difference between pasting a ticket into a prompt and picking it is the difference between vibe-coding from a paragraph and building against a contract with acceptance criteria and drift tracking.</p>
+  </div>
+  <p>That's the whole point of routing the ticket through a spec instead of straight into the agent. The board stays the source of truth for <em>what</em> to work on; the spec becomes the durable record of what was actually promised — and because it's a real spec node, it earns everything the graph gives every other spec: a reviewable body, checkable criteria, and a link to its code that goes to <em>drifted</em> the day that code moves out from under it.</p>
+
+  <h2>A PR only when the tests pass</h2>
+  <p><code>start</code> hands the spec to the bundled spec-implement workflow, which plans, pauses at its approval gate, implements, and verifies. The gate matters: nothing is written until you've seen the plan. And the finish line is strict — <strong>once the plan is approved and the implementation completes <em>and</em> its tests pass</strong>, SpecShip raises a pull request through the <code>gh</code> CLI. The issue key rides the branch name, the PR title, and the PR body, so JIRA's development panel links the PR straight back to the ticket with no manual cross-referencing.</p>
+  <div class="callout">
+    <div class="co-ic" style="background:color-mix(in srgb,#46C26B 16%,transparent);color:#46C26B"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/></svg></div>
+    <div class="co-body"><strong>Verified completion, or no PR.</strong> A run whose tests fail raises <em>no</em> PR at all — there's nothing to review, so nothing is opened. And the PR is never auto-merged or auto-closed: raising it is the last thing SpecShip does, because whether the work is truly Done is your call, not the workflow's.</div>
+  </div>
+  <p>The failure paths are honest, too. If <code>gh</code> is missing or unauthenticated, or the push itself fails, SpecShip tells you exactly why and <strong>leaves the branch and worktree intact</strong> so you can open the PR by hand — it never silently swallows finished work.</p>
+
+  <h2>The board stays in sync — gracefully</h2>
+  <p>Driving from the board is only half the value; the board also has to reflect what you're doing. SpecShip writes status back at two moments. On <code>start</code>, it assigns the issue to you and transitions it toward <strong>In Progress</strong>. When the PR is raised, it transitions the issue toward <strong>In Review</strong> and comments the PR link onto the ticket. Both transition names are configurable — set them in <code>~/.specship/jira.json</code>, or via <code>SPECSHIP_JIRA_TRANSITION_IN_PROGRESS</code> and <code>SPECSHIP_JIRA_TRANSITION_IN_REVIEW</code> (they default to "In Progress" and "In Review").</p>
+  <p>The key word is <em>gracefully</em>. Every JIRA workflow is different, and a transition you name might not exist in a given project. When that happens SpecShip doesn't error out — on the PR side it still comments the link and simply reports that it skipped the transition. And a JIRA hiccup on <code>start</code> never blocks your local work; the implementation runs regardless of whether the board write succeeded. What it will never do is mark an issue Done or close it — that transition is yours alone. <code>track</code> is where you watch it all come together: your local spec state and the live JIRA status, side by side.</p>
+
+  <h2>Secret-safe by construction</h2>
+  <p>An integration that holds a credential has to be paranoid about it, and this one is. The token is <strong>never logged, printed, or echoed</strong> into any output, error message, JIRA comment, or the graph — the closest you ever get to seeing it is <code>connected as &lt;name&gt;</code>. Every request is <strong>host-locked to the base URL you configured</strong> and refuses to follow a redirect to a different host, so a misconfigured or hostile server can't bounce your token somewhere it shouldn't go. Combined with the user-level <code>0600</code> credentials file that lives outside the project, there's no path by which your token ends up in a commit, a shared graph, or a PR body.</p>
+
+  <h2>What it deliberately doesn't do</h2>
+  <p>This is a solo-dev loop, and it's scoped like one on purpose. There are no team or sprint features — no board automation, no bulk import. It works <strong>one issue at a time</strong>: pick it, build it, ship the PR, move on. And the two decisions that are genuinely irreversible stay with you — SpecShip never marks an issue Done and never merges the PR. It gets you from a ticket id to a reviewed, linked, test-passing pull request with the board already updated around it. The last word is still yours.</p>
+</Article>

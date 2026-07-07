@@ -19,6 +19,7 @@ specship impact <symbol>         # Analyze what code is affected by changing a s
 specship affected [files...]     # Find test files affected by changes
 specship drifted [path]          # List spec links in concerning states (--state, --fail-on for CI, --json)
 specship workflow <action>       # Workflow engine: list | run | resume | cancel | approve | reject | runs
+specship jira <action>           # JIRA: configure | test | track (see below)
 specship serve --mcp             # Start the MCP server (stdio) for Claude Code
 specship serve --ui              # Start the desktop UI + HTTP API (127.0.0.1:4242)
 ```
@@ -54,3 +55,19 @@ Drives the workflow engine from the terminal — `list`, `run <name>`, `resume <
 ```bash
 specship workflow run spec-implement -i SPEC_ID=REQ-AUTH-005
 ```
+
+## jira
+
+Connects SpecShip to your JIRA board. `configure` stores credentials at `~/.specship/jira.json` (owner-only, `0600`); `test` verifies the connection; `track` shows the status of the issues SpecShip has picked. The list → pick → start flow itself runs through the [MCP tools](/reference/mcp-server/) an agent calls in conversation.
+
+```bash
+# Cloud (email + Atlassian API token)
+specship jira configure --base-url https://your-org.atlassian.net --email you@example.com --api-token <token>
+# Data Center / Server (Personal Access Token)
+specship jira configure --base-url https://jira.your-company.com --pat <token>
+
+specship jira test                 # Verify the connection ("connected as <name>")
+specship jira track                # Status of picked issues (--project to narrow, --path)
+```
+
+The token is never printed and every request is locked to the configured host. See the [JIRA integration guide](/guides/jira/).
