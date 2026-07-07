@@ -23,6 +23,12 @@ const CLOUD: JiraCredentials = {
   apiToken: 'tok-123',
 };
 
+const DATACENTER: JiraCredentials = {
+  baseUrl: 'https://jira.acme.com/',
+  deployment: 'datacenter',
+  pat: 'pat-123',
+};
+
 let fetchMock: ReturnType<typeof vi.fn>;
 const realFetch = globalThis.fetch;
 
@@ -122,7 +128,8 @@ describe('JiraClient.listMyIssues', () => {
     });
 
     const url = requestedUrl();
-    expect(url).toContain('/rest/api/2/search');
+    // Cloud must use the enhanced-search endpoint, not the removed classic one.
+    expect(new URL(url).pathname).toBe('/rest/api/2/search/jql');
     // Identity comes from the token, never a typed name.
     const jql = requestedJql();
     expect(jql).toContain('currentUser()');
@@ -216,5 +223,40 @@ describe('JiraClient.listMyIssues', () => {
     );
     expect(max).toBeGreaterThan(0);
     expect(max).toBeLessThanOrEqual(50);
+  });
+
+  it('A5: on Cloud, targets /search/jql (the classic /search was removed → HTTP 410)', async () => {
+    fetchMock.mockResolvedValue(searchResponse([]));
+    await new JiraClient(CLOUD).listMyIssues();
+    const path = new URL(requestedUrl()).pathname;
+    expect(path).toBe('/rest/api/2/search/jql');
+    // Must NOT hit the removed classic endpoint (that returns 410 Gone on Cloud).
+    expect(path).not.toBe('/rest/api/2/search');
+  });
+
+  it('A5: on Data Center, keeps the classic /search endpoint (still supported there)', async () => {
+    fetchMock.mockResolvedValue(searchResponse([]));
+    await new JiraClient(DATACENTER).listMyIssues();
+    const path = new URL(requestedUrl()).pathname;
+    expect(path).toBe('/rest/api/2/search');
+    // The DC PAT is sent as Bearer auth, not Basic.
+    const [, opts] = fetchMock.mock.calls[0];
+    expect(opts.headers.Authorization).toMatch(/^Bearer /);
+  });
+
+  it('A5: the enhanced-search response still maps issues correctly on Cloud', async () => {
+    // /search/jql returns the same { issues: [{ key, id, fields }] } shape.
+    fetchMock.mockResolvedValue(
+      searchResponse([
+        { key: 'PROJ-9', id: '10009', summary: 'Ship it', status: 'To Do', type: 'Task' },
+      ]),
+    );
+    const result = await new JiraClient(CLOUD).listMyIssues();
+    expect(result).toEqual({
+      ok: true,
+      issues: [
+        { key: 'PROJ-9', id: '10009', summary: 'Ship it', status: 'To Do', issueType: 'Task' },
+      ],
+    });
   });
 });
