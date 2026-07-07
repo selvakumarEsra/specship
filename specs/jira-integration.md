@@ -95,6 +95,12 @@ implementations:
 <!-- id: REQ-JIRA-002.A4 -->
 - An auth or network failure during listing is surfaced as such and returns no
   fabricated or partial list.
+<!-- id: REQ-JIRA-002.A5 -->
+- On JIRA Cloud, listing targets the current enhanced-search endpoint
+  (`/rest/api/2/search/jql`), NOT the classic `/rest/api/2/search` Atlassian
+  removed in 2025 (which now returns HTTP 410 Gone). Data Center, which still
+  serves the classic endpoint (and older versions lack `/search/jql`), continues
+  to use `/rest/api/2/search`. The consumed response shape is identical on both.
 
 <!-- id: REQ-JIRA-003 -->
 ## SpecShip MUST fetch and present a single issue picked by its id

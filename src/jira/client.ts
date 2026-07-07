@@ -95,7 +95,18 @@ export class JiraClient {
       fields: 'summary,status,issuetype',
       maxResults: String(MAX_ISSUE_RESULTS),
     });
-    const body = await this.request(`/rest/api/2/search?${params.toString()}`);
+    // JIRA Cloud removed the classic `GET /rest/api/2/search` in 2025 — it now
+    // returns HTTP 410 Gone — in favour of the enhanced-search endpoint
+    // `/search/jql`. Data Center never removed the classic endpoint (and older
+    // versions don't have `/search/jql`), so it keeps using `/search`. The
+    // response shape we consume (`body.issues[].fields.*`) is identical on both,
+    // and `/search/jql` requires `fields` to be listed explicitly — which we
+    // already do above. (REQ-JIRA-002.A5)
+    const searchPath =
+      this.deployment === 'datacenter'
+        ? `/rest/api/2/search?${params.toString()}`
+        : `/rest/api/2/search/jql?${params.toString()}`;
+    const body = await this.request(searchPath);
 
     const rawIssues: any[] = Array.isArray(body?.issues) ? body.issues : [];
     const issues: JiraIssue[] = rawIssues.map(issue => ({

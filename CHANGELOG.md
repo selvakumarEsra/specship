@@ -9,6 +9,10 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixes
+
+- **Listing JIRA issues works again on JIRA Cloud.** Atlassian removed the classic issue-search endpoint on Cloud in 2025 (it now returns `HTTP 410 Gone`), so "list my JIRA issues" failed for Cloud users. SpecShip now calls Cloud's current enhanced-search endpoint; Data Center, which still supports the classic endpoint, is unchanged.
+
 
 ## [0.14.0] - 2026-07-07
 

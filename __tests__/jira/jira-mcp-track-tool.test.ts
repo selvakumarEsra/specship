@@ -45,6 +45,12 @@ beforeEach(() => {
     saved[k] = process.env[k];
     delete process.env[k];
   }
+  // Point config resolution at a path that does not exist, so a developer's real
+  // ~/.specship/jira.json never bleeds in and makes the default state read as
+  // "configured" (it does on any machine that has run `specship jira configure`;
+  // CI has no such file, which is why this was invisible there). Tests opt into
+  // the configured state explicitly via configured().
+  process.env.SPECSHIP_JIRA_CONFIG = '/does/not/exist.json';
 });
 
 afterEach(() => {
