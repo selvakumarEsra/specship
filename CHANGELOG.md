@@ -9,6 +9,9 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+
+## [0.14.0] - 2026-07-07
+
 ### New Features
 
 - **Connect SpecShip to JIRA.** A new `specship jira configure` command walks you through pointing SpecShip at your JIRA instance — both Cloud (email + API token) and Data Center / Server (personal access token) are supported, and the deployment is inferred from the credentials you give. Your credentials are saved to `~/.specship/jira.json` with owner-only (`0600`) permissions and never to your project tree. `specship jira test` verifies the connection at any time. Your token is never printed — on success you just see "connected as <your name>". Credentials can also come from `SPECSHIP_JIRA_BASE_URL`, `SPECSHIP_JIRA_EMAIL`, `SPECSHIP_JIRA_API_TOKEN`, `SPECSHIP_JIRA_PAT`, and `SPECSHIP_JIRA_DEPLOYMENT` for headless setups.
@@ -18,7 +21,6 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **SpecShip moves your JIRA issue as the work moves.** When you start an issue, SpecShip assigns it to you and transitions it toward "In Progress"; when the verified pull request is raised, it transitions the issue toward "In Review" and comments the PR link on the ticket, so your board stays in sync without you touching it. Because JIRA workflows differ per project, the transition names are configurable — set them in `~/.specship/jira.json` or via `SPECSHIP_JIRA_TRANSITION_IN_PROGRESS` / `SPECSHIP_JIRA_TRANSITION_IN_REVIEW` (they default to "In Progress" and "In Review"). If a configured transition doesn't exist in your project's workflow, SpecShip still comments the PR link and tells you it skipped the move rather than erroring, and a JIRA hiccup on start never blocks your local work from beginning. SpecShip never marks an issue Done or closes it automatically — that stays your call when you merge.
 - **Track your JIRA work at a glance.** A new `specship_jira_track` MCP tool (and a `specship jira track` command) shows a read-only table of every issue you've brought into SpecShip, joining its SpecShip progress — spec authored, implementing, PR raised, or verified — with its current JIRA status read live at that moment, so an issue someone moved on the board reflects its real state rather than a stale snapshot. It never re-picks or re-starts anything; pass an optional project key to narrow the JIRA read, and if JIRA can't be reached each row degrades to a clear "unreachable" note instead of failing the whole view.
 - **The status line now leads with a session header.** If you use SpecShip's status-line segment, it now opens with a header line showing the active model, your working directory, the current git branch, and the Claude Code version — with the familiar SpecShip index/calls line and the context/usage bars stacked below it. The branch is read without spawning git, so the status line stays within its fast render budget.
-
 
 ## [0.13.1] - 2026-07-06
 
@@ -580,3 +582,4 @@ Thanks @andreinknv for the substantive draft this release was based on.
 [0.12.1]: https://github.com/selvakumarEsra/specship/releases/tag/v0.12.1
 [0.13.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.13.0
 [0.13.1]: https://github.com/selvakumarEsra/specship/releases/tag/v0.13.1
+[0.14.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.14.0
