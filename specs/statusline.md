@@ -3,7 +3,7 @@ id: SHIP-STATUSLINE-DOC
 title: SpecShip status-line segment
 owner: core
 priority: medium
-version: 3
+version: 4
 ---
 
 <!-- id: SHIP-STATUSLINE-DOC -->
@@ -56,7 +56,7 @@ implementations:
 <!-- id: REQ-STATUSLINE-001.A2 -->
 - Given empty stdin or stdin that is not valid JSON, the command writes a single degraded line to stdout and still exits 0 (it MUST NOT throw, hang, or exit non-zero).
 <!-- id: REQ-STATUSLINE-001.A3 -->
-- The command writes nothing to stderr on the success path, and its stdout contains no embedded newline other than the single trailing one expected by a status-line producer.
+- The command writes nothing to stderr on the success path, and its stdout contains only the newline(s) that separate its stacked lines (header / identity / telemetry, REQ-STATUSLINE-010) — no leading, trailing, or interior blank line.
 <!-- id: REQ-STATUSLINE-001.A4 -->
 - When the `NO_COLOR` environment variable is set, the emitted line contains no ANSI escape sequences.
 
@@ -82,7 +82,7 @@ implementations:
 <!-- id: REQ-STATUSLINE-002.A3 -->
 - The command spawns no child process and opens no socket during its run.
 <!-- id: REQ-STATUSLINE-002.A4 -->
-- The command reads at most the two cache files named above; it does not walk the project tree or stat source files.
+- The command reads at most the two cache files named above plus `.git/HEAD` (and a linked-worktree `.git` pointer) for the header's branch element (REQ-STATUSLINE-012); it walks upward for those roots exactly as it does for `.specship/`, but it does not walk the project tree downward or stat source files.
 
 <!-- id: REQ-STATUSLINE-003 -->
 ## SpecShip MUST refresh the status-line cache on index, sync, and watcher events
@@ -329,20 +329,24 @@ implementations:
 - Rendering the `CTX` element opens no SQLite connection, spawns no child process, and performs no network I/O (same bounded-read budget as REQ-STATUSLINE-002).
 
 <!-- id: REQ-STATUSLINE-010 -->
-## The segment MUST render as two lines when usage telemetry is present
+## The segment MUST stack its lines in a fixed order: header, then identity, then telemetry
 
-The SpecShip identity elements (brand ornament, sync state, drift, call
-count, active run) render on the FIRST line; the capacity telemetry (the
-`CTX` context bar and the `5h`/`7d` usage-limit bars) renders on a SECOND
-line, framed by the same ornament glyphs. When no telemetry element is
-available the output stays a single line — never a trailing empty line.
+The output is composed of up to three stacked lines, always in this order: the
+optional context header (model / directory / branch / version,
+REQ-STATUSLINE-012); the SpecShip identity line (brand ornament, sync state,
+drift, call count, active run); and the optional capacity telemetry line (the
+`CTX` context bar and the `5h`/`7d` usage-limit bars). The identity line is
+always present. Each optional line renders only when it has content, and absent
+lines collapse so there is never a leading, trailing, or interior blank line.
 The glyph vocabulary (`◈`, `◆`, `❮▰▱❯`) is unchanged.
 
 ## Acceptance
 <!-- id: REQ-STATUSLINE-010.A1 -->
-- With context and/or usage windows present, the output contains exactly one newline: SpecShip elements before it, all telemetry bars after it.
+- The identity line is always present; the header stacks directly above it and the telemetry line directly below it, each only when it has content.
 <!-- id: REQ-STATUSLINE-010.A2 -->
-- With no context and no usage data, the output is a single line with no newline.
+- With neither a header nor telemetry, the output is a single line with no newline.
+<!-- id: REQ-STATUSLINE-010.A3 -->
+- Present lines are separated by exactly one newline with no blank line between or around them (header + identity + telemetry ⇒ exactly two newlines; identity + telemetry, or header + identity ⇒ exactly one).
 
 implementations:
   - src/statusline/render.ts:renderSegment
@@ -371,3 +375,51 @@ implementations:
   - src/statusline/render.ts:renderSegment
   - src/statusline/active-run.ts:writeActiveRun
   - src/workflows/executor.ts:WorkflowExecutor.syncActiveRunMarker
+
+<!-- id: REQ-STATUSLINE-012 -->
+## The segment MUST prepend a context header line: model, working directory, git branch, and Claude Code version
+
+Above the SpecShip identity line, the segment renders a context header that
+orients the user to the current session at a glance. It carries, in order and
+each omitted individually when its source is absent: the active model's name
+(Claude Code's stdin `model.display_name`, falling back to `model.id`); the
+current working directory (from `workspace.current_dir` / `cwd`, with the user's
+home directory abbreviated to `~`); the current git branch; and the Claude Code
+version (stdin `version`, shown as `v<version>`). The header uses the same
+art-deco vocabulary (`◈`/`◆`) as the rest of the segment and strips all ANSI
+under `NO_COLOR` (REQ-STATUSLINE-001.A4).
+
+The git branch is derived WITHOUT spawning a process (the REQ-STATUSLINE-002
+performance contract): the reader walks up from the working directory to the
+nearest `.git`, follows a linked-worktree `.git` file's `gitdir:` pointer, and
+reads `HEAD` — reporting the branch name for a `ref: refs/heads/…` HEAD, a short
+commit SHA for a detached HEAD, and omitting the branch entirely when the
+directory is not inside a git repository. This `.git/HEAD` read is the only
+source consulted for the branch; Claude Code's stdin does not carry it.
+
+The header is a real-session affordance: it renders only when stdin actually
+identifies the session (a `model` or `version` is present). Empty or unparseable
+stdin therefore renders NO header, preserving the single degraded line of
+REQ-STATUSLINE-001.A2. When the header renders it stacks ABOVE the identity line
+(REQ-STATUSLINE-010), so the SpecShip identity and telemetry lines keep their
+existing content unchanged, now on the second and third lines.
+
+implementations:
+  - src/statusline/render.ts:renderSegment
+  - src/statusline/index.ts:buildSegment
+  - src/statusline/index.ts:identityFromInput
+  - src/statusline/index.ts:readGitBranch
+
+## Acceptance
+<!-- id: REQ-STATUSLINE-012.A1 -->
+- Given stdin carrying `model`, `workspace.current_dir`, and `version`, the first output line shows the model name, the working directory (home abbreviated to `~`), and the version (`v<version>`), stacked directly above the SpecShip identity line.
+<!-- id: REQ-STATUSLINE-012.A2 -->
+- When the working directory is inside a git repository checked out on a branch, the header includes that branch name; a detached HEAD shows a short commit SHA instead; a non-git directory omits the branch element with no placeholder.
+<!-- id: REQ-STATUSLINE-012.A3 -->
+- Deriving the branch opens no SQLite connection, spawns no child process, and performs no network I/O — it reads only `.git/HEAD` (and, for a linked worktree, the `.git` pointer file) via bounded file reads.
+<!-- id: REQ-STATUSLINE-012.A4 -->
+- Each header element is omitted individually when its source is absent (e.g. a missing `model` drops only the model element); the header never renders a dangling separator or empty ornament.
+<!-- id: REQ-STATUSLINE-012.A5 -->
+- Empty or unparseable stdin renders no header line at all — the degraded output stays a single line (REQ-STATUSLINE-001.A2).
+<!-- id: REQ-STATUSLINE-012.A6 -->
+- Under `NO_COLOR`, the header line contains no ANSI escape sequences.
