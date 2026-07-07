@@ -141,6 +141,43 @@ describe('handleSpecshipJiraIssues', () => {
     expect(out).toContain('Bug');
   });
 
+  it('A6: renders a table (no conversational preamble)', async () => {
+    configureCloud();
+    fetchMock.mockResolvedValue(
+      searchResponse([
+        { key: 'PROJ-1', id: '1', summary: 'Fix the thing', status: 'In Progress', type: 'Bug' },
+      ]),
+    );
+    const out = text(await handleSpecshipJiraIssues({}));
+    // Professional table, not a prose bullet list.
+    expect(out).toContain('| Key | Summary | Status | Type |');
+    expect(out).toContain('| --- | --- | --- | --- |');
+    expect(out).toContain('| PROJ-1 | Fix the thing | In Progress | Bug |');
+    expect(out).not.toMatch(/issues assigned to you \(\d+\)/i); // no chatty preamble
+    // No bottom note when there's nothing to flag (no filter, under the cap).
+    expect(out).not.toContain('> Note:');
+  });
+
+  it('A6: adds a bottom note when a project filter is applied', async () => {
+    configureCloud();
+    fetchMock.mockResolvedValue(
+      searchResponse([
+        { key: 'PROJ-1', id: '1', summary: 'Fix the thing', status: 'To Do', type: 'Task' },
+      ]),
+    );
+    const out = text(await handleSpecshipJiraIssues({ project: 'PROJ' }));
+    expect(out).toContain('| Key | Summary | Status | Type |');
+    expect(out).toMatch(/> Note:.*project PROJ/i);
+  });
+
+  it('A6: the empty state carries a terse bottom note', async () => {
+    configureCloud();
+    fetchMock.mockResolvedValue(searchResponse([]));
+    const out = text(await handleSpecshipJiraIssues({}));
+    expect(out).toMatch(/no issues assigned/i);
+    expect(out).toContain('> Note:');
+  });
+
   it('A2: passes the project filter through to the JQL', async () => {
     configureCloud();
     fetchMock.mockResolvedValue(searchResponse([]));

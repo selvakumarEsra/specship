@@ -174,6 +174,9 @@ describe('handleSpecshipJiraTrack (REQ-JIRA-008)', () => {
     expect(out).toMatch(/PROJ-2.*implementing.*In Progress/s);
     expect(out).toMatch(/PROJ-3.*PR raised.*In Review/s);
     expect(out).toMatch(/PROJ-4.*verified.*Done/s);
+    // A3: a clean table, no conversational preamble.
+    expect(out).toContain('| Key | Title | SpecShip | JIRA |');
+    expect(out).not.toMatch(/tracking \d+ picked/i);
   });
 
   it('A2: the JIRA column comes from the FRESH read, not pick-time cached metadata', async () => {

@@ -30,7 +30,7 @@ import {
 } from './types';
 
 /** Upper bound on issues fetched in one list call — never unbounded. */
-const MAX_ISSUE_RESULTS = 50;
+export const MAX_ISSUE_RESULTS = 50;
 
 export class JiraClient {
   private readonly baseUrl: string;

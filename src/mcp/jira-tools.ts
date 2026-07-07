@@ -20,7 +20,7 @@ import * as path from 'path';
 import { randomUUID } from 'crypto';
 import type { ToolDefinition, ToolResult } from './tools';
 import { loadJiraConfig, resolveJiraCredentials } from '../jira/config';
-import { JiraClient } from '../jira/client';
+import { JiraClient, MAX_ISSUE_RESULTS } from '../jira/client';
 import {
   JiraError,
   type JiraIssue,
@@ -369,31 +369,62 @@ interface JiraStartExecutorLike {
   ): Promise<{ run: JiraStartRunLike }>;
 }
 
-/** Render the issue list as compact markdown, or an explicit empty line. */
-function formatIssues(issues: JiraIssue[]): string {
-  if (issues.length === 0) {
-    return 'No issues assigned to you.';
-  }
-  const lines = issues.map(
-    i => `- **${i.key}** — ${i.summary} — ${i.status} — ${i.issueType}`,
-  );
-  return `Issues assigned to you (${issues.length}):\n\n${lines.join('\n')}`;
+/** Escape a value so it can't break the markdown table layout. */
+function cell(s: string): string {
+  return s.replace(/\r?\n/g, ' ').replace(/\|/g, '\\|').trim();
 }
 
-/** Render a single issue's full detail as markdown. */
+/**
+ * Render the assigned-issue list professionally (REQ-JIRA-002.A6): a table
+ * (key/summary/status/type) with NO conversational preamble, and a terse bottom
+ * note ONLY when there's something to flag — a project filter is applied, or the
+ * result hit the fetch cap. The caller relays this verbatim, so the output is
+ * self-sufficient. Empty → one explicit line plus a short actionable note.
+ */
+function formatIssues(issues: JiraIssue[], opts?: { project?: string }): string {
+  if (issues.length === 0) {
+    return (
+      'No issues assigned to you.\n\n' +
+      '> Note: pass a project key to narrow the search, or confirm the ' +
+      'configured token maps to the intended account.'
+    );
+  }
+  const table = [
+    '| Key | Summary | Status | Type |',
+    '| --- | --- | --- | --- |',
+    ...issues.map(
+      i => `| ${cell(i.key)} | ${cell(i.summary)} | ${cell(i.status)} | ${cell(i.issueType)} |`,
+    ),
+  ].join('\n');
+
+  const notes: string[] = [];
+  if (opts?.project) notes.push(`Filtered to project ${cell(opts.project)}.`);
+  if (issues.length >= MAX_ISSUE_RESULTS) {
+    notes.push(`Showing the ${MAX_ISSUE_RESULTS} most recently updated.`);
+  }
+  return notes.length ? `${table}\n\n> Note: ${notes.join(' ')}` : table;
+}
+
+/**
+ * Render a single issue's detail professionally (REQ-JIRA-003.A3): a title, a
+ * property table (status, type), the description, and a subtasks table — no
+ * conversational narration. The caller relays this verbatim.
+ */
 function formatIssue(issue: JiraIssue): string {
   const parts = [
-    `## ${issue.key} — ${issue.summary}`,
+    `### ${cell(issue.key)} — ${cell(issue.summary)}`,
     '',
-    `- **Status:** ${issue.status}`,
-    `- **Type:** ${issue.issueType}`,
+    '| Field | Value |',
+    '| --- | --- |',
+    `| Status | ${cell(issue.status)} |`,
+    `| Type | ${cell(issue.issueType)} |`,
   ];
   const description = issue.description?.trim();
-  parts.push('', '### Description', '', description || '_No description._');
+  parts.push('', '**Description**', '', description || '_No description._');
   if (issue.subtasks && issue.subtasks.length > 0) {
-    parts.push('', `### Subtasks (${issue.subtasks.length})`, '');
+    parts.push('', '**Subtasks**', '', '| Key | Summary | Status |', '| --- | --- | --- |');
     for (const st of issue.subtasks) {
-      parts.push(`- **${st.key}** — ${st.summary} — ${st.status}`);
+      parts.push(`| ${cell(st.key)} | ${cell(st.summary)} | ${cell(st.status)} |`);
     }
   }
   return parts.join('\n');
@@ -444,7 +475,7 @@ export async function handleSpecshipJiraIssues(
     const creds = resolveJiraCredentials();
     const client = new JiraClient(creds);
     const result = await client.listMyIssues({ project });
-    return textResult(formatIssues(result.issues));
+    return textResult(formatIssues(result.issues, { project }));
   } catch (err) {
     // JiraError messages are credential-free by construction (REQ-JIRA-009).
     if (err instanceof JiraError) {
@@ -939,19 +970,22 @@ interface JiraTrackRow {
 
 const JIRA_UNREACHABLE = '— (JIRA unreachable)';
 
-/** Render the tracking rows as a compact markdown table (REQ-JIRA-008). */
+/**
+ * Render the tracking rows as a table (REQ-JIRA-008.A3) — key, title, SpecShip
+ * work-state, live JIRA status — with no conversational preamble. An empty view
+ * is a single actionable line. The caller relays this verbatim.
+ */
 function formatTrack(rows: JiraTrackRow[]): string {
   if (rows.length === 0) {
     return 'No picked issues yet — run specship_jira_pick first.';
   }
-  const lines = [
-    '| Issue | SpecShip | JIRA |',
-    '| --- | --- | --- |',
+  return [
+    '| Key | Title | SpecShip | JIRA |',
+    '| --- | --- | --- | --- |',
     ...rows.map(
-      (r) => `| **${r.issueKey}** — ${r.title} | ${r.workState} | ${r.jiraStatus} |`,
+      (r) => `| ${cell(r.issueKey)} | ${cell(r.title)} | ${cell(r.workState)} | ${cell(r.jiraStatus)} |`,
     ),
-  ];
-  return `Tracking ${rows.length} picked issue${rows.length === 1 ? '' : 's'}:\n\n${lines.join('\n')}`;
+  ].join('\n');
 }
 
 /**

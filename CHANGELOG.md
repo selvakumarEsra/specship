@@ -9,6 +9,10 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### New Features
+
+- **Cleaner, consistent JIRA output.** Every JIRA view now renders professionally with no chatty narration: "list my JIRA issues" and the tracking view return tables (with a short note at the bottom only when there's something to flag — a project filter, a capped result, or an empty list), and a single issue shows a property table plus a subtasks table. The agent is also steered to present JIRA results as-is and to reach for the JIRA tools without a "use specship" prefix.
+
 
 ## [0.14.1] - 2026-07-07
 
