@@ -126,6 +126,13 @@ describe('handleSpecshipJiraIssue', () => {
     expect(out).toContain('A longer body describing the work.');
     expect(out).toContain('PROJ-2');
     expect(out).toContain('Sub one');
+    // A3: professional layout — a property table + a subtasks table, not bullets.
+    expect(out).toContain('| Field | Value |');
+    expect(out).toContain('| Status | In Progress |');
+    expect(out).toContain('| Type | Bug |');
+    expect(out).toContain('| Key | Summary | Status |');
+    expect(out).toContain('| PROJ-2 | Sub one | To Do |');
+    expect(out).not.toMatch(/^- \*\*Status/m);
   });
 
   it('A1: tolerates an empty description', async () => {

@@ -101,6 +101,12 @@ implementations:
   removed in 2025 (which now returns HTTP 410 Gone). Data Center, which still
   serves the classic endpoint (and older versions lack `/search/jql`), continues
   to use `/rest/api/2/search`. The consumed response shape is identical on both.
+<!-- id: REQ-JIRA-002.A6 -->
+- The list is presented professionally, not conversationally: the issues render
+  as a table (key, summary, status, type) with no prose preamble, and a terse
+  bottom note appears ONLY when there is something to flag (a project filter is
+  applied, or the result hit the fetch cap). The empty result is a single
+  explicit line with a short actionable note.
 
 <!-- id: REQ-JIRA-003 -->
 ## SpecShip MUST fetch and present a single issue picked by its id
@@ -121,6 +127,10 @@ implementations:
 <!-- id: REQ-JIRA-003.A2 -->
 - An unknown or forbidden issue key returns a clear not-found / no-access
   message and no downstream work is started.
+<!-- id: REQ-JIRA-003.A3 -->
+- The issue detail is presented professionally, not conversationally: a title,
+  a property table (status, type), the description, and — when present — a
+  subtasks table, with no narration around it.
 
 <!-- id: REQ-JIRA-004 -->
 ## Picking an issue MUST author a SpecShip spec from it
@@ -231,6 +241,10 @@ not require re-picking.
 <!-- id: REQ-JIRA-008.A2 -->
 - An issue whose JIRA status changed outside SpecShip shows the updated JIRA
   status on the next read.
+<!-- id: REQ-JIRA-008.A3 -->
+- The tracking view is a table (key, title, SpecShip work-state, JIRA status)
+  with no conversational preamble; an unreachable JIRA read shows a per-row
+  marker, and an empty view is a single actionable line.
 
 <!-- id: REQ-JIRA-009 -->
 ## SpecShip MUST keep the JIRA token secret and talk only to the configured host

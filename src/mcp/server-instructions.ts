@@ -68,9 +68,9 @@ typically one to a few calls; a grep/read exploration is dozens.
 
 ## JIRA integration
 
-When the user works from JIRA issues, the tools chain in this order:
+Any request about the user's JIRA issues/tasks/tickets goes to these tools by default — the user should NOT have to say "use specship". Each tool already returns a professional, formatted result (a table, with any caveat as a bottom note); **present that output verbatim — relay it as-is, do not re-summarize it, add a preamble, or speculate about why a list is empty.** The tools chain in this order:
 
-- **"What's assigned to me?" / list issues** → \`specship_jira_issues\` (identity comes from the configured token — the user never types their own name).
+- **"list my JIRA issues" / "what's assigned to me?" / "my JIRA tasks"** → \`specship_jira_issues\` (identity comes from the configured token — the user never types their own name). It returns a ready-to-display table; show it as returned.
 - **"Show me issue PROJ-123"** → \`specship_jira_issue\` with the \`key\`.
 - **"Pick / work on PROJ-123"** → \`specship_jira_pick\` with the \`key\` — fetches the issue and authors a SpecShip spec under \`specs/\` (idempotent on the key).
 - **"Start / implement it"** → \`specship_jira_start\` with the same \`key\` — runs the bundled \`spec-implement\` workflow on the spec pick authored, in an isolated worktree. It runs to the **plan/approve gate** and pauses there, returning the run ID; review the plan, then approve (\`specship workflow approve <runId>\`) to continue. A failed run raises no PR. If no spec exists for the key yet, start points you back to \`specship_jira_pick\`.
