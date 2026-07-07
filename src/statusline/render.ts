@@ -12,10 +12,35 @@
 
 import { StatuslineCache, SessionMarker, ActiveRun, UsageLimits } from './types';
 
+/**
+ * Context-header inputs (REQ-STATUSLINE-012). Every field is already resolved to
+ * a display string by the caller (the model name, the `~`-abbreviated working
+ * directory, the git branch, and the Claude Code version) so this module stays
+ * pure — no env, no clock, no I/O. Each is null/absent when its source is
+ * missing, and the element is then dropped. The caller passes `header: null`
+ * (no header at all) when stdin does not identify the session, which preserves
+ * the single degraded line of REQ-STATUSLINE-001.A2.
+ */
+export interface HeaderInput {
+  model?: string | null;
+  /** Working directory, already home-abbreviated to `~` by the caller. */
+  dir?: string | null;
+  branch?: string | null;
+  /** Claude Code version string (rendered as `v<version>`). */
+  version?: string | null;
+}
+
 export interface RenderInput {
   cache: StatuslineCache | null;
   marker: SessionMarker | null;
   run: ActiveRun | null;
+  /**
+   * Context header stacked ABOVE the identity line (REQ-STATUSLINE-012), or
+   * null/undefined to omit the header line entirely. The caller supplies null
+   * when stdin carries no `model`/`version` (empty or unparseable stdin), so the
+   * degraded path stays one line.
+   */
+  header?: HeaderInput | null;
   /**
    * Real Claude Code usage limits from the external usage file (REQ-STATUSLINE-008),
    * or null/undefined to omit the usage sub-segment entirely. SpecShip never
@@ -115,12 +140,26 @@ function paint(noColor: boolean, code: number, s: string): string {
  * a minimal `◈ specship … ◈` when caches are absent rather than erroring.
  */
 export function renderSegment(input: RenderInput): string {
-  const { cache, marker, run, usage, now, context, ctxWarnPct, noColor } = input;
+  const { cache, marker, run, usage, now, context, ctxWarnPct, noColor, header } = input;
   const c = (code: number, s: string) => paint(noColor, code, s);
 
   const orn = c(COLOR.orn, '◈');
   const sep = c(COLOR.frame, ' ◆ ');
   const brand = c(COLOR.orn, 'specship');
+
+  // Context header (REQ-STATUSLINE-012) — model · directory · branch · version,
+  // stacked above the identity line. Each element drops out when absent; the
+  // whole line is omitted when `header` is null or has no populated element, so
+  // the degraded single-line path (REQ-STATUSLINE-001.A2) is preserved.
+  let headerLine: string | null = null;
+  if (header) {
+    const hp: string[] = [];
+    if (header.model) hp.push(c(COLOR.calls, header.model));
+    if (header.dir) hp.push(c(COLOR.frame, header.dir));
+    if (header.branch) hp.push(c(COLOR.run, `⎇ ${header.branch}`));
+    if (header.version) hp.push(c(COLOR.dim, `v${header.version}`));
+    if (hp.length > 0) headerLine = `${orn} ${hp.join(sep)} ${orn}`;
+  }
 
   const parts: string[] = [];
 
@@ -179,7 +218,12 @@ export function renderSegment(input: RenderInput): string {
     win('7d', usage.weekly);
   }
 
-  const line1 = `${orn} ${brand}${sep}${parts.join(sep)} ${orn}`;
-  if (telemetry.length === 0) return line1;
-  return `${line1}\n${orn} ${telemetry.join(sep)} ${orn}`;
+  const identityLine = `${orn} ${brand}${sep}${parts.join(sep)} ${orn}`;
+  const telemetryLine = telemetry.length > 0 ? `${orn} ${telemetry.join(sep)} ${orn}` : null;
+
+  // Fixed stack order: header, identity, telemetry (REQ-STATUSLINE-010). The
+  // identity line is always present; the two optional lines collapse out so
+  // there is never a leading/trailing/interior blank line.
+  const lines = [headerLine, identityLine, telemetryLine].filter((l): l is string => l !== null);
+  return lines.join('\n');
 }

@@ -44,4 +44,39 @@ describe('buildAuthHeader', () => {
     };
     expect(() => buildAuthHeader(creds)).toThrow(JiraConfigError);
   });
+
+  // REQ-JIRA-009.A1 — a validation failure must never echo the token/PAT that
+  // WAS supplied. Feed creds that carry a secret but still fail (wrong shape
+  // for the declared deployment) so a naive message could leak it.
+  it('never puts the apiToken in the thrown message when the email is missing', () => {
+    const creds: JiraCredentials = {
+      baseUrl: 'https://acme.atlassian.net',
+      deployment: 'cloud',
+      apiToken: 'tok-super-secret',
+    };
+    try {
+      buildAuthHeader(creds);
+      throw new Error('should have thrown');
+    } catch (err) {
+      expect(err).toBeInstanceOf(JiraConfigError);
+      expect((err as Error).message).not.toContain('tok-super-secret');
+    }
+  });
+
+  it('never puts the PAT in the thrown message on a cloud/datacenter mismatch', () => {
+    // A PAT supplied but the deployment declared cloud → cloud path throws on
+    // the missing email/token; the stray PAT must not surface in the message.
+    const creds: JiraCredentials = {
+      baseUrl: 'https://jira.acme.internal',
+      deployment: 'cloud',
+      pat: 'pat-super-secret',
+    };
+    try {
+      buildAuthHeader(creds);
+      throw new Error('should have thrown');
+    } catch (err) {
+      expect(err).toBeInstanceOf(JiraConfigError);
+      expect((err as Error).message).not.toContain('pat-super-secret');
+    }
+  });
 });

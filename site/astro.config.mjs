@@ -114,6 +114,12 @@ export default defineConfig({
 					],
 				},
 				{
+					label: 'Integrations',
+					items: [
+						{ label: 'JIRA', slug: 'guides/jira' },
+					],
+				},
+				{
 					label: 'Reference',
 					items: [
 						{ label: 'MCP server', slug: 'reference/mcp-server' },

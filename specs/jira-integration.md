@@ -1,7 +1,7 @@
 ---
 id: JIRA-DOC
 title: JIRA integration for solo developers
-owner: "[needs review]"
+owner: core
 priority: medium
 brief: integrate-jira-into-specship/brief.md
 ---
@@ -18,15 +18,20 @@ This is SpecShip's first outbound integration — every requirement below assume
 the app is otherwise local-first, so credential handling and network-failure
 behaviour are first-class concerns, not afterthoughts.
 
-Design decisions taken while authoring (confirm at review):
+Design decisions (settled):
 
 - **Spec-driven bridge.** A picked issue is authored into a SpecShip spec (a
   low-ceremony auto-draft from the issue), then the existing spec-implement
   pipeline runs on that spec. This keeps the spec-as-contract ethos, drift
   tracking, and acceptance criteria rather than implementing raw issue text.
-- **Agent-native surface.** List/pick are MCP tools the agent calls in
-  conversation ("list my JIRA issues", "start PROJ-123"). A terminal CLI is a
-  follow-up, not part of this document [needs review: promote CLI into v1?].
+- **Surface split.** The issue-driving flow — list, fetch, pick, start — is
+  **agent-native MCP tools** (`specship_jira_issues` / `_issue` / `_pick` /
+  `_start`) the agent calls in conversation ("list my JIRA issues",
+  "start PROJ-123"). The **setup and tracking** surfaces ship as terminal
+  **CLI subcommands** in v1 too — `specship jira configure` / `jira test`
+  (connection) and `jira track` (status view) — because those are naturally
+  terminal-and-script-friendly. CLI wrappers for list/pick/start are a
+  follow-up, not v1.
 - **Both deployments.** JIRA Cloud (email + API token, basic auth) and Data
   Center / Server (Personal Access Token, bearer) are both supported.
 
@@ -75,6 +80,10 @@ issue, its key/id, summary, status, and issue type, ordered so the most
 actionable items surface first. "Assigned to me" resolves to the authenticated
 account, so the user never types their own name.
 
+implementations:
+  - src/mcp/jira-tools.ts:handleSpecshipJiraIssues
+  - src/mcp/jira-tools.ts:jiraToolDefinitions
+
 ## Acceptance
 <!-- id: REQ-JIRA-002.A1 -->
 - Listing returns exactly the issues assigned to the authenticated user, each
@@ -96,6 +105,9 @@ type, and acceptance/subtask information when present. An id that does not
 exist, or that the user cannot access, is reported clearly rather than silently
 producing an empty spec.
 
+implementations:
+  - src/mcp/jira-tools.ts:handleSpecshipJiraIssue
+
 ## Acceptance
 <!-- id: REQ-JIRA-003.A1 -->
 - Fetching a valid issue key returns its summary, description, status, and
@@ -114,6 +126,11 @@ linked. The draft is low-ceremony — generated from the issue without a full
 authoring interview — but still well-formed (id markers, RFC 2119 keywords,
 acceptance bullets) so it indexes cleanly and the existing pipeline can run on
 it.
+
+implementations:
+  - src/mcp/jira-tools.ts:handleSpecshipJiraPick
+  - src/jira/spec-generator.ts:generateSpecMarkdown
+  - src/jira/spec-writer.ts:writeSpecFromIssue
 
 ## Acceptance
 <!-- id: REQ-JIRA-004.A1 -->
@@ -134,6 +151,9 @@ it — plan, implement, verify, and link — in the isolated worktree the workfl
 already uses. The JIRA flow reuses that pipeline rather than implementing raw
 issue text, so the work carries acceptance-criteria verification and spec→code
 links like any other SpecShip implementation.
+
+implementations:
+  - src/mcp/jira-tools.ts:handleSpecshipJiraStart
 
 ## Acceptance
 <!-- id: REQ-JIRA-005.A1 -->
@@ -213,6 +233,11 @@ The token is never logged, printed, echoed into workflow logs or the graph, or
 written into the project tree. All JIRA requests go only to the configured base
 URL; SpecShip makes no other outbound calls with the credential. This holds
 across the list, pick, PR, and status-write paths.
+
+implementations:
+  - src/jira/client.ts:JiraClient
+  - src/jira/auth.ts:buildAuthHeader
+  - src/jira/config.ts:resolveJiraCredentials
 
 ## Acceptance
 <!-- id: REQ-JIRA-009.A1 -->

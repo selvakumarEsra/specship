@@ -33,6 +33,18 @@ Agents configured by the installer launch this automatically. When a `.specship/
 | `specship_link_verify` | Mark a link's verification pass/fail. (Mutating — prompts for permission.) |
 | `specship_drifted` | Pull the drift queue (drifted / broken / orphaned links). |
 
+## JIRA tools
+
+The issue-driving flow. Connect first with `specship jira configure`. See the [JIRA integration guide](/guides/jira/).
+
+| Tool | Purpose |
+|---|---|
+| `specship_jira_issues` | List the issues assigned to you (resolved from your token) — key, summary, status, type. Optional project filter. |
+| `specship_jira_issue` | Fetch one issue by key — summary, description, status, type. |
+| `specship_jira_pick` | Draft a well-formed SpecShip spec from an issue under `specs/`. Idempotent — re-picking updates the spec in place. |
+| `specship_jira_start` | Run the spec-implement workflow on the generated spec; pauses at its plan/approve gate. |
+| `specship_jira_track` | Read-only table joining each picked issue's SpecShip work-state with its live JIRA status. |
+
 ## Design tools
 
 Merged in from the standalone `designer` MCP, these drive [claude.ai/design](https://claude.ai/design) over a debug Chrome. macOS only; they only launch Chrome when invoked. See [Design-to-code](/workflows/design-to-code/).

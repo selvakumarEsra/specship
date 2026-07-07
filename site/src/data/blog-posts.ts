@@ -39,6 +39,16 @@ const doorArch = (stroke: string) =>
 
 export const posts: BlogPost[] = [
   {
+    slug: 'jira-integration',
+    cat: 'integrations', catLabel: 'Integrations', catColor: '#2684FF',
+    title: 'Drive work from your JIRA board: pick an id, get a reviewed PR',
+    dek: 'SpecShip’s first outbound integration turns a JIRA ticket into a real spec — summary to title, description to body, subtasks to acceptance criteria — implements it behind the plan gate, and raises a PR only when the tests pass, with the issue assigned, transitioned, and linked back. Local-first, secret-safe, one issue at a time.',
+    date: 'Jul 7, 2026', read: '7 min', feat: true,
+    tags: ['#jira', '#integrations', '#workflows', '#specs'],
+    thumbBg: 'rgba(38,132,255,0.10)',
+    thumb: `<svg viewBox="0 0 360 200" preserveAspectRatio="xMidYMid slice"><rect width="360" height="200" fill="rgba(38,132,255,0.08)"/><rect x="34" y="68" width="74" height="64" rx="9" fill="rgba(38,132,255,0.9)"/><rect x="34" y="68" width="7" height="64" rx="3.5" fill="#0A47B8"/><rect x="52" y="82" width="42" height="8" rx="4" fill="#0A1220" opacity="0.5"/><rect x="52" y="100" width="44" height="6" rx="3" fill="#0A1220" opacity="0.3"/><rect x="52" y="112" width="28" height="6" rx="3" fill="#0A1220" opacity="0.3"/><rect x="150" y="64" width="60" height="72" rx="7" fill="rgba(91,147,242,0.92)"/><path d="M160 84 h40 M160 100 h40 M160 116 h26" stroke="#0A1220" stroke-width="2" stroke-linecap="round"/><circle cx="210" cy="140" r="8" fill="#A586F5"/><circle cx="296" cy="100" r="17" fill="none" stroke="#46C26B" stroke-width="2.4"/><path d="M287 100 L294 108 L306 90" fill="none" stroke="#46C26B" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M108 100 L150 100 M210 100 L276 100" stroke="rgba(150,165,200,0.42)" stroke-width="2" fill="none" stroke-dasharray="5 5"/></svg>`,
+  },
+  {
     slug: 'lean-dashboard',
     cat: 'dashboard', catLabel: 'Dashboard', catColor: '#5B93F2',
     title: 'A dashboard that installs anywhere: retiring Angular for server-rendered HTML',
@@ -202,6 +212,7 @@ export const posts: BlogPost[] = [
 
 export const categories = [
   { key: 'all', label: 'All posts', color: '' },
+  { key: 'integrations', label: 'Integrations', color: '#2684FF' },
   { key: 'doors', label: 'Doors', color: '#29D2BE' },
   { key: 'statusline', label: 'Status Line', color: '#E5A50A' },
   { key: 'graph', label: 'Knowledge Graph', color: 'var(--node-spec)' },

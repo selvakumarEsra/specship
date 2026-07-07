@@ -27,6 +27,8 @@ const ENV_KEYS = [
   'SPECSHIP_JIRA_API_TOKEN',
   'SPECSHIP_JIRA_PAT',
   'SPECSHIP_JIRA_DEPLOYMENT',
+  'SPECSHIP_JIRA_TRANSITION_IN_PROGRESS',
+  'SPECSHIP_JIRA_TRANSITION_IN_REVIEW',
 ];
 
 beforeEach(() => {
@@ -108,6 +110,49 @@ describe('resolveJiraCredentials', () => {
     expect(creds.apiToken).toBe('tok');
   });
 
+  // REQ-JIRA-007 — lifecycle transition names are configurable, with sensible
+  // defaults so an unconfigured project still pushes status.
+  it('defaults transitions to In Progress / In Review when unconfigured', () => {
+    writeCfg({
+      baseUrl: 'https://acme.atlassian.net',
+      email: 'jane@acme.com',
+      apiToken: 'tok',
+    });
+    const creds = resolveJiraCredentials();
+    expect(creds.transitions).toEqual({
+      inProgress: 'In Progress',
+      inReview: 'In Review',
+    });
+  });
+
+  it('reads transition names from the config file', () => {
+    writeCfg({
+      baseUrl: 'https://acme.atlassian.net',
+      email: 'jane@acme.com',
+      apiToken: 'tok',
+      transitions: { inProgress: 'Start work', inReview: 'Review' },
+    });
+    const creds = resolveJiraCredentials();
+    expect(creds.transitions).toEqual({
+      inProgress: 'Start work',
+      inReview: 'Review',
+    });
+  });
+
+  it('env overrides the file transition names, per field', () => {
+    writeCfg({
+      baseUrl: 'https://acme.atlassian.net',
+      email: 'jane@acme.com',
+      apiToken: 'tok',
+      transitions: { inProgress: 'Start work', inReview: 'Review' },
+    });
+    process.env.SPECSHIP_JIRA_TRANSITION_IN_PROGRESS = 'Doing';
+    const creds = resolveJiraCredentials();
+    expect(creds.transitions?.inProgress).toBe('Doing');
+    // Unset env field falls back to the file value.
+    expect(creds.transitions?.inReview).toBe('Review');
+  });
+
   it('env override beats the file (per field)', () => {
     writeCfg({
       baseUrl: 'https://file.atlassian.net',
@@ -152,6 +197,39 @@ describe('resolveJiraCredentials', () => {
   it('propagates a malformed-file error', () => {
     fs.writeFileSync(cfgPath, 'not json at all');
     expect(() => resolveJiraCredentials()).toThrow(JiraConfigError);
+  });
+
+  // REQ-JIRA-009.A1 — even when a secret IS on disk, a resolution failure must
+  // not echo it back. A base-URL-less config still carries the apiToken, so a
+  // naive "here's your config" message could leak it.
+  it('never echoes the apiToken when the base URL is missing', () => {
+    writeCfg({ email: 'jane@acme.com', apiToken: 'tok-super-secret' });
+    try {
+      resolveJiraCredentials();
+      throw new Error('should have thrown');
+    } catch (err) {
+      expect(err).toBeInstanceOf(JiraConfigError);
+      expect((err as Error).message).not.toContain('tok-super-secret');
+    }
+  });
+
+  it('never echoes the token on a deployment/credential mismatch', () => {
+    // Explicit datacenter but only an email+token pair on disk → the PAT check
+    // throws while the apiToken sits in the resolved config; it must stay out
+    // of the message.
+    writeCfg({
+      baseUrl: 'https://jira.acme.internal',
+      deployment: 'datacenter',
+      email: 'jane@acme.com',
+      apiToken: 'tok-super-secret',
+    });
+    try {
+      resolveJiraCredentials();
+      throw new Error('should have thrown');
+    } catch (err) {
+      expect(err).toBeInstanceOf(JiraConfigError);
+      expect((err as Error).message).not.toContain('tok-super-secret');
+    }
   });
 });
 

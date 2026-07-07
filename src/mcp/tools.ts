@@ -401,6 +401,14 @@ import {
   handleDesignerSnapshot,
   handleDesignerHandoff,
 } from './designer-tools';
+import {
+  jiraToolDefinitions,
+  handleSpecshipJiraIssues,
+  handleSpecshipJiraIssue,
+  handleSpecshipJiraPick,
+  handleSpecshipJiraStart,
+  handleSpecshipJiraTrack,
+} from './jira-tools';
 
 export const tools: ToolDefinition[] = [
   {
@@ -586,6 +594,10 @@ export const tools: ToolDefinition[] = [
   // Designer tools: claude.ai/design driving, vendored from @pro-vi/designer.
   // See ./designer-tools.ts for handlers. Drives a debug Chrome over CDP.
   ...designerToolDefinitions,
+  // JIRA tools (REQ-JIRA-002/003): list issues assigned to the authenticated
+  // user + fetch one issue by key. See ./jira-tools.ts for handlers.
+  // Independent of the code graph.
+  ...jiraToolDefinitions,
 ];
 
 /**
@@ -1118,6 +1130,33 @@ export class ToolHandler {
           return await handleDesignerSnapshot(args);
         case 'designer_handoff':
           return await handleDesignerHandoff(args);
+        // JIRA tools are independent of the code graph — talk to the
+        // configured JIRA host and return directly, bypassing the
+        // worktree/staleness wrappers.
+        case 'specship_jira_issues':
+          return await handleSpecshipJiraIssues(args);
+        case 'specship_jira_issue':
+          return await handleSpecshipJiraIssue(args);
+        case 'specship_jira_pick':
+          return await handleSpecshipJiraPick(args);
+        case 'specship_jira_start': {
+          // start drives the spec-implement workflow, so it needs the DB
+          // handle + project root from the session's open SpecShip (threaded
+          // in — the JIRA tools never import the SpecShip package directly).
+          const cg = this.getSpecShip(args.projectPath as string | undefined);
+          return await handleSpecshipJiraStart(args, {
+            specQueries: cg.getSpecQueries(),
+            projectRoot: cg.getProjectRoot(),
+          });
+        }
+        case 'specship_jira_track': {
+          // track joins each picked issue's SpecShip work-state (from the
+          // session's workflow runs) with its live JIRA status — read-only.
+          const cg = this.getSpecShip(args.projectPath as string | undefined);
+          return await handleSpecshipJiraTrack(args, {
+            specQueries: cg.getSpecQueries(),
+          });
+        }
         default:
           return this.errorResult(`Unknown tool: ${toolName}`);
       }

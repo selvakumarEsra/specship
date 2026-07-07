@@ -2872,12 +2872,27 @@ program
     const { discoverWorkflows, loadWorkflowByName } = await import('../workflows/discovery');
     const { WorkflowExecutor } = await import('../workflows/executor');
     const { WorktreeProvider } = await import('../isolation/worktree');
+    const { handleJiraRunCompletion } = await import('../mcp/jira-tools');
 
     const cg = await SpecShip.open(projectRoot);
     try {
       const specQueries = cg.getSpecQueries();
       const worktrees = new WorktreeProvider(specQueries);
-      const executor = new WorkflowExecutor(specQueries, worktrees, projectRoot);
+      // On completion, a JIRA-started run raises its PR (REQ-JIRA-006); the hook
+      // is a silent no-op for any run without `metadata.jira`.
+      const executor = new WorkflowExecutor(
+        specQueries,
+        worktrees,
+        projectRoot,
+        async (run) => {
+          await handleJiraRunCompletion(run, {
+            getIsolationEnvById: (id) => specQueries.getIsolationEnvById(id),
+            projectRoot,
+            // eslint-disable-next-line no-console
+            log: (m) => console.log(m),
+          });
+        },
+      );
 
       switch (action) {
         case 'list': {
@@ -3251,6 +3266,39 @@ jira
       const label = err instanceof JiraAuthError ? 'Authentication failed' : 'Connection failed';
       error(`${label}: ${msg}`);
       process.exit(1);
+    }
+  });
+
+/**
+ * specship jira track — read-only tracking view (REQ-JIRA-008). Joins each
+ * picked issue's SpecShip work-state (from its workflow run) with its LIVE JIRA
+ * status (a fresh read at track time). Never re-picks or re-starts anything.
+ */
+jira
+  .command('track')
+  .description('Show each picked JIRA issue with its SpecShip work-state + live JIRA status.')
+  .option('--project <key>', 'narrow the live JIRA read to a project (e.g., "PROJ")')
+  .option('--path <projectRoot>', 'project root (default: cwd)')
+  .action(async (options: { project?: string; path?: string }) => {
+    const projectRoot = path.resolve(options.path ?? process.cwd());
+    if (!isInitialized(projectRoot)) {
+      error(`SpecShip not initialized in ${projectRoot}. Run \`specship init -i\` first.`);
+      process.exit(1);
+    }
+    const { SpecShip } = await loadSpecShip();
+    const { handleSpecshipJiraTrack } = await import('../mcp/jira-tools');
+    const cg = await SpecShip.open(projectRoot);
+    try {
+      const result = await handleSpecshipJiraTrack(
+        { project: options.project },
+        { specQueries: cg.getSpecQueries() },
+      );
+      const out = result.content.map((c) => c.text).join('\n');
+      // eslint-disable-next-line no-console
+      console.log(out);
+      if (result.isError) process.exit(1);
+    } finally {
+      cg.close();
     }
   });
 

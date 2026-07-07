@@ -81,7 +81,7 @@ describe('JiraClient.testConnection', () => {
     );
   });
 
-  it('refuses a redirect instead of following it', async () => {
+  it('refuses a 3xx redirect instead of following it (REQ-JIRA-009.A2)', async () => {
     fetchMock.mockResolvedValue({
       ok: false,
       status: 302,
@@ -90,14 +90,32 @@ describe('JiraClient.testConnection', () => {
       json: async () => ({}),
     } as Partial<Response>);
     const client = new JiraClient(CLOUD);
-    await expect(client.testConnection()).rejects.toBeInstanceOf(
-      JiraConfigError,
-    );
-    // Only the original host was contacted — no follow-up fetch.
+    let thrown: unknown;
+    try {
+      await client.testConnection();
+    } catch (err) {
+      thrown = err;
+    }
+    expect(thrown).toBeInstanceOf(JiraConfigError);
+    // The one fetch that DID fire opted out of auto-following redirects, so the
+    // Authorization header could never be replayed to the redirect target.
+    const [, opts] = fetchMock.mock.calls[0];
+    expect(opts.redirect).toBe('manual');
+    // Refused, not followed: exactly one fetch, and it hit only the configured
+    // host — never the evil.example.com the Location header pointed at.
     expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      'https://acme.atlassian.net/rest/api/2/myself',
+    );
+    // The refusal names the configured host but never echoes the credential.
+    const msg = (thrown as Error).message;
+    expect(msg).toContain('acme.atlassian.net');
+    expect(msg).not.toContain('tok-123');
+    expect(msg).not.toContain('Basic ');
+    expect(msg).not.toContain('evil.example.com');
   });
 
-  it('refuses an opaqueredirect response', async () => {
+  it('refuses an opaqueredirect response without a second host hit (REQ-JIRA-009.A2)', async () => {
     fetchMock.mockResolvedValue({
       ok: false,
       status: 0,
@@ -109,6 +127,11 @@ describe('JiraClient.testConnection', () => {
     await expect(client.testConnection()).rejects.toBeInstanceOf(
       JiraConfigError,
     );
+    // An opaqueredirect (redirect: 'manual' hid the target) is refused the same
+    // way — one fetch, no follow-up to whatever host it pointed at.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [, opts] = fetchMock.mock.calls[0];
+    expect(opts.redirect).toBe('manual');
   });
 
   it('never leaks the credential in a thrown auth error', async () => {
