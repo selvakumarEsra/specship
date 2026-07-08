@@ -106,9 +106,20 @@ describe('SettingsPage via App (REQ-DESKTOP-028)', () => {
     mockFetch([{ ingestEnabled: true }]);
     render(<App />);
 
-    // Version string from the mocked status (v-prefixed) and the backend.
-    expect(await screen.findByText('v9.9.9')).toBeTruthy();
+    // Version string from the mocked status (v-prefixed) and the backend. The
+    // version now also appears in the sidebar footer (REQ-DESKTOP-034), so
+    // allow more than one match.
+    expect((await screen.findAllByText('v9.9.9')).length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText('native').length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('REQ-DESKTOP-034: shows the product version at the bottom-left of the sidebar', async () => {
+    mockFetch([{ ingestEnabled: false }]);
+    render(<App />);
+
+    // The sidebar footer surfaces the server-provided product version as v<version>.
+    const badge = await screen.findByTestId('app-version');
+    expect(badge.textContent).toBe('v9.9.9');
   });
 
   it('A4: the design-system gallery renders control states from tokens in both themes', async () => {

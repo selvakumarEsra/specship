@@ -3,7 +3,7 @@ id: SPECSHIP-DESKTOP-DOC
 title: SpecShip Desktop
 owner: web
 priority: high
-version: 1
+version: 2
 source: specs/specship-desktop/source.md
 snapshot: specs/specship-desktop/snapshot.html
 tokens: specs/specship-desktop/tokens.css
@@ -990,3 +990,34 @@ implementations:
 - After retirement, the spec funnel shows no needs-attention entries
   caused by the removal — the SSR documents' links are retired or
   re-attached, not left orphaned.
+
+<!-- id: REQ-DESKTOP-034 -->
+## The shell MUST show the running product version at the bottom-left of the sidebar
+
+The dashboard shell displays the running SpecShip product version at the
+bottom-left of the sidebar, below the Settings entry, so a user can see at a
+glance which release the dashboard is on. The value is the real
+`@specship/specship` version resolved by the server at runtime (the same source
+the About view uses), never a hard-coded or build-time-baked string. It renders
+as `v<version>` when the sidebar is expanded and in a compact form when the
+sidebar is collapsed. Until the version has loaded — or when it is unavailable
+(no project/status yet) — the slot renders nothing rather than a broken or
+placeholder version.
+
+implementations:
+  - ui/src/App.tsx:Sidebar
+  - ui/src/App.tsx:App
+  - server/src/product-version.ts:productVersion
+
+## Acceptance
+<!-- id: REQ-DESKTOP-034.A1 -->
+- When the status has loaded, the sidebar's bottom-left shows the server-provided
+  product version rendered as `v<version>`.
+<!-- id: REQ-DESKTOP-034.A2 -->
+- The displayed version is the server's real `@specship/specship` version at
+  runtime, not a hard-coded or build-time constant baked into the SPA.
+<!-- id: REQ-DESKTOP-034.A3 -->
+- Before the version has loaded, or when it is unavailable, the slot renders
+  nothing — no broken or placeholder version string.
+<!-- id: REQ-DESKTOP-034.A4 -->
+- Collapsing the sidebar keeps the version visible in a compact form.

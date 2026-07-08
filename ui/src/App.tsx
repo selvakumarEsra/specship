@@ -179,7 +179,7 @@ export function App() {
 
   return (
     <div style={{ display: 'flex', height: '100%', position: 'relative' }}>
-      <Sidebar route={route} collapsed={collapsed} counts={counts} onToggleCollapse={toggleCollapse} />
+      <Sidebar route={route} collapsed={collapsed} counts={counts} version={status.data?.version} onToggleCollapse={toggleCollapse} />
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         <StatusStrip
           status={status.data}
@@ -202,7 +202,7 @@ export function App() {
   );
 }
 
-function Sidebar({ route, collapsed, counts, onToggleCollapse }: { route: string; collapsed: boolean; counts: BadgeCounts; onToggleCollapse: () => void }) {
+function Sidebar({ route, collapsed, counts, version, onToggleCollapse }: { route: string; collapsed: boolean; counts: BadgeCounts; version?: string; onToggleCollapse: () => void }) {
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
     try { return (JSON.parse(localStorage.getItem(NAV_GROUPS_KEY) || 'null') as Record<string, boolean>) || {}; } catch { return {}; }
   });
@@ -247,6 +247,21 @@ function Sidebar({ route, collapsed, counts, onToggleCollapse }: { route: string
       <div style={{ padding: 8, borderTop: '1px solid var(--border-subtle)' }}>
         <NavItem item={{ id: 'designsystem', label: 'Design system', icon: 'layers' }} active={route === 'designsystem'} collapsed={collapsed} />
         <NavItem item={{ id: 'settings', label: 'Settings', icon: 'settings' }} active={route === 'settings'} collapsed={collapsed} />
+        {version && (
+          <div
+            className="mono tabular"
+            title={`SpecShip v${version}`}
+            data-testid="app-version"
+            style={{
+              padding: collapsed ? '6px 0 2px' : '6px 10px 2px',
+              fontSize: 10.5, color: 'var(--text-muted)',
+              textAlign: collapsed ? 'center' : 'left',
+              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+            }}
+          >
+            {collapsed ? version : `v${version}`}
+          </div>
+        )}
       </div>
     </nav>
   );

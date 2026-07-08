@@ -9,6 +9,10 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### New Features
+
+- **The dashboard shows its version.** The running SpecShip release version now appears at the bottom-left of the dashboard sidebar (and stays visible, compact, when the sidebar is collapsed), so you can see at a glance which release the dashboard is on.
+
 
 ## [0.14.2] - 2026-07-07
 
