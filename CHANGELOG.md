@@ -9,6 +9,10 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Breaking Changes
+
+- **`specship uninstall` now removes SpecShip completely.** It used to only unwire SpecShip from Claude Code, leaving the CLI, your indexes, and your `~/.specship` data behind. It now also deletes the current project's index, the user-level `~/.specship` directory (including any saved JIRA credentials and worktrees), and the `specship` program itself — returning the machine to its pre-install state. It first shows exactly what will be deleted and asks for confirmation (`--yes` / `--force` skips the prompt). To keep the old wiring-only behavior, run `specship uninstall --keep-data`. Indexes in other projects aren't auto-discovered (SpecShip keeps no registry of them), so it says so rather than implying a machine-wide sweep.
+
 
 ## [0.14.3] - 2026-07-08
 

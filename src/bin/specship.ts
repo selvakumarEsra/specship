@@ -2535,26 +2535,43 @@ program
  */
 program
   .command('uninstall')
-  .description('Remove specship from Claude Code')
-  .option('-l, --location <where>', 'Uninstall location: "global" or "local". Default: prompt (local)')
-  .option('-y, --yes', 'Non-interactive: defaults to --location=local')
+  .description('Completely remove SpecShip (wiring, indexes, ~/.specship data, and the binary)')
+  .option('-y, --yes', 'Skip the confirmation prompt (also: --force)')
+  .option('-f, --force', 'Alias for --yes')
+  .option('--keep-data', 'Only unwire from Claude Code; keep the indexes, ~/.specship data, and the binary')
+  .option('-l, --location <where>', 'With --keep-data: which wiring to remove ("global" or "local")')
   // vestigial — kept so existing `--target claude` invocations keep working.
   .option('-t, --target <ids>', '(vestigial) accepted: "claude" | "auto" | "all" | "none"')
   .action(async (opts: {
     target?: string;
     location?: string;
     yes?: boolean;
+    force?: boolean;
+    keepData?: boolean;
   }) => {
     const { runUninstaller } = await import('../installer');
     if (opts.location && opts.location !== 'global' && opts.location !== 'local') {
       error(`--location must be "global" or "local" (got "${opts.location}").`);
       process.exit(1);
     }
+    // Resolve the purge env the same way `specship update` does: the running
+    // binary's dir anchors install-method detection; SPECSHIP_* env overrides
+    // the bundle install/bin locations.
+    const installDir = process.env.SPECSHIP_INSTALL_DIR || path.join(os.homedir(), '.specship');
+    const binDir = process.env.SPECSHIP_BIN_DIR || path.join(os.homedir(), '.local', 'bin');
     try {
       await runUninstaller({
         target: opts.target,
         location: opts.location as 'global' | 'local' | undefined,
-        yes: opts.yes,
+        yes: opts.yes || opts.force,
+        keepData: opts.keepData,
+        purgeEnv: {
+          cwd: process.cwd(),
+          homedir: os.homedir(),
+          installDir,
+          binDir,
+          method: detectInstallMethod(__dirname, installDir),
+        },
       });
     } catch (err) {
       error(err instanceof Error ? err.message : String(err));
