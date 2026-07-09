@@ -5,7 +5,7 @@ description: Every SpecShip command and the flags it accepts.
 
 ```bash
 specship install                 # Wire SpecShip into Claude Code (project-local by default; --location global)
-specship uninstall               # Remove SpecShip from Claude Code (inverse of install)
+specship uninstall               # Completely remove SpecShip (wiring, index, ~/.specship data, binary; --keep-data keeps all but the wiring)
 specship init [path]             # Initialize in a project and build the index (indexing runs by default)
 specship uninit [path]           # Remove SpecShip from a project (--force to skip prompt)
 specship index [path]            # Full index (--force to re-index, --quiet for less output)

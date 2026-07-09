@@ -9,11 +9,14 @@
  * but only accepts `claude` / `auto` / `all` / `none`.)
  */
 
-import { execSync } from 'child_process';
+import { execSync, execFileSync } from 'child_process';
+import * as os from 'os';
 import * as path from 'path';
 import * as fs from 'fs';
 import { claudeTarget, statusLineState, getStatusLineSnippet } from './targets/claude';
 import type { AgentTarget, Location, TargetId } from './targets/types';
+import { detectInstallMethod } from '../update/updater';
+import { planPurge, executePurge, assertSafeToRemove, type PurgeEnv, type PurgeExecDeps } from './purge';
 import { getGlyphs } from '../ui/glyphs';
 // Lightweight (fs/path only) — safe for the installer's no-native-modules rule.
 import { enableGateChecks } from '../enforce/enforce';
@@ -273,10 +276,22 @@ export interface RunUninstallerOptions {
    * / `auto` / `all` / `none`. Anything else throws.
    */
   target?: string;
-  /** Skip the location prompt; use this value directly. */
+  /** Only meaningful with `keepData`: which wiring location to sweep. */
   location?: Location;
-  /** Non-interactive: location=local, no prompts. */
+  /** Non-interactive: skip the confirmation prompt. */
   yes?: boolean;
+  /**
+   * Escape hatch (REQ-UNINSTALL-003): perform ONLY the original wiring-only
+   * uninstall — remove the Claude Code config, keep the index, `~/.specship`,
+   * and the binary. No confirmation, no data loss.
+   */
+  keepData?: boolean;
+  /**
+   * Purge environment (from the CLI, which knows the running binary's dir).
+   * Omitted → derived from `os.homedir()` + the `SPECSHIP_*` env with the
+   * installer module's own `__dirname` as the method-detection anchor.
+   */
+  purgeEnv?: PurgeEnv;
 }
 
 export type UninstallStatus = 'removed' | 'not-configured' | 'unsupported';
@@ -333,18 +348,14 @@ export function uninstallTargets(
 }
 
 /**
- * Interactive uninstaller — the inverse of `runInstallerWithOptions`.
- * Asks global-vs-local, then sweeps Claude Code's config at that
- * location. Removes only what install wrote (MCP server entry,
- * permissions) — never the `.specship/` index, which `specship
- * uninit` owns.
+ * Uninstaller entry. By default a COMPLETE removal (UNINSTALL-PURGE-DOC): the
+ * Claude Code wiring at both locations, the current project's `.specship/`
+ * index, the user-level `~/.specship/` data, and the binary itself. The
+ * `--keep-data` escape hatch runs the original wiring-only behavior instead.
  */
 export async function runUninstaller(opts: RunUninstallerOptions): Promise<void> {
   const clack = await importESM('@clack/prompts');
-
   clack.intro(`SpecShip v${getVersion()} — uninstall`);
-
-  const useDefaults = opts.yes === true;
 
   if (opts.target === 'none') {
     clack.outro('Skipped — nothing to uninstall.');
@@ -358,13 +369,25 @@ export async function runUninstaller(opts: RunUninstallerOptions): Promise<void>
     );
   }
 
-  // Step 1: location. Default tracks install (now local), so a user
-  // who ran `specship install --yes` and `specship uninstall --yes`
-  // touches the same files on both sides.
+  if (opts.keepData) {
+    await wiringOnlyUninstall(clack, opts);
+    return;
+  }
+  await purgeUninstall(clack, opts);
+}
+
+/**
+ * REQ-UNINSTALL-003 — the original behavior: strip only the Claude Code wiring
+ * at the chosen location, leaving the index, `~/.specship`, and the binary.
+ */
+async function wiringOnlyUninstall(
+  clack: typeof import('@clack/prompts'),
+  opts: RunUninstallerOptions,
+): Promise<void> {
   let location: Location;
   if (opts.location) {
     location = opts.location;
-  } else if (useDefaults) {
+  } else if (opts.yes === true) {
     location = 'local';
   } else {
     const sel = await clack.select({
@@ -382,30 +405,124 @@ export async function runUninstaller(opts: RunUninstallerOptions): Promise<void>
     location = sel;
   }
 
-  // Step 2: sweep + feedback. uninstallTargets always returns one
-  // report per input target — the non-null assertion is safe.
   const report = uninstallTargets([claudeTarget], location)[0]!;
   if (report.status === 'removed') {
-    for (const p of report.removedPaths) {
-      clack.log.success(`Claude Code: removed ${tildify(p)}`);
-    }
+    for (const p of report.removedPaths) clack.log.success(`Claude Code: removed ${tildify(p)}`);
   } else if (report.status === 'not-configured') {
     clack.log.info(`Claude Code: not configured — nothing to remove`);
   } else {
     clack.log.info(`Claude Code: skipped — ${report.notes[0] ?? 'unsupported location'}`);
   }
 
-  // Step 3: for local uninstall, the index dir is separate.
   if (location === 'local' && fs.existsSync(path.join(process.cwd(), '.specship'))) {
     clack.log.info('The .specship/ index for this project is still here. Run `specship uninit` to delete it.');
   }
+  clack.log.info('Kept your data and the specship binary (--keep-data). Run `specship uninstall` (no flag) for a complete removal.');
 
-  // Step 4: summary.
   if (report.status === 'removed') {
     clack.outro('Removed SpecShip from Claude Code. Restart it to apply.');
   } else {
     clack.outro(`SpecShip was not configured in Claude Code at the ${location} location — nothing to remove.`);
   }
+}
+
+/**
+ * REQ-UNINSTALL-001/002 — complete removal: the Claude Code wiring at BOTH
+ * locations, the current project's index, the user-level `~/.specship`, and the
+ * binary (by detected install method). Gated by a confirmation that lists
+ * exactly what will be deleted; `--yes` skips the prompt.
+ */
+async function purgeUninstall(
+  clack: typeof import('@clack/prompts'),
+  opts: RunUninstallerOptions,
+): Promise<void> {
+  const env = opts.purgeEnv ?? deriveDefaultPurgeEnv();
+  const plan = planPurge(env);
+
+  const targets: string[] = [
+    'Claude Code wiring (global + this project)',
+    `This project's index — ${tildify(plan.projectIndex)}`,
+    ...plan.dataDirs.map((d) => `User data & config (incl. JIRA credentials) — ${tildify(d)}`),
+  ];
+  if (plan.symlink) targets.push(`PATH symlink — ${tildify(plan.symlink)}`);
+  if (plan.npmRemove) targets.push('The specship program — `npm rm -g @specship/specship`');
+  if (plan.method === 'unknown') targets.push('The specship program — manual (install method unknown)');
+
+  clack.log.warn(
+    'This permanently removes EVERYTHING SpecShip:\n' +
+    targets.map((t) => `  • ${t}`).join('\n') +
+    "\n  (Other projects' .specship/ indexes are NOT auto-removed — no registry exists.)",
+  );
+
+  if (opts.yes !== true) {
+    const proceed = await clack.confirm({ message: 'Remove SpecShip completely?', initialValue: false });
+    if (clack.isCancel(proceed) || proceed !== true) {
+      clack.cancel('Uninstall cancelled — nothing was removed.');
+      return;
+    }
+  }
+
+  // 1. Claude Code wiring at BOTH locations.
+  for (const location of ['global', 'local'] as Location[]) {
+    const report = uninstallTargets([claudeTarget], location)[0]!;
+    if (report.status === 'removed') {
+      for (const p of report.removedPaths) clack.log.success(`Claude Code (${location}): removed ${tildify(p)}`);
+    }
+  }
+
+  // 2. Index + user data + binary. Self-affecting removals run LAST inside
+  //    executePurge, so nothing loads a new module after the code is gone.
+  const result = executePurge(plan, productionPurgeDeps(clack, env.homedir));
+  for (const note of result.notes) clack.log.warn(note);
+
+  clack.outro('SpecShip completely removed. Restart Claude Code to apply.');
+}
+
+/** Derive the purge env when the CLI didn't pass one (back-compat / tests). */
+function deriveDefaultPurgeEnv(): PurgeEnv {
+  const installDir = process.env.SPECSHIP_INSTALL_DIR || path.join(os.homedir(), '.specship');
+  const binDir = process.env.SPECSHIP_BIN_DIR || path.join(os.homedir(), '.local', 'bin');
+  return {
+    cwd: process.cwd(),
+    homedir: os.homedir(),
+    installDir,
+    binDir,
+    method: detectInstallMethod(__dirname, installDir),
+  };
+}
+
+/** Production filesystem/spawn deps for `executePurge`, guarded against unsafe paths. */
+function productionPurgeDeps(
+  clack: typeof import('@clack/prompts'),
+  homedir: string,
+): PurgeExecDeps {
+  return {
+    rmDir: (p) => {
+      assertSafeToRemove(p, homedir);
+      if (!fs.existsSync(p)) return false;
+      fs.rmSync(p, { recursive: true, force: true });
+      return true;
+    },
+    rmFile: (p) => {
+      try { fs.lstatSync(p); } catch { return false; } // lstat: a broken symlink is still removable
+      fs.rmSync(p, { force: true });
+      return true;
+    },
+    runNpmRemove: () => {
+      try {
+        execFileSync('npm', ['rm', '-g', '@specship/specship'], { stdio: 'ignore' });
+        return { ok: true, detail: 'removed @specship/specship (npm global)' };
+      } catch (err) {
+        return {
+          ok: false,
+          detail:
+            'could not run `npm rm -g @specship/specship` automatically — run it ' +
+            `yourself to remove the binary. (${err instanceof Error ? err.message : String(err)})`,
+        };
+      }
+    },
+    log: (msg) => clack.log.success(msg),
+  };
 }
 
 /**
