@@ -20,7 +20,7 @@ export const SCREENS = [
   { id: 'drift', path: '/drift', content: 'Drift queue' },
   { id: 'runs', path: '/runs', content: 'Runs' },
   { id: 'workflows', path: '/workflows', content: 'Workflows' },
-  { id: 'chat', path: '/chat', content: 'specship context' },
+  // chat removed entirely (CHAT-REMOVE-DOC) — the reviewer loop lives on Runs.
   { id: 'sessions', path: '/sessions', content: 'Sessions' },
   { id: 'heatmap', path: '/heatmap', content: 'Heatmap' },
   { id: 'costs', path: '/costs', content: 'Costs' },
