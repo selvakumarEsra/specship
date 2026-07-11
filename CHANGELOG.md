@@ -9,6 +9,26 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Breaking Changes
+
+- **JIRA and Designer are now opt-in integrations.** The core install is 100% local by construction — the tool groups that talk to an external service (JIRA → your Atlassian instance, Designer → claude.ai) are no longer exposed by default. Enable them with `specship install --with-jira` and/or `--with-designer`; a later plain re-install preserves the opt-in. If you used these tools before, re-run install once with the flags (a blocked call tells you exactly this). Designer is labeled experimental — it drives claude.ai through a debug Chrome session and can break without notice. JIRA tools are never auto-allowed, so Claude Code prompts per call.
+- **The dashboard Chat page is gone.** It duplicated what the graph, specs, and search pages (and Claude Code itself) already do, so it was removed along with its `/api/chat` endpoints. The reviewer workflow it hinted at — read the plan, approve or reject with a comment, follow the revision — lives on the Workflows + Runs page.
+
+### New Features
+
+- **The docs site's reference pages are now generated from source.** The CLI command list, MCP tool list, environment variables, and supported language/framework matrix on specship.cc are derived from the code at build time; the site build and the test suite both fail if a committed reference block drifts from source — documented-but-fictional commands can no longer ship.
+- **SpecShip now steers the agent toward the graph.** `specship install` adds a lightweight per-prompt nudge that reminds Claude Code to answer structure/flow questions with `specship_explore` before reaching for file reads — the pattern our benchmarks show saves the most time. It only speaks in projects with a SpecShip index, and `SPECSHIP_NO_STEERING=1` turns it off entirely. `specship uninstall` removes it.
+- **Rejecting a workflow run no longer destroys the work.** Reject now parks the run as `rejected` with its worktree and artifacts intact, and resuming drives the gate's `on_reject` revise prompt with your rejection comment before pausing again for re-review — a real feedback loop instead of disposal. Deleting a worktree is now only ever done by the new explicit `specship workflow purge <runId>` (also available on the run page); cancel keeps the worktree too.
+- **Workflow verify steps stopped false-failing for environmental reasons.** Test steps in the bundled workflows now install dependencies and build the worktree before running tests, and workflow shell steps run on the same Node runtime SpecShip itself uses — so a verify failure means the tests failed, not that the environment was missing.
+- **"Verified" now means proven.** A spec can only be promoted to `verified` when a test linked to it as evidence has passed. Declare evidence with a `verifies:` block in the spec (`- <test-file>:<test-symbol>`) or an `@verifies REQ-X` comment on the test; both are indexed as durable test links. Specs without evidence stay `implemented` and are visibly flagged, and a failing linked test demotes only the specs it evidences — a green suite no longer blanket-promotes everything.
+
+### Fixes
+
+- **Published benchmark numbers can no longer drift from measurement.** The README's performance numbers are now rendered from a dated, version-stamped results file written by the A/B benchmark harness, and the test suite fails if the README block and the measurements diverge — or if a hand-typed percentage claim appears anywhere outside the governed block.
+- **Doc comments on exported symbols are now indexed.** A `/** ... */` or `//` comment directly above `export function` / `export class` was silently dropped by the extractor, which also disabled the `@implements` / `@verifies` comment-link backstop for exported symbols.
+- **Asserted spec links now survive a full reindex.** `specship_link_assert` writes the link into the spec file's `implementations:` block (idempotently, creating the block when needed), so links are git-versioned, reviewable in PRs, and rebuilt from the file on every index — instead of living only in the local database and silently vanishing on `specship index`.
+- **No more confident $0.00 for unpriced sessions.** When a session's model has no pricing row (e.g. a brand-new Claude model), the dashboard now marks it "unpriced" in the cost tile, sessions list, and session detail instead of showing $0.00 — and cost totals disclose how many unpriced sessions they exclude. Adding a pricing row heals everything retroactively.
+- **Transcript ingest shows its parse coverage.** The dashboard now reports how many transcript lines the latest ingest pass parsed vs. skipped, so a Claude Code format change surfaces as a visible stat instead of silently missing analytics.
 
 ## [0.15.0] - 2026-07-09
 

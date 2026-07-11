@@ -2280,6 +2280,8 @@ program
   .option('-y, --yes', 'Non-interactive: defaults to --location=local, auto-allow on')
   .option('--no-permissions', 'Skip writing the auto-allow permissions list')
   .option('--sdd', 'Also install the spec-driven-development governance tier (spec/authoring/review/design commands + the spec-author nudge hook). Off by default — a plain install provisions only the retrieval tier.')
+  .option('--with-jira', 'Enable the optional JIRA integration (talks to your Atlassian instance; off by default — the core install is 100% local)')
+  .option('--with-designer', 'Enable the optional Designer integration (EXPERIMENTAL — drives claude.ai/design via a debug Chrome session and may break without notice; off by default)')
   .option('--statusline', 'Wire the SpecShip status-line segment into Claude (skips the prompt; never overwrites an existing status line)')
   .option('--skip-statusline', 'Do not add the status-line segment (skips the prompt)')
   .option('--skip-index', 'Do not offer to index the current project (an explicit opt-out for automation)')
@@ -2293,6 +2295,8 @@ program
     yes?: boolean;
     permissions?: boolean;
     sdd?: boolean;
+    withJira?: boolean;
+    withDesigner?: boolean;
     statusline?: boolean;
     skipStatusline?: boolean;
     skipIndex?: boolean;
@@ -2342,6 +2346,8 @@ program
         location: opts.location as 'global' | 'local' | undefined,
         autoAllow,
         sdd: opts.sdd === true ? true : undefined,
+        withJira: opts.withJira === true ? true : undefined,
+        withDesigner: opts.withDesigner === true ? true : undefined,
         statusLine,
         yes: opts.yes,
       });
@@ -2518,6 +2524,44 @@ program
         'This repo uses spec-driven development (SpecShip). Before any brainstorming or ' +
         'planning skill, FIRST invoke spec-author to author the spec under specs/ for this ' +
         'work — the spec is the contract; implement from it with /specship:spec implement.';
+      process.stdout.write(
+        JSON.stringify({ hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext } }) + '\n',
+      );
+    }
+    process.exit(0);
+  });
+
+/**
+ * specship steer-nudge (STEER-HOOK-DOC)
+ *
+ * Internal UserPromptSubmit hook command: inject the one-line retrieval
+ * steering nudge — the high-salience channel that measurably fixes
+ * specship-tool adoption. Exits 0 with empty output when the project has no
+ * `.specship/` index or `SPECSHIP_NO_STEERING=1` is set (REQ-STEER-002).
+ */
+program
+  .command('steer-nudge')
+  .description('Internal hook: steer flow/structure questions to specship_explore (UserPromptSubmit)')
+  .action(async () => {
+    // Prefer the hook payload's cwd (Claude Code sends it on stdin) so the
+    // check targets the project the prompt belongs to, not wherever the hook
+    // process happened to spawn.
+    let cwd = process.cwd();
+    const chunks: Buffer[] = [];
+    try {
+      for await (const c of process.stdin) chunks.push(c as Buffer);
+    } catch { /* no stdin — fall back to process.cwd() */ }
+    const raw = Buffer.concat(chunks).toString('utf-8').trim();
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw);
+        if (typeof parsed?.cwd === 'string' && parsed.cwd.length > 0) cwd = parsed.cwd;
+      } catch { /* not JSON — keep process.cwd() */ }
+    }
+
+    const { buildSteeringNudge } = await import('../activation/steering');
+    const additionalContext = buildSteeringNudge(cwd);
+    if (additionalContext) {
       process.stdout.write(
         JSON.stringify({ hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext } }) + '\n',
       );
@@ -2869,7 +2913,7 @@ program
 
 program
   .command('workflow <action> [arg]')
-  .description('Workflow engine: list | run <name> | resume <runId> | cancel <runId> | approve <runId> | reject <runId> | runs')
+  .description('Workflow engine: list | run <name> | resume <runId> | cancel <runId> | approve <runId> | reject <runId> | purge <runId> | runs')
   .option('-i, --input <kv...>', 'workflow inputs as KEY=VALUE (repeatable)')
   .option('--path <projectRoot>', 'project root (default: cwd)')
   .option('--comment <text>', 'comment for approve/reject')
@@ -3072,9 +3116,28 @@ program
             error('workflow reject requires a runId');
             process.exit(1);
           }
-          executor.reject(arg, options.reason);
+          executor.reject(arg, options.reason ?? options.comment);
           // eslint-disable-next-line no-console
-          console.log(`Run ${arg} rejected`);
+          console.log(
+            `Run ${arg} rejected — parked with its worktree and artifacts intact.\n` +
+            `  Revise:  specship workflow resume ${arg}   (runs the gate's on_reject prompt with your feedback, then re-pauses for review)\n` +
+            `  Discard: specship workflow purge ${arg}    (removes the worktree — the only way anything is deleted)`
+          );
+          break;
+        }
+
+        case 'purge': {
+          if (!arg) {
+            error('workflow purge requires a runId');
+            process.exit(1);
+          }
+          const purged = executor.purge(arg);
+          // eslint-disable-next-line no-console
+          console.log(
+            purged.worktreeRemoved
+              ? `Run ${arg} purged — worktree removed (${purged.workingPath ?? 'path unknown'}). Artifacts and the run record are kept.`
+              : `Run ${arg} had no worktree — nothing to remove. Artifacts and the run record are kept.`
+          );
           break;
         }
 
@@ -3099,7 +3162,7 @@ program
         }
 
         default:
-          error(`Unknown workflow action "${action}". Use: list | run | resume | cancel | approve | reject | runs`);
+          error(`Unknown workflow action "${action}". Use: list | run | resume | cancel | approve | reject | purge | runs`);
           process.exit(1);
       }
     } finally {

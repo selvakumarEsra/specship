@@ -44,6 +44,13 @@ import { SpecLinkCandidate } from '../extraction/specs/types';
 const CODE_COMMENT_IMPL = /@implements\s+([A-Za-z][A-Za-z0-9_.-]*)/g;
 
 /**
+ * Pattern: `// @verifies REQ-X` on a TEST symbol — declares the test as
+ * evidence for the spec (kind='tests'). Passing evidence is what gates
+ * promotion to `verified` (VERIFY-EVID-DOC, REQ-VEVID-001.A2).
+ */
+const CODE_COMMENT_VERIFIES = /@verifies\s+([A-Za-z][A-Za-z0-9_.-]*)/g;
+
+/**
  * Terminal-ish states that the resolver does NOT downgrade automatically.
  * `verified` is the success terminal; `broken` requires explicit re-verify.
  * `orphaned` won't become `implemented` again until the agent re-asserts.
@@ -327,31 +334,39 @@ export class SpecLinkResolver {
           (s): s is string => typeof s === 'string'
         );
         for (const source of sources) {
-          // Reset regex state for global pattern.
-          CODE_COMMENT_IMPL.lastIndex = 0;
-          let match: RegExpExecArray | null;
-          while ((match = CODE_COMMENT_IMPL.exec(source)) !== null) {
-            const specId = match[1];
-            if (!specId) continue;
-            const spec = this.specQueries.getSpecById(specId);
-            if (!spec) continue;
-            this.specQueries.upsertSpecLink({
-              specId,
-              targetFilePath: node.filePath,
-              targetQualifiedName: node.qualifiedName,
-              targetNodeKind: node.kind,
-              resolvedNodeId: node.id,
-              kind: 'implements',
-              state: 'implemented',
-              driftAxis: null,
-              specHashAtLink: spec.contentHash,
-              nodeSigAtLink: node.signature,
-              provenance: 'code-comment' as SpecLinkProvenance,
-              confidence: 0.9,
-              createdAt: now,
-              updatedAt: now,
-            });
-            if (stats) stats.commentLinksApplied++;
+          // Both marker flavors share the link shape; only the kind differs.
+          // `@verifies` marks TEST evidence (VERIFY-EVID-DOC, REQ-VEVID-001).
+          const markers: Array<{ re: RegExp; kind: 'implements' | 'tests' }> = [
+            { re: CODE_COMMENT_IMPL, kind: 'implements' },
+            { re: CODE_COMMENT_VERIFIES, kind: 'tests' },
+          ];
+          for (const { re, kind } of markers) {
+            // Reset regex state for global pattern.
+            re.lastIndex = 0;
+            let match: RegExpExecArray | null;
+            while ((match = re.exec(source)) !== null) {
+              const specId = match[1];
+              if (!specId) continue;
+              const spec = this.specQueries.getSpecById(specId);
+              if (!spec) continue;
+              this.specQueries.upsertSpecLink({
+                specId,
+                targetFilePath: node.filePath,
+                targetQualifiedName: node.qualifiedName,
+                targetNodeKind: node.kind,
+                resolvedNodeId: node.id,
+                kind,
+                state: 'implemented',
+                driftAxis: null,
+                specHashAtLink: spec.contentHash,
+                nodeSigAtLink: node.signature,
+                provenance: 'code-comment' as SpecLinkProvenance,
+                confidence: 0.9,
+                createdAt: now,
+                updatedAt: now,
+              });
+              if (stats) stats.commentLinksApplied++;
+            }
           }
         }
       }

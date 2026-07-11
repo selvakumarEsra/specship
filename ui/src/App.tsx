@@ -9,7 +9,6 @@ import { Icon, LogoMark } from './components/icons';
 import { useApi, useGlobalShortcuts } from './hooks';
 import { go, usePathRoute } from './router';
 import { applyTheme, getThemePref, type ThemePref } from './theme';
-import { ChatPage } from './pages/chat';
 import { ComparePage } from './pages/compare';
 import { CostsPage } from './pages/costs';
 import { DashboardPage } from './pages/dashboard';
@@ -70,14 +69,14 @@ const NAV: Array<{ group: string; items: NavEntry[] }> = [
 
 /**
  * Pages the ⌘K palette jumps to — NAV plus the pinned sidebar items.
- * Workflows and Chat are deliberately NOT sidebar entries (REQ-DESKTOP-018
- * pins the sidebar groups to the snapshot): Workflows is launched from the
- * Runs screen, Chat is palette- and URL-reachable (REQ-DESKTOP-027).
+ * Workflows is deliberately NOT a sidebar entry (REQ-DESKTOP-018 pins the
+ * sidebar groups to the snapshot): it's launched from the Runs screen.
+ * Chat was removed entirely (CHAT-REMOVE-DOC) — the reviewer loop lives on
+ * Workflows + Runs.
  */
 const PALETTE_PAGES: PalettePage[] = [
   ...NAV.flatMap((g) => g.items.map(({ id, label, icon }) => ({ id, label, icon }))),
   { id: 'workflows', label: 'Workflows', icon: 'workflow' },
-  { id: 'chat', label: 'Chat', icon: 'chat' },
   { id: 'designsystem', label: 'Design system', icon: 'layers' },
   { id: 'settings', label: 'Settings', icon: 'settings' },
 ];
@@ -97,7 +96,6 @@ const SCREENS: Record<string, ComponentType<PageProps>> = {
   drift: DriftPage,
   runs: RunsPage,
   workflows: WorkflowsPage,
-  chat: ChatPage,
   designsystem: () => <DesignSystemPage />,
   sessions: SessionsPage,
   heatmap: HeatmapPage,

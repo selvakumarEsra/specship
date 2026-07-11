@@ -22,7 +22,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { writeSseHead } from './sse.js';
 import type { SpecShipInstance } from '../project-registry.js';
-import { decodeProjectSlug } from '../ingest/index.js';
+import { decodeProjectSlug, getLastIngestStats } from '../ingest/index.js';
 import { computeSpecshipImpact } from '../ingest/impact-query.js';
 
 /**
@@ -156,8 +156,17 @@ export async function registerClaudeRoutes(app: FastifyInstance): Promise<void> 
       params.push(req.query.model);
     }
     params.push(limit);
+    // `unpriced_tokens` is derived, not stored: tokens with zero cost can only
+    // mean no pricing row resolved (a priced model with tokens always costs
+    // > 0), so the flag self-heals once pricing lands and the backfill recosts
+    // (REQ-DASHINT-007).
     const sessions = db.prepare(`
-      SELECT * FROM claude_sessions
+      SELECT *,
+        CASE WHEN total_cost_usd = 0
+                  AND (total_input_tokens + total_output_tokens + total_cache_creation_tokens + total_cache_read_tokens) > 0
+             THEN (total_input_tokens + total_output_tokens + total_cache_creation_tokens + total_cache_read_tokens)
+             ELSE 0 END AS unpriced_tokens
+      FROM claude_sessions
       WHERE started_at >= ?${where}
       ORDER BY started_at DESC
       LIMIT ?
@@ -717,6 +726,16 @@ export async function registerClaudeRoutes(app: FastifyInstance): Promise<void> 
     };
     const total = totalOf(since, null);
 
+    // Sessions in the window whose tokens resolved no pricing (cost 0 with
+    // non-zero tokens). Aggregates that exclude unpriced usage must say so
+    // (REQ-DASHINT-007.A2).
+    const unpricedSessions = (db.prepare(`
+      SELECT COUNT(*) as c FROM claude_sessions
+      WHERE started_at >= ? AND total_cost_usd = 0
+        AND (total_input_tokens + total_output_tokens + total_cache_creation_tokens + total_cache_read_tokens) > 0
+        ${project ? ' AND project_path = ?' : ''}
+    `).get(...(project ? [since, project] : [since])) as { c: number }).c;
+
     // Week-over-week spend delta: fractional change in total cost vs the prior
     // equal-length window (e.g. -0.08 → "-8%"). Zero for 'all' or no prior data.
     const prior = priorWindow(rangeKey(req.query.range));
@@ -767,7 +786,7 @@ export async function registerClaudeRoutes(app: FastifyInstance): Promise<void> 
       ORDER BY cost DESC
     `).all(...pParams(since));
 
-    return { total, topPrompts, series: dense, byModel, wowDelta };
+    return { total, topPrompts, series: dense, byModel, wowDelta, unpricedSessions };
   });
 
   /**
@@ -827,14 +846,19 @@ export async function registerClaudeRoutes(app: FastifyInstance): Promise<void> 
 
     // --- Last session cost (delta vs previous session, spark of recent sessions) ---
     const recent = db.prepare(
-      `SELECT total_cost_usd as cost FROM claude_sessions ORDER BY started_at DESC LIMIT 10`,
-    ).all() as Array<{ cost: number }>;
+      `SELECT total_cost_usd as cost,
+              (total_input_tokens + total_output_tokens + total_cache_creation_tokens + total_cache_read_tokens) as toks
+       FROM claude_sessions ORDER BY started_at DESC LIMIT 10`,
+    ).all() as Array<{ cost: number; toks: number }>;
     const lastCost = recent[0]?.cost ?? 0;
     const prevCost = recent[1]?.cost ?? 0;
     const lastSessionCost = {
       value: lastCost,
       delta: prevCost > 0 ? (lastCost - prevCost) / prevCost : 0,
       series: recent.map((r) => r.cost ?? 0).reverse(),
+      // Tokens with zero cost = no pricing row resolved. The tile renders an
+      // unpriced marker instead of a confident $0.00 (REQ-DASHINT-007.A1).
+      unpricedTokens: lastCost === 0 ? (recent[0]?.toks ?? 0) : 0,
     };
 
     // --- Drift (live graph count, no time series) ---
@@ -846,7 +870,10 @@ export async function registerClaudeRoutes(app: FastifyInstance): Promise<void> 
     // presenting $0 / 0-call zeros as truth (REQ-DESKTOP-020.A4).
     const sessionCount = countSince(`SELECT COUNT(*) c FROM claude_sessions`);
 
-    return { lastSessionCost, toolCalls, subagentPct, drift, sessionCount };
+    // Parse coverage of the latest ingest pass (REQ-DASHINT-008): the
+    // transcript format is an unversioned Claude Code internal, so skipped
+    // lines are a visible state, not a log line.
+    return { lastSessionCost, toolCalls, subagentPct, drift, sessionCount, ingest: getLastIngestStats() };
   });
 
   app.get('/api/claude/compare', async (_req, reply) => {

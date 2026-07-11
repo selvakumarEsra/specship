@@ -56,7 +56,7 @@ A **spec link** is a persistent record connecting one spec node to one code node
 | `spec_hash_at_link` | snapshot of the spec body when the link was set |
 | `node_sig_at_link` | snapshot of the code signature when the link was set |
 
-When the spec body or the code signature drifts past those snapshots, the link's state transitions to `drifted`. When the linked code disappears entirely, it becomes `orphaned`. When tests run and pass, it becomes `verified`. The state is the **single source of truth** for "is this requirement actually shipped".
+When the spec body or the code signature drifts past those snapshots, the link's state transitions to `drifted`. When the linked code disappears entirely, it becomes `orphaned`. And `verified` is **earned, not assumed**: promotion requires a passing test that is linked to the spec as evidence — a `verifies:` block in the spec (`- <test-file>:<test-symbol>`) or an `@verifies REQ-X` comment on the test. A green suite alone proves nothing about a spec with no linked tests; those stay `implemented` and are flagged as unevidenced. The state is the **single source of truth** for "is this requirement actually shipped".
 
 ## Why this matters in practice
 

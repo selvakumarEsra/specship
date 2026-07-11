@@ -80,6 +80,12 @@ export interface IngestStats {
   filesSkipped: number;
   bytesIngested: number;
   linesParsed: number;
+  /**
+   * Non-empty lines the parser could not classify (invalid JSON / missing
+   * type). Transcript JSONL is an unversioned Claude Code internal format —
+   * skips are counted and surfaced, never swallowed (REQ-DASHINT-008).
+   */
+  linesSkipped: number;
   promptsInserted: number;
   toolCallsInserted: number;
   errors: number;

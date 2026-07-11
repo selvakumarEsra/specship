@@ -183,7 +183,10 @@ function SessionsTable({ sessions, sort, onOpen }: { sessions: ClaudeSession[]; 
             </span>
             <span className="mono tabular" style={{ width: 70, textAlign: 'right', fontSize: 12 }}>{s.prompt_count ?? 0}</span>
             <span className="mono tabular" style={{ width: 70, textAlign: 'right', fontSize: 12, color: cacheColor(cache) }}>{Math.round(cache * 100)}%</span>
-            <span className="mono tabular" style={{ width: 70, textAlign: 'right', fontSize: 12.5, fontWeight: 600 }}>${(s.total_cost_usd ?? 0).toFixed(2)}</span>
+            {(s.unpriced_tokens ?? 0) > 0
+              ? <span className="mono tabular" style={{ width: 70, textAlign: 'right', fontSize: 12.5, fontWeight: 600, color: 'var(--warn)' }}
+                  title={`${s.unpriced_tokens} tokens on a model with no pricing row — cost unknown, not $0 (add pricing to heal)`}>unpriced ⚠</span>
+              : <span className="mono tabular" style={{ width: 70, textAlign: 'right', fontSize: 12.5, fontWeight: 600 }}>${(s.total_cost_usd ?? 0).toFixed(2)}</span>}
           </div>
         );
       })}
@@ -235,7 +238,10 @@ function SessionDetail({ id, onBack }: { id: string; onBack: () => void }) {
                 {s.last_model && <Pill>{s.last_model}</Pill>}
               </div>
               <div className="row" style={{ gap: 24, padding: '12px 0', borderTop: '1px solid var(--border-subtle)', borderBottom: '1px solid var(--border-subtle)', marginBottom: 16, flexWrap: 'wrap' }}>
-                <StatBlock label="Cost" value={'$' + (s.total_cost_usd ?? 0).toFixed(2)} />
+                {(s.total_cost_usd ?? 0) === 0 &&
+                 ((s.total_input_tokens ?? 0) + (s.total_output_tokens ?? 0) + (s.total_cache_creation_tokens ?? 0) + (s.total_cache_read_tokens ?? 0)) > 0
+                  ? <StatBlock label="Cost" value="unpriced ⚠" color="var(--warn)" />
+                  : <StatBlock label="Cost" value={'$' + (s.total_cost_usd ?? 0).toFixed(2)} />}
                 <StatBlock label="Prompts" value={s.prompt_count ?? d.prompts.length} />
                 <StatBlock label="Cache hit" value={Math.round(cache * 100) + '%'} color={cacheColor(cache)} />
                 <StatBlock label="Subagent $" value={'$' + sideCost.toFixed(2)} color="var(--node-code)" />

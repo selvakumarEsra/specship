@@ -3,7 +3,7 @@ id: DASHINT-DOC
 title: Dashboard data integrity
 owner: specship
 priority: high
-version: 1
+version: 2
 ---
 
 <!-- id: DASHINT-DOC -->
@@ -146,3 +146,68 @@ implementations:
 <!-- id: REQ-DASHINT-006.A2 -->
 - The same pattern within the primary project's sessions produces its tip,
   whether the session rows store the project path in real or in mangled form.
+
+<!-- id: REQ-DASHINT-007 -->
+## Unpriced usage MUST render as unpriced, never as $0.00
+
+Blanket invariant (2026-07-11 product review, Q2): **no silently-wrong number
+ever renders.** `computeCost` returns 0 when no pricing row resolves
+(REQ-DASHINT-001.A3 keeps that internal behavior — no throw). But a rendered
+cost is a claim: any surface showing a dollar figure for a session/prompt/range
+whose token usage is non-zero while its model resolved no pricing row MUST
+show an explicit unpriced treatment (e.g. `— · N unpriced tokens ⚠`) instead
+of `$0.00`. Aggregates that mix priced and unpriced sessions MUST carry a
+visible marker that the total excludes unpriced usage.
+
+implementations:
+  - server/src/ingest/pricing.ts:computeCost
+  - server/src/ingest/ingestor.ts:Ingestor
+
+## Acceptance
+<!-- id: REQ-DASHINT-007.A1 -->
+- A session with non-zero tokens on a model with no pricing row renders an
+  unpriced marker in the cost tile and Sessions list, not `$0.00`.
+<!-- id: REQ-DASHINT-007.A2 -->
+- A range aggregate containing at least one unpriced session shows a marker
+  that unpriced usage is excluded; an all-priced aggregate shows none.
+
+<!-- id: REQ-DASHINT-008 -->
+## Every ingest run MUST surface its parse coverage
+
+Transcript JSONL is an unversioned Claude Code internal format; parser skips
+are inevitable and MUST be counted, not swallowed. Each ingest pass records
+events seen vs. events parsed vs. events skipped (with the top skip reason),
+and the dashboard surfaces the stat (e.g. `312/312 events parsed` /
+`9 skipped — unknown format`) wherever ingest freshness is shown. A non-zero
+skip count is a visible state, not a log line.
+
+implementations:
+  - server/src/ingest/parser.ts:parseLine
+  - server/src/ingest/ingestor.ts:Ingestor
+
+## Acceptance
+<!-- id: REQ-DASHINT-008.A1 -->
+- An ingest over a transcript containing lines the parser cannot classify
+  completes and reports the skipped count and a reason category.
+<!-- id: REQ-DASHINT-008.A2 -->
+- The dashboard shows parsed/skipped counts for the latest ingest; zero
+  skips renders as full coverage, not as absence of the stat.
+
+<!-- id: REQ-DASHINT-009 -->
+## Pricing MUST be updatable without a SpecShip release
+
+The seeded `claude_pricing` table goes stale the day a new model ships. The
+seed MUST come from a bundled pricing JSON refreshed each release, and users
+MUST be able to override or add rows locally (UI or CLI) such that overrides
+survive upgrades and reseeding. [needs review: exact override surface — the
+Settings page vs a `specship pricing set` subcommand.]
+
+implementations:
+  - server/src/ingest/pricing.ts:resolvePricing
+
+## Acceptance
+<!-- id: REQ-DASHINT-009.A1 -->
+- Adding a local pricing row for a previously-unpriced model prices its
+  sessions on the next ingest without reinstalling SpecShip.
+<!-- id: REQ-DASHINT-009.A2 -->
+- A reseed on upgrade does not clobber a user-added or user-edited row.

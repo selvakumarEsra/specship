@@ -75,6 +75,13 @@ export interface RunInstallerOptions {
    */
   sdd?: boolean;
   /**
+   * Integrations opt-in (INTEG-TIER-DOC): enable the tool groups that talk to
+   * external services. Off by default; a prior install's opt-in is preserved
+   * on upgrade.
+   */
+  withJira?: boolean;
+  withDesigner?: boolean;
+  /**
    * Wire SpecShip's status-line segment into Claude's status line
    * (SHIP-STATUSLINE-DOC). Opt-in: undefined ⇒ ask interactively (default no);
    * `true` (the `--statusline` flag) installs without asking; `false` skips.
@@ -214,7 +221,13 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
   // Step 4: write Claude config. The governance tier is opt-in
   // (INSTALL-WEDGE-DOC): only an explicit `sdd: true` (from `--sdd`) installs it;
   // a default install provisions the retrieval tier alone.
-  const result = claudeTarget.install(location, { autoAllow, sdd: opts.sdd, installStatusLine });
+  const result = claudeTarget.install(location, {
+    autoAllow,
+    sdd: opts.sdd,
+    withJira: opts.withJira,
+    withDesigner: opts.withDesigner,
+    installStatusLine,
+  });
   for (const file of result.files) {
     const verb = file.action === 'unchanged'
       ? 'Unchanged'

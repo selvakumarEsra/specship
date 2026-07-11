@@ -47,7 +47,20 @@ export function getChildByField(node: SyntaxNode, fieldName: string): SyntaxNode
  * Get the docstring/comment preceding a node
  */
 export function getPrecedingDocstring(node: SyntaxNode, source: string): string | undefined {
-  let sibling = node.previousNamedSibling;
+  // An exported declaration is wrapped (`export_statement` → declaration), so
+  // the doc comment is a sibling of the WRAPPER, not of the declaration the
+  // visitor received. Climb through the wrapper before walking siblings —
+  // otherwise every `/** */` on an exported symbol is dropped (this also
+  // gated the `@implements` / `@verifies` comment-link backstop).
+  let anchor = node;
+  if (
+    anchor.previousNamedSibling === null &&
+    anchor.parent &&
+    (anchor.parent.type === 'export_statement' || anchor.parent.type === 'export_declaration')
+  ) {
+    anchor = anchor.parent;
+  }
+  let sibling = anchor.previousNamedSibling;
   const comments: string[] = [];
 
   while (sibling) {

@@ -14,6 +14,9 @@ nodes:
     timeout: 600000
     bash: |
       if [ -f package.json ]; then
+        # Run against a built tree so a missing dist/ can't false-fail the
+        # verify leg (WF-REJECT-DOC, REQ-WFREJ-005).
+        npm run build --if-present
         npm test
       elif [ -f Cargo.toml ]; then
         cargo test
@@ -38,14 +41,25 @@ nodes:
 
       $run_tests.output
 
-      1. Call specship_drifted to see any drifted/broken/orphaned links.
-      2. If tests passed (no failures reported), iterate over each
-         'implemented' link and call specship_link_verify(result: "pass")
-         to promote them to "verified". (Skip links that are already
-         verified.)
-      3. If tests failed, identify which specs the failing tests are
-         tied to and call specship_link_verify(result: "fail", reason:
-         "<test name>") on those links.
+      Promotion is EVIDENCE-BASED (VERIFY-EVID-DOC): a spec may only become
+      "verified" when a test linked to it as evidence passed. Evidence links
+      have kind='tests' and come from a `verifies:` block in the spec or an
+      `@verifies REQ-X` comment on the test. A green suite alone proves
+      nothing about a spec with no linked tests — never blanket-promote.
 
-      Output: a short summary of how many links moved to verified,
-      how many to broken, and which specs are still drifted.
+      1. Call specship_drifted to see any drifted/broken/orphaned links.
+      2. For each 'implemented' link whose spec HAS test-evidence links:
+         if all of that spec's evidence tests passed in the output above,
+         call specship_link_verify(result: "pass") to promote it.
+         (specship_link_verify enforces the evidence gate and will refuse
+         evidence-less promotion — do not work around the refusal.)
+      3. For each FAILING test, demote only the specs that test evidences:
+         call specship_link_verify(result: "fail", reason: "<test name>")
+         on those specs' links. Do not touch specs the failing test is not
+         linked to (REQ-VEVID-004).
+      4. Specs with no evidence links stay 'implemented'. List them as
+         "unevidenced" in your summary so the author can add `verifies:`
+         blocks (REQ-VEVID-003).
+
+      Output: a short summary — how many links moved to verified, how many
+      to broken, which specs are unevidenced, and which are still drifted.

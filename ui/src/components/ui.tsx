@@ -19,6 +19,8 @@ export const STATE: Record<string, StateStyle> = {
   completed: { label: 'Completed', color: 'var(--success)', bg: 'var(--success-soft)' },
   failed: { label: 'Failed', color: 'var(--error)', bg: 'var(--error-soft)' },
   cancelled: { label: 'Cancelled', color: 'var(--text-muted)', bg: 'rgba(255,255,255,0.05)' },
+  // Parked, not terminal (WF-REJECT-DOC): worktree + artifacts kept, resume revises.
+  rejected: { label: 'Rejected', color: 'var(--warn)', bg: 'var(--warn-soft)' },
   skipped: { label: 'Skipped', color: 'var(--text-muted)', bg: 'rgba(255,255,255,0.05)' },
   // spec link states
   drafted: { label: 'Drafted', color: 'var(--text-secondary)', bg: 'rgba(255,255,255,0.05)' },

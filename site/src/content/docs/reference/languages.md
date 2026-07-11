@@ -28,3 +28,13 @@ Language support is automatic from the file extension — there's nothing to con
 | Pascal / Delphi | `.pas`, `.dpr`, `.dpk`, `.lpr` | Full support (classes, records, interfaces, enums, DFM/FMX forms) |
 | Lua | `.lua` | Full support (functions, methods, locals, `require` imports, call edges) |
 | Luau | `.luau` | Full support (Lua, plus typed signatures, `type` aliases, Roblox `require`) |
+
+## Source of truth
+
+<!-- GENERATED:languages START — derived from source by scripts/generate-reference-docs.mjs; do not edit by hand -->
+**Tree-sitter languages:** `c-cpp` · `csharp` · `dart` · `go` · `java` · `javascript` · `kotlin` · `lua` · `luau` · `objc` · `pascal` · `php` · `python` · `ruby` · `rust` · `scala` · `swift` · `typescript`
+
+**Standalone extractors:** `dfm` · `liquid` · `mybatis` · `svelte` · `vue`
+
+**Framework resolvers:** `cargo-workspace` · `csharp` · `drupal` · `expo-modules` · `express` · `fabric` · `go` · `java` · `laravel` · `nestjs` · `play` · `python` · `react` · `react-native` · `ruby` · `rust` · `svelte` · `swift` · `swift-objc` · `vue`
+<!-- GENERATED:languages END -->

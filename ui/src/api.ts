@@ -273,7 +273,7 @@ export interface RunArtifactsResponse {
   artifacts: RunArtifact[];
 }
 
-export type RunAction = 'approve' | 'reject' | 'cancel' | 'resume';
+export type RunAction = 'approve' | 'reject' | 'cancel' | 'resume' | 'purge';
 
 export interface ProjectEntry {
   slug: string;
@@ -324,12 +324,17 @@ export interface StatMetric {
 }
 
 export interface ClaudeStatsResponse {
-  lastSessionCost: StatMetric;
+  /** unpricedTokens > 0 = the last session's model resolved no pricing row —
+   *  render an unpriced marker, never $0.00 (REQ-DASHINT-007). */
+  lastSessionCost: StatMetric & { unpricedTokens?: number };
   toolCalls: StatMetric;
   subagentPct: StatMetric;
   drift: StatMetric;
   /** Total ingested sessions; 0 = nothing ingested (REQ-DESKTOP-020.A4). */
   sessionCount: number;
+  /** Parse coverage of the latest ingest pass (REQ-DASHINT-008). Null until
+   *  the first pass of this server process completes. */
+  ingest?: { linesParsed: number; linesSkipped: number; at: number } | null;
 }
 
 /** One row from /api/claude/costs topPrompts (text capped at 200 chars). */
@@ -353,6 +358,9 @@ export interface ClaudeCostsResponse {
   series: Array<{ day: number; cost: number; prompts: number }>;
   byModel: Array<{ model: string; prompts: number; cost: number }>;
   wowDelta: number;
+  /** Sessions in the window with tokens but no resolvable pricing — the
+   *  total excludes them and the UI must say so (REQ-DASHINT-007.A2). */
+  unpricedSessions?: number;
 }
 
 export interface ClaudeCacheResponse {
@@ -409,6 +417,9 @@ export interface ClaudeSession {
   total_output_tokens?: number;
   total_cache_creation_tokens?: number;
   total_cache_read_tokens?: number;
+  /** Derived: token sum when cost is 0 with non-zero tokens (unpriced model,
+   *  REQ-DASHINT-007) — render a marker, not $0.00. */
+  unpriced_tokens?: number;
   [key: string]: unknown;
 }
 
@@ -618,55 +629,6 @@ export interface ConfigResponse {
   version: string;
 }
 
-// ---- Chat (server/src/routes/chat.ts + chat-answer.ts, REQ-DESKTOP-027) ----
-
-/** Pointer to one graph symbol inside a chat source's detail. */
-export interface ChatSymbolRef {
-  name: string;
-  qualifiedName: string;
-  filePath: string;
-  line: number;
-}
-
-/** Full retrieved detail for a symbol source — verbatim body + 1-hop trail. */
-export interface ChatSymbolDetail {
-  signature?: string;
-  body: string;
-  callers: ChatSymbolRef[];
-  callees: ChatSymbolRef[];
-}
-
-/** Full detail for a spec source: verbatim body + its links with states. */
-export interface ChatSpecDetail {
-  body: string;
-  links: Array<{ target: string; state: string }>;
-}
-
-/** Full detail for a domain-fact source. */
-export interface ChatDomainDetail {
-  body: string;
-}
-
-/** The `detail` payload on a ChatSource, discriminated by the source's `kind`. */
-export type ChatSourceDetail = ChatSymbolDetail | ChatSpecDetail | ChatDomainDetail;
-
-/** One indexed row the answer was derived from (chat-answer.ts ChatSource). */
-export interface ChatSource {
-  kind: 'symbol' | 'spec' | 'domain';
-  ref: string;
-  label: string;
-  filePath?: string;
-  line?: number;
-  detail?: ChatSourceDetail;
-}
-
-/** POST /api/chat — the fully-composed deterministic answer. */
-export interface ChatResponse {
-  found: boolean;
-  answer: string;
-  sources: ChatSource[];
-}
-
 // ---- API surface ----
 
 export const api = {
@@ -735,8 +697,6 @@ export const api = {
     patchJson<{ ok: boolean; name: string; disabled: boolean }>(`/api/mcp/servers/${encodeURIComponent(name)}`, { enabled }),
   addMcpServer: (payload: AddMcpServerPayload) =>
     postJson<{ ok: boolean; name: string }>('/api/mcp/servers', payload),
-  chat: (question: string, project?: string | null) =>
-    postJson<ChatResponse>(q('/api/chat', project), { question }),
   // Server runtime config (REQ-DESKTOP-028.A2): the Settings ingest toggle
   // round-trips through these; analytics screens read `get` to react.
   config: {
@@ -754,12 +714,3 @@ export function runEventsUrl(id: string, since?: number, project?: string | null
   return q(base, project);
 }
 
-/**
- * SSE stream URL for a chat answer (GET /api/chat/stream): `thinking` →
- * `tool` → `result_summary` → `chunk`… → `done`. The primary send path —
- * the `tool` event carries the tool-call context the answer renders
- * (REQ-DESKTOP-027.A2); `api.chat` is the non-stream fallback.
- */
-export function chatStreamUrl(question: string, project?: string | null): string {
-  return q(`/api/chat/stream?question=${encodeURIComponent(question)}`, project);
-}

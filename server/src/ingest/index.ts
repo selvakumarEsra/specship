@@ -13,7 +13,7 @@
  *   - `startWatcher(db)`  — live tail; runs ingestAll once + on each FS event.
  */
 
-export { ingestAll, listTranscriptFiles, decodeProjectSlug, primaryProjectMatcher } from './ingestor.js';
+export { ingestAll, listTranscriptFiles, decodeProjectSlug, primaryProjectMatcher, getLastIngestStats } from './ingestor.js';
 export type { IngestOptions, IngestDb } from './ingestor.js';
 export { startWatcher } from './watcher.js';
 export type { WatcherHandle, WatcherOptions } from './watcher.js';

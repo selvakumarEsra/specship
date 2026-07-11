@@ -199,6 +199,7 @@ export function ingestAll(db: IngestDb, options: IngestOptions = {}): IngestStat
     filesSkipped: 0,
     bytesIngested: 0,
     linesParsed: 0,
+    linesSkipped: 0,
     promptsInserted: 0,
     toolCallsInserted: 0,
     errors: 0,
@@ -215,7 +216,8 @@ export function ingestAll(db: IngestDb, options: IngestOptions = {}): IngestStat
         stats.filesSkipped++;
       } else {
         stats.bytesIngested += wasIngested.bytes;
-        stats.linesParsed += wasIngested.lines;
+        stats.linesParsed += wasIngested.lines - wasIngested.linesSkipped;
+        stats.linesSkipped += wasIngested.linesSkipped;
         stats.promptsInserted += wasIngested.prompts;
         stats.toolCallsInserted += wasIngested.toolCalls;
       }
@@ -228,13 +230,27 @@ export function ingestAll(db: IngestDb, options: IngestOptions = {}): IngestStat
     }
   }
   stats.durationMs = Date.now() - start;
+  lastIngestStats = { ...stats, at: Date.now() };
   return stats;
+}
+
+/**
+ * The most recent ingest pass's stats — parse coverage for the dashboard
+ * (REQ-DASHINT-008). In-memory only: the watcher runs a full pass at boot,
+ * so this repopulates immediately after a restart.
+ */
+let lastIngestStats: (IngestStats & { at: number }) | null = null;
+
+export function getLastIngestStats(): (IngestStats & { at: number }) | null {
+  return lastIngestStats;
 }
 
 interface FileResult {
   modified: boolean;
   bytes: number;
   lines: number;
+  /** Non-empty lines parseLine could not classify (subset of `lines`). */
+  linesSkipped: number;
   prompts: number;
   toolCalls: number;
 }
@@ -254,7 +270,7 @@ function ingestFile(
 
   const { text, size } = readTail(filePath, lastOffset);
   if (text.length === 0) {
-    return { modified: false, bytes: 0, lines: 0, prompts: 0, toolCalls: 0 };
+    return { modified: false, bytes: 0, lines: 0, linesSkipped: 0, prompts: 0, toolCalls: 0 };
   }
 
   const lines = text.split('\n');
@@ -285,7 +301,7 @@ function ingestFile(
 
   const newOffset = lastOffset + consumedLen;
   if (completeLines.length === 0) {
-    return { modified: false, bytes: 0, lines: 0, prompts: 0, toolCalls: 0 };
+    return { modified: false, bytes: 0, lines: 0, linesSkipped: 0, prompts: 0, toolCalls: 0 };
   }
 
   // Project lazy upsert — keep first_seen on insert, bump last_seen on update.
@@ -339,6 +355,7 @@ function ingestFile(
     modified: true,
     bytes: consumedLen,
     lines: completeLines.length,
+    linesSkipped: result.linesSkipped,
     prompts: result.prompts,
     toolCalls: result.toolCalls,
   };
@@ -422,6 +439,7 @@ function processLines(
   let lastSessionId: string | null = null;
   let promptsInserted = 0;
   let toolCallsInserted = 0;
+  let linesSkipped = 0;
 
   // Dedupe state for "user entries that share a promptId with one we
   // already inserted." `insertedPromptIds` covers the in-batch case
@@ -470,7 +488,12 @@ function processLines(
 
   for (const raw of completeLines) {
     const entry = parseLine(raw);
-    if (!entry) continue;
+    if (!entry) {
+      // Blank lines aren't events; a non-empty line the parser couldn't
+      // classify is a coverage gap and must be counted (REQ-DASHINT-008).
+      if (raw.trim().length > 0) linesSkipped++;
+      continue;
+    }
     const sessionId = entry.sessionId ?? '';
     if (!sessionId) continue;
     lastSessionId = sessionId;
@@ -674,6 +697,7 @@ function processLines(
     modified: true,
     bytes: 0,
     lines: completeLines.length,
+    linesSkipped,
     prompts: promptsInserted,
     toolCalls: toolCallsInserted,
     lastSessionId,

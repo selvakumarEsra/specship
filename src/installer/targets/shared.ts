@@ -13,21 +13,34 @@ import * as path from 'path';
 /**
  * The MCP-server config block specship injects into Claude's MCP
  * config (`~/.claude.json` or `./.mcp.json`).
+ *
+ * `integrations` (INTEG-TIER-DOC, REQ-INTEG-001): when non-empty, the entry
+ * carries `env.SPECSHIP_INTEGRATIONS` so the MCP server exposes the opted-in
+ * jira/designer tool groups. Empty → no env key at all (the local-only core).
  */
-export function getMcpServerConfig(): { type: string; command: string; args: string[] } {
-  return {
+export function getMcpServerConfig(
+  integrations: string[] = []
+): { type: string; command: string; args: string[]; env?: Record<string, string> } {
+  const base: { type: string; command: string; args: string[]; env?: Record<string, string> } = {
     type: 'stdio',
     command: 'specship',
     args: ['serve', '--mcp'],
   };
+  if (integrations.length > 0) {
+    base.env = { SPECSHIP_INTEGRATIONS: [...integrations].sort().join(',') };
+  }
+  return base;
 }
 
 /**
  * Permissions list for Claude `settings.json`. Permission strings
  * follow Claude's `mcp__<server>__<tool>` format.
+ *
+ * Designer permissions ride the integrations opt-in (INTEG-TIER-DOC): a
+ * default install auto-allows only the local-only core tools.
  */
-export function getSpecShipPermissions(): string[] {
-  return [
+export function getSpecShipPermissions(integrations: string[] = []): string[] {
+  const perms = [
     'mcp__specship__specship_explore',
     'mcp__specship__specship_search',
     'mcp__specship__specship_node',
@@ -40,15 +53,22 @@ export function getSpecShipPermissions(): string[] {
     // agent may run while exploring, so auto-allow to avoid a prompt.
     'mcp__specship__specship_maintainability',
     'mcp__specship__specship_fitness',
+  ];
+  if (integrations.includes('designer')) {
     // Designer tools (vendored from @pro-vi/designer) — the design loop is
     // human-driven, so auto-allow to avoid a prompt on every taste iteration.
-    'mcp__specship__designer_session',
-    'mcp__specship__designer_prompt',
-    'mcp__specship__designer_ask',
-    'mcp__specship__designer_list',
-    'mcp__specship__designer_snapshot',
-    'mcp__specship__designer_handoff',
-  ];
+    perms.push(
+      'mcp__specship__designer_session',
+      'mcp__specship__designer_prompt',
+      'mcp__specship__designer_ask',
+      'mcp__specship__designer_list',
+      'mcp__specship__designer_snapshot',
+      'mcp__specship__designer_handoff',
+    );
+  }
+  // JIRA tools are deliberately NOT auto-allowed even when enabled — they
+  // reach an external Atlassian instance, so each call should prompt.
+  return perms;
 }
 
 /**

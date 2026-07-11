@@ -8,6 +8,12 @@ priority: medium
 <!-- id: DASH-CHAT-DOC -->
 # Dashboard chat over the local knowledge base (no LLM)
 
+> **SUPERSEDED (2026-07-11) by CHAT-REMOVE-DOC** (`specs/chat-removal.md`):
+> the chat surface was removed entirely — even in its no-LLM form it
+> duplicated jobs other surfaces do, and the reviewer loop it might have
+> justified lives on Workflows + Runs. This document's requirements are
+> retired, kept for history.
+
 The SpecShip dashboard already ships a chat page (`packages/web-ng` → `pages/chat`)
 with a designed conversation UI — message list, slash-command palette, tool-call
 cards, streaming affordances — but its `send()` handler is a mock: it delays,

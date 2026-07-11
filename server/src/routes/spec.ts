@@ -286,6 +286,19 @@ export async function registerSpecRoutes(app: FastifyInstance): Promise<void> {
     const sq = cg.getSpecQueries();
     const link = sq.getLinkById(body.link_id);
     if (!link) return reply.code(404).send({ error: 'link not found' });
+    // Evidence gate (VERIFY-EVID-DOC, REQ-VEVID-002) — same rule as the MCP
+    // tool: promoting an `implements` link to verified requires the spec to
+    // have at least one test-evidence link (kind='tests'). Without this the
+    // dashboard's Verify button would bypass the gate.
+    if (body.result === 'pass' && link.kind === 'implements') {
+      const hasEvidence = sq.getLinksBySpec(link.specId).some((l) => l.kind === 'tests');
+      if (!hasEvidence) {
+        return reply.code(409).send({
+          error: `no test evidence linked to ${link.specId} — declare its proving test via a "verifies:" block in the spec (or an @verifies comment on the test) before promoting to verified`,
+          code: 'no_test_evidence',
+        });
+      }
+    }
     sq.updateSpecLinkState(body.link_id, body.result === 'pass' ? 'verified' : 'broken', null);
     return { ok: true, state: body.result === 'pass' ? 'verified' : 'broken' };
   });

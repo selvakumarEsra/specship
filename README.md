@@ -4,7 +4,7 @@
 
 ### Supercharge Claude Code with Semantic Code Intelligence
 
-**~16% cheaper · ~58% fewer tool calls · 100% local**
+**Stops your agent re-reading the codebase — structural answers in a few calls, not a grep-and-Read crawl · 100% local**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Self-contained](https://img.shields.io/badge/Node.js-bundled%20%C2%B7%20none%20required-brightgreen.svg)](https://nodejs.org/)
@@ -123,7 +123,7 @@ When Claude Code explores a codebase, it spawns **Explore agents** that scan fil
 | **20+ Languages** | TypeScript, JavaScript, Python, Go, Rust, Java, C#, PHP, Ruby, C, C++, Objective-C, Swift, Kotlin, Dart, Lua, Luau, Svelte, Liquid, Pascal/Delphi |
 | **Framework-aware Routes** | Recognizes web-framework routing files and links URL patterns to their handlers across 14 frameworks |
 | **Desktop UI** | Live dashboard for cost, drift, tool-call heatmap, cache analytics, SpecShip token impact, plus a project picker that auto-discovers every project you've used Claude Code in |
-| **100% Local** | No data leaves your machine. No API keys. No external services. SQLite database only |
+| **100% Local** | The core never leaves your machine — no API keys, no external services, SQLite only. The two optional integrations that do talk to a service (JIRA → your Atlassian instance, Designer → claude.ai, experimental) are strictly opt-in: `specship install --with-jira` / `--with-designer` |
 
 <details>
 <summary><strong>How auto-syncing works — and why you don't need to run <code>specship sync</code> manually</strong></summary>
@@ -227,7 +227,6 @@ Same shell, same shortcuts, more depth:
 | **Specs** | Doc tree + Markdown spec detail; per-spec linked-code list with state pills and one-click `Implement` / `Verify` / `Edit spec` / `Show in graph` actions. |
 | **Drift queue** | Filterable list of links needing attention. Bulk re-verify, bulk re-attach via the relink workflow. |
 | **Workflows + Runs** | Run any bundled or project-tier workflow, watch its DAG advance live via SSE, approve / reject pause gates, inspect per-step artifacts (plan.md, diff.md, test_results.md). |
-| **Chat** | A codegraph-aware companion chat with slash commands, collapsible tool calls, and per-turn cost footers. |
 | **Sessions / Heatmap / Costs / Compare / Tips** | The Claude Code analytics suite — sessions deep-dive with per-prompt expand, file/tool/subagent heatmap drilldowns, per-day cost line + by-model donut, cross-project comparison. |
 | **SpecShip Impact** | Measured tokens SpecShip's tools spent vs. an estimated (conservative) count of tokens saved, per prompt / session / project / all-projects, with a spend-vs-saved trend and per-tool breakdown. |
 | **Memory** | The full `CLAUDE.md` hierarchy (managed / user / project / subdir) plus `@import` resolution plus `~/.claude/memory/*.md` agent-written notes. Sources view + Effective (merged-precedence) view. |

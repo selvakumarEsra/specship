@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "astro dev",
     "start": "astro dev",
-    "build": "astro build",
+    "build": "node ../scripts/generate-reference-docs.mjs --check && astro build",
     "preview": "astro preview",
     "a11y": "node scripts/axe-check.mjs",
     "astro": "astro"

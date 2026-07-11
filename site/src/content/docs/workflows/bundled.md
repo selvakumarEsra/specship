@@ -36,8 +36,9 @@ The most-used workflow. End-to-end "take this requirement, ship code for it" pip
 **Failure modes:**
 
 - Tests fail at step 4 → workflow stops with `status: failed`. Worktree preserved. You inspect, fix, re-run with `--resume <runId>` to skip back to a specific step.
-- Reviewer rejects at step 5 → workflow stops with `status: cancelled`. Worktree preserved.
+- Reviewer rejects at step 5 → the run **parks** with `status: rejected`, worktree and artifacts intact. `specship workflow resume <runId>` drives the gate's revise prompt with your rejection comment, then pauses again for re-review. Rejection is feedback, never lost work.
 - Anything else fails → worktree preserved, error stored in `workflow_runs.errorMessage`.
+- Worktrees are only ever deleted by an explicit `specship workflow purge <runId>` — no status transition destroys work as a side effect.
 
 ## `spec-fix`
 
@@ -67,8 +68,8 @@ The cheap one. No editing, no merging — just re-runs the tests associated with
 **Steps:**
 
 1. **collect** — `script`. Queries SpecShip's spec-link table for all `implemented` links (optionally filtered by `SPEC_ID`).
-2. **test** — `bash`. Runs every test linked to any of those specs. Captures per-link pass/fail.
-3. **promote** — `script`. Promotes `implemented` → `verified` for any link whose tests all passed.
+2. **test** — `bash`. Builds the tree if needed, then runs the suite. Captures per-link pass/fail.
+3. **promote** — `agent`. Promotion is **evidence-based**: a spec moves to `verified` only when a test linked to it as evidence (a `verifies:` block in the spec, or an `@verifies REQ-X` comment on the test) passed. Specs with no linked evidence stay `implemented` and are reported as *unevidenced* — a green suite alone never blanket-promotes. A failing evidenced test demotes only the specs it evidences.
 
 **Use this in CI.** Drop it into a GitHub Action that runs on every PR to `main`, and your verified-link surface keeps current automatically.
 

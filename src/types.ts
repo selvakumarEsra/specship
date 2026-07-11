@@ -822,7 +822,12 @@ export interface SpecLink {
  * so existing reasoning about resumability transfers.
  *
  * Terminal: `completed`, `failed`, `cancelled` (no further transitions).
- * Resumable: `paused`, `failed` (can be resumed with `manage_run` resume).
+ * Resumable: `paused`, `failed`, `rejected` (can be resumed).
+ *
+ * `rejected` is a PARKED state, not a terminal one (WF-REJECT-DOC): the
+ * reviewer said "not like this" at an approval gate — the run keeps its
+ * worktree and artifacts, and resuming drives the gate's `on_reject` revise
+ * prompt (with the reviewer's comment) before re-pausing at the gate.
  */
 export type WorkflowRunStatus =
   | 'pending'
@@ -830,7 +835,8 @@ export type WorkflowRunStatus =
   | 'paused'
   | 'completed'
   | 'failed'
-  | 'cancelled';
+  | 'cancelled'
+  | 'rejected';
 
 /**
  * Node-level state within a workflow run.
@@ -855,7 +861,8 @@ export type WorkflowEventType =
   | 'run_completed'
   | 'run_failed'
   | 'run_cancelled'
-  | 'run_paused';
+  | 'run_paused'
+  | 'run_purged';
 
 /**
  * A workflow run record (one invocation of a workflow definition).

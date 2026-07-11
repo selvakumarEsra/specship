@@ -23,7 +23,20 @@ export class BashRunner implements NodeRunner {
     const node = rawNode as BashNode;
     const cwd = node.cwd ?? ctx.cwd;
     const timeout = node.timeout ?? DEFAULT_TIMEOUT_MS;
-    const env = { ...process.env, ...(node.env ?? {}) };
+    // Put the runtime SpecShip itself runs on at the FRONT of PATH so `node`
+    // (and everything npm scripts spawn) resolves to it — not to whatever the
+    // host shell defaults to. A host Node without FTS5 / with a mismatched
+    // better-sqlite3 ABI was one of the documented verify-leg false-fail
+    // classes (WF-REJECT-DOC, REQ-WFREJ-005).
+    const runtimeDir = path.dirname(process.execPath);
+    const basePath = process.env.PATH ?? '';
+    const env = {
+      ...process.env,
+      // Always prepend — being merely *present* later in PATH still loses to
+      // an earlier host Node.
+      PATH: `${runtimeDir}${path.delimiter}${basePath}`,
+      ...(node.env ?? {}),
+    };
 
     const isWindows = process.platform === 'win32';
     const shell = isWindows ? 'cmd.exe' : '/bin/bash';

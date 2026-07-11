@@ -22,6 +22,22 @@ describe('getExploreOutputBudget', () => {
     expect(small.maxCharsPerFile).toBeLessThan(huge.maxCharsPerFile);
   });
 
+  it('keeps every budget dimension monotonic non-decreasing across tiers', () => {
+    // Regression guard for the excalidraw god-file incident: the <5000 tier's
+    // maxCharsPerFile (2500) dropped BELOW the <500 tier's (3800), so a medium
+    // repo's explore returned <1% of a god-file and forced the agent to Read.
+    // Walk every tier boundary and assert no dimension shrinks as repos grow.
+    const tierPoints = [50, 149, 150, 499, 500, 4999, 5000, 14999, 15000, 24999, 25000, 40000];
+    for (let i = 1; i < tierPoints.length; i++) {
+      const lo = getExploreOutputBudget(tierPoints[i - 1]);
+      const hi = getExploreOutputBudget(tierPoints[i]);
+      expect(hi.maxCharsPerFile, `maxCharsPerFile at ${tierPoints[i]} files`).toBeGreaterThanOrEqual(lo.maxCharsPerFile);
+      expect(hi.maxOutputChars, `maxOutputChars at ${tierPoints[i]} files`).toBeGreaterThanOrEqual(lo.maxOutputChars);
+      expect(hi.defaultMaxFiles, `defaultMaxFiles at ${tierPoints[i]} files`).toBeGreaterThanOrEqual(lo.defaultMaxFiles);
+      expect(getExploreBudget(tierPoints[i]), `call budget at ${tierPoints[i]} files`).toBeGreaterThanOrEqual(getExploreBudget(tierPoints[i - 1]));
+    }
+  });
+
   it('caps total output well under 8000 tokens (~32k chars) on small projects', () => {
     const small = getExploreOutputBudget(100);
     expect(small.maxOutputChars).toBeLessThanOrEqual(20000);

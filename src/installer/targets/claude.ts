@@ -251,6 +251,21 @@ const SPECSHIP_SDD_HOOKS = [
 ] as const;
 
 /**
+ * Retrieval-steering nudge hook (STEER-HOOK-DOC, REQ-STEER-001) — part of the
+ * DEFAULT retrieval tier, unlike the opt-in SDD governance hook above. The
+ * command is silent when the project has no `.specship/` index or when
+ * `SPECSHIP_NO_STEERING=1` is set (REQ-STEER-002), so uninitialized projects
+ * get zero prompt noise.
+ */
+const SPECSHIP_STEER_HOOKS = [
+  {
+    event: 'UserPromptSubmit',
+    matcher: '',
+    hook: { type: 'command', command: 'specship steer-nudge' },
+  },
+] as const;
+
+/**
  * The status-line entry the installer writes into `settings.json`
  * (SHIP-STATUSLINE-DOC). `command` mirrors the MCP launcher (`specship` on
  * PATH); Claude Code pipes the status-line JSON to it on stdin and renders its
@@ -293,8 +308,17 @@ class ClaudeCodeTarget implements AgentTarget {
   install(loc: Location, opts: InstallOptions): WriteResult {
     const files: WriteResult['files'] = [];
 
+    // Integrations opt-in (INTEG-TIER-DOC, REQ-INTEG-001): the tools that
+    // talk to external services ship disabled; these flags enable them via
+    // the MCP entry's env. writeMcpEntry unions with a prior install's
+    // integrations so upgrades preserve an earlier opt-in.
+    const integrations: string[] = [
+      ...(opts.withJira ? ['jira'] : []),
+      ...(opts.withDesigner ? ['designer'] : []),
+    ];
+
     // 1. MCP server entry
-    files.push(writeMcpEntry(loc));
+    files.push(writeMcpEntry(loc, integrations));
 
     // 1b. Migrate away any stale ./.claude.json left by a pre-#207
     // local install, so the project isn't left with two competing
@@ -304,9 +328,10 @@ class ClaudeCodeTarget implements AgentTarget {
       if (migrated) files.push(migrated);
     }
 
-    // 2. Permissions (only when autoAllow)
+    // 2. Permissions (only when autoAllow). Designer permissions ride the
+    // opt-in; a plain install auto-allows only the local-only core.
     if (opts.autoAllow) {
-      files.push(writePermissionsEntry(loc));
+      files.push(writePermissionsEntry(loc, integrations));
     }
 
     // 2b. Strip stale auto-sync hooks left by a pre-0.8 install. Those
@@ -376,6 +401,14 @@ class ClaudeCodeTarget implements AgentTarget {
       files.push(writeSddHookEntry(loc));
     }
 
+    // 5b. Retrieval-steering nudge hook (STEER-HOOK-DOC, REQ-STEER-001) —
+    // DEFAULT tier, always written. High-salience per-prompt steering is the
+    // only channel that measurably fixed specship-tool adoption; the hook's
+    // command is silent without a project index and honors
+    // SPECSHIP_NO_STEERING=1 (REQ-STEER-002), so it adds zero noise where it
+    // can't help.
+    files.push(writeSteerHookEntry(loc));
+
     // 6. Status-line segment (SHIP-STATUSLINE-DOC, REQ-STATUSLINE-006).
     // Strictly opt-in — only when the caller set installStatusLine (the
     // interactive prompt, or `--statusline`). Never clobbers a user's existing
@@ -389,6 +422,23 @@ class ClaudeCodeTarget implements AgentTarget {
         'SpecShip slash commands moved from `/ss-*` to the `/specship:*` namespace ' +
         '(e.g. `/ss-spec` → `/specship:spec`, `/ss-explore` → `/specship:explore`). ' +
         'The old commands were removed from your commands directory.',
+      );
+    }
+    // Experimental caveat (INTEG-TIER-DOC, REQ-INTEG-002.A1): Designer drives
+    // claude.ai through a debug-Chrome session — an unofficial interface that
+    // can break without notice. Say so at the moment of opt-in.
+    if (opts.withDesigner) {
+      notes.push(
+        'Designer integration enabled — EXPERIMENTAL. It drives claude.ai/design through a ' +
+        'debug Chrome session (an unofficial interface) and may break without notice when ' +
+        'claude.ai changes. Set up the browser side with `specship designer setup`.',
+      );
+    }
+    if (opts.withJira) {
+      notes.push(
+        'JIRA integration enabled. It talks to your Atlassian instance; credentials are stored ' +
+        'under ~/.specship (removed by `specship uninstall`). JIRA tools are not auto-allowed — ' +
+        'Claude Code will prompt per call.',
       );
     }
     if (opts.installStatusLine) {
@@ -482,6 +532,10 @@ class ClaudeCodeTarget implements AgentTarget {
     const sddHookCleanup = cleanupSddHooks(loc);
     if (sddHookCleanup.action === 'removed') files.push(sddHookCleanup);
 
+    // 5b. Retrieval-steering hook — reverse of install step 5b.
+    const steerHookCleanup = cleanupSteerHooks(loc);
+    if (steerHookCleanup.action === 'removed') files.push(steerHookCleanup);
+
     // 6. Status-line segment — remove only the marked entry we wrote
     // (REQ-STATUSLINE-007). A user-authored status line has no marker and is
     // left untouched; absent entry is a no-op. Always runs so uninstall fully
@@ -516,11 +570,19 @@ class ClaudeCodeTarget implements AgentTarget {
  * writes all three files. Without this split the shims silently
  * cause side effects callers don't expect.
  */
-export function writeMcpEntry(loc: Location): WriteResult['files'][number] {
+export function writeMcpEntry(loc: Location, integrations: string[] = []): WriteResult['files'][number] {
   const file = mcpJsonPath(loc);
   const existing = readJsonFile(file);
   const before = existing.mcpServers?.specship;
-  const after = getMcpServerConfig();
+  // Integrations a previous install enabled are PRESERVED on upgrade
+  // (INTEG-TIER-DOC, REQ-INTEG-001.A3): union the existing entry's
+  // SPECSHIP_INTEGRATIONS with what this run requested — a plain re-install
+  // never silently disables an opted-in integration.
+  const prior = typeof before?.env?.SPECSHIP_INTEGRATIONS === 'string'
+    ? before.env.SPECSHIP_INTEGRATIONS.split(',').map((s: string) => s.trim()).filter(Boolean)
+    : [];
+  const merged = [...new Set([...prior, ...integrations])];
+  const after = getMcpServerConfig(merged);
 
   if (jsonDeepEqual(before, after)) {
     // Already exactly what we'd write — preserve byte-identical file.
@@ -685,7 +747,7 @@ export function cleanupCurrentHooks(loc: Location): WriteResult['files'][number]
   return stripHooksMatching(loc, isCurrentSpecshipHookCommand);
 }
 
-export function writePermissionsEntry(loc: Location): WriteResult['files'][number] {
+export function writePermissionsEntry(loc: Location, integrations: string[] = []): WriteResult['files'][number] {
   const file = settingsJsonPath(loc);
   const settings = readJsonFile(file);
   const created = !fs.existsSync(file);
@@ -693,7 +755,7 @@ export function writePermissionsEntry(loc: Location): WriteResult['files'][numbe
   if (!settings.permissions) settings.permissions = {};
   if (!Array.isArray(settings.permissions.allow)) settings.permissions.allow = [];
 
-  const want = getSpecShipPermissions();
+  const want = getSpecShipPermissions(integrations);
   const before = [...settings.permissions.allow];
   for (const perm of want) {
     if (!settings.permissions.allow.includes(perm)) {
@@ -808,6 +870,16 @@ export function writeSddHookEntry(loc: Location): WriteResult['files'][number] {
   return writeHooksFor(loc, SPECSHIP_SDD_HOOKS);
 }
 
+/**
+ * Write the retrieval-steering UserPromptSubmit hook into `settings.json`
+ * (STEER-HOOK-DOC, REQ-STEER-001). Same idempotent merge as the other hooks;
+ * part of the default retrieval tier — NOT gated on `--sdd` or autoAllow
+ * (the hook only prints guidance and is silent without an index).
+ */
+export function writeSteerHookEntry(loc: Location): WriteResult['files'][number] {
+  return writeHooksFor(loc, SPECSHIP_STEER_HOOKS);
+}
+
 type HookSpec = ReadonlyArray<{
   event: string;
   matcher: string;
@@ -862,6 +934,17 @@ function isSddHookCommand(command: unknown): boolean {
 /** Remove the SDD nudge hook written by `writeSddHookEntry`. Uninstall-only. */
 export function cleanupSddHooks(loc: Location): WriteResult['files'][number] {
   return stripHooksMatching(loc, isSddHookCommand);
+}
+
+/** True when a hook command is the retrieval-steering nudge. Uninstall-only. */
+function isSteerHookCommand(command: unknown): boolean {
+  if (typeof command !== 'string') return false;
+  return SPECSHIP_STEER_HOOKS.some(({ hook }) => command === hook.command);
+}
+
+/** Remove the steering hook written by `writeSteerHookEntry`. Uninstall-only. */
+export function cleanupSteerHooks(loc: Location): WriteResult['files'][number] {
+  return stripHooksMatching(loc, isSteerHookCommand);
 }
 
 /**

@@ -24,7 +24,7 @@ When SpecShip parses this file, it picks up the `@implements REQ-AUTH-005` and c
 - `target_file_path`: `src/auth.ts`
 - `kind`: `implements`
 - `provenance`: `pragma` (high-trust)
-- `state`: starts at `implemented`; promotes to `verified` once tests pass
+- `state`: starts at `implemented`; promotes to `verified` once a test **linked as evidence** passes (declare it with a `verifies:` block in the spec, or an `@verifies REQ-AUTH-005` comment on the test — the test-side twin of this pragma)
 
 ## Why the pragma is special
 

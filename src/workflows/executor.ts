@@ -230,7 +230,11 @@ export class WorkflowExecutor {
     if (!existing) {
       throw new Error(`Run ${runId} not found`);
     }
-    if (existing.status !== 'paused' && existing.status !== 'failed') {
+    if (
+      existing.status !== 'paused' &&
+      existing.status !== 'failed' &&
+      existing.status !== 'rejected'
+    ) {
       throw new Error(`Run ${runId} is in state "${existing.status}" — cannot resume`);
     }
 
@@ -259,6 +263,93 @@ export class WorkflowExecutor {
     this.syncActiveRunMarker(refreshed.status, refreshed.inputs, refreshed.id);
     this.event(runId, 'run_started', { resumed: true });
 
+    // Revise loop (WF-REJECT-DOC, REQ-WFREJ-002/003): resuming a rejected run
+    // first drives the gate's `on_reject` prompt — in the SAME worktree, with
+    // the reviewer's rejection reason appended — then falls through to
+    // driveExecution, where the (reset-to-pending) gate re-pauses for
+    // re-review. Without an `on_reject` on the gate, resume just re-pauses.
+    const wasRejected = existing.status === 'rejected';
+    if (wasRejected) {
+      const meta = (refreshed.metadata as Record<string, unknown>) ?? {};
+      const rejection = meta.rejection as
+        | { nodeId: string; reason: string | null; attempts: number }
+        | undefined;
+      const gate = rejection ? workflow.nodes.find((n) => n.id === rejection.nodeId) : undefined;
+      const onReject = gate?.kind === 'approval' ? (gate as ApprovalNode).on_reject : undefined;
+
+      if (rejection && onReject) {
+        const maxAttempts = onReject.max_attempts ?? Number.POSITIVE_INFINITY;
+        if (rejection.attempts > maxAttempts) {
+          const msg = `Run ${runId}: on_reject revision attempts exhausted (${maxAttempts}) — address the feedback manually, then approve, or purge the run`;
+          this.specQueries.updateWorkflowRun({ ...refreshed, status: 'rejected', errorMessage: msg });
+          this.syncActiveRunMarker('rejected', refreshed.inputs, refreshed.id);
+          throw new Error(msg);
+        }
+
+        const outputs: Map<string, NodeOutput> = new Map(
+          Object.entries((meta.outputs as Record<string, NodeOutput>) ?? {})
+        );
+        const reviseId = `${rejection.nodeId}__revise_${rejection.attempts}`;
+        const rawRevise: PromptNode = {
+          id: reviseId,
+          kind: 'prompt',
+          prompt:
+            `${onReject.prompt}\n\nReviewer feedback (rejection reason):\n` +
+            `${rejection.reason ?? '(no reason given)'}`,
+        };
+        // Resolve $nodeId.output refs in the on_reject prompt against the
+        // run's accumulated outputs, same as any other node.
+        const revise = this.resolveNodeRefs(rawRevise, outputs, opts.inputs, opts.variables) as PromptNode;
+
+        this.event(runId, 'step_started', { stepId: reviseId, kind: 'prompt', revision: true });
+        const runner = this.runners.get('prompt');
+        const result = runner
+          ? await runner.run(revise, {
+              cwd,
+              artifactsDir,
+              logsDir,
+              runId,
+              inputs: opts.inputs,
+              variables: opts.variables,
+              outputs,
+              verbose: opts.verbose,
+              emitEvent: (type, data) =>
+                this.event(runId, type, { stepId: reviseId, stepKind: 'prompt', ...data }),
+            })
+          : ({ status: 'failed', error: 'no runner for kind prompt' } as NodeRunResult);
+
+        if (result.status !== 'completed') {
+          const err = result.status === 'failed' ? result.error : `revise step ${result.status}`;
+          this.event(runId, 'step_failed', { stepId: reviseId, error: err });
+          this.specQueries.updateWorkflowRun({
+            ...refreshed,
+            status: 'rejected',
+            errorMessage: `revision failed: ${err}`,
+          });
+          this.syncActiveRunMarker('rejected', refreshed.inputs, refreshed.id);
+          throw new Error(`Run ${runId}: on_reject revision failed: ${err}`);
+        }
+
+        this.event(runId, 'step_completed', {
+          stepId: reviseId,
+          outputSize: result.output.text.length,
+          ...(result.stats ? { stats: result.stats } : {}),
+        });
+        await this.writeArtifact(artifactsDir, rawRevise, result.output);
+
+        // Persist the revise output + clear the pending rejection so the next
+        // reject starts a fresh attempt count from this one.
+        outputs.set(reviseId, result.output);
+        const newMeta = {
+          ...meta,
+          outputs: Object.fromEntries(outputs),
+          rejection: { ...rejection, consumed: true },
+        };
+        refreshed.metadata = newMeta;
+        this.specQueries.updateWorkflowRun({ ...refreshed, metadata: newMeta });
+      }
+    }
+
     return this.driveExecution(workflow, refreshed, cwd, artifactsDir, logsDir, opts);
   }
 
@@ -282,15 +373,8 @@ export class WorkflowExecutor {
     });
     this.syncActiveRunMarker('cancelled', run.inputs);
     this.event(runId, 'run_cancelled', { reason });
-
-    // Tear down the worktree if any.
-    if (run.isolationEnvId) {
-      try {
-        this.worktrees.destroy(run.isolationEnvId);
-      } catch {
-        // best-effort
-      }
-    }
+    // The worktree is deliberately KEPT (REQ-WFREJ-004): destruction only
+    // happens via the explicit purge() — never as a status side effect.
   }
 
   /**
@@ -340,6 +424,15 @@ export class WorkflowExecutor {
     }
   }
 
+  /**
+   * Reject a paused run's approval gate. Rejection is FEEDBACK, never
+   * disposal (WF-REJECT-DOC, REQ-WFREJ-001): the run parks as `rejected`
+   * with its worktree and artifacts intact, the gate node resets to
+   * `pending`, and the reviewer's reason is stored so `resume()` can drive
+   * the gate's `on_reject` revise prompt and re-pause at the gate
+   * (REQ-WFREJ-002/003). Nothing is deleted here — worktree teardown only
+   * happens via the explicit `purge()` (REQ-WFREJ-004).
+   */
   reject(runId: string, reason?: string): void {
     const run = this.specQueries.getWorkflowRunById(runId);
     if (!run) throw new Error(`Run ${runId} not found`);
@@ -349,21 +442,58 @@ export class WorkflowExecutor {
     const meta = (run.metadata as Record<string, unknown>) ?? {};
     const approval = meta.approval as ApprovalContext | undefined;
     const now = Date.now();
+
+    const nodeStates = { ...((meta.nodeStates as Record<string, WorkflowNodeState>) ?? {}) };
+    const priorAttempts =
+      typeof (meta.rejection as { attempts?: number } | undefined)?.attempts === 'number'
+        ? (meta.rejection as { attempts: number }).attempts
+        : 0;
+    if (approval) {
+      // The gate re-runs (and re-pauses) on resume.
+      nodeStates[approval.nodeId] = 'pending';
+    }
+
     this.specQueries.updateWorkflowRun({
       ...run,
-      status: 'cancelled',
-      completedAt: now,
+      status: 'rejected',
       lastActivityAt: now,
       errorMessage: reason ?? 'rejected at approval gate',
+      metadata: {
+        ...meta,
+        nodeStates,
+        approval: undefined,
+        rejection: approval
+          ? { nodeId: approval.nodeId, reason: reason ?? null, attempts: priorAttempts + 1 }
+          : undefined,
+      },
     });
-    this.syncActiveRunMarker('cancelled', run.inputs);
+    this.syncActiveRunMarker('rejected', run.inputs, run.id);
     this.event(runId, 'approval_rejected', {
       nodeId: approval?.nodeId,
       reason: reason ?? null,
     });
-    if (run.isolationEnvId) {
-      try { this.worktrees.destroy(run.isolationEnvId); } catch { /* best-effort */ }
+  }
+
+  /**
+   * Explicitly destroy a run's isolation worktree (REQ-WFREJ-004). This is
+   * the ONLY destruction path — no status transition (reject/cancel/fail)
+   * tears a worktree down as a side effect. Artifacts and the run record
+   * are kept; only the worktree (the disk-heavy part) is reclaimed.
+   */
+  purge(runId: string): { worktreeRemoved: boolean; workingPath?: string } {
+    const run = this.specQueries.getWorkflowRunById(runId);
+    if (!run) throw new Error(`Run ${runId} not found`);
+    if (run.status === 'running' || run.status === 'paused') {
+      throw new Error(`Run ${runId} is ${run.status} — cancel or finish it before purging`);
     }
+    if (!run.isolationEnvId) {
+      this.event(runId, 'run_purged', { worktreeRemoved: false });
+      return { worktreeRemoved: false };
+    }
+    const env = this.specQueries.getIsolationEnvById(run.isolationEnvId);
+    this.worktrees.destroy(run.isolationEnvId);
+    this.event(runId, 'run_purged', { worktreeRemoved: true, workingPath: env?.workingPath });
+    return { worktreeRemoved: true, workingPath: env?.workingPath };
   }
 
   // ===========================================================================
@@ -687,6 +817,9 @@ export class WorkflowExecutor {
     // completion hook recovers it from here (REQ-JIRA-006).
     const prevMeta = (run.metadata as Record<string, unknown> | undefined) ?? {};
     if (prevMeta.jira !== undefined) meta.jira = prevMeta.jira;
+    // Preserve the rejection history so on_reject `max_attempts` counts across
+    // reject → resume → re-pause cycles (WF-REJECT-DOC, REQ-WFREJ-003).
+    if (prevMeta.rejection !== undefined) meta.rejection = prevMeta.rejection;
 
     const updated: WorkflowRun = {
       ...run,
@@ -759,6 +892,7 @@ export class WorkflowExecutor {
       | 'run_failed'
       | 'run_cancelled'
       | 'run_paused'
+      | 'run_purged'
       | 'step_started'
       | 'step_completed'
       | 'step_failed'

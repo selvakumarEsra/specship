@@ -710,25 +710,38 @@ export class MarkdownSpecExtractor {
   }
 
   /**
-   * Scan a body block for a bullet-list `implementations:` declaration.
-   * Format:
+   * Scan a body block for bullet-list link declarations. Two block keywords:
    *
-   *   implementations:
-   *     - src/auth/login.ts:authenticate
-   *     - src/auth/rate-limit.ts:enforce
+   *   implementations:                       verifies:
+   *     - src/auth/login.ts:authenticate       - __tests__/auth.test.ts:rateLimitTest
    *
-   * Each match becomes a SpecLinkCandidate with kind='implements'.
-   * Tolerant of indentation; stops at the first non-bullet, non-blank line.
+   * `implementations:` becomes kind='implements'; `verifies:` becomes
+   * kind='tests' — the test-evidence declaration that gates promotion to
+   * `verified` (VERIFY-EVID-DOC, REQ-VEVID-001).
+   * Tolerant of indentation; each block stops at the first non-bullet,
+   * non-blank line.
    */
   private extractImplementationRefs(
     specId: string,
     bodyLines: string[]
   ): SpecLinkCandidate[] {
+    return [
+      ...this.extractLinkRefBlock(specId, bodyLines, 'implementations:', 'implements'),
+      ...this.extractLinkRefBlock(specId, bodyLines, 'verifies:', 'tests'),
+    ];
+  }
+
+  private extractLinkRefBlock(
+    specId: string,
+    bodyLines: string[],
+    keyword: string,
+    kind: SpecLinkKind
+  ): SpecLinkCandidate[] {
     const out: SpecLinkCandidate[] = [];
 
     for (let i = 0; i < bodyLines.length; i++) {
       const line = (bodyLines[i] ?? '').trim();
-      if (line !== 'implementations:' && !line.startsWith('implementations:')) continue;
+      if (line !== keyword && !line.startsWith(keyword)) continue;
 
       // Walk subsequent lines collecting `- path:symbol` entries.
       for (let j = i + 1; j < bodyLines.length; j++) {
@@ -744,10 +757,10 @@ export class MarkdownSpecExtractor {
           targetFilePath: refPath,
           targetQualifiedName: refSymbol,
           targetNodeKind: guessNodeKind(refSymbol),
-          kind: 'implements' as SpecLinkKind,
+          kind,
         });
       }
-      // Stop after first `implementations:` block — no need to find more.
+      // Stop after the first block of this keyword — no need to find more.
       break;
     }
     return out;

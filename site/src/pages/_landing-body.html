@@ -232,10 +232,10 @@
       <div class="showcase-copy reveal">
         <div class="kicker"><span class="sq" style="background:var(--warn)"></span>Spec linking &amp; drift</div>
         <h2>Requirements that stay true to the code.</h2>
-        <p class="sub">Write requirements in plain RFC-2119 prose and link each one to the symbol that satisfies it. SpecShip re-verifies those links on every index and surfaces anything that has drifted, broken, or was never implemented.</p>
+        <p class="sub">Write requirements in plain RFC-2119 prose and link each one to the symbol that satisfies it. SpecShip re-verifies those links on every index and surfaces anything that has drifted, broken, or was never implemented. One principle everywhere: <b style="color:var(--text-primary)">a surface may only promise what it can prove.</b></p>
         <div class="feat-list">
           <div class="li"><span class="mk" style="background:var(--warn-soft);color:var(--warn)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></span><span class="tx"><b>MUST / SHOULD / MAY, highlighted.</b> Normative keywords are parsed and color-coded so intent is unmissable.</span></div>
-          <div class="li"><span class="mk" style="background:var(--warn-soft);color:var(--warn)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></span><span class="tx"><b>Five honest states.</b> verified, implementing, drifted, broken, orphaned — never a green check that's lying.</span></div>
+          <div class="li"><span class="mk" style="background:var(--warn-soft);color:var(--warn)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></span><span class="tx"><b>Five honest states — and <span class="mono-inline">verified</span> is earned.</b> A spec only turns verified when a test linked to it as evidence has passed; a green suite alone proves nothing. Never a green check that's lying.</span></div>
           <div class="li"><span class="mk" style="background:var(--warn-soft);color:var(--warn)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></span><span class="tx"><b>A drift queue, not a surprise.</b> Stale links collect in one place with the exact symbol and axis that changed.</span></div>
         </div>
       </div>
@@ -379,7 +379,7 @@
     <div class="section-head center reveal" style="margin-bottom:8px">
       <div class="kicker" style="justify-content:center"><span class="sq" style="background:var(--accent)"></span>Workflows</div>
       <h2>Let the agent do the work — and still review every diff.</h2>
-      <p class="sub" style="margin-left:auto;margin-right:auto">Bundled workflows like <span class="mono-inline">spec-implement</span> run in an isolated git worktree: plan, implement, test, then <b style="color:var(--text-primary)">pause for your approval</b> before anything merges.</p>
+      <p class="sub" style="margin-left:auto;margin-right:auto">Bundled workflows like <span class="mono-inline">spec-implement</span> run in an isolated git worktree: plan, implement, test, then <b style="color:var(--text-primary)">pause for your approval</b> before anything merges. Reject with a comment and the agent revises in the same worktree, then pauses again — rejection is feedback, never lost work.</p>
     </div>
     <div class="frame reveal d1" style="margin-top:36px">
       <div class="frame-bar">
@@ -414,9 +414,9 @@
 <section class="final" id="download">
   <div class="wrap-narrow">
     <div class="final-card reveal">
-      <div class="kicker" style="justify-content:center"><span class="sq" style="background:var(--node-spec)"></span>v0.9.0 · npm · runs 100% local</div>
+      <div class="kicker" style="justify-content:center"><span class="sq" style="background:var(--node-spec)"></span>npm · self-contained runtime · 100% local core</div>
       <h2>Ship specs, not drift.</h2>
-      <p>Index your first repo in under a minute. SpecShip runs entirely local — your code and transcripts never leave your machine.</p>
+      <p>Index your first repo in under a minute. The core runs entirely local — your code and transcripts never leave your machine. The two optional integrations that do talk to a service (JIRA, Designer) are strictly opt-in.</p>
       <div class="hero-cta">
         <a class="btn btn-primary btn-lg" href="__BASE__/getting-started/quickstart">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"></path></svg>
@@ -483,7 +483,7 @@
       </div>
     </div>
     <div class="foot-bottom">
-      <span class="meta">© 2026 SpecShip · runs 100% local</span>
+      <span class="meta">© 2026 SpecShip · 100% local core</span>
       <span class="meta">v0.9.0 · better-sqlite3</span>
     </div>
   </div>

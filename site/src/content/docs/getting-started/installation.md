@@ -43,8 +43,14 @@ specship install --print-config               # print the MCP snippet, no file w
 | `--location` | `global`, `local` | prompt (highlights `local`) |
 | `--yes` | (boolean) non-interactive | prompt every step → `local` |
 | `--sdd` | (boolean) also install the spec-driven layer (`/specship:spec` + `/specship:check` doors + steering) | off (retrieval only) |
+| `--with-jira` | (boolean) enable the optional JIRA integration (talks to your Atlassian instance; never auto-allowed — Claude prompts per call) | off (core stays 100% local) |
+| `--with-designer` | (boolean) enable the optional Designer integration (**experimental** — drives claude.ai/design via a debug Chrome session) | off |
 | `--no-permissions` | (boolean) skip the auto-allow list | permissions on |
 | `--print-config` | print the MCP snippet and exit | — |
+
+> Integrations are remembered: a later plain `specship install` preserves an earlier `--with-*` opt-in — it never silently disables one.
+
+The default install also wires a tiny per-prompt nudge that steers Claude Code toward `specship_explore` for structure/flow questions — the pattern that saves the most time. It only speaks in projects with a SpecShip index; set `SPECSHIP_NO_STEERING=1` to turn it off.
 
 > `--yes` is non-interactive and resolves to a **project-local** install. Pass `--location global` alongside it for the old global behavior.
 

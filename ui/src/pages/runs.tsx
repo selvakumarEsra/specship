@@ -13,7 +13,7 @@ import { RunDetail, fmtCost, fmtDuration } from '../components/run-detail';
 import { Empty, PageHead, Segmented, StatePill, timeAgo } from '../components/ui';
 import type { PageProps } from './types';
 
-const STATUSES = ['running', 'paused', 'completed', 'failed', 'cancelled'];
+const STATUSES = ['running', 'paused', 'rejected', 'completed', 'failed', 'cancelled'];
 
 function asMs(v: string | number | null | undefined): number | null {
   if (v == null) return null;

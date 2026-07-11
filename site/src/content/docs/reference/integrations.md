@@ -25,7 +25,7 @@ A no-flag install is **project-local** by default — it writes to `./.mcp.json`
 }
 ```
 
-This tells Claude Code: "when you start, spawn `specship serve --mcp` as a stdio MCP server". The server exposes the code-graph tools (`specship_search`, `specship_explore`, `specship_node`, `specship_callers`, `specship_callees`, `specship_impact`, `specship_status`, `specship_files`), the spec tools (`specship_spec`, `specship_link_assert`, `specship_link_verify`, `specship_drifted`), and the design tools (`designer_session`, `designer_prompt`, `designer_ask`, `designer_list`, `designer_snapshot`, `designer_handoff`). See the [MCP server reference](/reference/mcp-server/) for what each does.
+This tells Claude Code: "when you start, spawn `specship serve --mcp` as a stdio MCP server". By default the server exposes only the **local-only core** — the code-graph tools, the spec tools, and the analysis harnesses. The two integrations that talk to an external service are strictly opt-in: `specship install --with-jira` (Atlassian) and `--with-designer` (claude.ai — experimental) add `"env": { "SPECSHIP_INTEGRATIONS": "..." }` to this entry, which is what turns their tool groups on. A later plain re-install preserves an earlier opt-in. See the [MCP server reference](/reference/mcp-server/) for the generated, always-current tool list.
 
 ### 2. The auto-allow permissions list
 

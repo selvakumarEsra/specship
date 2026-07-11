@@ -55,8 +55,18 @@ export function DashboardPage({ project }: PageProps) {
 
   const s = status.data;
   const projectName = s ? (s.projectPath.split('/').filter(Boolean).pop() ?? s.projectPath) : '';
-  const lastCost = !noIngest && stats.data ? ' · last session $' + stats.data.lastSessionCost.value.toFixed(2) : '';
-  const sub = s ? `${projectName} · ${fmtInt(s.nodeCount)} nodes${lastCost}` : 'Loading project status…';
+  const lastCost = !noIngest && stats.data
+    ? (stats.data.lastSessionCost.unpricedTokens ?? 0) > 0
+      ? ' · last session unpriced ⚠'
+      : ' · last session $' + stats.data.lastSessionCost.value.toFixed(2)
+    : '';
+  // Parse coverage of the latest ingest pass (REQ-DASHINT-008.A2): zero skips
+  // renders as full coverage, not as absence of the stat.
+  const ing = stats.data?.ingest;
+  const ingestCoverage = !noIngest && ing
+    ? ` · ingest ${fmtInt(ing.linesParsed)}/${fmtInt(ing.linesParsed + ing.linesSkipped)} parsed${ing.linesSkipped > 0 ? ' ⚠' : ''}`
+    : '';
+  const sub = s ? `${projectName} · ${fmtInt(s.nodeCount)} nodes${lastCost}${ingestCoverage}` : 'Loading project status…';
 
   return (
     <div className="scroll-y" style={{ flex: 1, padding: 18 }}>
@@ -68,10 +78,13 @@ export function DashboardPage({ project }: PageProps) {
           {(d) => (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
               <StatTile icon="coins" color="var(--accent)" label="Last session cost"
-                value={noIngest ? '—' : '$' + d.lastSessionCost.value.toFixed(2)}
-                delta={noIngest ? undefined : d.lastSessionCost.delta} deltaInvert
+                value={noIngest ? '—' : (d.lastSessionCost.unpricedTokens ?? 0) > 0 ? '—' : '$' + d.lastSessionCost.value.toFixed(2)}
+                delta={noIngest || (d.lastSessionCost.unpricedTokens ?? 0) > 0 ? undefined : d.lastSessionCost.delta} deltaInvert
                 spark={noIngest ? undefined : d.lastSessionCost.series} sparkColor="var(--accent)"
-                note={noIngest ? 'no transcript data — enable ingest' : undefined}
+                note={noIngest ? 'no transcript data — enable ingest'
+                  : (d.lastSessionCost.unpricedTokens ?? 0) > 0
+                    ? `${fmtInt(d.lastSessionCost.unpricedTokens!)} unpriced tokens ⚠ — model has no pricing row`
+                    : undefined}
                 onClick={() => go('sessions')} />
               <StatTile icon="wrench" color="var(--node-spec)" label="Tool calls · 7d"
                 value={noIngest ? '—' : fmtInt(d.toolCalls.value)}

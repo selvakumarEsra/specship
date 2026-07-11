@@ -299,6 +299,66 @@ describe('Claude target — specifics', () => {
     expect(fs.readFileSync(path.join(tmpCwd, 'CLAUDE.md'), 'utf-8')).toContain('SPECSHIP_SDD_START');
   });
 
+  it('default install writes the retrieval-steering hook; re-run is idempotent (REQ-STEER-001.A1)', () => {
+    claudeTarget.install('local', { autoAllow: false });
+    const settingsPath = path.join(tmpCwd, '.claude', 'settings.json');
+    const cmds = (JSON.parse(fs.readFileSync(settingsPath, 'utf-8')).hooks?.UserPromptSubmit ?? [])
+      .flatMap((g: any) => (g.hooks ?? []).map((h: any) => h.command));
+    expect(cmds).toContain('specship steer-nudge');
+
+    // Byte-idempotent on re-run.
+    const second = claudeTarget.install('local', { autoAllow: false });
+    const steerEntry = second.files.filter((f) => f.path === settingsPath);
+    expect(steerEntry.every((f) => f.action === 'unchanged')).toBe(true);
+    const after = (JSON.parse(fs.readFileSync(settingsPath, 'utf-8')).hooks?.UserPromptSubmit ?? [])
+      .flatMap((g: any) => (g.hooks ?? []).map((h: any) => h.command))
+      .filter((c: string) => c === 'specship steer-nudge');
+    expect(after).toHaveLength(1);
+  });
+
+  it('default install exposes no integrations and auto-allows no designer tools (REQ-INTEG-001.A1)', () => {
+    claudeTarget.install('local', { autoAllow: true });
+    const mcp = JSON.parse(fs.readFileSync(path.join(tmpCwd, '.mcp.json'), 'utf-8'));
+    expect(mcp.mcpServers.specship.env?.SPECSHIP_INTEGRATIONS).toBeUndefined();
+    const settings = JSON.parse(fs.readFileSync(path.join(tmpCwd, '.claude', 'settings.json'), 'utf-8'));
+    const allow: string[] = settings.permissions.allow;
+    expect(allow.some((p) => p.includes('designer_'))).toBe(false);
+    expect(allow.some((p) => p.includes('specship_jira_'))).toBe(false);
+  });
+
+  it('--with-jira / --with-designer enable the integrations (REQ-INTEG-001.A2)', () => {
+    claudeTarget.install('local', { autoAllow: true, withJira: true, withDesigner: true });
+    const mcp = JSON.parse(fs.readFileSync(path.join(tmpCwd, '.mcp.json'), 'utf-8'));
+    expect(mcp.mcpServers.specship.env.SPECSHIP_INTEGRATIONS).toBe('designer,jira');
+    const settings = JSON.parse(fs.readFileSync(path.join(tmpCwd, '.claude', 'settings.json'), 'utf-8'));
+    const allow: string[] = settings.permissions.allow;
+    expect(allow.some((p) => p.includes('designer_session'))).toBe(true);
+    // JIRA reaches an external instance — never auto-allowed even when enabled.
+    expect(allow.some((p) => p.includes('specship_jira_'))).toBe(false);
+  });
+
+  it('a plain re-install preserves a prior integrations opt-in (REQ-INTEG-001.A3)', () => {
+    claudeTarget.install('local', { autoAllow: true, withJira: true });
+    claudeTarget.install('local', { autoAllow: true }); // upgrade without flags
+    const mcp = JSON.parse(fs.readFileSync(path.join(tmpCwd, '.mcp.json'), 'utf-8'));
+    expect(mcp.mcpServers.specship.env.SPECSHIP_INTEGRATIONS).toBe('jira');
+  });
+
+  it('uninstall removes the steering hook without disturbing sibling hooks (REQ-STEER-001.A2)', () => {
+    claudeTarget.install('local', { autoAllow: false });
+    // Plant a user-authored sibling hook in the same event.
+    const settingsPath = path.join(tmpCwd, '.claude', 'settings.json');
+    const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
+    settings.hooks.UserPromptSubmit.push({ matcher: 'custom', hooks: [{ type: 'command', command: 'my-own-hook' }] });
+    fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
+
+    claudeTarget.uninstall('local');
+    const after = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
+    const cmds = (after.hooks?.UserPromptSubmit ?? []).flatMap((g: any) => (g.hooks ?? []).map((h: any) => h.command));
+    expect(cmds).not.toContain('specship steer-nudge');
+    expect(cmds).toContain('my-own-hook');
+  });
+
   it('install with sdd:false writes neither the CLAUDE.md rule nor the nudge hook (REQ-SDD-003)', () => {
     claudeTarget.install('local', { autoAllow: false, sdd: false });
     expect(fs.existsSync(path.join(tmpCwd, 'CLAUDE.md'))).toBe(false);

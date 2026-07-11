@@ -601,16 +601,50 @@ export const tools: ToolDefinition[] = [
 ];
 
 /**
+ * Integration tiering (INTEG-TIER-DOC, REQ-INTEG-001). The core promise —
+ * "100% local, no external services" — holds by construction: tools that talk
+ * to a third party (JIRA → Atlassian, Designer → claude.ai) are exposed only
+ * when the integration was explicitly enabled. The installer writes
+ * `SPECSHIP_INTEGRATIONS=jira,designer` into the MCP server entry's env when
+ * the user opts in (`specship install --with-jira --with-designer`).
+ */
+export type IntegrationName = 'jira' | 'designer';
+
+export function integrationEnabled(name: IntegrationName, env: NodeJS.ProcessEnv = process.env): boolean {
+  const raw = env.SPECSHIP_INTEGRATIONS ?? '';
+  return raw.split(',').map((s) => s.trim().toLowerCase()).includes(name);
+}
+
+/** Which integration (if any) a tool belongs to. Core tools return null. */
+export function toolIntegration(toolName: string): IntegrationName | null {
+  if (toolName.startsWith('designer_')) return 'designer';
+  if (toolName.startsWith('specship_jira_')) return 'jira';
+  return null;
+}
+
+/** Drop tools whose integration isn't enabled (REQ-INTEG-001.A1/A2). */
+export function filterIntegrationTools(
+  list: ToolDefinition[],
+  env: NodeJS.ProcessEnv = process.env
+): ToolDefinition[] {
+  return list.filter((t) => {
+    const integ = toolIntegration(t.name);
+    return integ === null || integrationEnabled(integ, env);
+  });
+}
+
+/**
  * Allowlist-filtered tool definitions WITHOUT an engine — the static surface the
  * proxy answers `tools/list` with before any project is open. Mirrors
  * `ToolHandler.getTools()` in the no-SpecShip case (the dynamic per-repo budget
  * note in a description only adds once `cg` is loaded; the schemas are static).
  */
 export function getStaticTools(): ToolDefinition[] {
+  const base = filterIntegrationTools(tools);
   const raw = process.env.SPECSHIP_MCP_TOOLS;
-  if (!raw || !raw.trim()) return tools;
+  if (!raw || !raw.trim()) return base;
   const allow = new Set(raw.split(',').map(s => s.trim().replace(/^specship_/, '')).filter(Boolean));
-  return allow.size ? tools.filter(t => allow.has(t.name.replace(/^specship_/, ''))) : tools;
+  return allow.size ? base.filter(t => allow.has(t.name.replace(/^specship_/, ''))) : base;
 }
 
 /**
@@ -707,10 +741,13 @@ export class ToolHandler {
    * allowlist so a trimmed surface is reflected in ListTools.
    */
   getTools(): ToolDefinition[] {
+    // Integration tier first (INTEG-TIER-DOC): jira/designer tools exist only
+    // when explicitly enabled, before any allowlist/size gating applies.
+    const base = filterIntegrationTools(tools);
     const allow = this.toolAllowlist();
     let visible = allow
-      ? tools.filter(t => allow.has(t.name.replace(/^specship_/, '')))
-      : tools;
+      ? base.filter(t => allow.has(t.name.replace(/^specship_/, '')))
+      : base;
     if (!this.cg) return visible;
 
     try {
@@ -1056,6 +1093,15 @@ export class ToolHandler {
       // surface rejects ablated tools defensively even if a client cached them.
       if (!this.isToolAllowed(toolName)) {
         return this.errorResult(`Tool ${toolName} is disabled via SPECSHIP_MCP_TOOLS`);
+      }
+      // Integration tier (INTEG-TIER-DOC, REQ-INTEG-001): a jira/designer
+      // call without the opt-in is rejected even if a client cached the tool.
+      const integ = toolIntegration(toolName);
+      if (integ && !integrationEnabled(integ)) {
+        return this.errorResult(
+          `Tool ${toolName} belongs to the optional "${integ}" integration, which is not enabled. ` +
+          `Enable it with: specship install --with-${integ} (it talks to ${integ === 'jira' ? 'your Atlassian instance' : 'claude.ai — experimental'}).`
+        );
       }
       // Cross-cutting input validation. All tools accept an optional
       // `projectPath` and most accept either `query`, `task`, or

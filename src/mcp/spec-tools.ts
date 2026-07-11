@@ -16,6 +16,7 @@ import type SpecShip from '../index';
 import type { Spec, SpecLink, SpecLinkState, SpecLinkKind, NodeKind } from '../types';
 import type { SpecQueries } from '../db/spec-queries';
 import { renderBehaviourSurface } from '../behaviour/behaviour-surface';
+import { writeBackImplementation } from '../extraction/specs/spec-file-writeback';
 import type { ToolDefinition, ToolResult } from './tools';
 import { summarizeBriefFunnel, ideaCaptureFields } from '../resolution/brief-link-resolver';
 import type { FunnelLookup } from '../resolution/brief-link-resolver';
@@ -618,6 +619,20 @@ export async function handleSpecshipSpec(
     lines.push('_No linked code yet. Implement this spec, then call specship_link_assert._');
   } else {
     for (const link of links) lines.push(formatLink(link));
+    // Evidence status (VERIFY-EVID-DOC, REQ-VEVID-003): distinguish
+    // "implemented, evidenced" from "implemented, no test evidence" — the
+    // latter can never promote to verified until evidence is declared.
+    const hasEvidence = links.some((l) => l.kind === 'tests');
+    const hasImplements = links.some((l) => l.kind === 'implements');
+    if (hasImplements && !hasEvidence && spec.kind === 'requirement') {
+      lines.push('');
+      lines.push(
+        '⚠ **No test evidence.** No test is linked to this spec (kind `tests`), so it cannot be promoted to `verified`. ' +
+          'Declare its proving test(s) via a `verifies:` block in the spec (`- <test-file>:<test-symbol>`) or an `@verifies ' +
+          spec.id +
+          '` comment on the test.'
+      );
+    }
   }
 
   // Inherited code (REQ-DOMAIN-002): a domain fact carries no direct code links;
@@ -754,8 +769,28 @@ export async function handleSpecshipLinkAssert(
   // populated immediately (otherwise it sits NULL until the next index/sync).
   resolver.resolveLinksForFiles([targetFilePath]);
 
+  // Persist the assertion into the spec file's `implementations:` block —
+  // the file is the source of truth; the DB row alone would vanish on a full
+  // reindex (LINK-TRUTH-DOC, REQ-LINKWB-001). `implements` only: `verifies`
+  // evidence has its own block (VERIFY-EVID-DOC).
+  let writeBackNote = '';
+  if (kind === 'implements') {
+    const wb = writeBackImplementation(
+      cg.getProjectRoot(),
+      spec.sourcePath,
+      specId,
+      targetFilePath,
+      targetQualifiedName
+    );
+    writeBackNote = wb.changed
+      ? ` — persisted to ${spec.sourcePath}`
+      : wb.ok
+        ? '' // already present in the file: nothing to add
+        : `\n⚠ Link stored in the index but NOT persisted to the spec file (${wb.detail}). It will not survive a full reindex — add \`- ${targetFilePath}:${targetQualifiedName}\` under \`implementations:\` in ${spec.sourcePath}.`;
+  }
+
   return text(
-    `Asserted ${kind} link: ${specId} → ${targetFilePath}:${targetQualifiedName} (link #${linkId})`
+    `Asserted ${kind} link: ${specId} → ${targetFilePath}:${targetQualifiedName} (link #${linkId})${writeBackNote}`
   );
 }
 
@@ -778,6 +813,26 @@ export async function handleSpecshipLinkVerify(
   const link = sq.getLinkById(linkId);
   if (!link) {
     return error(`Link #${linkId} not found`);
+  }
+
+  // Evidence gate (VERIFY-EVID-DOC, REQ-VEVID-002): `verified` is a proof
+  // claim, so promoting an `implements` link requires the spec to have at
+  // least one declared test-evidence link (kind='tests', from a `verifies:`
+  // block or an `@verifies REQ-X` comment on the test). A green suite alone
+  // proves nothing about THIS spec — evidence-less specs cap at
+  // `implemented` (REQ-VEVID-002.A2).
+  if (result === 'pass' && link.kind === 'implements') {
+    const evidence = sq
+      .getLinksBySpec(link.specId)
+      .filter((l) => l.kind === 'tests');
+    if (evidence.length === 0) {
+      return error(
+        `Cannot promote ${link.specId} to verified: no test evidence is linked to it. ` +
+          `Declare the test(s) that prove this requirement — add a \`verifies:\` block to the spec ` +
+          `(e.g. \`- __tests__/foo.test.ts:testName\`) or an \`@verifies ${link.specId}\` comment on the test — ` +
+          `then re-run specship_link_verify. The link stays 'implemented'.`
+      );
+    }
   }
 
   const newState: SpecLinkState = result === 'pass' ? 'verified' : 'broken';

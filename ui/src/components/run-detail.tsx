@@ -14,7 +14,9 @@ import { go } from '../router';
 import { Icon } from './icons';
 import { StatePill } from './ui';
 
-const TERMINAL = new Set(['completed', 'failed', 'cancelled']);
+// `rejected` is parked (resumable) but emits no events until resumed, so it
+// counts as settled for polling purposes.
+const TERMINAL = new Set(['completed', 'failed', 'cancelled', 'rejected']);
 
 /** stepId lives inside `data` (the executor stamps it there, not the column). */
 export function eventStepId(e: RunEvent): string | undefined {
@@ -346,6 +348,10 @@ export function RunDetail({ id, project }: { id: string; project: string | null 
   });
   const reject = () => act(() => api.runAction(id, 'reject', rejectReason.trim() ? { reason: rejectReason.trim() } : undefined, project));
   const cancel = () => act(() => api.runAction(id, 'cancel', undefined, project));
+  // Revise loop (WF-REJECT-DOC): resume a rejected run — the gate's on_reject
+  // prompt runs with the reviewer's feedback, then re-pauses at the gate.
+  const resumeRevise = () => act(() => api.runAction(id, 'resume', undefined, project));
+  const purge = () => act(() => api.runAction(id, 'purge', undefined, project));
 
   const artifacts = useApi(
     () => (tab === 'artifacts' ? api.runArtifacts(id, project) : Promise.resolve({ artifacts: [] })),
@@ -390,6 +396,27 @@ export function RunDetail({ id, project }: { id: string; project: string | null 
             <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--error)' }}>Run failed</div>
             <div className="secondary mono" style={{ fontSize: 12, marginTop: 1, whiteSpace: 'pre-wrap' }}>{run.errorMessage}</div>
           </div>
+        </div>
+      )}
+
+      {status === 'rejected' && (
+        <div className="row gap-12" style={{ padding: '12px 16px', background: 'var(--warn-soft)', borderBottom: '1px solid var(--border-subtle)', flexWrap: 'wrap' }}>
+          <span style={{ color: 'var(--warn)', flexShrink: 0 }}><Icon name="drift" size={18} /></span>
+          <div className="grow" style={{ minWidth: 220 }}>
+            <div style={{ fontWeight: 600, fontSize: 13 }}>Rejected — parked with worktree and artifacts kept</div>
+            <div className="secondary" style={{ fontSize: 12, marginTop: 1 }}>
+              {run?.errorMessage ?? 'Rejected at the approval gate.'}
+            </div>
+          </div>
+          <button className="btn btn-secondary btn-sm" onClick={() => setTab('artifacts')}>Inspect artifacts</button>
+          <button className="btn btn-destructive btn-sm" onClick={purge} disabled={actionBusy}
+            title="Removes the worktree — the only destructive action. Artifacts and the run record are kept.">
+            Purge worktree
+          </button>
+          <button className="btn btn-primary btn-sm" onClick={resumeRevise} disabled={actionBusy}
+            title="Runs the gate's on_reject revise prompt with your feedback, then re-pauses for review.">
+            <Icon name="circle" size={12} />Resume &amp; revise
+          </button>
         </div>
       )}
 

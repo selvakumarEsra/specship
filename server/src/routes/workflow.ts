@@ -228,7 +228,7 @@ export async function registerWorkflowRoutes(app: FastifyInstance): Promise<void
         lastId = e.id;
       }
       const run = sq.getWorkflowRunById(runId);
-      if (!run || ['completed', 'failed', 'cancelled'].includes(run.status)) {
+      if (!run || ['completed', 'failed', 'cancelled', 'rejected'].includes(run.status)) {
         reply.raw.write(`event: done\ndata: ${JSON.stringify({ status: run?.status })}\n\n`);
         reply.raw.end();
         return;
@@ -256,6 +256,15 @@ export async function registerWorkflowRoutes(app: FastifyInstance): Promise<void
     const cg = await resolveCg(app, req, reply); if (!cg) return;
     const { executor } = executorFor(cg);
     try { executor.cancel(req.params.id, req.body?.reason); return { ok: true }; }
+    catch (err) { return reply.code(400).send({ error: err instanceof Error ? err.message : String(err) }); }
+  });
+
+  // Explicit worktree teardown (WF-REJECT-DOC, REQ-WFREJ-004) — the only
+  // destruction path; reject/cancel park the run with its worktree intact.
+  app.post('/api/workflows/runs/:id/purge', async (req: FastifyRequest<{ Params: { id: string }; Querystring: ProjectQuery }>, reply) => {
+    const cg = await resolveCg(app, req, reply); if (!cg) return;
+    const { executor } = executorFor(cg);
+    try { return { ok: true, ...executor.purge(req.params.id) }; }
     catch (err) { return reply.code(400).send({ error: err instanceof Error ? err.message : String(err) }); }
   });
 

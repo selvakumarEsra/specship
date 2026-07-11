@@ -62,6 +62,16 @@ export interface InstallOptions {
    */
   sdd?: boolean;
   /**
+   * Optional integrations tier (INTEG-TIER-DOC, REQ-INTEG-001). The core
+   * install is local-only by construction; each integration that talks to an
+   * external service is an explicit opt-in (`--with-jira`, `--with-designer`).
+   * Enabling writes `SPECSHIP_INTEGRATIONS` into the MCP server entry's env.
+   * An integration a previous install enabled is PRESERVED on upgrade
+   * (REQ-INTEG-001.A3) — omitting the flag never disables it.
+   */
+  withJira?: boolean;
+  withDesigner?: boolean;
+  /**
    * Whether to wire SpecShip's status-line segment into Claude's `settings.json`
    * (SHIP-STATUSLINE-DOC, REQ-STATUSLINE-006). Opt-in — off unless the user
    * explicitly accepts the install prompt or passes `--statusline`. The writer

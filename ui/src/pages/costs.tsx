@@ -69,6 +69,12 @@ export function CostsPage(_props: PageProps) {
                         <span className="muted" style={{ fontSize: 11.5 }}>total · {RANGE_LABEL[range] ?? range}</span>
                         <Delta value={c.wowDelta} invert />
                       </div>
+                      {(c.unpricedSessions ?? 0) > 0 && (
+                        <div style={{ marginTop: 4, fontSize: 11, color: 'var(--warn)' }}
+                          title="Sessions whose model has no pricing row — their cost is unknown and excluded from this total, not $0">
+                          ⚠ excludes {c.unpricedSessions} unpriced session{c.unpricedSessions === 1 ? '' : 's'}
+                        </div>
+                      )}
                     </div>
                     {hover && (
                       <div style={{ textAlign: 'right' }}>
