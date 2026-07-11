@@ -155,8 +155,17 @@ function stubDeps(
 
 describe('specship_jira_start tool registration', () => {
   it('is registered in the static tool surface', () => {
-    const names = getStaticTools().map((t) => t.name);
-    expect(names).toContain('specship_jira_start');
+    // JIRA is an opt-in integration (INTEG-TIER-DOC, REQ-INTEG-001): absent
+    // from the default surface, present once SPECSHIP_INTEGRATIONS enables it.
+    expect(getStaticTools().map((t) => t.name)).not.toContain('specship_jira_start');
+    const prev = process.env.SPECSHIP_INTEGRATIONS;
+    try {
+      process.env.SPECSHIP_INTEGRATIONS = 'jira';
+      expect(getStaticTools().map((t) => t.name)).toContain('specship_jira_start');
+    } finally {
+      if (prev === undefined) delete process.env.SPECSHIP_INTEGRATIONS;
+      else process.env.SPECSHIP_INTEGRATIONS = prev;
+    }
   });
 
   it('requires a key string', () => {

@@ -2547,6 +2547,7 @@ program
     // check targets the project the prompt belongs to, not wherever the hook
     // process happened to spawn.
     let cwd = process.cwd();
+    let transcriptPath: string | null = null;
     const chunks: Buffer[] = [];
     try {
       for await (const c of process.stdin) chunks.push(c as Buffer);
@@ -2556,7 +2557,23 @@ program
       try {
         const parsed = JSON.parse(raw);
         if (typeof parsed?.cwd === 'string' && parsed.cwd.length > 0) cwd = parsed.cwd;
+        if (typeof parsed?.transcript_path === 'string' && parsed.transcript_path.length > 0) {
+          transcriptPath = parsed.transcript_path;
+        }
       } catch { /* not JSON — keep process.cwd() */ }
+    }
+
+    // Record the session's model from the transcript tail (MODCTX-DOC,
+    // REQ-MODCTX-001.A4) — the primary detection channel, present on every
+    // default install. Fires per prompt so mid-session /model switches
+    // track; runs even when the steering text is suppressed, but only in
+    // initialized projects. Best-effort: never fails the hook.
+    if (transcriptPath && fs.existsSync(path.join(cwd, '.specship'))) {
+      try {
+        const { readModelFromTranscript, recordSessionModel } = await import('../mcp/model-context');
+        const model = readModelFromTranscript(transcriptPath);
+        if (model) recordSessionModel(cwd, model);
+      } catch { /* telemetry must never break the hook */ }
     }
 
     const { buildSteeringNudge } = await import('../activation/steering');

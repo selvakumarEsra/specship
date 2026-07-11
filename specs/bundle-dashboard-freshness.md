@@ -13,44 +13,47 @@ The self-contained release bundle (`scripts/build-bundle.sh`) must ship the
 SpecShip Desktop dashboard — freshly built from source, with no stale artifacts
 left over from previous builds.
 
-The dashboard is an Angular app in `packages/web-ng` with its **own**
+The dashboard is a SPA in the top-level `ui/` module with its **own**
 `package-lock.json`; the repo-root `npm ci` does not install its dependencies.
-The bundle build runs `npm run build`, whose `build:web` step
-(`scripts/build-web-bundle.mjs`) invokes the Angular CLI from
-`packages/web-ng/node_modules` and copies the output into `dist/web/`, which the
-bundle then serves. When those dependencies are absent — a clean checkout, or a
-direct `scripts/build-bundle.sh <target>` run — the dashboard build cannot run,
-so the bundle ships a stale or missing UI. The GitHub release workflow works
-around this with a separate `cd packages/web-ng && npm ci` step, but the bundle
-build itself is not self-contained.
+The bundle build runs `npm run build`, whose `build:server` step
+(`scripts/build-server-bundle.mjs`) copies `ui/dist` into `dist/ui`, which the
+bundle then serves. Historically that step only COPIED whatever was lying in
+`ui/dist` — a direct `scripts/build-bundle.sh <target>` run (offline bundles,
+local builds) shipped a stale UI, or none at all, and only the GitHub release
+workflow's separate `cd ui && npm ci && npm run build` step saved releases.
+The bundle build itself must be self-contained. (Updated 2026-07-12 from the
+retired `packages/web-ng` / `build:web` layout — REQ ids preserved.)
 
 <!-- id: REQ-BUNDLE-WEB-001 -->
 ## The dashboard build MUST be self-contained so every bundle ships the freshly built UI
 
-The dashboard build step MUST ensure the dashboard's own dependencies are
-present before building, so a build started without them still produces the
-current UI rather than failing or shipping a stale one. When the Angular CLI is
-not found in `packages/web-ng`, the build MUST install the dashboard
-dependencies (from its own lockfile) and then build; when the CLI is already
-present, it MUST NOT reinstall. The dashboard build MUST run on the default path
-(it is skipped only when explicitly requested), so `dist/web/` reflects the
-current `packages/web-ng` source and rides into the bundle.
+The `build:server` step MUST build the dashboard itself rather than copying a
+pre-existing `ui/dist`: when the UI's build tooling is not installed under
+`ui/node_modules`, it MUST install the dashboard dependencies from `ui/`'s own
+lockfile first; when the tooling is present, it MUST NOT reinstall. On the
+default path the SPA is rebuilt from current `ui/` source so `dist/ui/` always
+reflects it; `SPECSHIP_SKIP_WEB_BUILD=1` is the only opt-out. If no
+`ui/dist/index.html` exists after the build, the step MUST fail loudly —
+a bundle without its dashboard never ships quietly.
 
-The implementation site is `scripts/build-web-bundle.mjs` (the `build:web` step),
-so the fix benefits every caller — `npm run build`, `scripts/build-bundle.sh`,
-and the release workflow alike.
+The implementation site is `scripts/build-server-bundle.mjs` (the
+`build:server` step), so the fix benefits every caller — `npm run build`,
+`scripts/build-bundle.sh`, and the release workflow alike.
+
+implementations:
+  - scripts/build-server-bundle.mjs
 
 ## Acceptance
 <!-- id: REQ-BUNDLE-WEB-001.A1 -->
-- When `packages/web-ng` has no installed dependencies (no Angular CLI under its `node_modules`), the `build:web` step installs them from the dashboard's lockfile and then builds, instead of exiting with an error.
+- When `ui/` has no installed dependencies (no build tooling under its `node_modules`), the `build:server` step installs them from the dashboard's lockfile and then builds, instead of shipping without the SPA.
 <!-- id: REQ-BUNDLE-WEB-001.A2 -->
-- After `scripts/build-bundle.sh <target>` completes on a checkout that started without `packages/web-ng/node_modules`, the staged bundle contains a freshly built `dist/web/index.html`.
+- After `scripts/build-bundle.sh <target>` completes on a checkout that started without `ui/node_modules`, the staged bundle contains a freshly built `lib/dist/ui/index.html`.
 <!-- id: REQ-BUNDLE-WEB-001.A3 -->
-- When the dashboard's Angular CLI is already installed, the build does not reinstall the dependencies (no redundant `npm ci`/`install`).
+- When the dashboard's build tooling is already installed, the build does not reinstall the dependencies (no redundant `npm ci`/`install`).
 <!-- id: REQ-BUNDLE-WEB-001.A4 -->
-- On the default path (with `SPECSHIP_SKIP_WEB_BUILD` unset and no `--skip-build`), the Angular build runs and `dist/web/` is rebuilt from the current `packages/web-ng` source.
+- On the default path (`SPECSHIP_SKIP_WEB_BUILD` unset), the SPA build runs and `dist/ui/` is rebuilt from the current `ui/` source.
 <!-- id: REQ-BUNDLE-WEB-001.A5 -->
-- If the Angular CLI is still missing after the install attempt, the build fails loudly (non-zero exit) rather than silently shipping a stale `dist/web/`.
+- If no `ui/dist/index.html` exists after the build attempt, the step exits non-zero rather than silently shipping a bundle without (or with a stale) dashboard.
 
 <!-- id: REQ-BUNDLE-WEB-002 -->
 ## The bundle build MUST start from a clean `dist/` so no stale artifacts ship

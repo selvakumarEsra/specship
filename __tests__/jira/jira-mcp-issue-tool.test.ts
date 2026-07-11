@@ -87,8 +87,17 @@ function text(result: { content: Array<{ text: string }> }): string {
 
 describe('specship_jira_issue tool registration', () => {
   it('is registered in the static tool surface', () => {
-    const names = getStaticTools().map(t => t.name);
-    expect(names).toContain('specship_jira_issue');
+    // JIRA is an opt-in integration (INTEG-TIER-DOC, REQ-INTEG-001): absent
+    // from the default surface, present once SPECSHIP_INTEGRATIONS enables it.
+    expect(getStaticTools().map(t => t.name)).not.toContain('specship_jira_issue');
+    const prev = process.env.SPECSHIP_INTEGRATIONS;
+    try {
+      process.env.SPECSHIP_INTEGRATIONS = 'jira';
+      expect(getStaticTools().map(t => t.name)).toContain('specship_jira_issue');
+    } finally {
+      if (prev === undefined) delete process.env.SPECSHIP_INTEGRATIONS;
+      else process.env.SPECSHIP_INTEGRATIONS = prev;
+    }
   });
 
   it('requires a key string', () => {

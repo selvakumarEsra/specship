@@ -25,6 +25,11 @@ export function activeRunPath(projectRoot: string): string {
   return path.join(getSpecShipDir(projectRoot), 'session', 'active-run.json');
 }
 
+/** `.specship/session/model.json` — the session's Claude model (MODCTX-DOC). */
+export function modelMarkerPath(projectRoot: string): string {
+  return path.join(getSpecShipDir(projectRoot), 'session', 'model.json');
+}
+
 /**
  * Atomic JSON write (temp-file + rename) so a concurrent status-line read
  * never observes a half-written file (REQ-STATUSLINE-003.A3). Creates the

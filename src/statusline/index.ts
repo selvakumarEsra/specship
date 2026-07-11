@@ -16,6 +16,7 @@ import { readStatuslineCache } from './cache';
 import { readSessionMarker } from './session-marker';
 import { readActiveRun } from './active-run';
 import { readUsageLimits, usageFromStatuslineInput, contextFromStatuslineInput, resolveCtxWarnPct } from './usage-limits';
+import { recordSessionModel } from '../mcp/model-context';
 import { renderSegment } from './render';
 
 export * from './types';
@@ -159,6 +160,11 @@ export function buildSegment(rawStdin: string, noColor = !!process.env.NO_COLOR)
     model || version
       ? { model, dir: abbreviateHome(projectDir), branch: readGitBranch(projectDir), version }
       : null;
+
+  // Record the session's model so the MCP server can compact its output for
+  // lower tiers (MODCTX-DOC, REQ-MODCTX-001). Write-on-change only; failure
+  // never affects the rendered line.
+  if (root && model) recordSessionModel(root, model);
 
   // Usage limits are account-wide (not per-project), so resolve them regardless
   // of whether we found a SpecShip project. Primary source is Claude's own

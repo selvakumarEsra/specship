@@ -106,8 +106,17 @@ const FIELDS = {
 
 describe('specship_jira_pick tool registration', () => {
   it('is registered in the static tool surface', () => {
-    const names = getStaticTools().map(t => t.name);
-    expect(names).toContain('specship_jira_pick');
+    // JIRA is an opt-in integration (INTEG-TIER-DOC, REQ-INTEG-001): absent
+    // from the default surface, present once SPECSHIP_INTEGRATIONS enables it.
+    expect(getStaticTools().map(t => t.name)).not.toContain('specship_jira_pick');
+    const prev = process.env.SPECSHIP_INTEGRATIONS;
+    try {
+      process.env.SPECSHIP_INTEGRATIONS = 'jira';
+      expect(getStaticTools().map(t => t.name)).toContain('specship_jira_pick');
+    } finally {
+      if (prev === undefined) delete process.env.SPECSHIP_INTEGRATIONS;
+      else process.env.SPECSHIP_INTEGRATIONS = prev;
+    }
   });
 
   it('requires a key string', () => {

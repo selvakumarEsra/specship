@@ -7,6 +7,7 @@
 import type SpecShip from '../index';
 import { findNearestSpecShipRoot } from '../directory';
 import { initSession, recordCall } from '../statusline';
+import { detectModelTier, compactToolResult } from './model-context';
 // Lazy-load the heavy SpecShip chain off the MCP startup path — see the same
 // helper in engine.ts. ToolHandler must load to answer tools/list (static
 // schemas), but it must NOT drag in sqlite/query layers before the daemon binds;
@@ -997,6 +998,30 @@ export class ToolHandler {
    * Cost when nothing is pending — the common case — is one boolean check.
    * No I/O, no parsing of markdown beyond a per-pending-file substring scan.
    */
+  /**
+   * Model-aware compaction (MODCTX-DOC, REQ-MODCTX-002/003). Resolves the
+   * session's model tier (status-line marker / SPECSHIP_MODEL; SPECSHIP_COMPACT=0
+   * disables) and, on haiku/sonnet, compresses the response's prose
+   * scaffolding — fenced code stays byte-verbatim. Full tier is identity.
+   */
+  private withModelCompaction(result: ToolResult): ToolResult {
+    if (result.isError) return result;
+    let root: string | null = null;
+    try {
+      root = this.cg?.getProjectRoot() ?? null;
+    } catch {
+      root = null;
+    }
+    const tier = detectModelTier(root);
+    if (tier === 'full') return result;
+    const first = result.content?.[0];
+    if (!first || first.type !== 'text' || typeof first.text !== 'string') return result;
+    return {
+      ...result,
+      content: [{ ...first, text: compactToolResult(first.text, tier) }, ...result.content.slice(1)],
+    };
+  }
+
   private withStalenessNotice(result: ToolResult, projectPath?: string): ToolResult {
     if (result.isError) return result;
 
@@ -1207,7 +1232,12 @@ export class ToolHandler {
           return this.errorResult(`Unknown tool: ${toolName}`);
       }
       const withWorktree = this.withWorktreeNotice(result, args.projectPath as string | undefined);
-      return this.withStalenessNotice(withWorktree, args.projectPath as string | undefined);
+      const withStaleness = this.withStalenessNotice(withWorktree, args.projectPath as string | undefined);
+      // Model-aware compaction (MODCTX-DOC): on haiku/sonnet sessions the
+      // prose scaffolding compresses; code stays byte-verbatim. Only the
+      // code-graph tools reach this funnel — designer/jira returned above
+      // (REQ-MODCTX-004).
+      return this.withModelCompaction(withStaleness);
     } catch (err) {
       return this.errorResult(`Tool execution failed: ${err instanceof Error ? err.message : String(err)}`);
     }

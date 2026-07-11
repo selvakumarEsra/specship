@@ -49,20 +49,45 @@ execFileSync(
   { stdio: 'inherit', cwd: serverPkg },
 );
 
-// Ship the built desktop SPA (REQ-DESKTOP-017.A1): copy ui/dist → dist/ui so
-// the platform tarballs carry it and the server's resolveDefaultWebDir()
-// finds it next to dist/server/. The SPA is the dashboard's only surface
-// (REQ-DESKTOP-033); it's a standalone module with its own install (`cd ui &&
-// npm ci && npm run build` — the Release workflow runs it). When it hasn't
-// been built the server still boots (headless / API only), so this is a
-// warn-and-continue, not a failure.
-const uiDist = path.join(root, 'ui', 'dist');
+// Ship the built desktop SPA (REQ-DESKTOP-017.A1 + BUNDLE-DASHBOARD-DOC,
+// REQ-BUNDLE-WEB-001): copy ui/dist → dist/ui so the platform tarballs carry
+// it and the server's resolveDefaultWebDir() finds it next to dist/server/.
+//
+// SELF-CONTAINED: this step BUILDS the SPA rather than copying whatever
+// happens to be lying in ui/dist — a standalone `scripts/build-bundle.sh`
+// run (offline bundles, local builds) used to silently ship a stale or
+// missing dashboard because only the Release workflow's separate step built
+// it. The ui/ module has its own lockfile: install its deps when the build
+// tool is absent (A1), never reinstall when present (A3), always rebuild
+// from current source on the default path (A4), and FAIL LOUDLY if no
+// index.html exists afterward (A5) — a bundle without its dashboard must
+// never ship quietly. `SPECSHIP_SKIP_WEB_BUILD=1` is the explicit opt-out
+// (dev/CI paths that don't produce shippable artifacts).
+const uiPkg = path.join(root, 'ui');
+const uiDist = path.join(uiPkg, 'dist');
 const uiOut = path.join(root, 'dist', 'ui');
-if (existsSync(path.join(uiDist, 'index.html'))) {
-  cpSync(uiDist, uiOut, { recursive: true });
-  console.log('[build-server-bundle] copied desktop SPA → dist/ui/');
+if (process.env.SPECSHIP_SKIP_WEB_BUILD === '1') {
+  console.warn('[build-server-bundle] SPECSHIP_SKIP_WEB_BUILD=1 — desktop SPA build skipped (dist/ui not refreshed)');
+  if (existsSync(path.join(uiDist, 'index.html'))) {
+    cpSync(uiDist, uiOut, { recursive: true });
+    console.log('[build-server-bundle] copied EXISTING (possibly stale) ui/dist → dist/ui/');
+  }
 } else {
-  console.warn('[build-server-bundle] ui/dist not built — bundle ships without the desktop SPA (cd ui && npm ci && npm run build)');
+  const uiBuildTool = process.platform === 'win32'
+    ? path.join(uiPkg, 'node_modules', '.bin', 'tsc.cmd')
+    : path.join(uiPkg, 'node_modules', '.bin', 'tsc');
+  if (!existsSync(uiBuildTool)) {
+    console.log('[build-server-bundle] ui/ dependencies missing — npm ci (from ui/package-lock.json)');
+    execFileSync('npm', ['ci', '--no-audit', '--no-fund'], { stdio: 'inherit', cwd: uiPkg, shell: process.platform === 'win32' });
+  }
+  console.log('[build-server-bundle] building desktop SPA (ui/)');
+  execFileSync('npm', ['run', 'build'], { stdio: 'inherit', cwd: uiPkg, shell: process.platform === 'win32' });
+  if (!existsSync(path.join(uiDist, 'index.html'))) {
+    console.error('[build-server-bundle] ui build produced no dist/index.html — refusing to ship a bundle without the dashboard');
+    process.exit(1);
+  }
+  cpSync(uiDist, uiOut, { recursive: true });
+  console.log('[build-server-bundle] built + copied desktop SPA → dist/ui/');
 }
 
 // Make the CLI executable (its shebang is preserved by tsc, but the file
