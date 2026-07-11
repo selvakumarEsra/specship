@@ -431,7 +431,7 @@ class ClaudeCodeTarget implements AgentTarget {
       notes.push(
         'Designer integration enabled — EXPERIMENTAL. It drives claude.ai/design through a ' +
         'debug Chrome session (an unofficial interface) and may break without notice when ' +
-        'claude.ai changes. Set up the browser side with `specship designer setup`.',
+        'claude.ai changes. Set up the browser side once with `designer setup`.',
       );
     }
     if (opts.withJira) {
