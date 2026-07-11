@@ -9,6 +9,9 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+
+## [0.16.0] - 2026-07-11
+
 ### Breaking Changes
 
 - **JIRA and Designer are now opt-in integrations.** The core install is 100% local by construction — the tool groups that talk to an external service (JIRA → your Atlassian instance, Designer → claude.ai) are no longer exposed by default. Enable them with `specship install --with-jira` and/or `--with-designer`; a later plain re-install preserves the opt-in. If you used these tools before, re-run install once with the flags (a blocked call tells you exactly this). Designer is labeled experimental — it drives claude.ai through a debug Chrome session and can break without notice. JIRA tools are never auto-allowed, so Claude Code prompts per call.
@@ -633,3 +636,4 @@ Thanks @andreinknv for the substantive draft this release was based on.
 [0.14.2]: https://github.com/selvakumarEsra/specship/releases/tag/v0.14.2
 [0.14.3]: https://github.com/selvakumarEsra/specship/releases/tag/v0.14.3
 [0.15.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.15.0
+[0.16.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.16.0
