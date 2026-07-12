@@ -9,6 +9,9 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### New Features
+
+- **Better guidance on smaller models — and fewer dead ends on every model.** A "not found" from any code-graph tool now names the closest real symbols and ends with a ready-to-send follow-up call instead of leaving the agent to guess. On Haiku sessions, SpecShip goes further: the per-prompt nudge becomes a precise do-this template (and steers away from costly subagent fan-out), call-path answers render as numbered step-by-step hops with each connection explained inline, and the tool menu slims to the three core tools so tool choice stays reliable — all without removing any evidence, and all off on frontier models. The benchmark harness also gained an `EVAL_MODEL` switch so these behaviors are validated per model tier.
 
 ## [0.16.0] - 2026-07-11
 
