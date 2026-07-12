@@ -84,6 +84,7 @@ export class MCPSession {
   private rootsAttempted = false;
   private resolvePromise: Promise<void> | null = null;
   private explicitProjectPath: string | null;
+  private removeTierListener: (() => void) | null = null;
 
   constructor(
     private transport: JsonRpcTransport,
@@ -99,6 +100,13 @@ export class MCPSession {
    */
   start(): void {
     this.transport.start(this.handleMessage.bind(this));
+    // Haiku menu trim changes tools/list on a mid-session /model switch —
+    // tell the client to re-fetch (LOWMODEL-DOC, REQ-LOWMODEL-004.A3).
+    this.removeTierListener = this.engine
+      .getToolHandler()
+      .addTierChangeListener(() => {
+        try { this.transport.notify('notifications/tools/list_changed', {}); } catch { /* session may be closing */ }
+      });
   }
 
   /**
@@ -106,6 +114,8 @@ export class MCPSession {
    * other sessions) or call `process.exit` (the daemon decides when to exit).
    */
   stop(): void {
+    this.removeTierListener?.();
+    this.removeTierListener = null;
     this.transport.stop();
   }
 

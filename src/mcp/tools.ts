@@ -7,7 +7,7 @@
 import type SpecShip from '../index';
 import { findNearestSpecShipRoot } from '../directory';
 import { initSession, recordCall } from '../statusline';
-import { detectModelTier, compactToolResult } from './model-context';
+import { detectModelTier, compactToolResult, type ModelTier } from './model-context';
 // Lazy-load the heavy SpecShip chain off the MCP startup path — see the same
 // helper in engine.ts. ToolHandler must load to answer tools/list (static
 // schemas), but it must NOT drag in sqlite/query layers before the daemon binds;
@@ -791,6 +791,25 @@ export class ToolHandler {
         );
       }
 
+      // Haiku-tier menu trim (LOWMODEL-DOC, REQ-LOWMODEL-004): small-model
+      // tool choice degrades with menu size, so the code-graph group trims
+      // to the core three; spec/link tools and enabled integrations are
+      // untouched. Composes with the tiny-repo gate as an intersection.
+      // Schemas never vary — only the list; `execute()` still answers a
+      // trimmed-away tool for clients that cached the full list (A2).
+      if (detectModelTier(this.cg.getProjectRoot()) === 'haiku') {
+        const HAIKU_CORE = new Set(['specship_explore', 'specship_search', 'specship_node']);
+        const CODE_GRAPH_GROUP = new Set([
+          'specship_explore', 'specship_search', 'specship_node',
+          'specship_callers', 'specship_callees', 'specship_impact',
+          'specship_files', 'specship_status',
+          'specship_maintainability', 'specship_fitness',
+        ]);
+        visible = visible.filter(
+          t => !CODE_GRAPH_GROUP.has(t.name) || HAIKU_CORE.has(t.name)
+        );
+      }
+
       return visible.map(tool => {
         if (tool.name === 'specship_explore') {
           return {
@@ -1004,6 +1023,30 @@ export class ToolHandler {
    * disables) and, on haiku/sonnet, compresses the response's prose
    * scaffolding — fenced code stays byte-verbatim. Full tier is identity.
    */
+  /**
+   * Tier-change listeners (LOWMODEL-DOC, REQ-LOWMODEL-004.A3): the haiku
+   * menu trim changes `tools/list`, so a mid-session /model switch must ride
+   * an MCP `notifications/tools/list_changed`. Sessions subscribe here; the
+   * change is detected on the next code-graph call (the same funnel that
+   * reads the tier for compaction).
+   */
+  private tierListeners = new Set<(tier: ModelTier) => void>();
+  private lastTier: ModelTier | null = null;
+
+  addTierChangeListener(cb: (tier: ModelTier) => void): () => void {
+    this.tierListeners.add(cb);
+    return () => this.tierListeners.delete(cb);
+  }
+
+  private noteTier(tier: ModelTier): void {
+    if (this.lastTier !== null && tier !== this.lastTier) {
+      for (const cb of this.tierListeners) {
+        try { cb(tier); } catch { /* a listener must never break a tool call */ }
+      }
+    }
+    this.lastTier = tier;
+  }
+
   private withModelCompaction(result: ToolResult): ToolResult {
     if (result.isError) return result;
     let root: string | null = null;
@@ -1013,6 +1056,7 @@ export class ToolHandler {
       root = null;
     }
     const tier = detectModelTier(root);
+    this.noteTier(tier);
     if (tier === 'full') return result;
     const first = result.content?.[0];
     if (!first || first.type !== 'text' || typeof first.text !== 'string') return result;
@@ -1261,7 +1305,7 @@ export class ToolHandler {
     });
 
     if (results.length === 0) {
-      return this.textResult(`No results found for "${query}"`);
+      return this.missWithSuggestions(cg, 'Query', query);
     }
 
     // Down-rank generated files within the FTS-returned set so a search
@@ -1278,6 +1322,48 @@ export class ToolHandler {
   }
 
   /**
+   * Anti-flounder miss template (LOWMODEL-DOC, REQ-LOWMODEL-001): a "not
+   * found" that just says "not found" leaves the agent — small models
+   * especially — to guess its next move, and the guess is usually grep/Read.
+   * Instead: name the nearest REAL symbols (token-level lookup, since the
+   * full query already failed FTS+LIKE) and end with a copy-pasteable next
+   * call. Applies at every tier.
+   */
+  private missWithSuggestions(cg: SpecShip, kindLabel: string, query: string): ToolResult {
+    // Split on separators AND camelCase so "AuthServic.logn" still yields
+    // useful probes ("Auth", "Servic", "logn" → LIKE finds AuthService/login).
+    const tokens = [...new Set(
+      query
+        .split(/[\s._:\->#/\\]+/)
+        .flatMap((t) => t.split(/(?=[A-Z])/))
+        .map((t) => t.trim())
+        .filter((t) => t.length >= 3)
+    )].slice(0, 6);
+
+    const seen = new Set<string>();
+    const suggestions: Array<{ name: string; where: string }> = [];
+    for (const token of tokens) {
+      for (const r of cg.searchNodes(token, { limit: 3 })) {
+        const key = r.node.qualifiedName;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        suggestions.push({ name: key, where: `${r.node.filePath}:${r.node.startLine}` });
+        if (suggestions.length >= 4) break;
+      }
+      if (suggestions.length >= 4) break;
+    }
+
+    const lines = [`${kindLabel} "${query}" not found in the index.`];
+    if (suggestions.length > 0) {
+      lines.push(`Closest indexed symbols: ${suggestions.map((s) => `${s.name} (${s.where})`).join(' · ')}`);
+      lines.push(`Next: specship_explore "${suggestions.map((s) => s.name).join(' ')}"`);
+    } else {
+      lines.push('Nothing close in the index either. Next: specship_explore with broader words from the question — it also matches file names and doc text.');
+    }
+    return this.textResult(lines.join('\n'));
+  }
+
+  /**
    * Handle specship_callers
    */
   private async handleCallers(args: Record<string, unknown>): Promise<ToolResult> {
@@ -1289,7 +1375,7 @@ export class ToolHandler {
 
     const allMatches = this.findAllSymbols(cg, symbol);
     if (allMatches.nodes.length === 0) {
-      return this.textResult(`Symbol "${symbol}" not found in the codebase`);
+      return this.missWithSuggestions(cg, 'Symbol', symbol);
     }
 
     // Aggregate callers across all matching symbols
@@ -1324,7 +1410,7 @@ export class ToolHandler {
 
     const allMatches = this.findAllSymbols(cg, symbol);
     if (allMatches.nodes.length === 0) {
-      return this.textResult(`Symbol "${symbol}" not found in the codebase`);
+      return this.missWithSuggestions(cg, 'Symbol', symbol);
     }
 
     // Aggregate callees across all matching symbols
@@ -1359,7 +1445,7 @@ export class ToolHandler {
 
     const allMatches = this.findAllSymbols(cg, symbol);
     if (allMatches.nodes.length === 0) {
-      return this.textResult(`Symbol "${symbol}" not found in the codebase`);
+      return this.missWithSuggestions(cg, 'Symbol', symbol);
     }
 
     // Aggregate impact across all matching symbols
@@ -1510,7 +1596,7 @@ export class ToolHandler {
    * whose qualifiedName contains another named token (`PmsProductServiceImpl::list`),
    * dropping unrelated `OmsOrderService::list`.
    */
-  private buildFlowFromNamedSymbols(cg: SpecShip, query: string): { text: string; pathNodeIds: Set<string>; namedNodeIds: Set<string>; uniqueNamedNodeIds: Set<string> } {
+  private buildFlowFromNamedSymbols(cg: SpecShip, query: string, tier: ModelTier = 'full'): { text: string; pathNodeIds: Set<string>; namedNodeIds: Set<string>; uniqueNamedNodeIds: Set<string> } {
     const EMPTY = { text: '', pathNodeIds: new Set<string>(), namedNodeIds: new Set<string>(), uniqueNamedNodeIds: new Set<string>() };
     try {
       const CALLABLE = new Set(['method', 'function', 'component', 'constructor']);
@@ -1622,8 +1708,19 @@ export class ToolHandler {
         out.push('## Flow (call path among the symbols you queried)', '');
         for (let i = 0; i < best!.length; i++) {
           const step = best![i]!;
-          if (step.edge) { const sy = this.synthEdgeNote(step.edge); out.push(`   ↓ ${sy ? sy.compact : step.edge.kind}`); }
-          out.push(`${i + 1}. ${step.node.name} (${step.node.filePath}:${step.node.startLine})`);
+          if (tier === 'haiku') {
+            // LOWMODEL-DOC REQ-LOWMODEL-003: small models don't synthesize
+            // the flow from evidence — render each hop as ONE explicit line
+            // with its mechanism inline. Additive formatting only; the code
+            // bodies below are identical to the full tier's (A2).
+            const mech = step.edge
+              ? ` — via ${(this.synthEdgeNote(step.edge)?.compact ?? step.edge.kind)}`
+              : '';
+            out.push(`${i + 1}. ${i > 0 ? '→ ' : ''}${step.node.name} (${step.node.filePath}:${step.node.startLine})${mech}`);
+          } else {
+            if (step.edge) { const sy = this.synthEdgeNote(step.edge); out.push(`   ↓ ${sy ? sy.compact : step.edge.kind}`); }
+            out.push(`${i + 1}. ${step.node.name} (${step.node.filePath}:${step.node.startLine})`);
+          }
         }
         out.push('');
       }
@@ -2252,7 +2349,7 @@ export class ToolHandler {
     // Compute the flow spine once — used both to prepend the Flow section (below)
     // and to gate adaptive source sizing: files on the spine get full source,
     // off-spine peers skeletonize.
-    const flow = this.buildFlowFromNamedSymbols(cg, query);
+    const flow = this.buildFlowFromNamedSymbols(cg, query, detectModelTier(cg.getProjectRoot()));
 
     // Polymorphic-sibling detector for adaptive sizing. A class that implements/
     // extends a supertype shared by >= MIN_SIBLINGS classes is one of many
@@ -2826,7 +2923,7 @@ export class ToolHandler {
 
     let matches = this.findSymbolMatches(cg, symbol);
     if (matches.length === 0) {
-      return this.textResult(`Symbol "${symbol}" not found in the codebase`);
+      return this.missWithSuggestions(cg, 'Symbol', symbol);
     }
 
     // Disambiguate a heavily-overloaded name to a specific definition the caller

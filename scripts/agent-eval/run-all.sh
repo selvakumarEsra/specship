@@ -7,6 +7,10 @@
 # Usage: run-all.sh <repo-path> "<question>" [headless|tmux|all]
 # Env:   CG_BIN          specship binary (default: command -v specship)
 #        AGENT_EVAL_OUT  output dir (default: /tmp/agent-eval)
+#        EVAL_MODEL      claude model for BOTH arms (default: opus).
+#                        LOWMODEL-DOC REQ-LOWMODEL-005: pass haiku/sonnet to
+#                        baseline lower tiers; results record the model (the
+#                        BENCH-CLAIM manifest stamps it from the stream).
 set -uo pipefail
 
 REPO="${1:?usage: run-all.sh <repo-path> \"<question>\" [headless|tmux|all]}"
@@ -14,6 +18,7 @@ Q="${2:?question required}"
 MODE="${3:-headless}"
 CG_BIN="${CG_BIN:-$(command -v specship)}"
 OUT="${AGENT_EVAL_OUT:-/tmp/agent-eval}"
+EVAL_MODEL="${EVAL_MODEL:-opus}"
 HARNESS="$(cd "$(dirname "$0")" && pwd)"
 mkdir -p "$OUT"
 
@@ -30,6 +35,7 @@ echo '{"mcpServers":{}}' > "$OUT/mcp-empty.json"
 echo "###### specship: $CG_BIN"
 echo "###### repo:      $REPO"
 echo "###### question:  $Q"
+echo "###### model:     $EVAL_MODEL"
 echo
 
 # Headless arm: claude -p with stream-json -> exact tool sequence + tokens/cost.
@@ -39,7 +45,7 @@ headless() {
   ( cd "$REPO" && claude -p "$Q" \
       --output-format stream-json --verbose \
       --permission-mode bypassPermissions \
-      --model opus \
+      --model "$EVAL_MODEL" \
       --max-budget-usd 4 \
       --strict-mcp-config --mcp-config "$cfg" \
       > "$OUT/run-$label.jsonl" 2>"$OUT/run-$label.err" )
@@ -56,11 +62,11 @@ fi
 
 if [ "$MODE" = tmux ] || [ "$MODE" = all ]; then
   echo "############################## INTERACTIVE [with] ##############################"
-  CLAUDE_EXTRA_ARGS="--model opus --strict-mcp-config --mcp-config $OUT/mcp-specship.json" \
+  CLAUDE_EXTRA_ARGS="--model $EVAL_MODEL --strict-mcp-config --mcp-config $OUT/mcp-specship.json" \
     bash "$HARNESS/itrun.sh" "$REPO" "int-with" "$Q" 2>&1 || echo "[itrun WITH failed]"
   echo
   echo "############################## INTERACTIVE [without] ##############################"
-  CLAUDE_EXTRA_ARGS="--model opus --strict-mcp-config --mcp-config $OUT/mcp-empty.json" \
+  CLAUDE_EXTRA_ARGS="--model $EVAL_MODEL --strict-mcp-config --mcp-config $OUT/mcp-empty.json" \
     bash "$HARNESS/itrun.sh" "$REPO" "int-without" "$Q" 2>&1 || echo "[itrun WITHOUT failed]"
   echo
 fi

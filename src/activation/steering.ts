@@ -13,6 +13,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { detectModelTier } from '../mcp/model-context';
 
 /**
  * The one steering line injected per prompt. Kept short (~40 tokens) — it is
@@ -26,10 +27,24 @@ export const STEERING_TEXT =
   'any Read/Grep — and treat the source it returns as already read.';
 
 /**
+ * The haiku-tier template (LOWMODEL-DOC, REQ-LOWMODEL-002): small models
+ * follow prescriptive templates far better than principles, and fan-out
+ * (subagents) multiplies their cost and confusion. Kept under ~80 tokens
+ * (REQ-LOWMODEL-002.A2).
+ */
+export const STEERING_TEXT_HAIKU =
+  'This project has a SpecShip index. For any code question, call exactly: ' +
+  'mcp__specship__specship_explore with the symbol/file names from the question. ' +
+  'ONE call, then answer from its output — the source it returns is already read. ' +
+  'Do not spawn subagents. Do not Read/Grep files the tool returned.';
+
+/**
  * Decide whether to emit the steering line (REQ-STEER-002): silent unless the
  * project is initialized (`.specship/` exists at cwd), and silent when the
  * user opted out via `SPECSHIP_NO_STEERING=1`. Uninitialized projects and
- * opted-out users get zero prompt noise.
+ * opted-out users get zero prompt noise. Tier-aware (REQ-LOWMODEL-002):
+ * haiku sessions get the prescriptive template; sonnet and frontier keep the
+ * standard line.
  */
 export function buildSteeringNudge(
   cwd: string,
@@ -41,5 +56,5 @@ export function buildSteeringNudge(
   } catch {
     return null;
   }
-  return STEERING_TEXT;
+  return detectModelTier(cwd, env) === 'haiku' ? STEERING_TEXT_HAIKU : STEERING_TEXT;
 }

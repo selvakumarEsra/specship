@@ -44,7 +44,7 @@ applies at EVERY tier (frontier models benefit too); it is the cheapest
 anti-flounder lever.
 
 implementations:
-  - src/mcp/tools.ts:ToolHandler
+  - src/mcp/tools.ts:ToolHandler.missWithSuggestions
 
 ## Acceptance
 <!-- id: REQ-LOWMODEL-001.A1 -->
@@ -116,6 +116,7 @@ intersection.]
 
 implementations:
   - src/mcp/tools.ts:ToolHandler.getTools
+  - src/mcp/tools.ts:ToolHandler.addTierChangeListener
 
 ## Acceptance
 <!-- id: REQ-LOWMODEL-004.A1 -->
