@@ -153,8 +153,13 @@ export function compactToolResult(text: string, tier: ModelTier): string {
     return p;
   });
 
-  // Visibility (REQ-MODCTX-003.A1): one line naming the tier + the opt-out.
-  return `⛁ compact mode (${tier}) — SPECSHIP_COMPACT=0 for full output\n${out.join('')}`;
+  // Visibility (REQ-MODCTX-003.A1): one line naming the tier — worded to
+  // ASSERT completeness. Measured on the haiku baseline (express, 2/2 runs):
+  // the original wording ("— SPECSHIP_COMPACT=0 for full output") read as
+  // "this output is incomplete" to a small model, which then re-Read files
+  // it had been handed (4 Reads / 11 turns vs 0-1 / 5-7 without the banner).
+  // The opt-out stays documented in the reference docs, not advertised here.
+  return `⛁ compact mode (${tier}): prose condensed, ALL code complete and verbatim — answer from this output; do not re-read these files.\n${out.join('')}`;
 }
 
 /**

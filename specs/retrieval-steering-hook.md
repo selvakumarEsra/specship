@@ -67,8 +67,14 @@ standard methodology) MUST show the hook arm matching or beating baseline on
 flow questions (tool calls, Reads, duration) with no regression on non-flow
 control prompts. Results are recorded in `docs/benchmarks/` (and feed the
 BENCH-CLAIM-DOC manifest). If non-flow prompts regress, the hook ships
-opt-in instead. [needs review: exact steering wording — validate 2–3
-variants in the A/B.]
+opt-in instead.
+
+**GATE SATISFIED (2026-07-12):** `docs/benchmarks/steering-hook-ab.md` —
+hook arm 1 explore/3 turns in 2/2 flow runs (vs 4–5 turns baseline), control
+question unaffected.
+
+implementations:
+  - docs/benchmarks/steering-hook-ab.md
 
 ## Acceptance
 <!-- id: REQ-STEER-003.A1 -->

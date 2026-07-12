@@ -109,16 +109,21 @@ implementations:
 <!-- id: REQ-MODCTX-003 -->
 ## Compaction MUST be visible and opt-outable
 
-A compacted response carries a one-line marker naming the tier and the
-opt-out (`SPECSHIP_COMPACT=0` disables compaction at any tier). No
-silently-different output.
+A compacted response carries a one-line marker naming the tier and
+ASSERTING completeness ("all code complete and verbatim"). Measured on the
+haiku baseline (2026-07-12, express 2/2 runs): advertising the opt-out in
+the marker read as "this output is incomplete" to a small model, which then
+re-Read files it had been handed — so the opt-out (`SPECSHIP_COMPACT=0`,
+which disables compaction at any tier) is documented in the reference docs,
+never in the response itself. No silently-different output.
 
 implementations:
   - src/mcp/model-context.ts:compactToolResult
 
 ## Acceptance
 <!-- id: REQ-MODCTX-003.A1 -->
-- A compacted response contains a single compact-mode line naming the tier.
+- A compacted response contains a single compact-mode line naming the tier
+  and asserting completeness; it does not mention the opt-out.
 <!-- id: REQ-MODCTX-003.A2 -->
 - With `SPECSHIP_COMPACT=0`, output is byte-identical to the full tier even
   on haiku.

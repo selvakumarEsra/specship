@@ -159,10 +159,15 @@ describe('compactToolResult (REQ-MODCTX-002/003)', () => {
     expect(s).toContain('`e` (src/e.ts:5)');
   });
 
-  it('003.A1: a compacted response names the tier and the opt-out once', () => {
+  it('003.A1: a compacted response names the tier once and ASSERTS completeness', () => {
     const c = compactToolResult(SAMPLE, 'sonnet');
-    expect(c.startsWith('⛁ compact mode (sonnet) — SPECSHIP_COMPACT=0')).toBe(true);
+    expect(c.startsWith('⛁ compact mode (sonnet):')).toBe(true);
     expect(c.match(/compact mode/g)).toHaveLength(1);
+    // Measured (haiku baseline, express 2/2): advertising the opt-out in the
+    // banner read as "output incomplete" and triggered re-Reads. The banner
+    // must assert completeness and never mention the opt-out.
+    expect(c).toContain('ALL code complete');
+    expect(c).not.toContain('SPECSHIP_COMPACT');
   });
 
   it('collapses blank-line runs in prose but not inside fences', () => {
