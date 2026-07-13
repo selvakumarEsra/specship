@@ -24,10 +24,14 @@ opt-outable, and gated on an A/B reproducing the measured win.
 
 The installer writes a `UserPromptSubmit` hook (idempotent merge into Claude
 `settings.json`, same machinery as the auto-sync and SDD hooks) whose command
-emits one short steering line: for flow/structure/architecture questions,
-call `specship_explore` with the relevant symbol names before any Read/Grep.
-Unlike the opt-in SDD governance tier, this hook is part of the default
-retrieval tier. `specship uninstall` removes it.
+emits one short steering line: before reading or editing ANY code for a task
+(understanding, implementing, fixing, refactoring), call `specship_explore`
+with the relevant symbol/file names first; Read/Grep only what it did not
+return. (Broadened 2026-07-13 from flow-questions-only: adoption telemetry —
+231 prompts/7d, 29% with specship, 41% with Read — showed the Read-heaviest
+prompts are plan-execution and feature/fix prompts, which the narrow wording
+excluded.) Unlike the opt-in SDD governance tier, this hook is part of the
+default retrieval tier. `specship uninstall` removes it.
 
 implementations:
   - src/installer/targets/claude.ts:writeSteerHookEntry

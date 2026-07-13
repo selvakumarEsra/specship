@@ -21,10 +21,11 @@ import { detectModelTier } from '../mcp/model-context';
  * ceiling. Wording is A/B-gated before default-on release (REQ-STEER-003).
  */
 export const STEERING_TEXT =
-  'This project has a SpecShip code-graph index. For structure/flow questions ' +
-  '("how does X work / reach Y", "who calls Z", architecture, impact), call ' +
-  'mcp__specship__specship_explore with the relevant symbol names FIRST — before ' +
-  'any Read/Grep — and treat the source it returns as already read.';
+  'This project has a SpecShip code-graph index. Before reading or editing ANY ' +
+  'code for a task — understanding, implementing, fixing, refactoring — call ' +
+  'mcp__specship__specship_explore with the relevant symbol/file names FIRST. ' +
+  'Treat the source it returns as already read; use Read/Grep only for content ' +
+  'it did not return.';
 
 /**
  * The haiku-tier template (LOWMODEL-DOC, REQ-LOWMODEL-002): small models

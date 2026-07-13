@@ -28,7 +28,10 @@ describe('buildSteeringNudge (REQ-STEER-002)', () => {
     fs.mkdirSync(path.join(dir, '.specship'));
     expect(buildSteeringNudge(dir, {})).toBe(STEERING_TEXT);
     expect(STEERING_TEXT).toContain('specship_explore');
-    expect(STEERING_TEXT).toContain('before');
+    // Broadened wording (REQ-STEER-001, 2026-07-13): covers all code work,
+    // not just flow questions, and keeps the explore-first ordering.
+    expect(STEERING_TEXT).toContain('FIRST');
+    expect(STEERING_TEXT).toMatch(/implementing, fixing/);
   });
 
   it('A2: emits nothing with SPECSHIP_NO_STEERING=1 even when initialized', () => {
