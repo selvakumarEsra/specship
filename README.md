@@ -51,11 +51,13 @@ specship install --no-sdd                                 # retrieval-only (skip
 <details>
 <summary><strong>Environment variables — every runtime switch</strong></summary>
 
-Set these in Claude Code's `settings.json` `env` block (project `./.claude/settings.json` or global `~/.claude/settings.json`) — hooks and the MCP server inherit them:
+Set the behavior switches durably in SpecShip's own settings files — `<repo>/.specship/settings.json` (per project, wins) or `~/.specship/settings.json` (machine-wide) — with env-var names as keys:
 
 ```json
-{ "env": { "SPECSHIP_NO_STEERING": "1" } }
+{ "SPECSHIP_NO_STEERING": "1" }
 ```
+
+An actual environment variable (shell `export`, or Claude Code's `settings.json` `env` block) overrides both files for one-off use.
 
 | Variable | What it does |
 |---|---|

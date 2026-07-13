@@ -19,17 +19,22 @@ The defaults apply uniformly, so committing a dependency or build directory does
 
 ## Environment variables
 
-SpecShip's runtime switches are environment variables. The reliable way to set them for Claude Code sessions is the `env` block in Claude's `settings.json` (project-local `./.claude/settings.json`, or `~/.claude/settings.json` for everywhere) — the MCP server and hooks inherit them:
+SpecShip's runtime switches are environment-variable-shaped, and there are three places to set them — from most to least specific:
+
+1. **An actual environment variable** — a shell `export`, or the `env` block in Claude Code's own `settings.json`. Always wins; use for one-off overrides.
+2. **`<repo>/.specship/settings.json`** — the project's durable defaults; travels with the repo and overrides the machine level.
+3. **`~/.specship/settings.json`** — machine-wide defaults for every project.
+
+The file format is the env-var names as keys, string values:
 
 ```json
 {
-  "env": {
-    "SPECSHIP_NO_STEERING": "1"
-  }
+  "SPECSHIP_NO_STEERING": "1",
+  "SPECSHIP_COMPACT": "0"
 }
 ```
 
-A shell `export` works too for terminal-launched sessions. The switches you'd actually reach for:
+The settings-file chain currently covers the behavior switches (`SPECSHIP_NO_STEERING`, `SPECSHIP_COMPACT`, `SPECSHIP_MODEL`); the remaining variables below are env-only for now. The switches you'd actually reach for:
 
 | Variable | What it does | Default |
 |---|---|---|

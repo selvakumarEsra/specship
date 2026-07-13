@@ -16,7 +16,8 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### New Features
 
 - **The agent is steered to the graph for ALL code work.** The per-prompt nudge now covers implementing, fixing, and refactoring — not just "how does X work" questions — after adoption telemetry showed plan-execution and feature prompts were the heaviest file re-readers. `SPECSHIP_NO_STEERING=1` still turns it off.
-- **Environment variables are documented in one place** — the README, the site's Configuration page (with the `settings.json` `env`-block method), and the generated CLI reference.
+- **Behavior switches can live in SpecShip settings files.** Put env-var-named keys in `<repo>/.specship/settings.json` (per-project, travels with the repo) or `~/.specship/settings.json` (machine-wide) — e.g. `{"SPECSHIP_NO_STEERING": "1"}`. Precedence: an actual environment variable > project file > machine file. Covers the steering, compaction, and model-tier switches.
+- **Environment variables are documented in one place** — the README, the site's Configuration page (settings files + `env`-block methods), and the generated CLI reference.
 
 ## [0.17.0] - 2026-07-13
 

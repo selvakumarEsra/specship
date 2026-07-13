@@ -14,6 +14,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { detectModelTier } from '../mcp/model-context';
+import { resolveSetting } from '../config/runtime-settings';
 
 /**
  * The one steering line injected per prompt. Kept short (~40 tokens) — it is
@@ -49,13 +50,16 @@ export const STEERING_TEXT_HAIKU =
  */
 export function buildSteeringNudge(
   cwd: string,
-  env: NodeJS.ProcessEnv = process.env
+  env: NodeJS.ProcessEnv = process.env,
+  homedir?: string
 ): string | null {
-  if (env.SPECSHIP_NO_STEERING === '1') return null;
+  // RUNSET-DOC: the opt-out resolves env > project .specship/settings.json >
+  // ~/.specship/settings.json, so a repo can silence steering durably.
+  if (resolveSetting('SPECSHIP_NO_STEERING', cwd, env, homedir) === '1') return null;
   try {
     if (!fs.statSync(path.join(cwd, '.specship')).isDirectory()) return null;
   } catch {
     return null;
   }
-  return detectModelTier(cwd, env) === 'haiku' ? STEERING_TEXT_HAIKU : STEERING_TEXT;
+  return detectModelTier(cwd, env, homedir) === 'haiku' ? STEERING_TEXT_HAIKU : STEERING_TEXT;
 }

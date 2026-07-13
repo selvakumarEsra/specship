@@ -17,6 +17,7 @@
 
 import * as fs from 'fs';
 import { modelMarkerPath, writeJsonAtomic, readJsonSafe } from '../statusline/paths';
+import { resolveSetting } from '../config/runtime-settings';
 
 export type ModelTier = 'haiku' | 'sonnet' | 'full';
 
@@ -96,16 +97,20 @@ export function modelTier(model: string | null | undefined): ModelTier {
 }
 
 /**
- * Resolve the active tier for a project (REQ-MODCTX-001):
+ * Resolve the active tier for a project (REQ-MODCTX-001, RUNSET-DOC):
  * `SPECSHIP_COMPACT=0` disables outright; `SPECSHIP_MODEL` overrides;
- * else the session model marker; else `full`.
+ * else the session model marker; else `full`. Both switches resolve
+ * through the settings chain (env > project `.specship/settings.json` >
+ * `~/.specship/settings.json`), so a repo can pin its behavior.
  */
 export function detectModelTier(
   projectRoot: string | null,
-  env: NodeJS.ProcessEnv = process.env
+  env: NodeJS.ProcessEnv = process.env,
+  homedir?: string
 ): ModelTier {
-  if (env.SPECSHIP_COMPACT === '0') return 'full';
-  if (env.SPECSHIP_MODEL) return modelTier(env.SPECSHIP_MODEL);
+  if (resolveSetting('SPECSHIP_COMPACT', projectRoot, env, homedir) === '0') return 'full';
+  const forced = resolveSetting('SPECSHIP_MODEL', projectRoot, env, homedir);
+  if (forced) return modelTier(forced);
   if (!projectRoot) return 'full';
   const marker = readJsonSafe<ModelMarker>(modelMarkerPath(projectRoot));
   return modelTier(marker?.model);
