@@ -6,7 +6,10 @@
       "args": [
         "serve",
         "--mcp"
-      ]
+      ],
+      "env": {
+        "SPECSHIP_INTEGRATIONS": "designer,jira"
+      }
     }
   }
 }

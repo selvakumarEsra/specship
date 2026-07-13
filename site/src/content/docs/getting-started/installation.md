@@ -20,7 +20,7 @@ The installer will:
 - Add the auto-sync hooks (re-index after the agent edits files; catch up on session start).
 - For a project-local install, initialize the current project and build its index.
 
-That's the **retrieval wedge** — everything you need for the agent to explore the index instead of re-reading files, with zero workflow change. The **spec-driven layer** (the `/specship:spec` and `/specship:check` doors plus the "author a spec first" steering) is **opt-in** — add it with `specship install --sdd` when you want it. An existing spec-driven install is preserved on upgrade; it's never silently downgraded.
+A default install gives you the **full surface**: the retrieval layer (the agent explores the index instead of re-reading files, plus a per-prompt nudge steering it there) **and the spec-driven layer** — the `/specship:spec` and `/specship:check` doors plus the "author a spec first" steering. Spec-driven development is on by default as of 0.18; pass `--no-sdd` for a retrieval-only install (the old default). An existing install is preserved on upgrade; it's never silently downgraded.
 
 ## Project-local vs global
 
@@ -31,9 +31,10 @@ Pass `--location global` to write to `~/.claude.json` and `~/.claude/settings.js
 ## Non-interactive (scripting / CI)
 
 ```bash
-specship install --yes                       # project-local, auto-allow on, retrieval only
+specship install --yes                        # project-local, auto-allow on, full surface
 specship install --yes --location global      # all projects
-specship install --sdd                        # ALSO install the spec-driven layer (doors + steering)
+specship install --with-jira --with-designer  # also enable the optional integrations
+specship install --no-sdd                     # retrieval-only (skip the spec-driven layer)
 specship install --no-permissions             # skip the auto-allow list
 specship install --print-config               # print the MCP snippet, no file writes
 ```
@@ -42,7 +43,7 @@ specship install --print-config               # print the MCP snippet, no file w
 |---|---|---|
 | `--location` | `global`, `local` | prompt (highlights `local`) |
 | `--yes` | (boolean) non-interactive | prompt every step → `local` |
-| `--sdd` | (boolean) also install the spec-driven layer (`/specship:spec` + `/specship:check` doors + steering) | off (retrieval only) |
+| `--no-sdd` | (boolean) skip the spec-driven layer (`/specship:spec` + `/specship:check` doors + steering) — retrieval-only | spec-driven layer ON |
 | `--with-jira` | (boolean) enable the optional JIRA integration (talks to your Atlassian instance; never auto-allowed — Claude prompts per call) | off (core stays 100% local) |
 | `--with-designer` | (boolean) enable the optional Designer integration (**experimental** — drives claude.ai/design via a debug Chrome session) | off |
 | `--no-permissions` | (boolean) skip the auto-allow list | permissions on |
@@ -50,7 +51,7 @@ specship install --print-config               # print the MCP snippet, no file w
 
 > Integrations are remembered: a later plain `specship install` preserves an earlier `--with-*` opt-in — it never silently disables one.
 
-The default install also wires a tiny per-prompt nudge that steers Claude Code toward `specship_explore` for structure/flow questions — the pattern that saves the most time. It only speaks in projects with a SpecShip index; set `SPECSHIP_NO_STEERING=1` to turn it off.
+The default install also wires a tiny per-prompt nudge that steers Claude Code toward `specship_explore` before it reads or edits code — the pattern that saves the most time. It only speaks in projects with a SpecShip index; set `SPECSHIP_NO_STEERING=1` to turn it off (see [Configuration](/getting-started/configuration/#environment-variables) for how to set environment variables).
 
 > `--yes` is non-interactive and resolves to a **project-local** install. Pass `--location global` alongside it for the old global behavior.
 

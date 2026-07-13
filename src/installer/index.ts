@@ -246,7 +246,7 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
   // only — the config is per-project (specship.config.json at the project
   // root); a global install gets the one-liner instead. `--yes` keeps the
   // advisory-only default (same posture as the status-line prompt).
-  if (opts.sdd === true) {
+  if (opts.sdd !== false) {
     if (location === 'local' && !useDefaults) {
       const gate = await clack.confirm({
         message: 'Gate `specship check` on drift & behaviour? (recommended — declining keeps every check advisory)',

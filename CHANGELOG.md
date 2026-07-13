@@ -9,6 +9,14 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Breaking Changes
+
+- **Spec-driven development is now installed by default.** A plain `specship install` provisions the full surface — the `/specship:spec` and `/specship:check` doors plus the "author a spec first" steering — alongside retrieval. Pass `--no-sdd` for a retrieval-only install (the previous default); the legacy `--sdd` flag is still accepted. Existing installs are never silently changed on upgrade.
+
+### New Features
+
+- **The agent is steered to the graph for ALL code work.** The per-prompt nudge now covers implementing, fixing, and refactoring — not just "how does X work" questions — after adoption telemetry showed plan-execution and feature prompts were the heaviest file re-readers. `SPECSHIP_NO_STEERING=1` still turns it off.
+- **Environment variables are documented in one place** — the README, the site's Configuration page (with the `settings.json` `env`-block method), and the generated CLI reference.
 
 ## [0.17.0] - 2026-07-13
 

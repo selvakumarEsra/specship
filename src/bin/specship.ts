@@ -2279,7 +2279,8 @@ program
   .option('-l, --location <where>', 'Install location: "global" or "local". Default: prompt (local)')
   .option('-y, --yes', 'Non-interactive: defaults to --location=local, auto-allow on')
   .option('--no-permissions', 'Skip writing the auto-allow permissions list')
-  .option('--sdd', 'Also install the spec-driven-development governance tier (spec/authoring/review/design commands + the spec-author nudge hook). Off by default — a plain install provisions only the retrieval tier.')
+  .option('--sdd', '(default) Install the spec-driven-development governance tier (spec/authoring/review/design commands + the spec-author nudge hook)')
+  .option('--no-sdd', 'Skip the governance tier — retrieval-only install (the pre-0.18 default)')
   .option('--with-jira', 'Enable the optional JIRA integration (talks to your Atlassian instance; off by default — the core install is 100% local)')
   .option('--with-designer', 'Enable the optional Designer integration (EXPERIMENTAL — drives claude.ai/design via a debug Chrome session and may break without notice; off by default)')
   .option('--statusline', 'Wire the SpecShip status-line segment into Claude (skips the prompt; never overwrites an existing status line)')
@@ -2345,7 +2346,9 @@ program
         target: opts.target,
         location: opts.location as 'global' | 'local' | undefined,
         autoAllow,
-        sdd: opts.sdd === true ? true : undefined,
+        // SDD/governance is default-ON (INSTALL-WEDGE-DOC v2): commander's
+        // --no-sdd sets opts.sdd=false; otherwise install the full surface.
+        sdd: opts.sdd === false ? false : true,
         withJira: opts.withJira === true ? true : undefined,
         withDesigner: opts.withDesigner === true ? true : undefined,
         statusLine,

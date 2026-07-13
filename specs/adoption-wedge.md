@@ -3,7 +3,7 @@ id: INSTALL-WEDGE-DOC
 title: Default install protects the retrieval wedge
 owner: core
 priority: high
-version: 1
+version: 2
 ---
 
 <!-- id: INSTALL-WEDGE-DOC -->
@@ -17,46 +17,52 @@ plus the spec-driven-development nudge hook on by default — so a newcomer who
 came for faster retrieval is immediately pushed toward authoring specs, a
 workflow they never asked for.
 
-This scopes the **default** install down to the retrieval tier and makes the
-spec/governance tier (the deep end) an explicit opt-in, so the wedge lands clean
-and depth is a deliberate next step. It is a packaging/onboarding change only —
-no retrieval or governance capability is removed, only re-gated.
+**REVERSED (v2, 2026-07-13, maintainer decision):** the governance tier now
+ships ON by default, with `--no-sdd` as the explicit opt-out. Rationale: the
+retrieval wedge no longer depends on hiding governance — the steering hook
+lands the retrieval value on the first prompt regardless of what else is
+installed, and spec-driven development is the product's core differentiator;
+hiding it by default buried it. The tier CLASSIFICATION and full
+reversibility are retained — only the default flipped.
 
 <!-- id: REQ-WEDGE-001 -->
-## The default install MUST provision only the retrieval tier
+## The default install MUST provision the retrieval AND governance tiers
 
-A plain `specship install` (no extra flags) provisions the retrieval tier — the
-MCP server and its read tools, the retrieval-oriented slash commands, the status
-line, and the initial index — and does not write the governance tier (the
-spec/governance/design slash commands or the spec-nudge hook).
+A plain `specship install` (no extra flags) provisions the full surface: the
+MCP server and its read tools, ALL slash commands (retrieval + the
+spec/authoring/review/design doors), the SDD steering (CLAUDE.md rule +
+spec-nudge hook), and the retrieval steering hook. `--no-sdd` is the explicit
+opt-out that yields a retrieval-only install. (v2 reversal — see the document
+intro; v1 shipped retrieval-only by default.)
 
 implementations:
 - src/installer/targets/claude.ts:writeCommandsEntries
 
 ## Acceptance
 <!-- id: REQ-WEDGE-001.A1 -->
-- After a default install, the MCP server entry, the retrieval read commands, and
-  the status-line wiring are present, and the project is indexed.
+- After a default install, the MCP server entry, ALL slash commands, the SDD
+  steering (CLAUDE.md rule + spec-nudge hook), and the retrieval steering hook
+  are present, and the project is indexed.
 <!-- id: REQ-WEDGE-001.A2 -->
-- After a default install, the spec/governance/design slash commands and the
-  spec-driven-development nudge hook are absent — none are written to the user's
-  config.
+- After `specship install --no-sdd`, the spec/governance/design slash commands
+  and the SDD nudge hook are absent — retrieval-only, exactly the v1 default.
 <!-- id: REQ-WEDGE-001.A3 -->
 - The classification of each shipped command into the retrieval tier vs the
-  governance tier is explicit in the installer, so adding a command forces a
-  deliberate tier choice rather than defaulting into the newcomer's surface.
+  governance tier stays explicit in the installer, so `--no-sdd` remains a
+  clean cut rather than a hand-maintained list.
 
 <!-- id: REQ-WEDGE-002 -->
-## The governance tier MUST be enabled only by an explicit opt-in
+## The governance tier MUST remain idempotent and fully reversible
 
 The spec/governance tier — the spec-authoring/implement/triage/behaviour/domain
-commands and the SDD nudge — is written only when the user explicitly asks for
-it, and that action is idempotent and fully reversible.
+commands and the SDD nudge — installs idempotently and reverses cleanly,
+whether it arrived by default (v2) or by the old `--sdd` opt-in (v1, still
+accepted for compatibility).
 
 ## Acceptance
 <!-- id: REQ-WEDGE-002.A1 -->
-- An explicit opt-in (an install flag and/or an `enable` action) provisions the
-  full governance tier on top of an existing retrieval install.
+- `specship install` (or the legacy `--sdd` flag) provisions the full
+  governance tier on top of an existing retrieval-only install.
 <!-- id: REQ-WEDGE-002.A2 -->
 - Running the opt-in twice is idempotent — a second run reports the governance
   tier unchanged, writing nothing new.

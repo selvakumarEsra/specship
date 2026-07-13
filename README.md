@@ -40,10 +40,35 @@ That symlinks `specship` onto your `PATH` and wires Claude Code using only the b
 ### 2. Wire up Claude Code
 
 ```bash
-specship install
+specship install                                          # full install: retrieval + spec-driven development
+specship install --yes --location local                   # non-interactive, project-local
+specship install --with-jira --with-designer              # also enable the optional integrations
+specship install --no-sdd                                 # retrieval-only (skip the spec-driven layer)
 ```
 
-<sub>Writes the SpecShip MCP server into `~/.claude.json` (global) or `./.mcp.json` (project), plus the auto-allow permissions list into Claude's `settings.json`. Use `--yes` for non-interactive defaults (global location, auto-allow on).</sub>
+<sub>Writes the SpecShip MCP server into `~/.claude.json` (global) or `./.mcp.json` (project-local), the auto-allow permissions list into Claude's `settings.json`, all slash commands, the spec-driven-development steering (on by default; `--no-sdd` opts out), and a per-prompt nudge that steers the agent to the graph before Read/Grep. The two integrations that talk to an external service — **JIRA** (your Atlassian instance) and **Designer** (claude.ai, experimental) — are strictly opt-in via `--with-jira` / `--with-designer`, and a later plain re-install preserves them.</sub>
+
+<details>
+<summary><strong>Environment variables — every runtime switch</strong></summary>
+
+Set these in Claude Code's `settings.json` `env` block (project `./.claude/settings.json` or global `~/.claude/settings.json`) — hooks and the MCP server inherit them:
+
+```json
+{ "env": { "SPECSHIP_NO_STEERING": "1" } }
+```
+
+| Variable | What it does |
+|---|---|
+| `SPECSHIP_NO_STEERING=1` | Turn off the per-prompt "use the graph first" nudge |
+| `SPECSHIP_COMPACT=0` | Disable the smaller-model output compaction entirely |
+| `SPECSHIP_MODEL=<model>` | Force the model tier for compaction (normally auto-detected) |
+| `SPECSHIP_INTEGRATIONS` | Written by the installer for `--with-jira`/`--with-designer` — which optional tool groups the MCP server exposes |
+| `SPECSHIP_WATCH_DEBOUNCE_MS` | Auto-sync debounce window (default 2000, clamped 100ms–60s) |
+| `SPECSHIP_NO_DAEMON=1` | Disable the file watcher (sandboxed environments) |
+
+The full generated list lives in the [CLI reference](https://specship.cc/reference/cli/#environment-variables).
+
+</details>
 
 ### 3. Initialize each project
 

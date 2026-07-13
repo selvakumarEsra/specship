@@ -1,9 +1,9 @@
 ---
 title: Configuration
-description: SpecShip is zero-config — there are no config files.
+description: Zero config files — plus the environment-variable switches for steering, compaction, integrations, and the watcher.
 ---
 
-There isn't any — SpecShip is **zero-config**, with **no config file** to write or keep in sync. Language support is automatic from the file extension; there's nothing to wire up per language.
+SpecShip is **zero-config** — no config file to write or keep in sync; behavior is tuned through a handful of environment variables (below). Language support is automatic from the file extension; there's nothing to wire up per language.
 
 ## What it skips out of the box
 
@@ -16,6 +16,32 @@ There isn't any — SpecShip is **zero-config**, with **no config file** to writ
 To keep something else out, add it to `.gitignore`. To pull a default-excluded directory back **in** (e.g. you really want a vendored dependency indexed), add a negation — `!vendor/`.
 
 The defaults apply uniformly, so committing a dependency or build directory doesn't force it into the graph — the `.gitignore` negation is the explicit opt-in.
+
+## Environment variables
+
+SpecShip's runtime switches are environment variables. The reliable way to set them for Claude Code sessions is the `env` block in Claude's `settings.json` (project-local `./.claude/settings.json`, or `~/.claude/settings.json` for everywhere) — the MCP server and hooks inherit them:
+
+```json
+{
+  "env": {
+    "SPECSHIP_NO_STEERING": "1"
+  }
+}
+```
+
+A shell `export` works too for terminal-launched sessions. The switches you'd actually reach for:
+
+| Variable | What it does | Default |
+|---|---|---|
+| `SPECSHIP_NO_STEERING=1` | Turn off the per-prompt "use the graph first" nudge | steering on |
+| `SPECSHIP_COMPACT=0` | Disable smaller-model output compaction entirely (also disables the tier-specific rendering) | compaction auto by model |
+| `SPECSHIP_MODEL=<id>` | Force the model tier for compaction — normally detected automatically from the session | auto-detect |
+| `SPECSHIP_INTEGRATIONS` | Which optional tool groups the MCP server exposes (`jira`, `designer`). The installer writes this into the MCP entry for `--with-jira` / `--with-designer`; you rarely set it by hand | none (local-only core) |
+| `SPECSHIP_WATCH_DEBOUNCE_MS` | Auto-sync debounce after a file change (clamped 100 ms – 60 s) | `2000` |
+| `SPECSHIP_NO_DAEMON=1` | Disable the file watcher (sandboxed environments; run `specship sync` manually) | watcher on |
+| `SPECSHIP_MCP_TOOLS` | Comma-separated allowlist trimming the exposed MCP tool surface | all tools |
+
+The complete generated list of every `SPECSHIP_*` variable the code reads is in the [CLI reference](/reference/cli/#environment-variables).
 
 ## Where data lives
 

@@ -249,23 +249,28 @@ describe('Claude target — specifics', () => {
     expect(cmds).toContain('specship spec-nudge');
   });
 
-  it('default install provisions ONLY the retrieval tier — no governance commands, no SDD (REQ-WEDGE-001)', () => {
+  it('default install provisions retrieval AND governance (INSTALL-WEDGE-DOC v2, REQ-WEDGE-001.A1)', () => {
     claudeTarget.install('local', { autoAllow: false });
     const cmds = path.join(tmpCwd, '.claude', 'commands', 'specship');
-    // Retrieval tier present — the reads door (under the /specship: namespace).
+    // Full surface: reads door + intent + gate doors.
+    for (const name of ['explore.md', 'spec.md', 'check.md']) {
+      expect(fs.existsSync(path.join(cmds, name))).toBe(true);
+    }
+    // SDD steering present by default: project CLAUDE.md rule + spec-nudge hook.
+    expect(fs.readFileSync(path.join(tmpCwd, 'CLAUDE.md'), 'utf-8')).toContain('SPECSHIP_SDD_START');
+    const settings = JSON.parse(fs.readFileSync(path.join(tmpCwd, '.claude', 'settings.json'), 'utf-8'));
+    const hookCmds = (settings.hooks?.UserPromptSubmit ?? []).flatMap((g: any) => (g.hooks ?? []).map((h: any) => h.command));
+    expect(hookCmds).toContain('specship spec-nudge');
+  });
+
+  it('--no-sdd yields the retrieval-only surface (REQ-WEDGE-001.A2)', () => {
+    claudeTarget.install('local', { autoAllow: false, sdd: false });
+    const cmds = path.join(tmpCwd, '.claude', 'commands', 'specship');
     expect(fs.existsSync(path.join(cmds, 'explore.md'))).toBe(true);
-    // Governance tier absent (REQ-WEDGE-001.A2) — the intent + gate doors.
     for (const name of ['spec.md', 'check.md']) {
       expect(fs.existsSync(path.join(cmds, name))).toBe(false);
     }
-    // SDD steering absent: no project CLAUDE.md, no spec-nudge hook.
     expect(fs.existsSync(path.join(tmpCwd, 'CLAUDE.md'))).toBe(false);
-    const settingsPath = path.join(tmpCwd, '.claude', 'settings.json');
-    if (fs.existsSync(settingsPath)) {
-      const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
-      const hookCmds = (settings.hooks?.UserPromptSubmit ?? []).flatMap((g: any) => (g.hooks ?? []).map((h: any) => h.command));
-      expect(hookCmds).not.toContain('specship spec-nudge');
-    }
   });
 
   it('install copies the specship-explorer subagent asset (INSTALL-BUNDLE-ASSETS REQ-001.A2)', () => {

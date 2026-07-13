@@ -376,11 +376,11 @@ class ClaudeCodeTarget implements AgentTarget {
     // `cg-*` prefix, the folded per-action `ss-*` commands, and (CMD-NS-DOC) the
     // flat door commands superseded by the `specship/` subdir. Self-heals on
     // upgrade so the user's autocomplete doesn't carry stale duplicates.
-    // Governance is opt-in (INSTALL-WEDGE-DOC, REQ-WEDGE-002): the spec /
-    // authoring / review / design commands AND the SDD steering ship together
-    // only when the user explicitly enables them with `--sdd`. A default install
-    // provisions the retrieval tier alone, protecting the wedge (REQ-WEDGE-001).
-    const includeGovernance = opts.sdd === true;
+    // Governance ships BY DEFAULT (INSTALL-WEDGE-DOC v2, REQ-WEDGE-001): the
+    // spec / authoring / review / design commands AND the SDD steering are
+    // part of a plain install; `--no-sdd` (opts.sdd === false) is the explicit
+    // opt-out that yields the old retrieval-only surface.
+    const includeGovernance = opts.sdd !== false;
     const legacyRemoved = cleanupLegacyCommandsEntries(loc);
     for (const f of legacyRemoved) files.push(f);
     for (const f of writeCommandsEntries(loc, includeGovernance)) files.push(f);
