@@ -496,22 +496,35 @@ const CORRECTION_CUE = /^(no\b|don'?t\b|do not\b|never\b|always\b|stop\b|instead
 function ruleRecurringCorrection(db: SqliteDatabase, ctx: ReflectContext, forms: PathForms): Proposal[] {
   const rows = db
     .prepare(
-      `SELECT id, text FROM claude_prompts
+      `SELECT id, session_id, ts, text FROM claude_prompts
        WHERE text IS NOT NULL AND length(text) BETWEEN 12 AND 200
          AND text NOT LIKE '<%' AND text NOT LIKE '%<command-name>%'
          AND is_sidechain = 0
          AND ${IN_PROJECT}
-       ORDER BY ts DESC
+       ORDER BY session_id, ts ASC
        LIMIT 4000`,
     )
-    .all(...forms) as Array<{ id: string; text: string }>;
-  const groups = new Map<string, { count: number; prompts: string[]; sample: string }>();
+    .all(...forms) as Array<{ id: string; session_id: string; ts: number; text: string }>;
+  const groups = new Map<string, { count: number; prompts: string[]; sample: string; context: string }>();
+  let prevInSession: { session: string; text: string } | null = null;
   for (const r of rows) {
     const trimmed = r.text.trim();
-    if (!CORRECTION_CUE.test(trimmed)) continue;
+    const isCorrection = CORRECTION_CUE.test(trimmed);
+    if (!isCorrection) {
+      prevInSession = { session: r.session_id, text: trimmed };
+      continue;
+    }
+    // Corrected-approach context (LEARN-DOC, REQ-LEARN-001): the prompt the
+    // correction FOLLOWED tells us what was being done wrong — capturing it
+    // turns "stop doing X" into "when doing Y, do X-the-right-way".
+    const context =
+      prevInSession && prevInSession.session === r.session_id
+        ? prevInSession.text.split('\n')[0]!.slice(0, 80)
+        : '';
     const key = trimmed.replace(/\s+/g, ' ').toLowerCase();
-    const g = groups.get(key) ?? { count: 0, prompts: [], sample: trimmed };
+    const g = groups.get(key) ?? { count: 0, prompts: [], sample: trimmed, context };
     g.count++;
+    if (!g.context && context) g.context = context;
     if (g.prompts.length < 8) g.prompts.push(r.id);
     groups.set(key, g);
   }
@@ -527,7 +540,9 @@ function ruleRecurringCorrection(db: SqliteDatabase, ctx: ReflectContext, forms:
       nameSeed: `correction-${g.sample}`,
       title: `Recurring correction: "${truncate(g.sample, 48)}"`,
       body: `You've given this correction ${g.count} times. Recording it as a durable preference means you shouldn't have to repeat it.`,
-      content: `Standing user preference (you have repeated this): ${g.sample}`,
+      content:
+        (g.context ? `When doing work like "${g.context}": ` : 'Standing user preference (you have repeated this): ') +
+        g.sample,
       evidence: {
         sessions: [],
         prompts: g.prompts,
