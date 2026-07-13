@@ -30,10 +30,32 @@ describe('Workflow discovery', () => {
     const result = discoverWorkflows(dir);
     expect(result.errors).toEqual([]);
     const names = result.workflows.map((w) => w.workflow.name).sort();
-    expect(names).toEqual(['claude-design-implement', 'spec-author', 'spec-fix', 'spec-implement', 'spec-relink', 'spec-verify']);
+    expect(names).toEqual(['claude-design-implement', 'spec-author', 'spec-fix', 'spec-implement', 'spec-implement-mixed', 'spec-relink', 'spec-verify']);
     for (const w of result.workflows) {
       expect(w.scope).toBe('bundled');
     }
+  });
+
+  it('spec-implement-mixed splits judgment from execution (MIXMODEL-DOC, REQ-MIX-001.A2)', () => {
+    const result = discoverWorkflows(dir);
+    const mixed = result.workflows.find((w) => w.workflow.name === 'spec-implement-mixed')!.workflow;
+    const base = result.workflows.find((w) => w.workflow.name === 'spec-implement')!.workflow;
+    const modelOf = (wf: typeof mixed, id: string) =>
+      (wf.nodes.find((n) => n.id === id) as { model?: string } | undefined)?.model;
+
+    // Judgment pinned up, mechanical steps pinned down.
+    expect(modelOf(mixed, 'plan')).toBe('sonnet');
+    for (const id of ['fetch_spec', 'implement', 'link', 'coverage']) {
+      expect(modelOf(mixed, id)).toBe('haiku');
+    }
+    // Verification and gates are model-free and structurally identical to
+    // spec-implement — correctness comes from tests + the reviewer.
+    for (const id of ['verify', 'approve_plan', 'final_review']) {
+      expect(modelOf(mixed, id)).toBeUndefined();
+      expect(mixed.nodes.find((n) => n.id === id)?.kind).toBe(base.nodes.find((n) => n.id === id)?.kind);
+    }
+    // Same step graph.
+    expect(mixed.nodes.map((n) => n.id)).toEqual(base.nodes.map((n) => n.id));
   });
 
   it('project workflow overrides bundled by name', () => {

@@ -15,6 +15,8 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### New Features
 
+- **`spec-implement-mixed` — frontier judgment, small-model execution.** A new bundled workflow with the same steps and gates as `spec-implement`, but Sonnet runs the planning step while Haiku runs the mechanical ones (implement, link, coverage); the test run and approval gates verify the work externally. Most of the tokens at Haiku prices, with correctness coming from the machinery. The dashboard's Tips also now spot a Haiku/Sonnet session drowning in file re-reads and recommend escalating to a bigger model or this workflow.
+
 - **The agent is steered to the graph for ALL code work.** The per-prompt nudge now covers implementing, fixing, and refactoring — not just "how does X work" questions — after adoption telemetry showed plan-execution and feature prompts were the heaviest file re-readers. `SPECSHIP_NO_STEERING=1` still turns it off.
 - **Behavior switches can live in SpecShip settings files.** Put env-var-named keys in `<repo>/.specship/settings.json` (per-project, travels with the repo) or `~/.specship/settings.json` (machine-wide) — e.g. `{"SPECSHIP_NO_STEERING": "1"}`. Precedence: an actual environment variable > project file > machine file. Covers the steering, compaction, and model-tier switches.
 - **Environment variables are documented in one place** — the README, the site's Configuration page (settings files + `env`-block methods), and the generated CLI reference.

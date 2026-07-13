@@ -1,0 +1,197 @@
+name: spec-implement-mixed
+description: Implement a spec with mixed models — sonnet plans, haiku executes, tests + gates verify. Same steps and gates as spec-implement at a fraction of the token cost.
+tags: [spec, default, mixed-model]
+requires: [specship, git]
+
+worktree:
+  enabled: true
+
+inputs:
+  - name: SPEC_ID
+    description: The spec ID to implement (e.g. REQ-AUTH-005)
+    required: true
+
+systemPromptAppend: |
+  You are implementing a specific requirement. Before editing code, call
+  specship_spec($INPUT.SPEC_ID) to see the spec body and any code it
+  already links to. After editing, call specship_link_assert with the
+  spec_id and the symbol you implemented BEFORE reporting done.
+
+nodes:
+  - id: fetch_spec
+    # MIXMODEL-DOC: mechanical step → haiku
+    model: haiku
+    kind: prompt
+    output_type: spec_summary
+    allowed_tools:
+      - mcp__specship__specship_spec
+      - mcp__specship__specship_explore
+    prompt: |
+      Spec ID: $INPUT.SPEC_ID
+
+      Call specship_spec to fetch the spec. Then call specship_explore on
+      a small bag of terms drawn from the spec title and acceptance
+      criteria to find the relevant code area.
+
+      Output: a short summary (≤300 words) of (a) what the spec asks for,
+      (b) which code areas / symbols are most relevant, and (c) whether
+      any code currently claims to implement it (look at linked_code).
+
+  - id: plan
+    # MIXMODEL-DOC: judgment step → sonnet
+    model: sonnet
+    kind: prompt
+    depends_on: [fetch_spec]
+    output_type: plan
+    allowed_tools:
+      - mcp__specship__specship_explore
+      - mcp__specship__specship_node
+      - mcp__specship__specship_spec
+      - Read
+    prompt: |
+      Based on this spec summary, write a concrete implementation plan:
+
+      $fetch_spec.output
+
+      The plan should list:
+      - Files to create or modify (with project-relative paths)
+      - Specific functions/methods/classes to add or change
+      - Tests to add or update
+      - Order of changes
+
+      Keep it tight (≤500 words). Do NOT edit code in this step.
+
+  - id: approve_plan
+    kind: approval
+    depends_on: [plan]
+    message: |
+      Plan ready for $INPUT.SPEC_ID. Review the plan output and approve
+      to proceed with implementation, or reject with feedback to revise.
+    capture_response: true
+    on_reject:
+      prompt: |
+        The plan was rejected with this feedback. Revise:
+
+        $approve_plan.output
+      max_attempts: 3
+
+  - id: implement
+    # MIXMODEL-DOC: mechanical step → haiku
+    model: haiku
+    kind: prompt
+    depends_on: [approve_plan]
+    output_type: diff
+    allowed_tools:
+      - Read
+      - Edit
+      - Write
+      - Bash
+      - mcp__specship__specship_explore
+      - mcp__specship__specship_node
+      - mcp__specship__specship_spec
+    prompt: |
+      Implement the approved plan. Follow it closely.
+
+      Plan:
+      $plan.output
+
+      Approval feedback (if any):
+      $approve_plan.output
+
+      When done, output a short diff summary (which files changed and why).
+
+  - id: verify
+    kind: bash
+    depends_on: [implement]
+    output_type: test_results
+    timeout: 600000
+    bash: |
+      # Run the project's test suite. The verify node's exit code drives
+      # the gating for the link node — non-zero halts the workflow.
+      # The VERIFY_RESULT marker is the machine-readable contract the link
+      # node routes on (REQ-IMPLINT-001.A1): a skipped run must never be
+      # mistaken for a passing one.
+      if [ -f package.json ]; then
+        # A fresh worktree has no node_modules/ or build output — a verify
+        # failure must mean the tests failed, not that the environment was
+        # missing (WF-REJECT-DOC, REQ-WFREJ-005).
+        if [ ! -d node_modules ]; then npm ci --no-audit --no-fund || npm install --no-audit --no-fund; fi
+        npm run build --if-present
+        if npm test; then echo "VERIFY_RESULT=ran-and-passed"; else echo "VERIFY_RESULT=ran-and-failed"; exit 1; fi
+      elif [ -f Cargo.toml ]; then
+        if cargo test; then echo "VERIFY_RESULT=ran-and-passed"; else echo "VERIFY_RESULT=ran-and-failed"; exit 1; fi
+      elif [ -f pyproject.toml ] || [ -f requirements.txt ]; then
+        if python -m pytest; then echo "VERIFY_RESULT=ran-and-passed"; else echo "VERIFY_RESULT=ran-and-failed"; exit 1; fi
+      else
+        echo "no recognised test framework; tests did NOT run"
+        echo "VERIFY_RESULT=skipped"
+      fi
+
+  - id: link
+    # MIXMODEL-DOC: mechanical step → haiku
+    model: haiku
+    kind: prompt
+    depends_on: [verify]
+    output_type: link_summary
+    allowed_tools:
+      - mcp__specship__specship_link_assert
+      - mcp__specship__specship_link_verify
+      - mcp__specship__specship_spec
+    prompt: |
+      Assert spec→code links for the changes made in the implement step.
+      For each symbol that implements $INPUT.SPEC_ID (or its child
+      requirements), call specship_link_assert with the spec_id, the
+      file path, and the qualified symbol name.
+
+      Then route on the VERIFY_RESULT marker in the test results below
+      (REQ-IMPLINT-001):
+      - VERIFY_RESULT=ran-and-passed → after each assert, call
+        specship_link_verify with result="pass".
+      - VERIFY_RESULT=skipped → do NOT call specship_link_verify at all;
+        the links stay in the `implemented` state. Tests that did not run
+        are never reported as passing.
+
+      Implementation diff summary:
+      $implement.output
+
+      Test results:
+      $verify.output
+
+      Output: a short list of "spec_id → file:symbol [verified|implemented]"
+      lines, ending with one line stating whether verification ran or was
+      skipped.
+
+  - id: coverage
+    # MIXMODEL-DOC: mechanical step → haiku
+    model: haiku
+    kind: prompt
+    depends_on: [link]
+    output_type: coverage_summary
+    allowed_tools:
+      - mcp__specship__specship_spec
+    prompt: |
+      Report acceptance-criteria test coverage for $INPUT.SPEC_ID
+      (REQ-IMPLINT-002). Call specship_spec with the spec_id, count its
+      acceptance criteria (the .A<N> children; if the spec has none,
+      treat the requirement itself as one criterion), and count how many
+      of them carry a `tests`-kind link.
+
+      Output exactly one or two lines:
+      - "N of M acceptance criteria for $INPUT.SPEC_ID have linked tests."
+      - If N < M, add: "Close the gap with /specship:spec behaviour
+        $INPUT.SPEC_ID."
+
+  - id: final_review
+    kind: approval
+    depends_on: [coverage]
+    message: |
+      Implementation complete for $INPUT.SPEC_ID.
+
+      Links asserted:
+      $link.output
+
+      Acceptance-criteria test coverage:
+      $coverage.output
+
+      Approve to finalize the run (worktree is left for you to inspect
+      and merge), or reject to abandon.

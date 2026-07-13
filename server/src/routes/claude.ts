@@ -1032,6 +1032,33 @@ export async function registerClaudeRoutes(app: FastifyInstance): Promise<void> 
       });
     }
 
+    // Rule 4: small-model flounder → escalate (MIXMODEL-DOC, REQ-MIX-002).
+    // A haiku/sonnet session drowning in file Reads is the re-read spiral —
+    // the task shape wants a bigger model, or the same work packaged as the
+    // mixed-model workflow (fresh context per step + external verification).
+    const flounder = db.prepare(`
+      SELECT s.id, s.last_model,
+             (SELECT COUNT(*) FROM claude_tool_calls t WHERE t.session_id = s.id AND t.tool_name = 'Read') AS reads
+      FROM claude_sessions s
+      WHERE s.project_path IN (?, ?)
+        AND (LOWER(COALESCE(s.last_model,'')) LIKE '%haiku%' OR LOWER(COALESCE(s.last_model,'')) LIKE '%sonnet%')
+      ORDER BY s.started_at DESC
+      LIMIT 30
+    `).all(realRoot, mangledRoot) as Array<{ id: string; last_model: string; reads: number }>;
+    for (const r of flounder) {
+      if (r.reads < 15) continue;
+      tips.push({
+        id: 'model_escalation:' + r.id,
+        severity: 'warn',
+        icon: 'bot',
+        title: `${r.reads} file Reads on a ${/haiku/i.test(r.last_model) ? 'Haiku' : 'Sonnet'} session — this task wants a bigger model or a workflow`,
+        why: 'Small models flounder on plan-and-synthesize tasks: they re-read files instead of reasoning over them. Escalate the judgment, keep the typing cheap.',
+        evidence: { session: r.id, detail: `${r.last_model}: ${r.reads} Read calls` },
+        fix: 'specship workflow run spec-implement-mixed -i SPEC_ID=<id>   # sonnet plans, haiku executes, tests verify',
+        saving: 'flounder turns cost more than a bigger model',
+      });
+    }
+
     // Sort: errors before warns before info, then within bucket by saving heuristic.
     const order: Record<string, number> = { error: 0, warn: 1, info: 2 };
     tips.sort((a, b) => (order[a.severity as string] ?? 9) - (order[b.severity as string] ?? 9));

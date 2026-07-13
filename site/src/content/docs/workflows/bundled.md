@@ -9,6 +9,7 @@ SpecShip ships these workflows out of the box. They're stored in the npm package
 specship workflow list
 # NAME                     TIER     DESC
 # spec-implement           bundled  Plan → implement → test → review → merge
+# spec-implement-mixed     bundled  Sonnet plans, Haiku executes, tests + gates verify
 # spec-fix                 bundled  Diagnose a drifted/broken link → fix → re-verify
 # spec-verify              bundled  Re-run tests, promote implemented → verified
 # spec-relink              bundled  Re-attach an orphan after a refactor
@@ -39,6 +40,16 @@ The most-used workflow. End-to-end "take this requirement, ship code for it" pip
 - Reviewer rejects at step 5 → the run **parks** with `status: rejected`, worktree and artifacts intact. `specship workflow resume <runId>` drives the gate's revise prompt with your rejection comment, then pauses again for re-review. Rejection is feedback, never lost work.
 - Anything else fails → worktree preserved, error stored in `workflow_runs.errorMessage`.
 - Worktrees are only ever deleted by an explicit `specship workflow purge <runId>` — no status transition destroys work as a side effect.
+
+## `spec-implement-mixed`
+
+The same steps and gates as `spec-implement`, with per-node models chosen for what each step actually needs: **`plan` runs on Sonnet** (the judgment-heavy step), while `fetch_spec`, `implement`, `link`, and `coverage` **run on Haiku** (mechanical: summarize, type the planned code, assert links, count). The bash `verify` step and both approval gates are identical — correctness comes from the tests and the reviewer, never from the executor's self-assessment. That's the small-model sweet spot: fresh context per step, cheap tokens for the typing, external verification catching mistakes.
+
+```bash
+specship workflow run spec-implement-mixed -i SPEC_ID=REQ-AUTH-005
+```
+
+Use it when token cost matters and the plan is the hard part; use plain `spec-implement` when you want one capable model end-to-end.
 
 ## `spec-fix`
 

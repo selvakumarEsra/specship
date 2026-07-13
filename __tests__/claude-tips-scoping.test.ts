@@ -85,3 +85,38 @@ describe('GET /api/claude/tips project scoping (REQ-DASHINT-006)', () => {
     expect(wasteful.some((t) => t.id.includes('own-mangled'))).toBe(true);
   });
 });
+
+describe('model-escalation tip (MIXMODEL-DOC, REQ-MIX-002)', () => {
+  function seedFlounder(sessionId: string, model: string, reads = 16): void {
+    seedSession(sessionId, OWN_ROOT);
+    db.prepare('UPDATE claude_sessions SET last_model = ? WHERE id = ?').run(model, sessionId);
+    // Distinct files per Read so the same-file wasteful_reads rule stays out
+    // of the way — this rule is about session-level volume, not one file.
+    for (let i = 0; i < reads; i++) {
+      db.prepare(`INSERT INTO claude_tool_calls (prompt_id, session_id, assistant_uuid, tool_name, input_summary, ts)
+                  VALUES (?, ?, ?, 'Read', ?, ?)`)
+        .run(`p-${sessionId}`, sessionId, `a-${sessionId}-${i}`, `src/f${i}.ts`, 1500 + i);
+    }
+  }
+
+  it('A1: a floundering haiku session gets the escalation tip naming the mixed workflow', async () => {
+    seedFlounder('haiku-s', 'claude-haiku-4-5-20251001');
+    const tips = await fetchTips();
+    const esc = tips.filter((t) => t.id.startsWith('model_escalation:'));
+    expect(esc).toHaveLength(1);
+    expect(esc[0].title).toContain('Haiku');
+    expect((esc[0] as { fix?: string }).fix).toContain('spec-implement-mixed');
+  });
+
+  it('A1: the same Read volume on a frontier model produces no escalation tip', async () => {
+    seedFlounder('fable-s', 'claude-fable-5');
+    const tips = await fetchTips();
+    expect(tips.filter((t) => t.id.startsWith('model_escalation:'))).toEqual([]);
+  });
+
+  it('below the threshold, no tip', async () => {
+    seedFlounder('haiku-quiet', 'claude-haiku-4-5', 8);
+    const tips = await fetchTips();
+    expect(tips.filter((t) => t.id.startsWith('model_escalation:'))).toEqual([]);
+  });
+});
