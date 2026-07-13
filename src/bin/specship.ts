@@ -1378,7 +1378,9 @@ program
   .command('reflect [path]')
   .description('Mine ingested transcripts for self-improvement proposals (memory rules, skills, hooks)')
   .option('-j, --json', 'Output as JSON')
-  .action(async (pathArg: string | undefined, options: { json?: boolean }) => {
+  .option('--capture', 'Capture a routine as a skill proposal: --title required, content on stdin (LEARN-DOC)')
+  .option('--title <title>', 'Title for --capture')
+  .action(async (pathArg: string | undefined, options: { json?: boolean; capture?: boolean; title?: string }) => {
     const projectPath = resolveProjectPath(pathArg);
     try {
       if (!isInitialized(projectPath)) {
@@ -1387,6 +1389,33 @@ program
       }
       const { default: SpecShip } = await loadSpecShip();
       const cg = await SpecShip.open(projectPath);
+
+      // Explicit capture door (LEARN-DOC, REQ-LEARN-002): crystallize a
+      // distilled routine into a human-gated skill proposal. Content on
+      // stdin so multi-line routines survive shell quoting.
+      if (options.capture) {
+        if (!options.title || !options.title.trim()) {
+          error('--capture requires --title "<what this routine does>"');
+          process.exit(1);
+        }
+        const chunks: Buffer[] = [];
+        for await (const c of process.stdin) chunks.push(c as Buffer);
+        const content = Buffer.concat(chunks).toString('utf-8').trim();
+        if (!content) {
+          error('--capture expects the routine content on stdin (pipe or heredoc)');
+          process.exit(1);
+        }
+        const p = cg.reflectCapture({ title: options.title, content });
+        if (options.json) {
+          console.log(JSON.stringify(p, null, 2));
+        } else {
+          info(`Captured as proposal ${p.contentHash.slice(0, 12)} (${p.state}): ${p.title}`);
+          info('Review and apply it from the dashboard Improvements page (preview-diff → confirm).');
+        }
+        cg.destroy();
+        return;
+      }
+
       const result = cg.reflectAnalyze();
 
       if (options.json) {

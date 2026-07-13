@@ -12,6 +12,7 @@
 
 import { SqliteDatabase } from '../db/sqlite-adapter';
 import { mineProposals } from './miner';
+import { buildProposal } from './targets';
 import { ReflectStore } from './store';
 import { Proposal, ReflectContext } from './types';
 
@@ -58,4 +59,37 @@ export function sweep(
     }
   }
   return { open: store.list('open'), empty: mined.length === 0, notify };
+}
+
+/**
+ * Explicit capture (LEARN-DOC, REQ-LEARN-002): crystallize a workflow the
+ * user/agent just performed into a `skill` proposal ON DEMAND — same store,
+ * same content-hash convergence, same human gate as mined proposals. The
+ * evidence detail marks the explicit provenance so the Improvements surface
+ * can distinguish "you asked for this" from "the miner found this".
+ */
+export function capture(
+  db: SqliteDatabase,
+  ctx: ReflectContext,
+  input: { title: string; content: string },
+  now: () => number = () => Date.now(),
+): Proposal {
+  const store = new ReflectStore(db, now);
+  const title = input.title.trim();
+  const proposal = buildProposal(ctx, {
+    type: 'skill',
+    severity: 'info',
+    nameSeed: `learn-${title}`,
+    title: `Captured routine: ${title}`,
+    body: 'Explicitly captured via /specship:learn — a distilled routine from a real session, awaiting your review.',
+    content: input.content.trim(),
+    evidence: {
+      sessions: [],
+      prompts: [],
+      detail: 'explicitly captured (/specship:learn)',
+    },
+  });
+  store.upsertMined([proposal]);
+  // Return the stored row (state may differ if it already existed).
+  return store.list().find((p) => p.contentHash === proposal.contentHash) ?? proposal;
 }

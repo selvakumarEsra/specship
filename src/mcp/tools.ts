@@ -8,6 +8,8 @@ import type SpecShip from '../index';
 import { findNearestSpecShipRoot } from '../directory';
 import { initSession, recordCall } from '../statusline';
 import { detectModelTier, compactToolResult, type ModelTier } from './model-context';
+import { projectPathForms } from '../reflect/miner';
+import { sessionsTouchingFiles, sessionOutcome } from '../reflect/session-outcomes';
 // Lazy-load the heavy SpecShip chain off the MCP startup path — see the same
 // helper in engine.ts. ToolHandler must load to answer tools/list (static
 // schemas), but it must NOT drag in sqlite/query layers before the daemon binds;
@@ -1765,6 +1767,42 @@ export class ToolHandler {
    * CLAUDE.md). Facts are few and human-authored, so a linear scan + token
    * match is cheap and precise enough.
    */
+  /**
+   * Prior-work recall (LEARN-DOC, REQ-LEARN-003): sessions from this
+   * project's ingested task history that EDITED the files this exploration
+   * touches — date, opening prompt, files, overlapping workflow runs.
+   * Deterministic join over `claude_*` + `workflow_runs`; scoped to this
+   * project in both path forms; silent when the tables are absent (ingest
+   * never ran) or nothing matches. Capped tiny so the hot path stays lean.
+   */
+  private buildPriorWorkSection(cg: SpecShip, subgraph: Subgraph): string {
+    try {
+      const db = cg.getSpecQueries()['db'] as unknown as import('../db/sqlite-adapter').SqliteDatabase;
+      const files = [...new Set([...subgraph.nodes.values()].map((n) => n.filePath))].slice(0, 12);
+      const forms = projectPathForms(cg.getProjectRoot());
+      const sessions = sessionsTouchingFiles(db, forms, files);
+      if (sessions.length === 0) return '';
+      const linesOut: string[] = ['## Prior work', '_Past sessions that edited these files (local task history — deterministic, from ingested transcripts)._', ''];
+      for (const id of sessions) {
+        const o = sessionOutcome(db, id);
+        if (!o) continue;
+        const date = o.startedAt ? new Date(o.startedAt).toISOString().slice(0, 10) : '—';
+        const runs = o.workflowRuns.length
+          ? ` · runs in window: ${o.workflowRuns.map((r) => `${r.name} (${r.status})`).join(', ')}`
+          : '';
+        const links = o.linksAsserted > 0 ? ` · ${o.linksAsserted} spec link(s) asserted` : '';
+        linesOut.push(
+          `- ${date} · session ${o.sessionId.slice(0, 8)} · "${o.firstPrompt || '(no prompt text)'}" · edited: ${o.filesEdited.slice(0, 5).map((f) => f.split('/').pop()).join(', ')}${o.filesEdited.length > 5 ? ` +${o.filesEdited.length - 5}` : ''}${runs}${links}`
+        );
+      }
+      if (linesOut.length <= 3) return '';
+      linesOut.push('');
+      return linesOut.join('\n');
+    } catch {
+      return ''; // recall must never break an exploration
+    }
+  }
+
   private buildDomainFactsSection(cg: SpecShip, query: string): string {
     let facts;
     try {
@@ -2303,6 +2341,13 @@ export class ToolHandler {
     // truncation that drops trailing file sections.
     const domainFacts = this.buildDomainFactsSection(cg, query);
     if (domainFacts) lines.push(domainFacts);
+
+    // Prior work (LEARN-DOC, REQ-LEARN-003): if past sessions edited the
+    // files this exploration resolves to, surface them inline — the tier-3
+    // task-history recall, riding the same additive/silent pattern as domain
+    // facts (no new tool; one indexed query; nothing on no-match).
+    const priorWork = this.buildPriorWorkSection(cg, subgraph);
+    if (priorWork) lines.push(priorWork);
 
     // Blast radius (always-on, compact): for the entry symbols, who depends on
     // them + which tests cover them — locations only, no source — so the agent

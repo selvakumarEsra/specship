@@ -35,6 +35,8 @@ const THRESHOLDS = {
   heavyOutputBytes: 50000, // R9: a Bash call whose result exceeds N "tokens"
   heavyOutputMin: 2, // R9: …seen ≥N times
   refDocSessions: 3, // R10: a doc file Read across ≥N distinct sessions
+  recipeMinSteps: 5, // R11: completed workflow run with ≥N finished steps (LEARN-DOC)
+  workaroundSessions: 2, // R12: the corrected command form recurs in ≥N sessions (LEARN-DOC)
 };
 
 /** Per-rule cap so a noisy corpus can't flood the Improvements list. */
@@ -92,6 +94,10 @@ export function mineProposals(db: SqliteDatabase, ctx: ReflectContext): Proposal
   out.push(...ruleSpecshipCold(db, ctx, forms));
   out.push(...ruleHeavyOutput(db, ctx, forms));
   out.push(...ruleReferenceDoc(db, ctx, forms));
+  // Round 4 — SUCCESS crystallization (LEARN-DOC, REQ-LEARN-001): mine what
+  // WORKED, not only what wasted. Same human-gated proposal pipeline.
+  out.push(...ruleCompletedRunRecipe(db, ctx));
+  out.push(...ruleErrorWorkaround(db, ctx, forms));
   return out;
 }
 
@@ -274,6 +280,113 @@ function ruleRepeatedCommands(db: SqliteDatabase, ctx: ReflectContext, forms: Pa
       },
     }),
   );
+}
+
+/**
+ * R11 → skill: a workflow run that COMPLETED with ≥5 finished steps is a
+ * proven recipe (LEARN-DOC, REQ-LEARN-001.A1) — crystallize it so the next
+ * same-shaped task starts from the routine instead of rediscovering it.
+ * Success signal is the run's own recorded status; nothing is inferred from
+ * transcript data that can't prove it. workflow_runs is project-local (it
+ * lives in this project's DB), so no cross-project predicate is needed.
+ */
+function ruleCompletedRunRecipe(db: SqliteDatabase, ctx: ReflectContext): Proposal[] {
+  if (!tableExists(db, 'workflow_runs')) return [];
+  const rows = db
+    .prepare(
+      `SELECT id, workflow_name, inputs, metadata FROM workflow_runs
+       WHERE status = 'completed'
+       ORDER BY completed_at DESC
+       LIMIT 20`,
+    )
+    .all() as Array<{ id: string; workflow_name: string; inputs: string | null; metadata: string | null }>;
+  const out: Proposal[] = [];
+  for (const r of rows) {
+    let steps: string[] = [];
+    let inputs: Record<string, string> = {};
+    try { steps = (JSON.parse(r.metadata ?? '{}') as { completedNodes?: string[] }).completedNodes ?? []; } catch { /* unparseable metadata — skip */ }
+    try { inputs = JSON.parse(r.inputs ?? '{}') as Record<string, string>; } catch { /* unparseable inputs — skip */ }
+    if (steps.length < THRESHOLDS.recipeMinSteps) continue;
+    const inputKeys = Object.keys(inputs);
+    out.push(
+      buildProposal(ctx, {
+        type: 'skill',
+        severity: 'info',
+        nameSeed: `recipe-${r.workflow_name}`,
+        title: `Crystallize the completed ${r.workflow_name} run as a recipe`,
+        body: `Run ${r.id.slice(0, 8)} completed all ${steps.length} steps. Capturing the routine makes the next same-shaped task start from a proven recipe.`,
+        content:
+          `Proven recipe from a completed run of \`${r.workflow_name}\`` +
+          (inputKeys.length ? ` (inputs: ${inputKeys.join(', ')})` : '') +
+          `:\n\n` +
+          steps.map((st, i) => `${i + 1}. ${st}`).join('\n') +
+          `\n\nRe-run the routine with: \`specship workflow run ${r.workflow_name}${inputKeys.map((k) => ` -i ${k}=<value>`).join('')}\``,
+        evidence: {
+          sessions: [],
+          prompts: [],
+          detail: `workflow_runs ${r.id}: ${r.workflow_name} completed, ${steps.length} steps`,
+        },
+      }),
+    );
+    if (out.length >= PER_RULE_LIMIT) break;
+  }
+  return out;
+}
+
+/**
+ * R12 → memory_rule: error→workaround pair (LEARN-DOC, REQ-LEARN-001.A2).
+ * Transcripts carry no exit codes, so "failing-shaped" is structural: within
+ * a session, the SAME first token re-run as a DIFFERENT full command in the
+ * next Bash call, where the later variant then recurs (normalized) across
+ * ≥2 distinct sessions — the working form the agent converged on.
+ * Conservative by design; the threshold is spec-flagged for tuning.
+ */
+function ruleErrorWorkaround(db: SqliteDatabase, ctx: ReflectContext, forms: PathForms): Proposal[] {
+  const rows = db
+    .prepare(
+      `SELECT session_id, input_summary AS cmd, ts FROM claude_tool_calls
+       WHERE tool_name = 'Bash' AND input_summary != '' AND ${IN_PROJECT}
+       ORDER BY session_id, ts ASC
+       LIMIT 8000`,
+    )
+    .all(...forms) as Array<{ session_id: string; cmd: string; ts: number }>;
+
+  // Consecutive same-first-token, different-command pairs → candidate
+  // workarounds (the LATER command is the form that stuck).
+  const candidates = new Map<string, { sample: string; sessions: Set<string> }>();
+  for (let i = 1; i < rows.length; i++) {
+    const prev = rows[i - 1]!;
+    const cur = rows[i]!;
+    if (prev.session_id !== cur.session_id) continue;
+    const tok = (c: string) => c.trim().split(/\s+/)[0] ?? '';
+    if (!tok(prev.cmd) || tok(prev.cmd) !== tok(cur.cmd)) continue;
+    if (prev.cmd.trim() === cur.cmd.trim()) continue;
+    const key = cur.cmd.replace(/\s+/g, ' ').trim();
+    const c = candidates.get(key) ?? { sample: cur.cmd.trim(), sessions: new Set<string>() };
+    c.sessions.add(cur.session_id);
+    candidates.set(key, c);
+  }
+
+  return [...candidates.values()]
+    .filter((c) => c.sessions.size >= THRESHOLDS.workaroundSessions)
+    .sort((a, b) => b.sessions.size - a.sessions.size)
+    .slice(0, PER_RULE_LIMIT)
+    .map((c) =>
+      buildProposal(ctx, {
+        type: 'memory_rule',
+        scope: 'project',
+        severity: 'info',
+        nameSeed: `workaround-${c.sample}`,
+        title: `Working form: \`${truncate(c.sample, 44)}\``,
+        body: `An initial variant of this command was immediately re-run in this altered form, and the altered form recurs across ${c.sessions.size} sessions — it looks like the form that works here.`,
+        content: `In this project, use \`${c.sample}\` directly (an earlier variant of this command consistently gets corrected to this form).`,
+        evidence: {
+          sessions: [...c.sessions].slice(0, 8),
+          prompts: [],
+          detail: `same-first-token retry converging on this form across ${c.sessions.size} sessions`,
+        },
+      }),
+    );
 }
 
 /** Destructive shell-operation categories the agent should treat with care. */

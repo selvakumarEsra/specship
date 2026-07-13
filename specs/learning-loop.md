@@ -80,7 +80,7 @@ the user where to review (`/specship:check` or the dashboard's Improvements
 surface).
 
 implementations:
-  - src/bin/specship.ts:main
+  - src/reflect/sweep.ts:capture
   - commands/specship/learn.md
 
 ## Acceptance
@@ -107,7 +107,8 @@ tables; no summarization. Sessions from other projects never appear
 (REQ-REFLECT-008's scoping predicate).
 
 implementations:
-  - src/mcp/tools.ts:ToolHandler.buildDomainFactsSection
+  - src/mcp/tools.ts:ToolHandler.buildPriorWorkSection
+  - src/reflect/session-outcomes.ts:sessionsTouchingFiles
 
 ## Acceptance
 <!-- id: REQ-LEARN-003.A1 -->
@@ -132,7 +133,7 @@ claimed unless a workflow run's verify step recorded them — transcripts
 carry no exit codes, and the record never states what the data can't prove.
 
 implementations:
-  - server/src/ingest/ingestor.ts:ingestAll
+  - src/reflect/session-outcomes.ts:sessionOutcome
 
 ## Acceptance
 <!-- id: REQ-LEARN-004.A1 -->

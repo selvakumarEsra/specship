@@ -53,6 +53,7 @@ import { SpecQueries } from './db/spec-queries';
 import {
   analyze as reflectAnalyzeImpl,
   sweep as reflectSweepImpl,
+  capture as reflectCaptureImpl,
   ReflectStore,
   previewProposal,
   applyProposal,
@@ -463,6 +464,15 @@ export class SpecShip {
   /** Run a reflection pass, persist the batch, return the open proposals. */
   reflectAnalyze(): AnalyzeResult {
     return reflectAnalyzeImpl(this.db.getDb(), this.reflectContext());
+  }
+
+  /**
+   * Explicitly capture a distilled routine as a `skill` proposal
+   * (LEARN-DOC, REQ-LEARN-002). Same lifecycle as mined proposals —
+   * nothing lands on disk until the user applies it.
+   */
+  reflectCapture(input: { title: string; content: string }): Proposal {
+    return reflectCaptureImpl(this.db.getDb(), this.reflectContext(), input);
   }
 
   /** Run a sweep: analyze + return new high-severity proposals to notify on. */

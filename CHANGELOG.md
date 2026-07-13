@@ -15,6 +15,9 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### New Features
 
+- **SpecShip now learns from what worked — with you in the loop.** The reflection engine gained success crystallization: a completed multi-step workflow run becomes a reusable recipe proposal, and a shell command you kept correcting into a working form becomes a "use this form" rule proposal — alongside the existing waste detectors, all human-gated (preview → apply → undo). A new `/specship:learn` command (and `specship reflect --capture`) crystallizes the current session's workflow on demand.
+- **The graph now remembers your work.** `specship_explore` surfaces a "Prior work" section when past sessions edited the files you're exploring — date, what was asked, files touched, workflow runs in that window — computed deterministically from the local task history, never summarized by a model, and never from another project's sessions.
+
 - **`spec-implement-mixed` — frontier judgment, small-model execution.** A new bundled workflow with the same steps and gates as `spec-implement`, but Sonnet runs the planning step while Haiku runs the mechanical ones (implement, link, coverage); the test run and approval gates verify the work externally. Most of the tokens at Haiku prices, with correctness coming from the machinery. The dashboard's Tips also now spot a Haiku/Sonnet session drowning in file re-reads and recommend escalating to a bigger model or this workflow.
 
 - **The agent is steered to the graph for ALL code work.** The per-prompt nudge now covers implementing, fixing, and refactoring — not just "how does X work" questions — after adoption telemetry showed plan-execution and feature prompts were the heaviest file re-readers. `SPECSHIP_NO_STEERING=1` still turns it off.
