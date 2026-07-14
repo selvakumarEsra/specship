@@ -103,6 +103,10 @@ Fires when a session ran for > 30 minutes, had > 10 prompts, and didn't invoke a
 
 Tips are sorted by severity (error > warn > info) and within severity by **recency of triggering evidence**. The list updates every 30 seconds while the desktop UI is open.
 
+### Model escalation
+
+A **Haiku or Sonnet session drowning in file Reads** (the re-read spiral — 15+ Reads in one session) gets a tip recommending a bigger model, or the same work packaged as the `spec-implement-mixed` workflow: Sonnet plans, Haiku executes, tests and approval gates verify. Frontier-model sessions with the same Read count don't trigger it — that's a different problem with different tips.
+
 ## Writing custom rules
 
 The tip engine reads rule definitions from `~/.specship/tips/*.yaml` and `<project>/.specship/tips/*.yaml`. Each rule is:

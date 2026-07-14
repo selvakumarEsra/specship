@@ -133,6 +133,17 @@ Customize by dropping your own `<project>/.specship/workflows/<name>.yaml` (proj
 
 ---
 
+## Self-Improving, With You in the Loop
+
+SpecShip observes your Claude Code sessions and gets smarter every time you use it — without ever changing anything behind your back:
+
+- **It crystallizes what worked.** A completed multi-step workflow run becomes a reusable recipe proposal; a command you kept correcting into a working form becomes a "use this form" rule; recurring corrections are captured with the context they followed. Run `/specship:learn` to crystallize the current session's workflow on demand.
+- **Everything is a human-gated proposal.** Each one shows a preview diff of exactly what it would write (a CLAUDE.md rule, a memory note, a slash command, a hook); nothing lands until you apply it, and every apply is undoable. Review from the dashboard's **Improvements** page or `specship reflect`.
+- **It remembers your work.** A four-tier SQLite memory — the code **graph** (deterministic truth), your **specs** (human-confirmed intent), the full **task history** (every session, tool call, cost, outcome), and the **crystallized rules/skills** you approved. `specship_explore` surfaces a "Prior work" section when past sessions edited the files at hand, so the agent starts from what was already done.
+- **Deterministic and local.** Proposals cite the actual sessions that triggered them; recall is a SQL join, never an LLM summary; nothing leaves your machine.
+
+---
+
 ## Why SpecShip?
 
 When Claude Code explores a codebase, it spawns **Explore agents** that scan files with grep, glob, and Read — consuming tokens on every tool call.
@@ -150,6 +161,7 @@ When Claude Code explores a codebase, it spawns **Explore agents** that scan fil
 | **20+ Languages** | TypeScript, JavaScript, Python, Go, Rust, Java, C#, PHP, Ruby, C, C++, Objective-C, Swift, Kotlin, Dart, Lua, Luau, Svelte, Liquid, Pascal/Delphi |
 | **Framework-aware Routes** | Recognizes web-framework routing files and links URL patterns to their handlers across 14 frameworks |
 | **Desktop UI** | Live dashboard for cost, drift, tool-call heatmap, cache analytics, SpecShip token impact, plus a project picker that auto-discovers every project you've used Claude Code in |
+| **Self-Improving** | Mines your sessions for what worked and what wasted — and proposes rules, skills, and hooks you approve with a preview diff. Prior-work recall built into every explore |
 | **100% Local** | The core never leaves your machine — no API keys, no external services, SQLite only. The two optional integrations that do talk to a service (JIRA → your Atlassian instance, Designer → claude.ai, experimental) are strictly opt-in: `specship install --with-jira` / `--with-designer` |
 
 <details>

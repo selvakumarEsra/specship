@@ -23,7 +23,7 @@ Agents configured by the installer launch this automatically. When a `.specship/
 
 | Tool | Purpose |
 |---|---|
-| `specship_explore` | **Primary.** Return the verbatim source of the symbols relevant to a question — a plain question or a bag of symbol names both work — grouped by file, plus a relationship map and the call path among named symbols (following dynamic-dispatch hops like callbacks, React re-render, and interface→impl that grep can't). Usually the only call an agent needs. |
+| `specship_explore` | **Primary.** Return the verbatim source of the symbols relevant to a question — a plain question or a bag of symbol names both work — grouped by file, plus a relationship map and the call path among named symbols (following dynamic-dispatch hops like callbacks, React re-render, and interface→impl that grep can't). Also surfaces matching human-confirmed domain facts and a "Prior work" section (past sessions that edited these files) inline. Usually the only call an agent needs. |
 | `specship_search` | Find symbols by name across the codebase (just locations). |
 | `specship_node` | Get one symbol's full body + its caller/callee trail; returns every overload's body in one call for an ambiguous name. |
 | `specship_callers` | Find what calls a function. |

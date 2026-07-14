@@ -111,6 +111,7 @@ export default defineConfig({
 						{ label: 'Costs & cache', slug: 'claude-code/costs' },
 						{ label: 'SpecShip Impact', slug: 'claude-code/specship-impact' },
 						{ label: 'Tips engine', slug: 'claude-code/tips' },
+						{ label: 'Self-improvement', slug: 'claude-code/improvements' },
 					],
 				},
 				{
