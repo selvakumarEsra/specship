@@ -9,6 +9,9 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+
+## [0.18.0] - 2026-07-14
+
 ### Breaking Changes
 
 - **Spec-driven development is now installed by default.** A plain `specship install` provisions the full surface — the `/specship:spec` and `/specship:check` doors plus the "author a spec first" steering — alongside retrieval. Pass `--no-sdd` for a retrieval-only install (the previous default); the legacy `--sdd` flag is still accepted. Existing installs are never silently changed on upgrade.
@@ -658,3 +661,4 @@ Thanks @andreinknv for the substantive draft this release was based on.
 [0.15.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.15.0
 [0.16.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.16.0
 [0.17.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.17.0
+[0.18.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.18.0
