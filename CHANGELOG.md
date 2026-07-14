@@ -9,6 +9,10 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixes
+
+- **The offline bundle installer now asks where to wire Claude Code** — globally (every project) or a specific repo, which it also indexes — instead of silently writing project-local wiring into the extracted bundle directory. Scripted installs use `--global` or `--path <repo>` (`-Global` / `-Path` on Windows); without a terminal the safe default is global.
+
 
 ## [0.18.0] - 2026-07-14
 

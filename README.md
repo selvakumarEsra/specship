@@ -35,7 +35,7 @@ cd specship-<target>
 ./install.sh                        # .\install.ps1 on Windows
 ```
 
-That symlinks `specship` onto your `PATH` and wires Claude Code using only the bundled runtime — nothing is compiled on the target. From a checkout, `./scripts/offline-install.sh <bundle>` (`.ps1` on Windows) does the same given a downloaded bundle. See [Offline / air-gapped install](https://specship.cc/getting-started/installation/#offline--air-gapped-install) for the full walkthrough.
+That symlinks `specship` onto your `PATH`, then asks where to wire Claude Code — globally or a specific repo (`--global` / `--path <repo>` for scripts) — using only the bundled runtime; nothing is compiled on the target. From a checkout, `./scripts/offline-install.sh <bundle>` (`.ps1` on Windows) does the same given a downloaded bundle. See [Offline / air-gapped install](https://specship.cc/getting-started/installation/#offline--air-gapped-install) for the full walkthrough.
 
 ### 2. Wire up Claude Code
 

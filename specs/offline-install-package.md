@@ -159,3 +159,33 @@ for the no-compile path.
 <!-- id: REQ-OFFLINE-004.A3 -->
 - A `CHANGELOG.md` entry under `## [Unreleased]` notes the offline bundle is
   now self-installing with no npm or compilation, in user-facing language.
+
+<!-- id: REQ-OFFLINE-005 -->
+## The bundle installer MUST ask where to wire Claude Code
+
+`install.sh` / `install.ps1` run from the extracted bundle directory, so a
+blind project-local `specship install -y` writes the MCP entry into the
+bundle folder itself — useless wiring. Instead, after placing the launcher on
+PATH, the installer resolves the wiring target:
+
+- **Interactive (TTY):** ask — wire **globally** (all projects), wire **a
+  specific repo** (prompt for its path, which must exist; the install runs
+  project-local from that directory, indexing it), or **skip** wiring.
+- **Non-interactive flags:** `--global`, or `--path <repo>` (project-local in
+  that repo); `--skip-claude` retained. Without a TTY and without flags, the
+  default is **global** — never a local install into the bundle directory.
+
+implementations:
+  - scripts/bundle-install.sh
+  - scripts/bundle-install.ps1
+
+## Acceptance
+<!-- id: REQ-OFFLINE-005.A1 -->
+- `./install.sh --path <repo>` wires `<repo>/.mcp.json` +
+  `<repo>/.claude/settings.json` and initializes that repo's index; nothing
+  Claude-related is written into the bundle or install directory.
+<!-- id: REQ-OFFLINE-005.A2 -->
+- `./install.sh --global` (and the no-TTY no-flag default) wires the global
+  `~/.claude.json` + `~/.claude/settings.json`.
+<!-- id: REQ-OFFLINE-005.A3 -->
+- A nonexistent `--path` fails with a clear message before any wiring.

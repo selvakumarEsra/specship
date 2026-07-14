@@ -86,13 +86,18 @@ Every release is a **self-contained bundle** — a vendored Node runtime plus th
 
 **1. On a machine with internet**, grab the archive matching the *offline* machine's platform from the [Releases page](https://github.com/selvakumarEsra/specship/releases) — `specship-<target>.tar.gz` (or `.zip` on Windows), where `<target>` is one of `darwin-arm64`, `darwin-x64`, `linux-x64`, `linux-arm64`, `win32-x64`, `win32-arm64`.
 
-**2. On the offline machine**, extract the archive and run the bundle's own installer. It puts `specship` on your `PATH` and wires Claude Code (MCP server, permissions, slash commands, auto-sync hooks) using only the bundled runtime — nothing is compiled and nothing is fetched:
+**2. On the offline machine**, extract the archive and run the bundle's own installer. It puts `specship` on your `PATH`, then **asks where to wire Claude Code** — globally (every project) or a specific repo (project-local, indexing that repo) — using only the bundled runtime; nothing is compiled and nothing is fetched:
 
 ```bash
 tar -xzf specship-<target>.tar.gz
 cd specship-<target>
-./install.sh                 # add --skip-claude to install onto PATH only
+./install.sh                     # interactive: asks global vs one repo
+./install.sh --global            # non-interactive: wire all projects
+./install.sh --path ~/dev/myrepo # non-interactive: wire + index one repo
+./install.sh --skip-claude       # PATH only; wire later with `specship install`
 ```
+
+Without a terminal (scripted installs), the default is **global** — the installer never writes project wiring into the bundle directory. On Windows the same choices are `-Global`, `-Path C:\dev\myrepo`, `-SkipClaude`.
 
 On **Windows**, unzip `specship-win32-<arch>.zip` and run `.\install.ps1` from the extracted folder. On **macOS**, clear Gatekeeper quarantine on the unsigned bundle first, or the launcher is blocked: `xattr -dr com.apple.quarantine specship-<target>`.
 

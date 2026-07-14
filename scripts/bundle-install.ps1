@@ -10,11 +10,19 @@
 .PARAMETER SkipClaude
   Install onto PATH only; leave Claude Code config untouched.
 
+.PARAMETER Global
+  Wire Claude Code globally (all projects) without asking.
+
+.PARAMETER Path
+  Wire Claude Code for a specific repo (project-local; indexes that repo).
+
 .PARAMETER Uninstall
   Remove the install directory and its PATH entry.
 
 .EXAMPLE
   .\install.ps1
+  .\install.ps1 -Global
+  .\install.ps1 -Path C:\dev\my-repo
   .\install.ps1 -SkipClaude
   .\install.ps1 -Uninstall
 
@@ -24,6 +32,8 @@
 [CmdletBinding()]
 param(
   [switch]$SkipClaude,
+  [switch]$Global,
+  [string]$Path,
   [switch]$Uninstall
 )
 
@@ -66,9 +76,46 @@ if (($userPath -split ';') -notcontains $binDir) {
 }
 
 # 3. Wire Claude Code via the vendored Node (no system Node, no network).
+#    REQ-OFFLINE-005: the wiring target is asked, never assumed — a blind
+#    project-local install from here would land in the bundle directory.
 if (-not $SkipClaude) {
-  Write-Host "Wiring Claude Code..."
-  & (Join-Path $dest 'node.exe') --liftoff-only (Join-Path $dest 'lib\dist\bin\specship.js') install --target claude -y
+  if (-not $Global -and -not $Path) {
+    if ([Environment]::UserInteractive -and -not [Console]::IsInputRedirected) {
+      Write-Host ""
+      Write-Host "Wire Claude Code:"
+      Write-Host "  [1] globally  - SpecShip loads in every project (~/.claude.json)"
+      Write-Host "  [2] one repo  - project-local, indexes that repo (./.mcp.json)"
+      Write-Host "  [s] skip      - wire later with: specship install"
+      $choice = Read-Host "Choice [1/2/s] (default 1)"
+      switch ($choice) {
+        '2' { $Path = Read-Host "Repo path" }
+        's' { $SkipClaude = $true }
+        default { $Global = $true }
+      }
+    } else {
+      # No interactive console, no flags: global is the only safe default —
+      # never local into the bundle directory (REQ-OFFLINE-005.A2).
+      $Global = $true
+    }
+  }
+}
+
+if (-not $SkipClaude) {
+  $nodeExe = Join-Path $dest 'node.exe'
+  $cliJs   = Join-Path $dest 'lib\dist\bin\specship.js'
+  if ($Path) {
+    if (-not (Test-Path $Path -PathType Container)) {
+      Write-Error "specship: -Path '$Path' is not a directory"
+      exit 1
+    }
+    Write-Host "Wiring Claude Code for $Path ..."
+    Push-Location $Path
+    try { & $nodeExe --liftoff-only $cliJs install --target claude -y --location local }
+    finally { Pop-Location }
+  } else {
+    Write-Host "Wiring Claude Code globally..."
+    & $nodeExe --liftoff-only $cliJs install --target claude -y --location global --skip-index
+  }
 }
 
 Write-Host ""
