@@ -9,6 +9,9 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+
+## [0.19.0] - 2026-07-15
+
 ### New Features
 
 - **JIRA Data Center behind a corporate or self-signed certificate now works.** `specship jira configure` gained `--ca-cert <pem>` to trust your corporate CA bundle (preferred) and `--insecure-tls` to skip certificate verification as a last resort — both scoped to SpecShip's JIRA requests only, also settable via `SPECSHIP_JIRA_CA_CERT` and `SPECSHIP_JIRA_INSECURE_TLS`. Base URLs with a context path (e.g. `https://jira.company.com:8443/jira`) are fully supported — include the context path in the base URL.
@@ -16,7 +19,6 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Fixes
 
 - Connection failures during `specship jira configure` / `specship jira test` now explain the likely causes (corporate certificate, missing context path in the base URL, VPN/network) and surface the underlying TLS error code instead of a bare "fetch failed".
-
 
 ## [0.18.1] - 2026-07-14
 
@@ -679,3 +681,4 @@ Thanks @andreinknv for the substantive draft this release was based on.
 [0.17.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.17.0
 [0.18.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.18.0
 [0.18.1]: https://github.com/selvakumarEsra/specship/releases/tag/v0.18.1
+[0.19.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.19.0
