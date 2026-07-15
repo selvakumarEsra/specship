@@ -55,6 +55,7 @@ const SOURCE: SpecPublishSource = {
 function makePublishFake(opts?: {
   existingSubtasks?: Array<{ key: string; summary: string; status: string }>;
   failCreate?: boolean;
+  projects?: Array<{ key: string; name: string }>;
 }) {
   let next = 100;
   const created: Array<Record<string, unknown>> = [];
@@ -82,6 +83,9 @@ function makePublishFake(opts?: {
           subtasks: opts?.existingSubtasks ?? [],
         },
       };
+    },
+    async listProjects() {
+      return opts?.projects ?? [];
     },
   };
   return { client, created, updated };
@@ -768,6 +772,142 @@ describe('handleSpecshipJiraPublish', () => {
       },
     );
     expect(doc.isError).toBe(true);
+  });
+});
+
+
+// ---------------------------------------------------------------------------
+// REQ-JIRAPUB-009 — project picker
+// ---------------------------------------------------------------------------
+
+/** Response-shaped stub for the real client's fetch path. @verifies REQ-JIRAPUB-009 */
+function fetchResponse(body: unknown, status = 200) {
+  return {
+    status,
+    ok: status >= 200 && status < 300,
+    type: 'basic',
+    json: async () => body,
+  };
+}
+
+describe('project picker (REQ-JIRAPUB-009)', () => {
+  it('A1: listProjects returns key + name for accessible projects', async () => {
+    const realFetch = globalThis.fetch;
+    try {
+      globalThis.fetch = vi.fn(async () =>
+        fetchResponse([
+          { key: 'PROJ', name: 'Project One', id: '1' },
+          { key: 'OPS', name: 'Operations', id: '2' },
+        ]),
+      ) as unknown as typeof fetch;
+      const { JiraClient } = await import('../../src/jira/client');
+      const client = new JiraClient({
+        baseUrl: 'https://jira.test',
+        deployment: 'datacenter',
+        pat: 'pat-x',
+      });
+      const projects = await client.listProjects();
+      expect(projects).toEqual([
+        { key: 'PROJ', name: 'Project One' },
+        { key: 'OPS', name: 'Operations' },
+      ]);
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
+
+  it('A1: an auth fault surfaces the existing credential-free error', async () => {
+    const realFetch = globalThis.fetch;
+    try {
+      globalThis.fetch = vi.fn(async () => fetchResponse({}, 401)) as unknown as typeof fetch;
+      const { JiraClient } = await import('../../src/jira/client');
+      const client = new JiraClient({
+        baseUrl: 'https://jira.test',
+        deployment: 'datacenter',
+        pat: 'pat-super-secret',
+      });
+      await expect(client.listProjects()).rejects.toThrow(/(?!.*pat-super-secret)/);
+      await expect(client.listProjects()).rejects.not.toThrow(/pat-super-secret/);
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
+
+  function noProjectConfig(): void {
+    const cfg = path.join(tmp, 'jira-noproj.json');
+    fs.writeFileSync(
+      cfg,
+      JSON.stringify({ baseUrl: 'https://jira.test', pat: 'pat-x', deployment: 'datacenter' }),
+    );
+    process.env.SPECSHIP_JIRA_CONFIG = cfg;
+  }
+
+  function pickerSpecQueries(specPath: string) {
+    const rel = path.relative(tmp, specPath);
+    return {
+      getSpecById: (id: string) =>
+        id === 'REQ-FOO-001'
+          ? { id, kind: 'requirement', title: 'T', body: 'MUST.', sourcePath: rel }
+          : null,
+      getSpecsByParent: () => [],
+      getLinksBySpec: () => [],
+      getAllSpecs: () => [{ id: 'REQ-FOO-001', kind: 'requirement', sourcePath: rel }],
+    };
+  }
+
+  it('A2: publish with no project returns the accessible list and creates no issue', async () => {
+    const saved = process.env.SPECSHIP_JIRA_CONFIG;
+    try {
+      noProjectConfig();
+      const specPath = writeSpecFile(tmp, 'specs/foo.md', SPEC_MD);
+      const { client, created } = makePublishFake({
+        projects: [
+          { key: 'PROJ', name: 'Project One' },
+          { key: 'OPS', name: 'Operations' },
+        ],
+      });
+      const result = await handleSpecshipJiraPublish(
+        { spec_id: 'REQ-FOO-001' },
+        { specQueries: pickerSpecQueries(specPath), projectRoot: tmp, makeJiraClient: () => client },
+      );
+      const text = result.content.map((c) => c.text).join('\n');
+      expect(result.isError).toBeUndefined();
+      expect(text).toContain('| PROJ | Project One |');
+      expect(text).toContain('| OPS | Operations |');
+      expect(text).toContain('project: "<Key>"');
+      expect(created).toHaveLength(0);
+      expect(fs.readFileSync(specPath, 'utf8')).toBe(SPEC_MD);
+    } finally {
+      if (saved === undefined) delete process.env.SPECSHIP_JIRA_CONFIG;
+      else process.env.SPECSHIP_JIRA_CONFIG = saved;
+    }
+  });
+
+  it('A4: an empty accessible list is a clear message, not an error', async () => {
+    const saved = process.env.SPECSHIP_JIRA_CONFIG;
+    try {
+      noProjectConfig();
+      const specPath = writeSpecFile(tmp, 'specs/foo.md', SPEC_MD);
+      const { client, created } = makePublishFake({ projects: [] });
+      const result = await handleSpecshipJiraPublish(
+        { spec_id: 'REQ-FOO-001' },
+        { specQueries: pickerSpecQueries(specPath), projectRoot: tmp, makeJiraClient: () => client },
+      );
+      const text = result.content.map((c) => c.text).join('\n');
+      expect(result.isError).toBeUndefined();
+      expect(text).toContain('no browseable projects');
+      expect(created).toHaveLength(0);
+    } finally {
+      if (saved === undefined) delete process.env.SPECSHIP_JIRA_CONFIG;
+      else process.env.SPECSHIP_JIRA_CONFIG = saved;
+    }
+  });
+
+  it('A3: the configure command exposes a --project flag and the interactive picker', () => {
+    const cli = fs.readFileSync(path.join(__dirname, '../../src/bin/specship.ts'), 'utf8');
+    expect(cli).toContain("--project <key>");
+    expect(cli).toContain('listProjects');
+    expect(cli).toMatch(/Default project for spec→JIRA publishing/);
   });
 });
 

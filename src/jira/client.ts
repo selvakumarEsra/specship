@@ -317,6 +317,21 @@ export class JiraClient {
   }
 
   /**
+   * List the projects the authenticated user can see (REQ-JIRAPUB-009) —
+   * `GET /rest/api/2/project` returns only browseable projects on both Cloud
+   * and Data Center, so the list IS the user's access. Bounded to
+   * `MAX_ISSUE_RESULTS` entries; an empty list is a valid success (A4).
+   */
+  async listProjects(): Promise<Array<{ key: string; name: string }>> {
+    const body = await this.request('/rest/api/2/project');
+    const raw: any[] = Array.isArray(body) ? body : [];
+    return raw.slice(0, MAX_ISSUE_RESULTS).map(p => ({
+      key: String(p?.key ?? ''),
+      name: String(p?.name ?? ''),
+    })).filter(p => p.key.length > 0);
+  }
+
+  /**
    * Create an issue (REQ-JIRAPUB-001) — a Story (or configured type) when
    * `parentKey` is absent, a Sub-task parented to `parentKey` when present.
    * `POST /rest/api/2/issue`; both Cloud and Data Center accept the

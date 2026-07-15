@@ -190,6 +190,36 @@ implementations:
 - Re-running the same release call is a no-op: no duplicate version, no
   duplicate shipped-in comment.
 
+<!-- id: REQ-JIRAPUB-009 -->
+## Choosing the publish project MUST be assisted by the user's accessible project list
+
+The publish project is never something a user should have to guess or type
+blind. The client can list the projects the authenticated user has access to,
+and both selection surfaces use it: `specship jira configure` offers the list
+interactively and saves the choice, and a publish invoked with no project
+configured or passed answers with the accessible list and a copy-pasteable
+next call — never a bare "no project configured" dead end, and never an issue
+created against a guessed project.
+
+implementations:
+  - src/jira/client.ts:JiraClient.listProjects
+  - src/mcp/jira-tools.ts:handleSpecshipJiraPublish
+
+## Acceptance
+<!-- id: REQ-JIRAPUB-009.A1 -->
+- Listing projects returns each accessible project's key and name; auth and
+  network faults surface the client's existing credential-free errors.
+<!-- id: REQ-JIRAPUB-009.A2 -->
+- A publish with no project configured or passed returns the accessible
+  project list with instructions to re-call with a chosen key, and creates no
+  issue.
+<!-- id: REQ-JIRAPUB-009.A3 -->
+- `specship jira configure` offers the accessible projects for selection and
+  saves the choice; a later publish uses the saved key without asking.
+<!-- id: REQ-JIRAPUB-009.A4 -->
+- An empty accessible-project list produces a clear message, not an error
+  stack, and creates no issue.
+
 <!-- id: REQ-JIRAPUB-008 -->
 ## JIRA-side edits to a published issue MUST be detectable as drift
 

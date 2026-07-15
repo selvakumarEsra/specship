@@ -299,7 +299,7 @@ export const jiraToolDefinitions: ToolDefinition[] = [
         project: {
           type: 'string',
           description:
-            'JIRA project key to create the Story in (e.g., "PROJ"). Optional when a default project is configured.',
+            'JIRA project key to create the Story in (e.g., "PROJ"). Optional when a default project is configured; omitted with no default, the tool returns the projects your account can access so the user can choose.',
         },
       },
       required: ['spec_id'],
@@ -1291,19 +1291,37 @@ export async function handleSpecshipJiraPublish(
 
   try {
     const creds = resolveJiraCredentials();
+    const client = deps.makeJiraClient
+      ? deps.makeJiraClient()
+      : new JiraClient(creds);
+
     const projectKey =
       (typeof args.project === 'string' && args.project.trim()
         ? args.project.trim()
         : undefined) ?? creds.project;
     if (!projectKey) {
-      return errorResult(
-        'No JIRA project configured for publishing. Pass "project", set ' +
-          'SPECSHIP_JIRA_PROJECT, or add "project" to your jira config.',
+      // No configured/passed project → offer the user's accessible list
+      // instead of a dead end (REQ-JIRAPUB-009.A2); no issue is created.
+      const projects = await client.listProjects();
+      if (projects.length === 0) {
+        return textResult(
+          'Your JIRA account has no browseable projects, so there is nowhere ' +
+            'to publish. Ask your JIRA admin for project access, then retry.',
+        );
+      }
+      return textResult(
+        [
+          'No publish project is configured. Choose one of the projects your account can access:',
+          '',
+          '| Key | Name |',
+          '| --- | --- |',
+          ...projects.map((p) => `| ${p.key} | ${p.name} |`),
+          '',
+          `Then re-call specship_jira_publish with spec_id: "${specId}" and project: "<Key>" — ` +
+            'or save a default with `specship jira configure --project <Key>`.',
+        ].join('\n'),
       );
     }
-    const client = deps.makeJiraClient
-      ? deps.makeJiraClient()
-      : new JiraClient(creds);
 
     const absPath = path.isAbsolute(spec.sourcePath)
       ? spec.sourcePath

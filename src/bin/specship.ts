@@ -3329,6 +3329,7 @@ jira
   .option('--deployment <kind>', 'Deployment kind: "cloud" or "datacenter" (inferred if omitted)')
   .option('--ca-cert <pem>', 'Path to a PEM CA bundle for a corporate/self-signed certificate (Data Center)')
   .option('--insecure-tls', 'Disable TLS certificate verification for JIRA requests only (last resort)')
+  .option('--project <key>', 'Default project for spec→JIRA publishing (interactive setup offers your accessible projects)')
   .action(async (opts: {
     baseUrl?: string;
     email?: string;
@@ -3337,6 +3338,7 @@ jira
     deployment?: string;
     caCert?: string;
     insecureTls?: boolean;
+    project?: string;
   }) => {
     const {
       saveJiraConfig,
@@ -3441,7 +3443,39 @@ jira
       // Probe the connection so the user knows immediately whether it works.
       const client = new JiraClient(resolveJiraCredentials());
       const result = await client.testConnection();
-      clack.outro(`Connected as ${result.displayName ?? 'unknown user'}.`);
+      clack.log.success(`Connected as ${result.displayName ?? 'unknown user'}.`);
+
+      // Publish project (REQ-JIRAPUB-009.A3): an explicit --project saves
+      // directly; otherwise the interactive path offers the projects this
+      // account can actually browse, so the user picks instead of typing.
+      if (opts.project) {
+        config.project = opts.project.trim().toUpperCase();
+        saveJiraConfig(config);
+        clack.log.success(`Default publish project: ${config.project}.`);
+      } else if (!flagged) {
+        try {
+          const projects = await client.listProjects();
+          if (projects.length > 0) {
+            const NONE = '__none__';
+            const chosen = await clack.select({
+              message: 'Default project for spec→JIRA publishing (specship_jira_publish)',
+              options: [
+                ...projects.map((p) => ({ value: p.key, label: `${p.key} — ${p.name}` })),
+                { value: NONE, label: 'Skip — choose per publish' },
+              ],
+            });
+            if (!cancelled(chosen) && chosen !== NONE) {
+              config.project = String(chosen);
+              saveJiraConfig(config);
+              clack.log.success(`Default publish project: ${config.project}.`);
+            }
+          }
+        } catch {
+          // Listing projects is a convenience — a fault here never fails
+          // an otherwise-successful configure.
+        }
+      }
+      clack.outro('JIRA is configured.');
     } catch (err) {
       // Messages from the jira module are already scrubbed of the secret.
       const msg = err instanceof Error ? err.message : String(err);
