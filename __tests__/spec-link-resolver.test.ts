@@ -675,6 +675,7 @@ describe.skipIf(!fts5Available)('SpecLinkResolver orphan reattach (REQ-LINKFIX-0
     clean(dir);
   });
 
+  /** @verifies REQ-LINKFIX-001 */
   function seedOrphan(
     specId: string,
     qname: string,
@@ -785,6 +786,7 @@ describe.skipIf(!fts5Available)('SpecLinkResolver qualified-name variants (REQ-L
     clean(dir);
   });
 
+  /** @verifies REQ-LINKFIX-002 */
   function seedSpec(specId: string) {
     const sq = cg.getSpecQueries();
     const now = Date.now();
