@@ -51,9 +51,6 @@ invoke any language model or external inference service, and MUST NOT fabricate
 content not present in the data. Given identical data and question, it MUST
 produce the same answer (deterministic).
 
-implementations:
-  - packages/server/src/routes/chat.ts:registerChatRoutes
-
 ## Acceptance
 <!-- id: REQ-DASH-CHAT-001.A1 -->
 - A question answerable from the graph/specs/domain returns an answer whose facts (names, paths, counts, states) all come from the queried data.
@@ -76,9 +73,6 @@ work"), spec lookup, drift status, and domain lookup ("what is <term>"). When no
 intent matches with confidence, the classifier MUST fall back to a full-text
 search over the knowledge base and return the top matches — it never guesses an
 intent and never returns nothing when data exists.
-
-implementations:
-  - packages/server/src/chat/classify.ts:classifyIntent
 
 ## Acceptance
 <!-- id: REQ-DASH-CHAT-002.A1 -->
@@ -105,10 +99,6 @@ streaming; the chunking is presentation pacing only (a small inter-chunk delay)
 so the reply renders progressively like a model typing. A client disconnect MUST
 end the stream cleanly without error.
 
-implementations:
-  - packages/server/src/routes/chat.ts:registerChatRoutes
-  - packages/web-ng/src/app/pages/chat/chat.ts:Chat.send
-
 ## Acceptance
 <!-- id: REQ-DASH-CHAT-003.A1 -->
 - Sending a message opens an incremental event stream that emits, in order: a thinking event, a tool/query event (name + input), a result-summary event, one or more answer-chunk events, and a terminal done event.
@@ -128,9 +118,6 @@ figure, or a token count. The tool-call card the UI renders MUST reflect the
 actual input, and a truthful result summary derived from the query (e.g. node/
 edge counts, match count) — never a fabricated summary. The mock's random
 cost/token values and hardcoded reply MUST be removed.
-
-implementations:
-  - packages/web-ng/src/app/pages/chat/chat.ts:Chat.send
 
 ## Acceptance
 <!-- id: REQ-DASH-CHAT-004.A1 -->
@@ -161,10 +148,6 @@ fabricated — and MUST be deterministic across repeat calls on an unchanged ind
 (consistent with REQ-DASH-CHAT-001). The concise composed answer stays on top;
 the chat UI MUST render each match's full detail in an **expandable section**
 below it, so depth is one interaction away without drowning the answer.
-
-implementations:
-  - packages/server/src/routes/chat-answer.ts:answerForIntent
-  - packages/web-ng/src/app/pages/chat/chat.ts:Chat
 
 ## Acceptance
 <!-- id: REQ-DASH-CHAT-005.A1 -->

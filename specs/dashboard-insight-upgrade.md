@@ -47,7 +47,7 @@ click away. The force layout result is memoized (a `computed()`), so kind
 filters, selection, and pan/drag do not re-run the O(n²) simulation.
 
 implementations:
-  - packages/web-ng/src/app/pages/graph/graph.ts:Graph
+  - ui/src/pages/graph.tsx:GraphPage
 
 ## Acceptance
 <!-- id: REQ-DASHUX-002.A1 -->
@@ -66,7 +66,7 @@ unlinked), not by node kind, so the tree reads as an alignment map. The
 funnel summary is promoted to a visible stat strip on the page header.
 
 implementations:
-  - packages/web-ng/src/app/pages/specs/specs.ts:Specs
+  - ui/src/pages/specs.tsx:SpecsPage
 
 ## Acceptance
 <!-- id: REQ-DASHUX-003.A1 -->
@@ -86,8 +86,8 @@ index/ingest without manual refresh. When the stream is unavailable the
 existing fetch-once behavior is unchanged.
 
 implementations:
-  - packages/web-ng/src/app/api/refresh.ts:RefreshService
-  - packages/web-ng/src/app/api/resource.ts:apiResource
+  - ui/src/hooks.ts:useApi
+  - ui/src/api.ts:runEventsUrl
 
 ## Acceptance
 <!-- id: REQ-DASHUX-004.A1 -->
@@ -108,8 +108,8 @@ the merged page so deep links keep working, and the sidebar shows a single
 combined badge count.
 
 implementations:
-  - packages/web-ng/src/app/app.routes.ts:routes
-  - packages/web-ng/src/app/shell/sidebar/sidebar.ts:Sidebar
+  - ui/src/router.ts:usePathRoute
+  - ui/src/App.tsx:Sidebar
 
 ## Acceptance
 <!-- id: REQ-DASHUX-005.A1 -->
@@ -128,7 +128,7 @@ the project picker control displays that project's name/path. The
 all (projectless boot with nothing picked).
 
 implementations:
-  - packages/web-ng/src/app/shell/project-picker/project-picker.ts:ProjectPicker
+  - ui/src/App.tsx:ProjectSwitcher
 
 ## Acceptance
 <!-- id: REQ-DASHUX-006.A1 -->

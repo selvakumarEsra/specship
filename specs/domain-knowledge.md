@@ -49,7 +49,7 @@ fact MUST be idempotent.
 
 implementations:
   - src/types.ts:SpecKind
-  - src/extraction/specs/markdown-spec-extractor.ts:parseFrontmatter
+  - src/extraction/specs/markdown-spec-extractor.ts:MarkdownSpecExtractor.parseFrontmatter
   - src/db/spec-queries.ts:SpecQueries.insertSpec
 
 ## Acceptance
@@ -179,7 +179,7 @@ kind union MUST gain `'domain'`.
 
 implementations:
   - packages/web-ng/src/app/pages/domain/domain.ts
-  - packages/web-ng/src/app/app.routes.ts:routes
+  - ui/src/router.ts:usePathRoute
   - packages/web-ng/src/app/shell/sidebar/sidebar.ts
   - packages/web-ng/src/app/api/types.ts:Spec
 

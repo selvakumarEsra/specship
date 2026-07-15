@@ -99,7 +99,7 @@ counts, drift-queue count, and the last-indexed timestamp. Writes are atomic
 implementations:
   - src/statusline/cache.ts:writeStatuslineCache
   - src/index.ts:SpecShip.indexAll
-  - src/sync/file-watcher.ts:FileWatcher
+  - src/sync/watcher.ts:FileWatcher
 
 ## Acceptance
 <!-- id: REQ-STATUSLINE-003.A1 -->
@@ -123,7 +123,7 @@ created on the first call. Updating it MUST be atomic and MUST NOT block or fail
 the underlying tool call if the write errors.
 
 implementations:
-  - src/mcp/tools.ts:MCPTools.execute
+  - src/mcp/tools.ts:ToolHandler.execute
   - src/statusline/session-marker.ts:recordCall
 
 ## Acceptance

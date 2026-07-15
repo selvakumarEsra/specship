@@ -108,8 +108,8 @@ NOT offer in-place spec editing and MUST NOT ship a heavyweight embedded code
 editor. This removes both the editing affordance and its largest dependency.
 
 implementations:
-  - packages/web-ng/src/app/pages/specs/specs.ts:Specs
-  - packages/web-ng/src/app/pages/spec-detail/spec-detail.ts:SpecDetail
+  - ui/src/pages/specs.tsx:SpecsPage
+  - ui/src/components/spec-detail.tsx:SpecDetail
 
 ## Acceptance
 <!-- id: REQ-DASHLEAN-003.A1 -->

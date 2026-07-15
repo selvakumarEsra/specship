@@ -97,7 +97,7 @@ advisory by default but shaped to become a CI gate later.
 
 implementations:
   - src/mcp/maintainability-tool.ts:handleSpecshipMaintainability
-  - packages/server/src/routes/maintainability.ts:registerMaintainabilityRoutes
+  - server/src/routes/maintainability.ts:registerMaintainabilityRoutes
 
 ## Acceptance
 <!-- id: REQ-MAINT-003.A1 -->

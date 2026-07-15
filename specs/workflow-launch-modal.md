@@ -28,8 +28,8 @@ on Cancel, on its close button, on backdrop click, and on Escape, returning
 focus to the page without launching anything.
 
 implementations:
-  - packages/web-ng/src/app/pages/workflows/workflows.ts:Workflows.openRun
-  - packages/web-ng/src/app/pages/workflows/run-modal.ts:RunModal
+  - ui/src/pages/workflows.tsx:WorkflowsPage
+  - ui/src/pages/workflows.tsx:LaunchRunDialog
 
 ## Acceptance
 <!-- id: REQ-WF-LAUNCH-001.A1 -->
@@ -48,8 +48,7 @@ with no declared inputs MUST show a "No inputs required" note instead of an empt
 form.
 
 implementations:
-  - packages/web-ng/src/app/pages/workflows/run-modal.ts:RunModal
-  - packages/web-ng/src/app/pages/workflows/run-modal.html:inputs
+  - ui/src/pages/workflows.tsx:LaunchRunDialog
 
 ## Acceptance
 <!-- id: REQ-WF-LAUNCH-002.A1 -->
@@ -68,7 +67,7 @@ request is in flight the action is disabled to prevent double-submission; a
 failure surfaces an error and keeps the modal open so the user can retry.
 
 implementations:
-  - packages/web-ng/src/app/pages/workflows/run-modal.ts:RunModal.launch
+  - ui/src/pages/workflows.tsx:LaunchRunDialog
 
 ## Acceptance
 <!-- id: REQ-WF-LAUNCH-003.A1 -->

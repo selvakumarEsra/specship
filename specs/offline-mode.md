@@ -46,7 +46,7 @@ version.
 - A first-ever visit while the server has never been reachable (nothing cached yet) still fails gracefully — the user sees an in-app "can't reach the server" state, not a blank page or a stack trace.
 
 implementations:
-  - packages/server/src/static-handler.ts:makeStaticHandler
+  - server/src/static-handler.ts:makeStaticHandler
 
 <!-- id: REQ-OFFLINE-002 -->
 ## The connection indicator MUST show Offline when the server is unreachable
@@ -68,8 +68,8 @@ when reachability changes without requiring a manual page reload.
 - Any live-stream status shown on a detail view (e.g. the session / run event stream) reads "Offline" when the server is unreachable, rather than remaining on "Live".
 
 implementations:
-  - packages/web-ng/src/app/api/api.ts:ApiService
-  - packages/web-ng/src/app/pages/dashboard/dashboard.ts:Dashboard
+  - ui/src/api.ts:api
+  - ui/src/pages/dashboard.tsx:DashboardPage
 
 <!-- id: REQ-OFFLINE-003 -->
 ## Last-known data MUST stay visible offline and be marked stale
@@ -93,8 +93,8 @@ REQ-OFFLINE-004 for actions.
 - A surface that has never been loaded while online shows an explicit "no cached data — connect to load" empty state offline, not a spinner that never resolves.
 
 implementations:
-  - packages/web-ng/src/app/api/resource.ts:apiResource
-  - packages/web-ng/src/app/api/api.ts:ApiService
+  - ui/src/api.ts:runEventsUrl
+  - ui/src/api.ts:api
 
 <!-- id: REQ-OFFLINE-004 -->
 ## Server-dependent actions MUST be disabled with an offline notice
@@ -114,8 +114,8 @@ silently lose the user's input.
 - When the server returns, the previously-disabled controls re-enable automatically (no manual reload required).
 
 implementations:
-  - packages/web-ng/src/app/api/refresh.ts:RefreshService
-  - packages/web-ng/src/app/api/api.ts:ApiService
+  - ui/src/hooks.ts:useApi
+  - ui/src/api.ts:api
 
 <!-- id: REQ-OFFLINE-005 -->
 ## A missing static asset MUST NOT be answered with the app shell
@@ -146,8 +146,8 @@ dots without being asset paths (e.g. `/specs/REQ-OFFLINE-001.A1`).
 - GET of an existing asset still returns 200 with its correct content type, and `/api/*` misses and non-GET methods still return a JSON 404 (behavior for those is unchanged).
 
 implementations:
-  - packages/server/src/static-handler.ts:isAssetPath
-  - packages/server/src/server.ts:createServer
+  - server/src/static-handler.ts:isAssetPath
+  - server/src/server.ts:createServer
 
 <!-- id: REQ-OFFLINE-006 -->
 ## The offline cache MUST NOT store a response that contradicts its request
@@ -170,4 +170,4 @@ poisoned before this rule existed are dropped on upgrade.
 - After upgrading to a build with a new cache generation, entries from the previous generation are no longer served — a cache poisoned before the upgrade cannot poison the app after it.
 
 implementations:
-  - packages/web-ng/public/sw.js
+  - ui/public/sw.js

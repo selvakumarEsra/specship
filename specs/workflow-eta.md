@@ -32,7 +32,7 @@ it tightens rather than staying fixed at its launch value.
 
 implementations:
   - src/workflows/eta.ts:estimateRunEta
-  - packages/server/src/routes/workflow.ts:registerWorkflowRoutes
+  - server/src/routes/workflow.ts:registerWorkflowRoutes
 
 <!-- id: REQ-ETA-002 -->
 ## The estimate MUST be derived from the same workflow's per-step history

@@ -198,7 +198,7 @@ and the status derivation; the door's dispatch entry stays thin — one call,
 render, no fallback exploration.
 
 implementations:
-  - packages/web-ng/src/app/pages/dashboard/dashboard.ts:Dashboard
+  - ui/src/pages/dashboard.tsx:DashboardPage
 
 ## Acceptance
 <!-- id: REQ-DOORS-008.A1 -->

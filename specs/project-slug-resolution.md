@@ -54,8 +54,8 @@ cheap. Failures reading either source MUST degrade to the next source, never
 throw.
 
 implementations:
-  - packages/server/src/ingest/project-paths.ts:resolveProjectSlug
-  - packages/server/src/ingest/project-paths.ts:createSlugResolver
+  - server/src/ingest/project-paths.ts:resolveProjectSlug
+  - server/src/ingest/project-paths.ts:createSlugResolver
 
 ## Acceptance
 <!-- id: REQ-SLUGRES-001.A1 -->
@@ -82,7 +82,7 @@ project living under a hyphenated parent directory MUST NOT be reported as
 missing when it exists on disk.
 
 implementations:
-  - packages/server/src/routes/projects.ts:enumerate
+  - server/src/routes/projects.ts:enumerate
 
 ## Acceptance
 <!-- id: REQ-SLUGRES-002.A1 -->
@@ -99,7 +99,7 @@ opening, so specship-scoped routes (`status`, `graph`, `spec`, `drift`,
 back to the boot-time primary.
 
 implementations:
-  - packages/server/src/project-registry.ts:ProjectRegistry.getBySlug
+  - server/src/project-registry.ts:ProjectRegistry.getBySlug
 
 ## Acceptance
 <!-- id: REQ-SLUGRES-003.A1 -->
