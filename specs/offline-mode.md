@@ -152,6 +152,11 @@ implementations:
 <!-- id: REQ-OFFLINE-006 -->
 ## The offline cache MUST NOT store a response that contradicts its request
 
+> **SUPERSEDED (2026-07-15, maintainer):** the service worker
+> (`packages/web-ng/public/sw.js`) was not carried over to the React desktop
+> SPA — no offline cache exists in the current UI, so there is nothing this
+> requirement governs. Retained for history; carries no implementation links.
+
 The offline cache MUST refuse to store a response whose declared content type
 contradicts what the request asked for — concretely, an HTML-typed response
 MUST never be stored for a non-navigation request (a script, stylesheet, font,
@@ -169,5 +174,3 @@ poisoned before this rule existed are dropped on upgrade.
 <!-- id: REQ-OFFLINE-006.A3 -->
 - After upgrading to a build with a new cache generation, entries from the previous generation are no longer served — a cache poisoned before the upgrade cannot poison the app after it.
 
-implementations:
-  - ui/public/sw.js
