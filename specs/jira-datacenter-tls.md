@@ -10,7 +10,7 @@ priority: high
 
 Enterprise JIRA Data Center instances commonly sit behind a self-signed or
 corporate-CA certificate and are often served under a context path (e.g.
-`https://jira2.example.com:8443/dcifjira`). SpecShip's JIRA client uses Node
+`https://jira2.example.com:8443/jira`). SpecShip's JIRA client uses Node
 `fetch`, which (correctly) rejects untrusted certificates — but today there is
 no escape hatch, so `specship jira configure` fails with an opaque
 "fetch failed" even when the PAT and URL are right. Reference clients (e.g.
@@ -78,8 +78,8 @@ implementations:
 <!-- id: REQ-JIRATLS-003 -->
 ## Base URLs with a context path MUST be honored end-to-end
 
-A base URL like `https://host:8443/dcifjira` produces requests to
-`https://host:8443/dcifjira/rest/api/2/...` on both transports; configure's
+A base URL like `https://host:8443/jira` produces requests to
+`https://host:8443/jira/rest/api/2/...` on both transports; configure's
 prompt/help text tells the user to include the context path if their
 instance has one.
 

@@ -130,11 +130,11 @@ describe('REQ-JIRATLS-003 — context-path base URLs', () => {
   it('A1: a base URL with a context path requests <contextPath>/rest/api/2/myself', async () => {
     seenPaths.length = 0;
     const client = new JiraClient(
-      creds({ insecureTls: true }, `${baseUrl}/dcifjira`),
+      creds({ insecureTls: true }, `${baseUrl}/ctx`),
     );
     const res = await client.testConnection();
     expect(res.ok).toBe(true);
-    expect(seenPaths).toContain('/dcifjira/rest/api/2/myself');
+    expect(seenPaths).toContain('/ctx/rest/api/2/myself');
   });
 });
 
