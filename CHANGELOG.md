@@ -18,6 +18,10 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - When no publish project is set, SpecShip now shows the JIRA projects your account can access and lets you choose — interactively during `specship jira configure` (or via its new `--project` flag), and as a pick-list when publishing a spec.
 - `specship_jira_track` now also lists published specs and flags issues that were edited in JIRA after publishing, so specs and their JIRA mirrors can't silently diverge.
 
+### Fixes
+
+- Verified and broken spec links no longer silently reset to unverified when a spec is re-extracted for an unrelated reason (for example, appending another requirement to the same spec file) — a link's verdict is now preserved as long as the requirement's own text hasn't changed. Only an actual edit to that requirement re-opens it for re-verification.
+
 ## [0.19.1] - 2026-07-15
 
 ### Fixes

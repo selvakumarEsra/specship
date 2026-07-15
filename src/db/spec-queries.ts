@@ -17,6 +17,7 @@ import {
   SpecFormat,
   SpecLink,
   SpecLinkState,
+  STICKY_SPEC_LINK_STATES,
   SpecLinkKind,
   SpecLinkProvenance,
   SpecLinkDriftAxis,
@@ -658,6 +659,17 @@ export class SpecQueries {
       if (newConfidence < existingConfidence) {
         return existing.id;
       }
+      // Sticky-state guard (REQ-STICKYLINK-001): when the existing row is in a
+      // terminal-ish state (`verified`/`broken`) AND the spec body hasn't moved
+      // (same spec_hash_at_link), preserve its verdict — a plain re-extraction
+      // of the spec (e.g. appending an unrelated requirement) must not silently
+      // reset a verified/broken link back to `implemented`. Only a genuine
+      // spec-hash change is allowed to drive the downgrade path. Everything
+      // else (resolved node id, signature, provenance, confidence, metadata)
+      // still refreshes so the link stays current.
+      const preserve =
+        STICKY_SPEC_LINK_STATES.has(existing.state) &&
+        existing.specHashAtLink === link.specHashAtLink;
       this.db
         .prepare(
           `
@@ -677,9 +689,9 @@ export class SpecQueries {
         .run({
           id: existing.id,
           resolvedNodeId: link.resolvedNodeId ?? null,
-          state: link.state,
-          driftAxis: link.driftAxis ?? null,
-          specHashAtLink: link.specHashAtLink,
+          state: preserve ? existing.state : link.state,
+          driftAxis: preserve ? existing.driftAxis ?? null : link.driftAxis ?? null,
+          specHashAtLink: preserve ? existing.specHashAtLink : link.specHashAtLink,
           nodeSigAtLink: link.nodeSigAtLink ?? null,
           provenance: link.provenance,
           confidence: link.confidence ?? 1.0,

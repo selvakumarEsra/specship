@@ -728,6 +728,18 @@ export type SpecLinkState =
   | 'orphaned';
 
 /**
+ * Terminal-ish states that are NOT downgraded automatically: `verified` is
+ * the success terminal and `broken` requires an explicit re-verify. Shared
+ * between the resolver (which never auto-downgrades these) and the DB upsert
+ * (which preserves them across a same-spec-hash re-extraction — REQ-STICKYLINK-001).
+ * `orphaned` is deliberately NOT sticky — the resolver auto-reattaches it.
+ */
+export const STICKY_SPEC_LINK_STATES: ReadonlySet<SpecLinkState> = new Set([
+  'verified',
+  'broken',
+]);
+
+/**
  * Which side of a `drifted` link moved.
  *  - `spec`: spec body changed since link was established
  *  - `code`: code symbol's signature changed
