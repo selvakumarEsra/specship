@@ -2310,6 +2310,7 @@ program
   .option('--no-permissions', 'Skip writing the auto-allow permissions list')
   .option('--sdd', '(default) Install the spec-driven-development governance tier (spec/authoring/review/design commands + the spec-author nudge hook)')
   .option('--no-sdd', 'Skip the governance tier — retrieval-only install (the pre-0.18 default)')
+  .option('--path <repo>', 'Target repo to wire and initialize (default: current directory). Project-local files and the .specship index land there')
   .option('--with-jira', 'Enable the optional JIRA integration (talks to your Atlassian instance; off by default — the core install is 100% local)')
   .option('--with-designer', 'Enable the optional Designer integration (EXPERIMENTAL — drives claude.ai/design via a debug Chrome session and may break without notice; off by default)')
   .option('--statusline', 'Wire the SpecShip status-line segment into Claude (skips the prompt; never overwrites an existing status line)')
@@ -2331,12 +2332,26 @@ program
     skipStatusline?: boolean;
     skipIndex?: boolean;
     printConfig?: boolean;
+    path?: string;
   }) => {
     if (opts.printConfig) {
       const { claudeTarget } = await import('../installer/targets/claude');
       const loc = (opts.location === 'local' ? 'local' : 'global') as 'global' | 'local';
       process.stdout.write(claudeTarget.printConfig(loc));
       return;
+    }
+
+    // Target repo (INSTALL-SCOPE-DOC, REQ-SCOPE-002): the project-local
+    // wiring and the .specship index land in --path, not wherever the
+    // command happened to run. Same semantics as the bundle installer's
+    // --path — implemented the same way (the local writers are cwd-based).
+    if (opts.path) {
+      const target = path.resolve(opts.path);
+      if (!fs.existsSync(target) || !fs.statSync(target).isDirectory()) {
+        error(`--path '${opts.path}' is not a directory`);
+        process.exit(1);
+      }
+      process.chdir(target);
     }
 
     const { runInstallerWithOptions } = await import('../installer');

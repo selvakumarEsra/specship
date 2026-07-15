@@ -124,30 +124,24 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
     );
   }
 
-  // Step 1: install the specship CLI on PATH (always offered; skipped
-  // with --yes since CI assumes it's there).
-  if (!useDefaults) {
-    const shouldInstallGlobally = await clack.confirm({
-      message: 'Install the specship CLI on your PATH? (Required so Claude Code can launch the MCP server)',
-      initialValue: true,
-    });
-    if (clack.isCancel(shouldInstallGlobally)) {
-      clack.cancel('Installation cancelled.');
-      process.exit(0);
-    }
-    if (shouldInstallGlobally) {
-      const s = clack.spinner();
-      s.start('Installing specship CLI...');
-      try {
-        execSync('npm install -g @specship/specship', { stdio: 'pipe', windowsHide: true });
-        s.stop('Installed specship CLI on PATH');
-      } catch {
-        s.stop('Could not install (permission denied)');
-        clack.log.warn('Try: sudo npm install -g @specship/specship');
-      }
-    } else {
-      clack.log.info('Skipped CLI install — Claude Code will not be able to launch the MCP server without it');
-    }
+  // Step 1 (INSTALL-SCOPE-DOC, REQ-SCOPE-001): `specship install` is
+  // WIRING-ONLY — binary acquisition (npm i -g, or the offline bundle's
+  // install.sh) is a separate, prior step, and by definition the binary
+  // already exists when this runs. We never invoke a package manager here
+  // (offline machines have no npm; a bundle install must not be hijacked
+  // onto the npm method). The one thing worth checking is read-only: the
+  // MCP entry launches `specship` BY NAME, so warn if PATH can't resolve it.
+  try {
+    const probe = process.platform === 'win32' ? 'where specship' : 'command -v specship';
+    execSync(probe, { stdio: 'pipe', windowsHide: true, shell: process.platform === 'win32' ? undefined : '/bin/sh' });
+  } catch {
+    clack.log.warn(
+      'The `specship` command is not on your PATH — Claude Code launches `specship serve --mcp` by name, ' +
+      'so the wiring below will not work until it is. Install the CLI first:\n' +
+      '    npm i -g @specship/specship          (online)\n' +
+      '    ./install.sh from the release bundle (offline — puts it on PATH)\n' +
+      'Continuing with the wiring anyway.',
+    );
   }
 
   // Step 2: global vs local. Default is **local** so the SpecShip MCP

@@ -14,6 +14,8 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixes
 
+- **`specship install` is now strictly wiring-only.** It no longer offers to run `npm install -g` (pointless — the running command *is* the binary; broken on offline machines; and it could silently switch a bundle install onto the npm method). Getting the CLI is step 1 (`npm i -g` or the offline bundle installer); `specship install` only configures Claude Code and prepares the repo's `.specship/` index. It also gained `--path <repo>` to wire and initialize a specific repository from anywhere, and warns (without acting) if `specship` isn't on PATH.
+
 - **The offline bundle installer now asks where to wire Claude Code** — globally (every project) or a specific repo, which it also indexes — instead of silently writing project-local wiring into the extracted bundle directory. Scripted installs use `--global` or `--path <repo>` (`-Global` / `-Path` on Windows); without a terminal the safe default is global.
 
 ## [0.18.0] - 2026-07-14

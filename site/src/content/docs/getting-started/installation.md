@@ -5,20 +5,32 @@ description: Install SpecShip and wire it into Claude Code.
 
 SpecShip is **Claude Code only** — the installer configures one agent on purpose, so the surface stays small and easy to keep correct. If you need MCP integration with another agent that speaks the protocol, point it at `specship serve --mcp` by hand (see [MCP & Claude Code wiring](/reference/integrations/)).
 
-## 1. Run the installer
+## 1. Get the CLI
+
+Two routes put the `specship` binary on your machine — this is the only step where a package manager is involved:
 
 ```bash
-npx @specship/specship install
+npm i -g @specship/specship        # online
 ```
 
-The installer will:
+Or, with no npm and no network, use the [offline bundle](#offline--air-gapped-install): download the release archive, extract, and run its `install.sh` / `install.ps1`.
 
-- Ask whether to wire SpecShip into **just this project** (the default) or **all projects** (global).
-- Write the MCP server entry so Claude Code launches `specship serve --mcp`.
-- Add the read-only `specship_*` (and `designer_*`) tools to Claude Code's auto-allow list, so you aren't prompted on every query.
-- Install the **`/specship:explore`** reads door and the `specship-explorer` subagent.
-- Add the auto-sync hooks (re-index after the agent edits files; catch up on session start).
-- For a project-local install, initialize the current project and build its index.
+## 2. Wire Claude Code
+
+```bash
+specship install
+```
+
+`specship install` is **wiring-only** — it never installs or updates the binary (and never touches npm). It:
+
+- Asks whether to wire SpecShip into **just this project** (the default) or **all projects** (global). Pass `--path <repo>` to target a specific repo from anywhere.
+- Writes the MCP server entry so Claude Code launches `specship serve --mcp`.
+- Adds the read-only `specship_*` tools to Claude Code's auto-allow list, so you aren't prompted on every query.
+- Installs the slash commands and the `specship-explorer` subagent.
+- Adds the auto-sync hooks (re-index after the agent edits files; catch up on session start) and the per-prompt steering nudge.
+- For a project-local install, initializes the target repo's `.specship/` and builds its index.
+
+If the `specship` command isn't on your PATH yet, the installer warns (Claude Code launches it by name) and points at both acquisition routes — it never runs them for you.
 
 A default install gives you the **full surface**: the retrieval layer (the agent explores the index instead of re-reading files, plus a per-prompt nudge steering it there) **and the spec-driven layer** — the `/specship:spec` and `/specship:check` doors plus the "author a spec first" steering. Spec-driven development is on by default as of 0.18; pass `--no-sdd` for a retrieval-only install (the old default). An existing install is preserved on upgrade; it's never silently downgraded.
 
@@ -42,6 +54,7 @@ specship install --print-config               # print the MCP snippet, no file w
 | Flag | Values | Default |
 |---|---|---|
 | `--location` | `global`, `local` | prompt (highlights `local`) |
+| `--path <repo>` | target repo to wire + initialize, from any cwd | current directory |
 | `--yes` | (boolean) non-interactive | prompt every step → `local` |
 | `--no-sdd` | (boolean) skip the spec-driven layer (`/specship:spec` + `/specship:check` doors + steering) — retrieval-only | spec-driven layer ON |
 | `--with-jira` | (boolean) enable the optional JIRA integration (talks to your Atlassian instance; never auto-allowed — Claude prompts per call) | off (core stays 100% local) |
@@ -55,11 +68,11 @@ The default install also wires a tiny per-prompt nudge that steers Claude Code t
 
 > `--yes` is non-interactive and resolves to a **project-local** install. Pass `--location global` alongside it for the old global behavior.
 
-## 2. Restart Claude Code
+## 3. Restart Claude Code
 
 Restart Claude Code so it picks up the new MCP server entry and loads the `specship_*` tools.
 
-## 3. Initialize more projects
+## 4. Initialize more projects
 
 A project-local install already indexed the current project. For any other project:
 

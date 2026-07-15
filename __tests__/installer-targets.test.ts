@@ -321,6 +321,19 @@ describe('Claude target — specifics', () => {
     expect(after).toHaveLength(1);
   });
 
+  it('specship install never invokes a package manager (INSTALL-SCOPE-DOC, REQ-SCOPE-001.A1)', () => {
+    // Wiring-only: binary acquisition is npm-i-g / the offline bundle — a
+    // separate prior step. The uninstall purge path (`npm rm -g`) is the
+    // one deliberate exception (teardown, not acquisition).
+    const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'installer', 'index.ts'), 'utf-8');
+    expect(src).not.toMatch(/exec\w*\(\s*['"`]npm (install|i)\b/);
+    expect(src).not.toMatch(/exec\w*\(\s*['"`]npx\b/);
+    for (const f of ['claude.ts', 'shared.ts']) {
+      const t = fs.readFileSync(path.join(__dirname, '..', 'src', 'installer', 'targets', f), 'utf-8');
+      expect(t).not.toMatch(/exec\w*\(|spawn\(/); // targets write files, never spawn
+    }
+  });
+
   it('default install exposes no integrations and auto-allows no designer tools (REQ-INTEG-001.A1)', () => {
     claudeTarget.install('local', { autoAllow: true });
     const mcp = JSON.parse(fs.readFileSync(path.join(tmpCwd, '.mcp.json'), 'utf-8'));
