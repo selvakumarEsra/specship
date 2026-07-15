@@ -106,7 +106,7 @@ nudge hook entry, and the gate hook entry — leaving no residue and preserving 
 user's other CLAUDE.md content, permissions, and sibling hooks.
 
 implementations:
-  - src/installer/targets/claude.ts:install
+  - src/installer/targets/claude.ts:ClaudeCodeTarget.install
   - src/bin/specship.ts:main
 
 ## Acceptance

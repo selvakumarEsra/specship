@@ -26,7 +26,7 @@ Each door links to the most-related dashboard page so the surface is also a
 navigation affordance, not just documentation.
 
 implementations:
-  - packages/web-ng/src/app/pages/dashboard/dashboard.ts:Dashboard
+  - ui/src/pages/dashboard.tsx:DashboardPage
   - packages/web-ng/src/app/pages/dashboard/dashboard.html
 
 ## Acceptance

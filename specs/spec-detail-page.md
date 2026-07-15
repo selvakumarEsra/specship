@@ -29,7 +29,7 @@ screen or an unhandled throw.
 
 implementations:
   - packages/web-ng/src/app/app.routes.ts
-  - packages/web-ng/src/app/pages/spec-detail/spec-detail.ts:SpecDetail
+  - ui/src/components/spec-detail.tsx:SpecDetail
 
 ## Acceptance
 <!-- id: REQ-SPECDETAIL-001.A1 -->
@@ -67,7 +67,7 @@ spans styled as code chips. A rationale ("why it matters") section is rendered
 only when the data model supplies separate rationale content.
 
 implementations:
-  - packages/web-ng/src/app/pages/spec-detail/spec-detail.ts:SpecDetail
+  - ui/src/components/spec-detail.tsx:SpecDetail
   - packages/web-ng/src/app/pages/spec-detail/spec-detail.html
 
 ## Acceptance
@@ -86,7 +86,7 @@ The acceptance section lists the spec's acceptance-kind children, each with its
 link state. The section header shows an "N / M met" rollup over the criteria.
 
 implementations:
-  - packages/web-ng/src/app/pages/spec-detail/spec-detail.ts:SpecDetail
+  - ui/src/components/spec-detail.tsx:SpecDetail
 
 ## Acceptance
 <!-- id: REQ-SPECDETAIL-004.A1 -->
@@ -104,7 +104,7 @@ The linked-code section lists each entry in `links`, showing the linked
 heuristic). The section header shows the symbol count.
 
 implementations:
-  - packages/web-ng/src/app/pages/spec-detail/spec-detail.ts:SpecDetail
+  - ui/src/components/spec-detail.tsx:SpecDetail
 
 ## Acceptance
 <!-- id: REQ-SPECDETAIL-005.A1 -->

@@ -30,8 +30,8 @@ governing spec's id, the link kind, and the link's current state, and closes
 with drift-handoff guidance when governed symbols are in the radius.
 
 implementations:
-  - src/mcp/tools.ts:handleImpact
-  - src/mcp/tools.ts:formatGovernedBy
+  - src/mcp/tools.ts:ToolHandler.handleImpact
+  - src/mcp/tools.ts:ToolHandler.formatGovernedBy
   - src/index.ts:SpecShip.getImpactRadius
 
 ## Acceptance

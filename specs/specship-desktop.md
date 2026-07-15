@@ -780,6 +780,11 @@ implementations:
 <!-- id: REQ-DESKTOP-027 -->
 ## The Chat screen MUST render the project chat wired to the server's chat API
 
+> **SUPERSEDED (2026-07-11) by CHAT-REMOVE-DOC** (`specs/chat-removal.md`): the
+> dashboard Chat was cut entirely; `ui/src/pages/chat.tsx` is deleted and a
+> source-scan guard keeps it gone. This requirement is retained for history
+> only and carries no implementation links.
+
 The chat surface renders the snapshot's composer with context chips
 (project, indexed files, MCP tools, tool access level), seeded suggested
 actions (summarize the drift queue, look up a spec and its link state,
@@ -787,9 +792,6 @@ kick off the spec-implement workflow), attachment of files or spec ids,
 and a show-context affordance. Messages round-trip through the dashboard
 server's chat API; the sibling chat document's behaviour contract remains
 authoritative for answer semantics.
-
-implementations:
-  - ui/src/pages/chat.tsx:ChatPage
 
 ## Acceptance
 <!-- id: REQ-DESKTOP-027.A1 -->

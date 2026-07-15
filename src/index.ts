@@ -817,7 +817,7 @@ export class SpecShip {
     const transitions: DriftTransition[] = [];
     const specStats: SpecLinkResolverStats = {
       scanned: 0, reresolved: 0, orphaned: 0, driftedCode: 0,
-      candidatesApplied: 0, commentLinksApplied: 0, transitions,
+      candidatesApplied: 0, commentLinksApplied: 0, reattached: 0, transitions,
     };
     let specFilesChanged = 0;
     const specRoots = this.defaultSpecRoots();
@@ -914,6 +914,7 @@ export class SpecShip {
             driftedCode: 0,
             candidatesApplied: 0,
             commentLinksApplied: 0,
+            reattached: 0,
             transitions: [],
           },
           errors: 0,
@@ -939,6 +940,7 @@ export class SpecShip {
           driftedCode: 0,
           candidatesApplied: 0,
           commentLinksApplied: 0,
+          reattached: 0,
           transitions: [],
         };
 
@@ -1009,6 +1011,7 @@ export class SpecShip {
         stats.reresolved += resolveStats.reresolved;
         stats.orphaned += resolveStats.orphaned;
         stats.driftedCode += resolveStats.driftedCode;
+        stats.reattached += resolveStats.reattached;
         stats.transitions.push(...resolveStats.transitions);
 
         return {

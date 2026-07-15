@@ -38,9 +38,7 @@ exposed, and a needs-attention count), then the configured servers split into
 Each server appears as a clickable row that opens its detail view.
 
 implementations:
-  - packages/web-ng/src/app/pages/mcp/mcp.ts:Mcp
-  - packages/web-ng/src/app/pages/mcp/mcp.html:mcp
-  - packages/web-ng/src/app/pages/mcp/mcp.scss:mcp
+  - ui/src/pages/mcp.tsx:McpPage
 
 ## Acceptance
 <!-- id: REQ-MCP-001.A1 -->
@@ -87,7 +85,7 @@ launch command. Below it, a row of summary tiles shows tools, calls this week,
 result tokens returned, and client count.
 
 implementations:
-  - packages/web-ng/src/app/pages/mcp/mcp-detail.ts:McpDetail
+  - ui/src/pages/mcp.tsx:ServerDetail
   - packages/web-ng/src/app/pages/mcp/mcp-detail.html:status-banner
   - packages/web-ng/src/app/pages/mcp/mcp-detail.scss:status-banner
 
@@ -116,7 +114,7 @@ list.
 
 implementations:
   - packages/web-ng/src/app/pages/mcp/mcp-detail.html:tool-row
-  - packages/web-ng/src/app/pages/mcp/mcp-detail.ts:McpDetail.toggleTool
+  - ui/src/pages/mcp.tsx:ServerDetail.toggleTool
 
 ## Acceptance
 <!-- id: REQ-MCP-004.A1 -->
@@ -160,9 +158,9 @@ the endpoint is unavailable or returns nothing, the page MUST fall back to a see
 dataset so it still renders meaningfully, marked as seed.
 
 implementations:
-  - packages/web-ng/src/app/api/types.ts:McpServersResponse
-  - packages/web-ng/src/app/api/mcp-seed.ts:MCP_SEED
-  - packages/web-ng/src/app/pages/mcp/mcp.ts:Mcp.servers
+  - ui/src/api.ts:McpServersResponse
+  - ui/src/api.ts:mcpServers
+  - ui/src/pages/mcp.tsx:McpPage
 
 ## Acceptance
 <!-- id: REQ-MCP-006.A1 -->
@@ -183,8 +181,8 @@ server navigates to its detail route; the back control returns to the list. A
 detail route for an unknown server id MUST resolve gracefully.
 
 implementations:
-  - packages/web-ng/src/app/app.routes.ts:routes
-  - packages/web-ng/src/app/pages/mcp/mcp-detail.ts:McpDetail
+  - ui/src/router.ts:usePathRoute
+  - ui/src/pages/mcp.tsx:ServerDetail
 
 ## Acceptance
 <!-- id: REQ-MCP-007.A1 -->

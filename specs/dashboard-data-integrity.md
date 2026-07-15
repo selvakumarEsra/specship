@@ -29,9 +29,9 @@ non-zero MUST be re-costed on the next ingest boot (idempotent backfill),
 so historical charts heal without manual intervention.
 
 implementations:
-  - packages/server/src/ingest/pricing.ts:resolvePricing
-  - packages/server/src/ingest/ingestor.ts:seedPricing
-  - packages/server/src/ingest/impact-backfill.ts:backfillDisplaced
+  - server/src/ingest/pricing.ts:resolvePricing
+  - server/src/ingest/ingestor.ts:loadPricing
+  - server/src/ingest/impact-backfill.ts:backfillDisplaced
 
 ## Acceptance
 <!-- id: REQ-DASHINT-001.A1 -->
@@ -55,8 +55,8 @@ positive ones (-971752 → -972k). Producers currently emitting raw counts or
 unbounded ratios into delta slots are normalized to fractions.
 
 implementations:
-  - packages/web-ng/src/app/ui/delta.ts:Delta
-  - packages/web-ng/src/app/pages/specship-impact/specship-impact.ts:fmtK
+  - ui/src/components/ui.tsx:Delta
+  - ui/src/components/dashboard-modules.tsx:fmtTok
 
 ## Acceptance
 <!-- id: REQ-DASHINT-002.A1 -->
@@ -78,7 +78,7 @@ with `json_valid()`, so malformed rows degrade to null instead of failing
 the request.
 
 implementations:
-  - packages/server/src/routes/claude.ts:registerClaudeRoutes
+  - server/src/routes/claude.ts:registerClaudeRoutes
 
 ## Acceptance
 <!-- id: REQ-DASHINT-003.A1 -->
@@ -99,7 +99,7 @@ available the panel renders the nodes without connecting lines. No
 randomness is used in any computed().
 
 implementations:
-  - packages/web-ng/src/app/pages/dashboard/dashboard.ts:Dashboard
+  - ui/src/pages/dashboard.tsx:DashboardPage
 
 ## Acceptance
 <!-- id: REQ-DASHINT-004.A1 -->
@@ -119,7 +119,7 @@ seeded card/row), not only a dismissible banner, so a screenshot of the page
 cannot be mistaken for live data.
 
 implementations:
-  - packages/web-ng/src/app/pages/mcp/mcp.ts:Mcp
+  - ui/src/pages/mcp.tsx:McpPage
 
 ## Acceptance
 <!-- id: REQ-DASHINT-005.A1 -->
@@ -137,7 +137,7 @@ project never advises about files, commands, or sessions that belong to a
 different project.
 
 implementations:
-  - packages/server/src/routes/claude.ts:registerClaudeRoutes
+  - server/src/routes/claude.ts:registerClaudeRoutes
 
 ## Acceptance
 <!-- id: REQ-DASHINT-006.A1 -->
@@ -161,7 +161,7 @@ visible marker that the total excludes unpriced usage.
 
 implementations:
   - server/src/ingest/pricing.ts:computeCost
-  - server/src/ingest/ingestor.ts:Ingestor
+  - server/src/ingest/ingestor.ts:ingestFile
 
 ## Acceptance
 <!-- id: REQ-DASHINT-007.A1 -->
@@ -183,7 +183,7 @@ skip count is a visible state, not a log line.
 
 implementations:
   - server/src/ingest/parser.ts:parseLine
-  - server/src/ingest/ingestor.ts:Ingestor
+  - server/src/ingest/ingestor.ts:getLastIngestStats
 
 ## Acceptance
 <!-- id: REQ-DASHINT-008.A1 -->

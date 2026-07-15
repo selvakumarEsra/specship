@@ -16,6 +16,10 @@ import * as os from 'os';
 import SpecShip from '../src';
 import { Node, NodeKind } from '../src/types';
 import { generateNodeId } from '../src/extraction/tree-sitter-helpers';
+import {
+  qualifiedNameVariants,
+  canonicalQualifiedName,
+} from '../src/resolution/spec-link-resolver';
 
 function tempDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'cg-link-resolver-'));
@@ -636,7 +640,7 @@ describe.skipIf(!fts5Available)('SpecLinkResolver drift transitions (REQ-DRIFT-P
     const resolver = cg.getSpecLinkResolver();
     const stats = {
       scanned: 0, reresolved: 0, orphaned: 0, driftedCode: 0,
-      candidatesApplied: 0, commentLinksApplied: 0, transitions: [] as import('../src/resolution/spec-link-resolver').DriftTransition[],
+      candidatesApplied: 0, commentLinksApplied: 0, reattached: 0, transitions: [] as import('../src/resolution/spec-link-resolver').DriftTransition[],
     };
 
     resolver.markSpecDrifted('REQ-T3', 'h2', stats);
@@ -649,5 +653,229 @@ describe.skipIf(!fts5Available)('SpecLinkResolver drift transitions (REQ-DRIFT-P
     const again = { ...stats, transitions: [] as import('../src/resolution/spec-link-resolver').DriftTransition[] };
     resolver.markSpecDrifted('REQ-T3', 'h3', again);
     expect(again.transitions).toHaveLength(0);
+  });
+});
+
+/**
+ * Orphan auto-reattach (LINKFIX-DOC, REQ-LINKFIX-001): an orphaned link whose
+ * logical target reappears goes back to `implemented` without an agent
+ * re-assert. Sticky states (`verified`, `broken`) are never touched.
+ */
+describe.skipIf(!fts5Available)('SpecLinkResolver orphan reattach (REQ-LINKFIX-001)', () => {
+  let dir: string;
+  let cg: SpecShip;
+
+  beforeEach(async () => {
+    dir = tempDir();
+    cg = await SpecShip.init(dir);
+  });
+
+  afterEach(async () => {
+    cg?.close();
+    clean(dir);
+  });
+
+  /** @verifies REQ-LINKFIX-001 */
+  function seedOrphan(
+    specId: string,
+    qname: string,
+    state: import('../src/types').SpecLinkState = 'orphaned',
+    sigAtLink = `${qname}(a)`
+  ) {
+    const sq = cg.getSpecQueries();
+    const queries = (cg as unknown as { queries: import('../src/db/queries').QueryBuilder }).queries;
+    const now = Date.now();
+    sq.insertSpec({
+      id: specId, kind: 'requirement', title: 'X', body: 'b', format: 'markdown',
+      sourcePath: 'specs/x.md', contentHash: 'h', createdAt: now, updatedAt: now,
+    });
+    const linkId = sq.upsertSpecLink({
+      specId, targetFilePath: 'src/r.ts', targetQualifiedName: qname,
+      targetNodeKind: 'function', resolvedNodeId: undefined, kind: 'implements',
+      state, driftAxis: null, specHashAtLink: 'h',
+      nodeSigAtLink: sigAtLink, provenance: 'agent-asserted', confidence: 1.0,
+      createdAt: now, updatedAt: now,
+    });
+    return { sq, queries, linkId };
+  }
+
+  it('reattaches an orphaned link when its target reappears (resolveAll), idempotently', () => {
+    const { sq, queries, linkId } = seedOrphan('REQ-R1', 'restoreMe');
+    const resolver = cg.getSpecLinkResolver();
+
+    // Target reappears with the original signature.
+    const node = makeNode('src/r.ts', 'restoreMe', 'function', 1, 'restoreMe(a)');
+    queries.insertNode(node);
+
+    const stats = resolver.resolveAll();
+    expect(stats.reattached).toBe(1);
+    const link = sq.getLinkById(linkId)!;
+    expect(link.state).toBe('implemented');
+    expect(link.resolvedNodeId).toBe(node.id);
+
+    // Second pass: already implemented — no counter bump, state unchanged.
+    const second = resolver.resolveAll();
+    expect(second.reattached).toBe(0);
+    expect(sq.getLinkById(linkId)!.state).toBe('implemented');
+  });
+
+  it('reattached target with a changed signature lands drifted(code) with fromState implemented', () => {
+    const { sq, queries, linkId } = seedOrphan('REQ-R2', 'shifty');
+    const resolver = cg.getSpecLinkResolver();
+
+    // Target reappears but its signature changed since the link baseline.
+    queries.insertNode(makeNode('src/r.ts', 'shifty', 'function', 1, 'shifty(a, b)'));
+
+    const stats = resolver.resolveAll();
+    expect(stats.reattached).toBe(1);
+    const link = sq.getLinkById(linkId)!;
+    expect(link.state).toBe('drifted');
+    expect(link.driftAxis).toBe('code');
+    expect(stats.transitions).toEqual([
+      { specId: 'REQ-R2', fromState: 'implemented', axis: 'code', symbol: 'shifty' },
+    ]);
+  });
+
+  it('leaves verified and broken orphan-shaped links untouched', () => {
+    const { sq, queries, linkId: verifiedId } = seedOrphan('REQ-R3', 'vfun', 'verified');
+    const brokenId = sq.upsertSpecLink({
+      specId: 'REQ-R3', targetFilePath: 'src/r.ts', targetQualifiedName: 'bfun',
+      targetNodeKind: 'function', resolvedNodeId: undefined, kind: 'implements',
+      state: 'broken', driftAxis: null, specHashAtLink: 'h',
+      nodeSigAtLink: 'bfun(a)', provenance: 'agent-asserted', confidence: 1.0,
+      createdAt: Date.now(), updatedAt: Date.now(),
+    });
+    queries.insertNode(makeNode('src/r.ts', 'vfun', 'function', 1, 'vfun(a)'));
+    queries.insertNode(makeNode('src/r.ts', 'bfun', 'function', 10, 'bfun(a)'));
+
+    const resolver = cg.getSpecLinkResolver();
+    const stats = resolver.resolveAll();
+    expect(stats.reattached).toBe(0);
+    expect(sq.getLinkById(verifiedId)!.state).toBe('verified');
+    expect(sq.getLinkById(brokenId)!.state).toBe('broken');
+  });
+
+  it('reattaches through the resolveLinksForFiles path too', () => {
+    const { sq, queries, linkId } = seedOrphan('REQ-R4', 'perFile');
+    const resolver = cg.getSpecLinkResolver();
+
+    queries.insertNode(makeNode('src/r.ts', 'perFile', 'function', 1, 'perFile(a)'));
+
+    const stats = resolver.resolveLinksForFiles(['src/r.ts']);
+    expect(stats.reattached).toBe(1);
+    expect(sq.getLinkById(linkId)!.state).toBe('implemented');
+  });
+});
+
+/**
+ * Qualified-name separator matching (LINKFIX-DOC, REQ-LINKFIX-002):
+ * `Class.method` and `Class::method` are the same logical symbol. Lookup
+ * tries both separator forms; upserts key on the canonical dotted form.
+ */
+describe.skipIf(!fts5Available)('SpecLinkResolver qualified-name variants (REQ-LINKFIX-002)', () => {
+  let dir: string;
+  let cg: SpecShip;
+
+  beforeEach(async () => {
+    dir = tempDir();
+    cg = await SpecShip.init(dir);
+  });
+
+  afterEach(async () => {
+    cg?.close();
+    clean(dir);
+  });
+
+  /** @verifies REQ-LINKFIX-002 */
+  function seedSpec(specId: string) {
+    const sq = cg.getSpecQueries();
+    const now = Date.now();
+    sq.insertSpec({
+      id: specId, kind: 'requirement', title: 'X', body: 'b', format: 'markdown',
+      sourcePath: 'specs/x.md', contentHash: 'h', createdAt: now, updatedAt: now,
+    });
+    return sq;
+  }
+
+  it('qualifiedNameVariants swaps ALL separators and dedupes', () => {
+    expect(qualifiedNameVariants('plain')).toEqual(['plain']);
+    expect(qualifiedNameVariants('A.B.method')).toEqual(['A.B.method', 'A::B::method']);
+    expect(qualifiedNameVariants('A::B::method')).toEqual(['A::B::method', 'A.B.method']);
+    // Mixed separators normalize to both pure forms.
+    expect(qualifiedNameVariants('A::B.method')).toEqual([
+      'A::B.method', 'A.B.method', 'A::B::method',
+    ]);
+    expect(canonicalQualifiedName('A::B::method')).toBe('A.B.method');
+    expect(canonicalQualifiedName('plain')).toBe('plain');
+  });
+
+  it('spec-declared Class.method resolves against an indexed Class::method node', () => {
+    const sq = seedSpec('REQ-N1');
+    const queries = (cg as unknown as { queries: import('../src/db/queries').QueryBuilder }).queries;
+    const now = Date.now();
+
+    queries.insertNode(makeNode('src/c.ts', 'Class::method', 'method', 1, 'method(a)'));
+
+    const linkId = sq.upsertSpecLink({
+      specId: 'REQ-N1', targetFilePath: 'src/c.ts', targetQualifiedName: 'Class.method',
+      targetNodeKind: 'method', resolvedNodeId: undefined, kind: 'implements',
+      state: 'orphaned', driftAxis: null, specHashAtLink: 'h',
+      nodeSigAtLink: undefined, provenance: 'spec-declaration', confidence: 0.7,
+      createdAt: now, updatedAt: now,
+    });
+
+    cg.getSpecLinkResolver().resolveAll();
+    const link = sq.getLinkById(linkId)!;
+    expect(link.state).toBe('implemented');
+    expect(link.resolvedNodeId).toBeDefined();
+  });
+
+  it('spec-declared Class::method resolves against an indexed Class.method node', () => {
+    const sq = seedSpec('REQ-N2');
+    const queries = (cg as unknown as { queries: import('../src/db/queries').QueryBuilder }).queries;
+    const now = Date.now();
+
+    queries.insertNode(makeNode('src/d.ts', 'Class.method', 'method', 1, 'method(a)'));
+
+    const linkId = sq.upsertSpecLink({
+      specId: 'REQ-N2', targetFilePath: 'src/d.ts', targetQualifiedName: 'Class::method',
+      targetNodeKind: 'method', resolvedNodeId: undefined, kind: 'implements',
+      state: 'orphaned', driftAxis: null, specHashAtLink: 'h',
+      nodeSigAtLink: undefined, provenance: 'spec-declaration', confidence: 0.7,
+      createdAt: now, updatedAt: now,
+    });
+
+    cg.getSpecLinkResolver().resolveAll();
+    expect(sq.getLinkById(linkId)!.state).toBe('implemented');
+  });
+
+  it('dotted spec-declaration + :: code-comment collapse to ONE row, confidence 0.9 wins', () => {
+    const sq = seedSpec('REQ-N3');
+    const queries = (cg as unknown as { queries: import('../src/db/queries').QueryBuilder }).queries;
+    const resolver = cg.getSpecLinkResolver();
+    const now = Date.now();
+
+    // Extractor indexed the symbol with :: separator and an @implements marker.
+    const node = makeNode('src/e.ts', 'Store::save', 'method', 1, 'save(x)');
+    node.docstring = '@implements REQ-N3';
+    queries.insertNode(node);
+
+    // Spec declares the dotted form.
+    const spec = sq.getSpecById('REQ-N3')!;
+    resolver.applyDeclarationCandidates(
+      [{
+        specId: 'REQ-N3', targetFilePath: 'src/e.ts',
+        targetQualifiedName: 'Store.save', targetNodeKind: 'method', kind: 'implements',
+      }],
+      new Map([['REQ-N3', spec]])
+    );
+    // Code-comment scan sees the :: form.
+    resolver.applyCodeCommentLinks(['src/e.ts']);
+
+    const links = sq.getLinksBySpec('REQ-N3');
+    expect(links).toHaveLength(1);
+    expect(links[0]!.targetQualifiedName).toBe('Store.save');
+    expect(links[0]!.provenance).toBe('code-comment');
+    expect(links[0]!.confidence).toBe(0.9);
   });
 });

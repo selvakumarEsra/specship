@@ -39,8 +39,8 @@ writes the same Claude Code config it writes from the non-bundled package.
 
 implementations:
   - src/installer/targets/claude.ts:packageAssetPath
-  - src/installer/targets/claude.ts:installCommands
-  - src/installer/targets/claude.ts:installAgents
+  - src/installer/targets/claude.ts:writeCommandsEntries
+  - src/installer/targets/claude.ts:writeAgentsEntries
 
 ## Acceptance
 <!-- id: REQ-INSTALL-ASSETS-001.A1 -->
@@ -62,7 +62,7 @@ the non-bundled or from-source path), so a future regression that omits an
 installer asset from the bundle fails CI before it reaches npm.
 
 implementations:
-  - .github/workflows/smoke-npx.yml:smoke
+  - .github/workflows/smoke-npx.yml
 
 ## Acceptance
 <!-- id: REQ-INSTALL-ASSETS-002.A1 -->

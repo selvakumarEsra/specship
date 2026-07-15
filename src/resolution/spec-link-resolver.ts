@@ -53,9 +53,33 @@ const CODE_COMMENT_VERIFIES = /@verifies\s+([A-Za-z][A-Za-z0-9_.-]*)/g;
 /**
  * Terminal-ish states that the resolver does NOT downgrade automatically.
  * `verified` is the success terminal; `broken` requires explicit re-verify.
- * `orphaned` won't become `implemented` again until the agent re-asserts.
+ * `orphaned` is NOT sticky: when the logical target reappears (e.g. the
+ * symbol was restored or a rename was reverted), the resolver auto-reattaches
+ * the link to `implemented` (REQ-LINKFIX-001) — no agent re-assert needed.
  */
 const STICKY_STATES: Set<SpecLinkState> = new Set(['verified', 'broken']);
+
+/**
+ * Normalize a qualified name to its canonical dotted form: every `::`
+ * separator becomes `.` (REQ-LINKFIX-002). Used as the upsert key so
+ * spec-declared `Class.method` and extractor-emitted `Class::method`
+ * collapse to one logical link row.
+ */
+export function canonicalQualifiedName(name: string): string {
+  return name.replace(/::/g, '.');
+}
+
+/**
+ * Separator-form variants of a qualified name for lookup (REQ-LINKFIX-002):
+ * `[name]` when it has no `.`/`::` separators; otherwise the name plus its
+ * all-dotted and all-`::` forms (every separator swapped), deduped.
+ */
+export function qualifiedNameVariants(name: string): string[] {
+  if (!name.includes('.') && !name.includes('::')) return [name];
+  const dotted = canonicalQualifiedName(name);
+  const coloned = dotted.replace(/\./g, '::');
+  return [...new Set([name, dotted, coloned])];
+}
 
 export interface SpecLinkResolverOptions {
   /**
@@ -71,6 +95,11 @@ export interface SpecLinkResolverStats {
   driftedCode: number;
   candidatesApplied: number;
   commentLinksApplied: number;
+  /**
+   * Orphaned links whose logical target reappeared this pass and were
+   * auto-reattached to `implemented` (REQ-LINKFIX-001).
+   */
+  reattached: number;
   /**
    * Links that TRANSITIONED into `drifted` during this pass (REQ-DRIFT-PUSH-001).
    * A link already in `drifted` that re-drifts is not recorded — consumers
@@ -210,6 +239,24 @@ export class SpecLinkResolver {
     this.specQueries.updateSpecLinkResolution(link.id, node.id, now);
     stats.reresolved++;
 
+    // Auto-reattach (REQ-LINKFIX-001): an orphaned link whose logical target
+    // reappeared goes back to `implemented`. Idempotent — a second pass sees
+    // `implemented` and skips. The drift check below then runs against the
+    // reattached state, so a signature-changed target immediately transitions
+    // `implemented → drifted(code)`.
+    let state = link.state;
+    if (state === 'orphaned') {
+      this.specQueries.updateSpecLinkState(link.id, 'implemented', null, now);
+      state = 'implemented';
+      stats.reattached++;
+      if (this.opts.verbose) {
+        // eslint-disable-next-line no-console
+        console.error(
+          `[SpecLinkResolver] reattached ${link.targetQualifiedName} for spec ${link.specId}`
+        );
+      }
+    }
+
     // Code-side drift detection. We compare the node's current signature
     // to the snapshot taken at link creation. If the link has no baseline
     // (older link), don't trip drift — just adopt the current signature
@@ -219,15 +266,15 @@ export class SpecLinkResolver {
       link.nodeSigAtLink !== '' &&
       node.signature !== undefined &&
       node.signature !== link.nodeSigAtLink &&
-      !STICKY_STATES.has(link.state)
+      !STICKY_STATES.has(state)
     ) {
       this.specQueries.updateSpecLinkState(link.id, 'drifted', 'code', now);
       stats.driftedCode++;
-      if (link.state !== 'drifted') {
+      if (state !== 'drifted') {
         // A genuine transition, not a re-drift — record for push notification.
         stats.transitions.push({
           specId: link.specId,
-          fromState: link.state,
+          fromState: state,
           axis: 'code',
           symbol: link.targetQualifiedName,
         });
@@ -252,7 +299,18 @@ export class SpecLinkResolver {
     qualifiedName: string,
     kind: NodeKind
   ): Node | null {
-    const candidates = this.queries.getNodesByQualifiedNameExact(qualifiedName);
+    // Look up every separator-form variant (Class.method ⇄ Class::method) so
+    // a spec-declared dotted name still finds an extractor-emitted `::` node
+    // and vice versa (REQ-LINKFIX-002).
+    const candidates: Node[] = [];
+    const seenIds = new Set<string>();
+    for (const variant of qualifiedNameVariants(qualifiedName)) {
+      for (const n of this.queries.getNodesByQualifiedNameExact(variant)) {
+        if (seenIds.has(n.id)) continue;
+        seenIds.add(n.id);
+        candidates.push(n);
+      }
+    }
     if (candidates.length === 0) return null;
 
     // Prefer same-file matches.
@@ -294,7 +352,10 @@ export class SpecLinkResolver {
       this.specQueries.upsertSpecLink({
         specId: c.specId,
         targetFilePath: c.targetFilePath,
-        targetQualifiedName: c.targetQualifiedName,
+        // Canonical dotted form as the logical key (REQ-LINKFIX-002) so a
+        // spec-declared `Class.method` and a code-comment `Class::method`
+        // collapse to one row (highest confidence wins).
+        targetQualifiedName: canonicalQualifiedName(c.targetQualifiedName),
         targetNodeKind: c.targetNodeKind,
         resolvedNodeId: resolvedNode?.id,
         kind: c.kind,
@@ -352,7 +413,9 @@ export class SpecLinkResolver {
               this.specQueries.upsertSpecLink({
                 specId,
                 targetFilePath: node.filePath,
-                targetQualifiedName: node.qualifiedName,
+                // Canonical dotted key (REQ-LINKFIX-002) — see
+                // applyDeclarationCandidates.
+                targetQualifiedName: canonicalQualifiedName(node.qualifiedName),
                 targetNodeKind: node.kind,
                 resolvedNodeId: node.id,
                 kind,
@@ -479,6 +542,7 @@ export class SpecLinkResolver {
       driftedCode: 0,
       candidatesApplied: 0,
       commentLinksApplied: 0,
+      reattached: 0,
       transitions: [],
     };
   }
