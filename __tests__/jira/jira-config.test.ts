@@ -122,6 +122,7 @@ describe('resolveJiraCredentials', () => {
     expect(creds.transitions).toEqual({
       inProgress: 'In Progress',
       inReview: 'In Review',
+      done: 'Done',
     });
   });
 
@@ -136,6 +137,7 @@ describe('resolveJiraCredentials', () => {
     expect(creds.transitions).toEqual({
       inProgress: 'Start work',
       inReview: 'Review',
+      done: 'Done',
     });
   });
 

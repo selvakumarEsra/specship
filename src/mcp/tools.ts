@@ -411,6 +411,7 @@ import {
   handleSpecshipJiraPick,
   handleSpecshipJiraStart,
   handleSpecshipJiraTrack,
+  handleSpecshipJiraPublish,
 } from './jira-tools';
 
 export const tools: ToolDefinition[] = [
@@ -1272,6 +1273,16 @@ export class ToolHandler {
           const cg = this.getSpecShip(args.projectPath as string | undefined);
           return await handleSpecshipJiraTrack(args, {
             specQueries: cg.getSpecQueries(),
+            projectRoot: cg.getProjectRoot(),
+          });
+        }
+        case 'specship_jira_publish': {
+          // publish writes a Story + Sub-tasks from an authored spec and
+          // records the key in the spec file (REQ-JIRAPUB-001/-002).
+          const cg = this.getSpecShip(args.projectPath as string | undefined);
+          return await handleSpecshipJiraPublish(args, {
+            specQueries: cg.getSpecQueries(),
+            projectRoot: cg.getProjectRoot(),
           });
         }
         default:

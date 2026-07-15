@@ -123,6 +123,12 @@ export function resolveJiraCredentials(): JiraCredentials {
     process.env.SPECSHIP_JIRA_TRANSITION_IN_REVIEW ??
     file?.transitions?.inReview ??
     'In Review';
+  const done =
+    process.env.SPECSHIP_JIRA_TRANSITION_DONE ??
+    file?.transitions?.done ??
+    'Done';
+  // Default publish project (REQ-JIRAPUB-001): env over file, per field.
+  const project = process.env.SPECSHIP_JIRA_PROJECT ?? file?.project;
 
   const deployment = inferDeployment({
     deployment: explicitDeployment,
@@ -150,9 +156,10 @@ export function resolveJiraCredentials(): JiraCredentials {
     email,
     apiToken,
     pat,
-    transitions: { inProgress, inReview },
+    transitions: { inProgress, inReview, done },
     caCertPath,
     insecureTls,
+    project,
   };
 }
 

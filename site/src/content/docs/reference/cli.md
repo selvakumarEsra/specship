@@ -36,6 +36,7 @@ description: Every SpecShip command and the flags it accepts.
 | `specship jira configure` | Save JIRA credentials to ~/.specship/jira.json (0600) and test the connection. |
 | `specship jira test` | Test the configured JIRA connection (uses ~/.specship/jira.json or SPECSHIP_JIRA_* env). |
 | `specship jira track` | Show each picked JIRA issue with its SpecShip work-state + live JIRA status. |
+| `specship jira release <version>` | Set <version> as fixVersion on JIRA issues (creating the project version if missing) with a shipped-in comment. |
 <!-- GENERATED:cli-commands END -->
 
 ## Query commands
@@ -119,6 +120,8 @@ Every `SPECSHIP_*` variable the shipped code reads:
 - `SPECSHIP_JIRA_EMAIL`
 - `SPECSHIP_JIRA_INSECURE_TLS`
 - `SPECSHIP_JIRA_PAT`
+- `SPECSHIP_JIRA_PROJECT`
+- `SPECSHIP_JIRA_TRANSITION_DONE`
 - `SPECSHIP_JIRA_TRANSITION_IN_PROGRESS`
 - `SPECSHIP_JIRA_TRANSITION_IN_REVIEW`
 - `SPECSHIP_LEARNING`

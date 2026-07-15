@@ -30,8 +30,17 @@ import {
   type JiraTransitionNames,
   type JiraTransitionResult,
 } from '../jira/types';
-import { writeSpecFromIssue, findSpecForIssueKey } from '../jira/spec-writer';
+import { writeSpecFromIssue, findSpecForIssueKey, readSpecJiraKey } from '../jira/spec-writer';
 import { reqIdForIssue } from '../jira/spec-generator';
+import {
+  publishSpecToJira,
+  writeBackJiraIdentity,
+  publishedSpecFilename,
+  readFrontmatterValue,
+  issueContentFingerprint,
+  type PublishJiraClient,
+  type SpecPublishSource,
+} from '../jira/publish';
 import {
   raisePullRequest as defaultRaisePullRequest,
   buildPrTitle,
@@ -269,6 +278,31 @@ export const jiraToolDefinitions: ToolDefinition[] = [
             'Optional project key to narrow the live JIRA read (e.g., "PROJ"). Omit to read all your assigned issues.',
         },
       },
+    },
+  },
+  {
+    name: 'specship_jira_publish',
+    description:
+      'Publish an authored spec to JIRA as a Story whose Sub-tasks mirror the ' +
+      "spec's acceptance criteria, and write the created key back into the " +
+      "spec's frontmatter so commits, branches, PRs, and tracking all carry " +
+      'it. Idempotent: re-publishing a spec that already has a jira_issue key ' +
+      'updates the existing Story and creates only missing Sub-tasks.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        spec_id: {
+          type: 'string',
+          description:
+            'The requirement spec id to publish, e.g., "REQ-AUTH-001". Required.',
+        },
+        project: {
+          type: 'string',
+          description:
+            'JIRA project key to create the Story in (e.g., "PROJ"). Optional when a default project is configured.',
+        },
+      },
+      required: ['spec_id'],
     },
   },
 ];
@@ -921,6 +955,12 @@ export interface JiraTrackDeps {
   makeJiraClient?: () => JiraTrackClient;
   /** How many recent runs to scan for JIRA-picked issues (default 200). */
   limit?: number;
+  /**
+   * Project root whose specs/ dir is scanned for published (jira_issue-keyed)
+   * specs — enables the REQ-JIRAPUB-008 divergence check. Optional; omitted
+   * (older callers / tests) skips the published-spec section entirely.
+   */
+  projectRoot?: string;
 }
 
 /** The SpecShip lifecycle work-state derived from a run (REQ-JIRA-008). */
@@ -1039,7 +1079,10 @@ export async function handleSpecshipJiraTrack(
     });
   }
 
-  if (picked.length === 0) {
+  // Published specs are tracked too (REQ-JIRAPUB-008) — they may predate any
+  // workflow run, so the empty-view short-circuit must consider both sources.
+  const published = deps.projectRoot ? enumeratePublishedSpecs(deps.projectRoot) : [];
+  if (picked.length === 0 && published.length === 0) {
     return textResult(formatTrack([]));
   }
 
@@ -1078,5 +1121,229 @@ export async function handleSpecshipJiraTrack(
     rows.push({ ...p, jiraStatus });
   }
 
-  return textResult(formatTrack(rows));
+  // Published specs (REQ-JIRAPUB-008): specs that carry a jira_issue key are
+  // tracked too (they may predate any workflow run), and each one with a
+  // recorded publish fingerprint is compared against the LIVE issue content —
+  // an issue edited in JIRA after publish surfaces as a divergence instead of
+  // silently drifting from the spec.
+  const divergences: string[] = [];
+  {
+    for (const pub of published) {
+      let live: JiraIssue | undefined;
+      if (client) {
+        try {
+          live = (await client.getIssue(pub.issueKey)).issue;
+        } catch {
+          live = undefined;
+        }
+      }
+      if (!seen.has(pub.issueKey)) {
+        seen.add(pub.issueKey);
+        rows.push({
+          issueKey: pub.issueKey,
+          title: pub.title,
+          workState: 'spec authored',
+          jiraStatus: live?.status ?? JIRA_UNREACHABLE,
+        });
+      }
+      if (pub.fingerprint && live) {
+        const liveFp = issueContentFingerprint(live.summary, live.description ?? '');
+        if (liveFp !== pub.fingerprint) {
+          divergences.push(
+            `⚠ ${pub.issueKey} was edited in JIRA after publish (spec: ${pub.specRelPath}) — ` +
+              're-publish with specship_jira_publish to refresh, or fold the JIRA edit back into the spec.',
+          );
+        }
+      }
+    }
+  }
+
+  const table = formatTrack(rows);
+  return textResult(
+    divergences.length > 0 ? `${table}\n\n${divergences.join('\n')}` : table,
+  );
+}
+
+/** A spec under specs/ that carries a published JIRA identity. */
+interface PublishedSpecRef {
+  issueKey: string;
+  title: string;
+  specRelPath: string;
+  fingerprint: string | null;
+}
+
+/**
+ * Enumerate the specs under `<projectRoot>/specs/` whose frontmatter carries a
+ * `jira_issue:` key (REQ-JIRAPUB-008). Best-effort filesystem scan — unreadable
+ * files are skipped, and an absent specs/ dir yields an empty list.
+ */
+function enumeratePublishedSpecs(projectRoot: string): PublishedSpecRef[] {
+  const specsDir = path.join(projectRoot, 'specs');
+  let entries: string[] = [];
+  try {
+    entries = fs.readdirSync(specsDir);
+  } catch {
+    return [];
+  }
+  const out: PublishedSpecRef[] = [];
+  for (const name of entries) {
+    if (!name.toLowerCase().endsWith('.md')) continue;
+    const full = path.join(specsDir, name);
+    try {
+      if (!fs.statSync(full).isFile()) continue;
+      const content = fs.readFileSync(full, 'utf8');
+      const issueKey = readFrontmatterValue(content, 'jira_issue');
+      if (!issueKey) continue;
+      out.push({
+        issueKey,
+        title: readSpecTitle(full, issueKey),
+        specRelPath: path.join('specs', name),
+        fingerprint: readFrontmatterValue(content, 'jira_fingerprint'),
+      });
+    } catch {
+      continue;
+    }
+  }
+  return out;
+}
+
+/**
+ * Dependencies for `handleSpecshipJiraPublish` (REQ-JIRAPUB-001/-002). The DB
+ * handle supplies the spec + acceptance children + link state; `projectRoot`
+ * resolves the spec file for the frontmatter write-back; `makeJiraClient` is
+ * the injectable seam so tests never contact a real host.
+ */
+export interface JiraPublishDeps {
+  /** SpecQueries handle from the MCP session's open SpecShip. */
+  specQueries: unknown;
+  /** The SpecShip project root the spec file lives under. */
+  projectRoot: string;
+  /** Client factory seam (default: resolve creds + new JiraClient). */
+  makeJiraClient?: () => PublishJiraClient;
+}
+
+/** The structural slice of SpecQueries the publish handler reads. */
+interface PublishSpecQueries {
+  getSpecById?: (id: string) => {
+    id: string;
+    kind: string;
+    title: string;
+    body: string;
+    sourcePath: string;
+  } | null;
+  getSpecsByParent?: (id: string) => Array<{
+    id: string;
+    kind: string;
+    title: string;
+    body: string;
+  }>;
+  getLinksBySpec?: (id: string) => unknown[];
+  getAllSpecs?: () => Array<{ id: string; kind: string; sourcePath: string }>;
+}
+
+/**
+ * Handle `specship_jira_publish` (REQ-JIRAPUB-001, REQ-JIRAPUB-002): publish a
+ * requirement spec as a Story + Sub-tasks, then write the JIRA identity back
+ * into the spec file. Re-iding + renaming to the key-derived form happens only
+ * for a first publish of a link-less, single-requirement file — the safe case
+ * where nothing references the old id yet.
+ */
+export async function handleSpecshipJiraPublish(
+  args: Record<string, unknown>,
+  deps: JiraPublishDeps,
+): Promise<ToolResult> {
+  const notConfigured = notConfiguredResult();
+  if (notConfigured) return notConfigured;
+
+  const specId =
+    typeof args.spec_id === 'string' && args.spec_id.trim()
+      ? args.spec_id.trim()
+      : undefined;
+  if (!specId) {
+    return textResult(
+      'A spec id is required (e.g., "REQ-AUTH-001"). Pass it as the "spec_id" argument.',
+    );
+  }
+
+  const sq = deps.specQueries as PublishSpecQueries;
+  const spec = sq.getSpecById?.(specId);
+  if (!spec) {
+    return errorResult(`Spec ${specId} not found — run specship sync first?`);
+  }
+  if (spec.kind !== 'requirement') {
+    return errorResult(
+      `Spec ${specId} is a ${spec.kind}; publish targets a single requirement (pass a REQ-… id).`,
+    );
+  }
+
+  const acceptance = (sq.getSpecsByParent?.(specId) ?? [])
+    .filter((c) => c.kind === 'acceptance')
+    .map((c) => ({ id: c.id, text: (c.title || c.body || '').trim() }))
+    .filter((c) => c.text.length > 0);
+
+  const source: SpecPublishSource = {
+    specId,
+    title: spec.title,
+    body: spec.body ?? '',
+    specRelPath: spec.sourcePath,
+    acceptance,
+  };
+
+  try {
+    const creds = resolveJiraCredentials();
+    const projectKey =
+      (typeof args.project === 'string' && args.project.trim()
+        ? args.project.trim()
+        : undefined) ?? creds.project;
+    if (!projectKey) {
+      return errorResult(
+        'No JIRA project configured for publishing. Pass "project", set ' +
+          'SPECSHIP_JIRA_PROJECT, or add "project" to your jira config.',
+      );
+    }
+    const client = deps.makeJiraClient
+      ? deps.makeJiraClient()
+      : new JiraClient(creds);
+
+    const absPath = path.isAbsolute(spec.sourcePath)
+      ? spec.sourcePath
+      : path.join(deps.projectRoot, spec.sourcePath);
+    const existingKey = readSpecJiraKey(absPath);
+
+    const result = await publishSpecToJira(
+      client,
+      source,
+      { projectKey },
+      existingKey,
+    );
+
+    // Write-back (REQ-JIRAPUB-002). Re-id + rename ONLY on first publish of a
+    // link-less file whose only requirement is this one.
+    const links = sq.getLinksBySpec?.(specId) ?? [];
+    const sameFileReqs = (sq.getAllSpecs?.() ?? []).filter(
+      (s) => s.kind === 'requirement' && s.sourcePath === spec.sourcePath,
+    );
+    const reIdSafe =
+      !existingKey && links.length === 0 && sameFileReqs.length === 1;
+    const written = writeBackJiraIdentity(absPath, result.key, {
+      fingerprint: result.fingerprint,
+      reId: reIdSafe ? { from: specId } : null,
+      renameTo: reIdSafe ? publishedSpecFilename(result.key, spec.title) : null,
+    });
+
+    const verb = result.created ? 'Created' : 'Updated';
+    const newId = reIdSafe ? ` The requirement is now ${reqIdForIssue(result.key)}.` : '';
+    return textResult(
+      `${verb} ${result.key} (${result.subtasksCreated} Sub-task${
+        result.subtasksCreated === 1 ? '' : 's'
+      } created) and recorded jira_issue in ${written.path}.${newId} ` +
+        'Run "specship sync" (or let the watcher pick it up) so the index reflects the file change. ' +
+        `Commits for this spec should be prefixed "${result.key}: ".`,
+    );
+  } catch (err) {
+    if (err instanceof JiraError) {
+      return errorResult(err.message);
+    }
+    return errorResult('Failed to publish the spec to JIRA.');
+  }
 }

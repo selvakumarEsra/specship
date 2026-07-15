@@ -317,6 +317,146 @@ export class JiraClient {
   }
 
   /**
+   * Create an issue (REQ-JIRAPUB-001) — a Story (or configured type) when
+   * `parentKey` is absent, a Sub-task parented to `parentKey` when present.
+   * `POST /rest/api/2/issue`; both Cloud and Data Center accept the
+   * `fields.parent.key` shape for sub-task creation. Returns the new key.
+   *
+   * SECURITY: only spec-derived text (summary/description) and public keys
+   * travel here — never a credential (REQ-JIRA-009).
+   */
+  async createIssue(fields: {
+    projectKey: string;
+    issueType: string;
+    summary: string;
+    description?: string;
+    parentKey?: string;
+  }): Promise<{ key: string; id: string }> {
+    const projectKey = (fields.projectKey ?? '').trim();
+    if (!projectKey) {
+      throw new JiraConfigError(
+        'A JIRA project key is required to create an issue (configure "project" or pass one).',
+      );
+    }
+    const body: any = {
+      fields: {
+        project: { key: projectKey },
+        issuetype: { name: fields.issueType },
+        summary: fields.summary,
+        ...(fields.description !== undefined
+          ? { description: fields.description }
+          : {}),
+        ...(fields.parentKey ? { parent: { key: fields.parentKey } } : {}),
+      },
+    };
+    const created = await this.write('/rest/api/2/issue', body);
+    const key = typeof created?.key === 'string' ? created.key : '';
+    if (!key) {
+      throw new JiraConfigError(
+        `JIRA at ${this.host} did not return a key for the created issue.`,
+      );
+    }
+    return { key, id: String(created?.id ?? '') };
+  }
+
+  /**
+   * Update an issue's summary and/or description (REQ-JIRAPUB-001, the
+   * idempotent re-publish path). `PUT /rest/api/2/issue/{key}`; 204 on
+   * success.
+   */
+  async updateIssue(
+    key: string,
+    fields: { summary?: string; description?: string },
+  ): Promise<void> {
+    const trimmed = (key ?? '').trim();
+    if (!trimmed) {
+      throw new JiraConfigError('An issue key is required (e.g., "PROJ-123").');
+    }
+    const patch: Record<string, unknown> = {};
+    if (fields.summary !== undefined) patch.summary = fields.summary;
+    if (fields.description !== undefined) patch.description = fields.description;
+    if (Object.keys(patch).length === 0) return;
+    await this.write(
+      `/rest/api/2/issue/${encodeURIComponent(trimmed)}`,
+      { fields: patch },
+      'PUT',
+    );
+  }
+
+  /**
+   * List the plain-text bodies of an issue's comments (REQ-JIRAPUB-007's
+   * idempotency check). `GET /issue/{key}/comment`; api/2 comment bodies are
+   * plain strings. Bounded by JIRA's own page size — enough for a
+   * contains-check, never used to mirror content.
+   */
+  async listComments(key: string): Promise<string[]> {
+    const trimmed = (key ?? '').trim();
+    if (!trimmed) {
+      throw new JiraConfigError('An issue key is required (e.g., "PROJ-123").');
+    }
+    const body = await this.request(
+      `/rest/api/2/issue/${encodeURIComponent(trimmed)}/comment`,
+    );
+    const raw: any[] = Array.isArray(body?.comments) ? body.comments : [];
+    return raw
+      .map(c => (typeof c?.body === 'string' ? c.body : ''))
+      .filter(b => b.length > 0);
+  }
+
+  /**
+   * Ensure a project version with `name` exists (REQ-JIRAPUB-007), creating
+   * it when missing. Returns whether this call created it — a re-run finds
+   * the existing version and creates nothing (A2).
+   */
+  async ensureProjectVersion(
+    projectKey: string,
+    name: string,
+  ): Promise<{ created: boolean }> {
+    const project = (projectKey ?? '').trim();
+    const version = (name ?? '').trim();
+    if (!project || !version) {
+      throw new JiraConfigError(
+        'A project key and a version name are required to ensure a JIRA version.',
+      );
+    }
+    const existing = await this.request(
+      `/rest/api/2/project/${encodeURIComponent(project)}/versions`,
+    );
+    const versions: any[] = Array.isArray(existing) ? existing : [];
+    if (versions.some(v => v?.name === version)) return { created: false };
+    await this.write('/rest/api/2/version', { name: version, project });
+    return { created: true };
+  }
+
+  /**
+   * Add a fix version to an issue (REQ-JIRAPUB-007), idempotently: when the
+   * issue already carries it, no write happens. Uses the additive
+   * `update.fixVersions add` shape so other fix versions are preserved.
+   */
+  async setFixVersion(key: string, versionName: string): Promise<{ added: boolean }> {
+    const trimmed = (key ?? '').trim();
+    const version = (versionName ?? '').trim();
+    if (!trimmed || !version) {
+      throw new JiraConfigError(
+        'An issue key and a version name are required to set a fix version.',
+      );
+    }
+    const issue = await this.request(
+      `/rest/api/2/issue/${encodeURIComponent(trimmed)}?fields=fixVersions`,
+    );
+    const current: any[] = Array.isArray(issue?.fields?.fixVersions)
+      ? issue.fields.fixVersions
+      : [];
+    if (current.some(v => v?.name === version)) return { added: false };
+    await this.write(
+      `/rest/api/2/issue/${encodeURIComponent(trimmed)}`,
+      { update: { fixVersions: [{ add: { name: version } }] } },
+      'PUT',
+    );
+    return { added: true };
+  }
+
+  /**
    * Shared, credentialed GET against the configured host. Delegates to
    * `send()` for the security guards, then parses JSON. Returns the parsed
    * JSON body on success; a non-JSON body is a `JiraConfigError`.

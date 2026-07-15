@@ -219,6 +219,25 @@ just-written spec:
 This is what enforces REQ-DOORS-002.A3 ("speed does not sacrifice correctness")
 for the fast-path rather than leaving it aspirational.
 
+## JIRA offer (automatic, every authoring path — REQ-JIRAPUB-003)
+
+After the Post-write review completes, **when the JIRA integration is
+configured** (the `specship_jira_*` tools are present and not returning the
+"not configured" pointer), offer **exactly one** prompt:
+
+> Create a JIRA Story for this spec? (its acceptance criteria become Sub-tasks)
+
+- **Yes** → call `specship_jira_publish` with the new requirement's `spec_id`
+  (pass `project` only if the user names one; the configured default applies
+  otherwise). Relay the result — the created key, Sub-task count, and the
+  updated spec path — and note that commits for this spec should be prefixed
+  with the key (`PROJ-123: …`). The publish writes `jira_issue:` into the
+  spec's frontmatter, which is what wires branch naming, PR linkage, and
+  tracking automatically.
+- **No** → proceed to the implement hand-off unchanged; write nothing to JIRA.
+- **JIRA not configured** → skip this section entirely — no prompt, no
+  mention (REQ-JIRAPUB-003.A1).
+
 ## Fast-path (`fast <description>`)
 
 For a solo dev who wants to record intent and move, **without** the brainstorm /

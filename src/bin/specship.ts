@@ -847,6 +847,40 @@ program
       }
     };
 
+    // JIRA push (REQ-JIRAPUB-006): a genuine drift transition on a JIRA-backed
+    // spec is commented onto its issue — best-effort, transition events only
+    // (so an ongoing drift never repeats a comment), never blocks the sync.
+    const pushJiraDriftComments = async (
+      cg: { getSpecQueries(): { getSpecById(id: string): { sourcePath: string } | null } },
+      result: { driftedTransitions?: Array<{ specId: string; axis: string; symbol: string }> },
+    ) => {
+      const transitions = result.driftedTransitions ?? [];
+      if (transitions.length === 0) return;
+      try {
+        const { loadJiraConfig, resolveJiraCredentials } = await import('../jira/config');
+        if (!loadJiraConfig()) return; // not configured → no JIRA calls at all
+        const { readSpecJiraKey } = await import('../jira/spec-writer');
+        const { JiraClient } = await import('../jira/client');
+        const { commentDriftTransitionsOnJira } = await import('../jira/publish');
+        const notes = await commentDriftTransitionsOnJira({
+          transitions,
+          specPathFor: (specId) => {
+            const rootId = specId.replace(/\.A\d+$/, '');
+            const spec = cg.getSpecQueries().getSpecById(rootId);
+            if (!spec) return null;
+            return path.isAbsolute(spec.sourcePath)
+              ? spec.sourcePath
+              : path.join(projectPath, spec.sourcePath);
+          },
+          readKey: readSpecJiraKey,
+          makeClient: () => new JiraClient(resolveJiraCredentials()),
+        });
+        for (const note of notes) console.log(`JIRA: ${note}`);
+      } catch {
+        /* a JIRA fault must never fail a sync */
+      }
+    };
+
     // One-line drift-queue summary, only when non-empty (REQ-DRIFT-PUSH-002).
     const pushDriftSummary = (cg: { getSpecQueries(): { getLinksByState(states: string[]): unknown[] } }) => {
       if (!options.driftSummary) return;
@@ -870,6 +904,7 @@ program
       if (options.quiet) {
         const result = await cg.sync();
         pushDriftNotices(result);
+        await pushJiraDriftComments(cg, result);
         pushDriftSummary(cg);
         cg.destroy();
         return;
@@ -901,6 +936,7 @@ program
       }
 
       pushDriftNotices(result);
+      await pushJiraDriftComments(cg, result);
       pushDriftSummary(cg);
       clack.outro('Done');
       cg.destroy();
@@ -3457,7 +3493,7 @@ jira
     try {
       const result = await handleSpecshipJiraTrack(
         { project: options.project },
-        { specQueries: cg.getSpecQueries() },
+        { specQueries: cg.getSpecQueries(), projectRoot },
       );
       const out = result.content.map((c) => c.text).join('\n');
       // eslint-disable-next-line no-console
@@ -3465,6 +3501,68 @@ jira
       if (result.isError) process.exit(1);
     } finally {
       cg.close();
+    }
+  });
+
+/**
+ * specship jira release — stamp a released version onto issues
+ * (REQ-JIRAPUB-007): ensure the project version exists, add it as fixVersion
+ * on each issue, and add one shipped-in comment. Idempotent — a re-run
+ * creates no duplicate version, fixVersion, or comment.
+ */
+jira
+  .command('release <version>')
+  .description('Set <version> as fixVersion on JIRA issues (creating the project version if missing) with a shipped-in comment.')
+  .option('--keys <keys>', 'comma-separated issue keys (e.g., "PROJ-1,PROJ-2"); default: every published spec\'s jira_issue key')
+  .option('--project <key>', 'JIRA project key the version belongs to (default: the configured publish project)')
+  .option('--path <projectRoot>', 'project root whose specs/ supplies the default keys (default: cwd)')
+  .action(async (version: string, options: { keys?: string; project?: string; path?: string }) => {
+    const { resolveJiraCredentials, JiraClient } = await import('../jira');
+    const { releaseIssues } = await import('../jira/publish');
+    const { readSpecJiraKey } = await import('../jira/spec-writer');
+    try {
+      const creds = resolveJiraCredentials();
+      const projectKey = options.project ?? creds.project;
+      if (!projectKey) {
+        error('No JIRA project configured. Pass --project, set SPECSHIP_JIRA_PROJECT, or add "project" to your jira config.');
+        process.exit(1);
+      }
+
+      let keys = (options.keys ?? '')
+        .split(',')
+        .map((k) => k.trim())
+        .filter(Boolean);
+      if (keys.length === 0) {
+        // Default: every spec under <root>/specs with a jira_issue key.
+        const projectRoot = path.resolve(options.path ?? process.cwd());
+        const specsDir = path.join(projectRoot, 'specs');
+        try {
+          for (const name of fs.readdirSync(specsDir)) {
+            if (!name.toLowerCase().endsWith('.md')) continue;
+            const key = readSpecJiraKey(path.join(specsDir, name));
+            if (key) keys.push(key);
+          }
+        } catch {
+          /* no specs dir → empty keys, handled below */
+        }
+        keys = [...new Set(keys)];
+      }
+      if (keys.length === 0) {
+        error('No issue keys to release — pass --keys or publish specs first (specship_jira_publish).');
+        process.exit(1);
+      }
+
+      const client = new JiraClient(creds);
+      const result = await releaseIssues(client, projectKey, version, keys);
+      const stamped = result.issues.filter((i) => i.fixVersionAdded).length;
+      const commented = result.issues.filter((i) => i.commented).length;
+      success(
+        `Version ${version}${result.versionCreated ? ' created' : ' already existed'} in ${projectKey}; ` +
+          `fixVersion added to ${stamped}/${keys.length} issue(s), shipped-in comment added to ${commented}.`,
+      );
+    } catch (err) {
+      error(`JIRA release failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(1);
     }
   });
 

@@ -843,11 +843,80 @@ export async function handleSpecshipLinkVerify(
   const newState: SpecLinkState = result === 'pass' ? 'verified' : 'broken';
   sq.updateSpecLinkState(linkId, newState, null);
 
+  // JIRA push (REQ-JIRAPUB-005): a verified acceptance criterion on a
+  // JIRA-backed spec advances its published Sub-task (and, when all Sub-tasks
+  // are done, the Story). Strictly best-effort AFTER the verify is recorded —
+  // a JIRA fault degrades to a note, never a failed verify.
+  let jiraNote = '';
+  if (newState === 'verified' && /\.A\d+$/.test(link.specId)) {
+    jiraNote = await advanceJiraForVerifiedAcceptance(cg, link.specId);
+  }
+
   return text(
     `Link #${linkId} (${link.specId} → ${link.targetQualifiedName}): ${newState}${
       reason ? ` — ${reason}` : ''
-    }`
+    }${jiraNote}`
   );
+}
+
+/**
+ * Best-effort JIRA Sub-task advance for a just-verified acceptance criterion
+ * (REQ-JIRAPUB-005). Silent (`''`) when JIRA isn't configured or the owning
+ * spec carries no `jira_issue:` key (A3 — no JIRA call is made in that case
+ * beyond reading the local config/spec file); otherwise returns a short note
+ * describing the transition, skip, or failure.
+ */
+async function advanceJiraForVerifiedAcceptance(
+  cg: SpecShip,
+  acceptanceSpecId: string
+): Promise<string> {
+  try {
+    // Lazy imports keep the JIRA integration entirely off the hot path.
+    const { loadJiraConfig, resolveJiraCredentials } = await import('../jira/config');
+    if (!loadJiraConfig()) return '';
+
+    const sq = cg.getSpecQueries();
+    const reqId = acceptanceSpecId.replace(/\.A\d+$/, '');
+    const acceptance = sq.getSpecById(acceptanceSpecId);
+    const requirement = sq.getSpecById(reqId);
+    if (!acceptance || !requirement) return '';
+
+    const { readSpecJiraKey } = await import('../jira/spec-writer');
+    const path = await import('path');
+    const absPath = path.isAbsolute(requirement.sourcePath)
+      ? requirement.sourcePath
+      : path.join(cg.getProjectRoot(), requirement.sourcePath);
+    const issueKey = readSpecJiraKey(absPath);
+    if (!issueKey) return '';
+
+    const creds = resolveJiraCredentials();
+    const { JiraClient } = await import('../jira/client');
+    const { advanceSubtaskForAcceptance } = await import('../jira/publish');
+    const outcome = await advanceSubtaskForAcceptance(
+      new JiraClient(creds),
+      issueKey,
+      acceptance.title || acceptance.body || '',
+      creds.transitions?.done ?? 'Done'
+    );
+
+    if ('skipped' in outcome.subtask) {
+      return `\nJIRA: ${outcome.subtask.reason}.`;
+    }
+    const sub = outcome.subtask;
+    const subNote =
+      'transitioned' in sub.result
+        ? `${sub.key} → ${sub.result.transitioned}`
+        : `${sub.key} skipped (${sub.result.reason})`;
+    const storyNote = outcome.story
+      ? 'transitioned' in outcome.story.result
+        ? `; ${outcome.story.key} → ${outcome.story.result.transitioned}`
+        : `; ${outcome.story.key} skipped (${outcome.story.result.reason})`
+      : '';
+    return `\nJIRA: ${subNote}${storyNote}.`;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return `\nJIRA: couldn't advance the Sub-task (${msg}).`;
+  }
 }
 
 export async function handleSpecshipDrifted(

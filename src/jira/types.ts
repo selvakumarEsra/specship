@@ -25,6 +25,12 @@ export interface JiraTransitionNames {
   inProgress?: string;
   /** Transition applied when a PR is raised (default "In Review"). */
   inReview?: string;
+  /**
+   * Transition applied when acceptance evidence verifies (REQ-JIRAPUB-005),
+   * driving a published Sub-task (and, once all Sub-tasks are done, its
+   * Story) toward completion. Default "Done".
+   */
+  done?: string;
 }
 
 /**
@@ -48,6 +54,8 @@ export interface JiraCredentials {
    * hand-built credentials (tests, direct callers) needn't supply it.
    */
   transitions?: JiraTransitionNames;
+  /** Default project key for spec→JIRA publishing (REQ-JIRAPUB-001). */
+  project?: string;
   /**
    * Path to a PEM CA bundle trusted for JIRA requests (REQ-JIRATLS-001) —
    * the preferred fix for Data Center behind a corporate/self-signed cert.
@@ -81,6 +89,11 @@ export interface JiraConfig {
   caCertPath?: string;
   /** Disable TLS verification for JIRA requests only (REQ-JIRATLS-001). */
   insecureTls?: boolean;
+  /**
+   * Default project key that spec→JIRA publishing creates issues in
+   * (REQ-JIRAPUB-001). A publish call may override it per invocation.
+   */
+  project?: string;
 }
 
 /**

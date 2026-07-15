@@ -51,6 +51,20 @@ function readJiraIssueKey(content: string): string | null {
 }
 
 /**
+ * Read the `jira_issue:` key of a spec FILE (REQ-JIRAPUB-004): the JIRA
+ * identity commits and tracking key on. Returns `null` for a file without
+ * frontmatter, without the key, or that can't be read — a key mentioned only
+ * in the body never matches (same guarantee as `readJiraIssueKey`).
+ */
+export function readSpecJiraKey(specPath: string): string | null {
+  try {
+    return readJiraIssueKey(fs.readFileSync(specPath, 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Find the spec file (if any) whose frontmatter records `issueKey`, scanning
  * `<projectRoot>/specs/`. Returns the absolute path, or `null` when no spec for
  * the key exists. Keyed on the parsed `jira_issue:` frontmatter value — never a

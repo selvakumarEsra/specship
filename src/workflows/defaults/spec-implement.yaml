@@ -17,6 +17,12 @@ systemPromptAppend: |
   already links to. After editing, call specship_link_assert with the
   spec_id and the symbol you implemented BEFORE reporting done.
 
+  JIRA-backed specs (REQ-JIRAPUB-004): if the spec file's frontmatter
+  carries a `jira_issue:` key, EVERY git commit message you write for this
+  work MUST be prefixed with that key ("PROJ-123: ..."), so JIRA's
+  development panel and smart-commit processing link the commits to the
+  issue. Specs without the key commit exactly as normal.
+
 nodes:
   - id: fetch_spec
     kind: prompt

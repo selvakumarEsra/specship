@@ -9,6 +9,13 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### New Features
+
+- Publish a spec to JIRA with the new `specship_jira_publish` tool: it creates a Story whose Sub-tasks mirror the spec's acceptance criteria, records the issue key in the spec so branches, PRs, and tracking pick it up automatically, and is safe to re-run (it updates the existing Story instead of duplicating it). After authoring a spec with JIRA connected, SpecShip now offers this in one prompt.
+- Commits for a JIRA-backed spec are prefixed with the issue key (`PROJ-123: …`), so JIRA's development panel and smart commits link them to the issue.
+- Verifying an acceptance criterion now advances its published JIRA Sub-task toward Done (and the Story once every Sub-task is done), and a spec that drifts posts a one-time comment on its issue — both configurable via the `SPECSHIP_JIRA_TRANSITION_DONE` and `SPECSHIP_JIRA_PROJECT` settings.
+- New `specship jira release <version>` command stamps a released version onto your JIRA issues as fixVersion with a shipped-in comment, creating the project version if needed; re-running it is a no-op.
+- `specship_jira_track` now also lists published specs and flags issues that were edited in JIRA after publishing, so specs and their JIRA mirrors can't silently diverge.
 
 ## [0.19.1] - 2026-07-15
 
