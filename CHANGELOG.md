@@ -9,6 +9,9 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+
+## [0.19.1] - 2026-07-15
+
 ### Fixes
 
 - Orphaned spec links now re-attach automatically when their target symbol reappears (e.g. a rename is reverted or a file is restored), instead of staying orphaned until manually re-asserted — and `Class.method` / `Class::method` are now treated as the same symbol when resolving spec links, so specs and code comments that spell the separator differently no longer produce broken or duplicate links.
@@ -685,3 +688,4 @@ Thanks @andreinknv for the substantive draft this release was based on.
 [0.18.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.18.0
 [0.18.1]: https://github.com/selvakumarEsra/specship/releases/tag/v0.18.1
 [0.19.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.19.0
+[0.19.1]: https://github.com/selvakumarEsra/specship/releases/tag/v0.19.1
