@@ -39,6 +39,26 @@ specship jira configure \
   --pat <personal-access-token>
 ```
 
+:::note[Context path]
+If your instance is served under a context path (common on Data Center, e.g. `https://jira.your-company.com:8443/jira`), include it in `--base-url` — SpecShip appends `/rest/api/2/...` to exactly what you configure.
+:::
+
+### Corporate or self-signed certificates (Data Center)
+
+Enterprise Data Center instances often sit behind a certificate your machine doesn't trust, which fails with `Could not reach JIRA at <host>`. Two opt-ins fix it — preferred first:
+
+```bash
+# Preferred: trust your corporate CA bundle (PEM) for JIRA requests
+specship jira configure --base-url https://jira.your-company.com:8443/jira \
+  --pat <token> --ca-cert /path/to/corporate-ca.pem
+
+# Last resort: disable certificate verification for JIRA requests only
+specship jira configure --base-url https://jira.your-company.com:8443/jira \
+  --pat <token> --insecure-tls
+```
+
+Both are scoped to SpecShip's JIRA requests only — they never change TLS verification for anything else. `--insecure-tls` prints a warning; use it only on trusted networks.
+
 Then verify the connection at any time:
 
 ```bash
@@ -62,6 +82,8 @@ Every field can come from an environment variable instead of the stored file, so
 | `SPECSHIP_JIRA_API_TOKEN` | Atlassian API token (Cloud) |
 | `SPECSHIP_JIRA_PAT` | Personal Access Token (Data Center / Server) |
 | `SPECSHIP_JIRA_DEPLOYMENT` | Force `cloud` or `datacenter` instead of inferring |
+| `SPECSHIP_JIRA_CA_CERT` | Path to a PEM CA bundle for a corporate/self-signed certificate |
+| `SPECSHIP_JIRA_INSECURE_TLS` | `1`/`true` disables certificate verification for JIRA requests only (last resort) |
 | `SPECSHIP_JIRA_CONFIG` | Point at a config file other than `~/.specship/jira.json` |
 
 An environment variable overrides the stored value.

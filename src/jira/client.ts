@@ -15,6 +15,8 @@
  *  - No thrown error or result field ever contains the credential.
  */
 
+import * as fs from 'fs';
+import * as https from 'https';
 import { buildAuthHeader } from './auth';
 import {
   JiraCredentials,
@@ -32,11 +34,29 @@ import {
 /** Upper bound on issues fetched in one list call — never unbounded. */
 export const MAX_ISSUE_RESULTS = 50;
 
+/**
+ * The structural subset of `Response` the client consumes. Both transports
+ * — global `fetch` and the TLS-aware `https` path (REQ-JIRATLS-001) —
+ * produce this, so every guard in `send()` applies identically to each.
+ */
+interface JiraHttpResponse {
+  status: number;
+  ok: boolean;
+  type: string;
+  json(): Promise<any>;
+}
+
 export class JiraClient {
   private readonly baseUrl: string;
   private readonly host: string;
   private readonly authHeader: string;
   private readonly deployment: JiraCredentials['deployment'];
+  /**
+   * Non-null when a TLS opt-in is active (REQ-JIRATLS-001): a custom CA
+   * bundle and/or verification disabled — scoped to JIRA requests only,
+   * never process-global.
+   */
+  private readonly tls: { ca?: Buffer; rejectUnauthorized: boolean } | null;
 
   constructor(creds: JiraCredentials) {
     // Normalize: strip trailing slashes so path joins are clean.
@@ -50,6 +70,23 @@ export class JiraClient {
     }
     this.authHeader = buildAuthHeader(creds);
     this.deployment = creds.deployment;
+
+    if (creds.caCertPath || creds.insecureTls) {
+      let ca: Buffer | undefined;
+      if (creds.caCertPath) {
+        try {
+          ca = fs.readFileSync(creds.caCertPath);
+        } catch {
+          // Fail fast (REQ-JIRATLS-001.A4) — only the path, no credential.
+          throw new JiraConfigError(
+            `Could not read the JIRA CA certificate at ${creds.caCertPath}.`,
+          );
+        }
+      }
+      this.tls = { ca, rejectUnauthorized: !creds.insecureTls };
+    } else {
+      this.tls = null;
+    }
   }
 
   /**
@@ -336,7 +373,7 @@ export class JiraClient {
     path: string,
     method: 'GET' | 'POST' | 'PUT',
     jsonBody?: string,
-  ): Promise<Response> {
+  ): Promise<JiraHttpResponse> {
     const url = `${this.baseUrl}${path}`;
 
     const headers: Record<string, string> = {
@@ -347,20 +384,39 @@ export class JiraClient {
       headers['Content-Type'] = 'application/json';
     }
 
-    let res: Response;
+    let res: JiraHttpResponse;
     try {
-      res = await fetch(url, {
-        method,
-        redirect: 'manual',
-        headers,
-        ...(jsonBody !== undefined ? { body: jsonBody } : {}),
-      });
+      // With a TLS opt-in active, route through `https` (fetch/undici has no
+      // per-request TLS options). Both transports refuse redirects the same
+      // way — `https.request` never follows one, and the 3xx guard below
+      // fires on either path.
+      res = this.tls
+        ? await this.sendViaTls(url, method, headers, jsonBody)
+        : await fetch(url, {
+            method,
+            redirect: 'manual',
+            headers,
+            ...(jsonBody !== undefined ? { body: jsonBody } : {}),
+          });
     } catch (err) {
-      // Network / DNS — the message is fetch's own (no credential in it),
-      // but we prepend the host, never the header.
+      // Network / DNS / TLS — the message is the transport's own (no
+      // credential in it), but we prepend the host, never the header.
+      // Undici hides the real cause (e.g. SELF_SIGNED_CERT_IN_CHAIN) behind
+      // a bare "fetch failed" — surface the cause code plus actionable
+      // guidance for the common Data Center causes (REQ-JIRATLS-002).
       const msg = err instanceof Error ? err.message : String(err);
+      const cause = (err as any)?.cause;
+      const causeCode: string | undefined = cause?.code ?? cause?.message;
+      const detail = causeCode && !msg.includes(causeCode)
+        ? `${msg} (${causeCode})`
+        : msg;
       throw new JiraConfigError(
-        `Could not reach JIRA at ${this.host}: ${msg}`,
+        `Could not reach JIRA at ${this.host}: ${detail}. Likely causes: ` +
+          `a corporate/self-signed certificate — point SPECSHIP_JIRA_CA_CERT ` +
+          `at your CA bundle (or re-run "specship jira configure --ca-cert ` +
+          `<pem>"; last resort: --insecure-tls); a context path — if your ` +
+          `instance lives under one (e.g. https://host:8443/jira), include ` +
+          `it in the base URL; or the host isn't reachable (VPN/network).`,
       );
     }
 
@@ -399,5 +455,50 @@ export class JiraClient {
     }
 
     return res;
+  }
+
+  /**
+   * TLS-aware transport (REQ-JIRATLS-001): used only when a custom CA or the
+   * insecure opt-in is configured. `https.request` never follows a redirect,
+   * so a 3xx surfaces as-is and `send()`'s redirect guard refuses it — the
+   * `Authorization` header is never replayed, same as the fetch path. TLS
+   * options apply to this request only; the process default trust store is
+   * untouched.
+   */
+  private sendViaTls(
+    url: string,
+    method: 'GET' | 'POST' | 'PUT',
+    headers: Record<string, string>,
+    jsonBody?: string,
+  ): Promise<JiraHttpResponse> {
+    return new Promise((resolve, reject) => {
+      const req = https.request(
+        url,
+        {
+          method,
+          headers,
+          ca: this.tls?.ca,
+          rejectUnauthorized: this.tls?.rejectUnauthorized ?? true,
+        },
+        (res) => {
+          const chunks: Buffer[] = [];
+          res.on('data', (c: Buffer) => chunks.push(c));
+          res.on('error', reject);
+          res.on('end', () => {
+            const status = res.statusCode ?? 0;
+            const text = Buffer.concat(chunks).toString('utf-8');
+            resolve({
+              status,
+              ok: status >= 200 && status < 300,
+              type: 'basic',
+              json: async () => JSON.parse(text),
+            });
+          });
+        },
+      );
+      req.on('error', reject);
+      if (jsonBody !== undefined) req.write(jsonBody);
+      req.end();
+    });
   }
 }

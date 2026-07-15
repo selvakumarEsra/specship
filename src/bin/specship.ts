@@ -3291,12 +3291,16 @@ jira
   .option('--api-token <token>', 'Cloud: API token (paired with --email)')
   .option('--pat <token>', 'Data Center: personal access token')
   .option('--deployment <kind>', 'Deployment kind: "cloud" or "datacenter" (inferred if omitted)')
+  .option('--ca-cert <pem>', 'Path to a PEM CA bundle for a corporate/self-signed certificate (Data Center)')
+  .option('--insecure-tls', 'Disable TLS certificate verification for JIRA requests only (last resort)')
   .action(async (opts: {
     baseUrl?: string;
     email?: string;
     apiToken?: string;
     pat?: string;
     deployment?: string;
+    caCert?: string;
+    insecureTls?: boolean;
   }) => {
     const {
       saveJiraConfig,
@@ -3336,7 +3340,7 @@ jira
         };
       } else {
         const baseUrl = opts.baseUrl ?? (await clack.text({
-          message: 'JIRA base URL',
+          message: 'JIRA base URL (include the context path if your instance has one, e.g. https://host:8443/jira)',
           placeholder: 'https://acme.atlassian.net',
           validate: (v: string) => (v && v.trim() ? undefined : 'Required'),
         }));
@@ -3374,6 +3378,24 @@ jira
           if (cancelled(pat)) { clack.cancel('Cancelled — nothing saved.'); return; }
           config.pat = String(pat);
         }
+      }
+
+      // Corporate TLS opt-ins (REQ-JIRATLS-001) — flags apply on both the
+      // flagged and interactive paths.
+      if (opts.caCert) {
+        const caPath = opts.caCert.trim();
+        if (!fs.existsSync(caPath)) {
+          clack.log.error(`CA certificate not found: ${caPath}`);
+          process.exit(1);
+        }
+        config.caCertPath = caPath;
+      }
+      if (opts.insecureTls) {
+        config.insecureTls = true;
+        clack.log.warn(
+          'TLS certificate verification is DISABLED for JIRA requests. ' +
+            'Prefer --ca-cert with your corporate CA bundle when possible.',
+        );
       }
 
       saveJiraConfig(config);

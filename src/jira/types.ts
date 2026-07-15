@@ -48,6 +48,17 @@ export interface JiraCredentials {
    * hand-built credentials (tests, direct callers) needn't supply it.
    */
   transitions?: JiraTransitionNames;
+  /**
+   * Path to a PEM CA bundle trusted for JIRA requests (REQ-JIRATLS-001) —
+   * the preferred fix for Data Center behind a corporate/self-signed cert.
+   */
+  caCertPath?: string;
+  /**
+   * Disable TLS certificate verification for JIRA requests ONLY
+   * (REQ-JIRATLS-001). Explicit opt-in, never inferred, never
+   * process-global. Last resort when no CA bundle is available.
+   */
+  insecureTls?: boolean;
 }
 
 /**
@@ -66,6 +77,10 @@ export interface JiraConfig {
    * built-in "In Progress" / "In Review" defaults apply.
    */
   transitions?: JiraTransitionNames;
+  /** PEM CA bundle for corporate/self-signed TLS (REQ-JIRATLS-001). */
+  caCertPath?: string;
+  /** Disable TLS verification for JIRA requests only (REQ-JIRATLS-001). */
+  insecureTls?: boolean;
 }
 
 /**

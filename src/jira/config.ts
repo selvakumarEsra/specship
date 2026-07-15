@@ -98,6 +98,13 @@ export function resolveJiraCredentials(): JiraCredentials {
   const explicitDeployment = normalizeDeployment(
     process.env.SPECSHIP_JIRA_DEPLOYMENT ?? file?.deployment,
   );
+  // Corporate TLS opt-ins (REQ-JIRATLS-001): env over file, per field.
+  const caCertPath = process.env.SPECSHIP_JIRA_CA_CERT ?? file?.caCertPath;
+  const insecureEnv = process.env.SPECSHIP_JIRA_INSECURE_TLS;
+  const insecureTls =
+    insecureEnv !== undefined
+      ? insecureEnv === '1' || insecureEnv.toLowerCase() === 'true'
+      : Boolean(file?.insecureTls);
 
   if (!baseUrl) {
     throw new JiraConfigError(
@@ -144,6 +151,8 @@ export function resolveJiraCredentials(): JiraCredentials {
     apiToken,
     pat,
     transitions: { inProgress, inReview },
+    caCertPath,
+    insecureTls,
   };
 }
 
