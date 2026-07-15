@@ -18,6 +18,7 @@ import type { SpecQueries } from '../db/spec-queries';
 import { renderBehaviourSurface } from '../behaviour/behaviour-surface';
 import { writeBackImplementation } from '../extraction/specs/spec-file-writeback';
 import type { ToolDefinition, ToolResult } from './tools';
+import { canonicalQualifiedName } from '../resolution/spec-link-resolver';
 import { summarizeBriefFunnel, ideaCaptureFields } from '../resolution/brief-link-resolver';
 import type { FunnelLookup } from '../resolution/brief-link-resolver';
 
@@ -713,7 +714,7 @@ export async function handleSpecshipLinkAssert(
 ): Promise<ToolResult> {
   const specId = args.spec_id;
   const targetFilePath = args.target_file_path;
-  const targetQualifiedName = args.target_qualified_name;
+  const rawQualifiedName = args.target_qualified_name;
   const targetNodeKind = (args.target_node_kind as NodeKind | undefined) ?? 'function';
   const kind = (args.kind as SpecLinkKind | undefined) ?? 'implements';
 
@@ -723,9 +724,13 @@ export async function handleSpecshipLinkAssert(
   if (typeof targetFilePath !== 'string' || targetFilePath.length === 0) {
     return error('target_file_path is required');
   }
-  if (typeof targetQualifiedName !== 'string' || targetQualifiedName.length === 0) {
+  if (typeof rawQualifiedName !== 'string' || rawQualifiedName.length === 0) {
     return error('target_qualified_name is required');
   }
+  // Canonical dotted key (REQ-LINKFIX-002): the agent may assert `Class.method`
+  // while the extractor indexed `Class::method` (or vice versa) — normalizing
+  // here keeps one logical row per symbol regardless of separator style.
+  const targetQualifiedName = canonicalQualifiedName(rawQualifiedName);
 
   const sq = cg.getSpecQueries();
   const spec = sq.getSpecById(specId);
