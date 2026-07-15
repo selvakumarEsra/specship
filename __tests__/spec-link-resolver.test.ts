@@ -341,6 +341,68 @@ describe.skipIf(!fts5Available)('SpecLinkResolver refactor scenarios', () => {
     expect(sq.getLinksBySpec('REQ-5')).toHaveLength(0);
   });
 
+  it('verified spec-declaration link survives spec re-extraction (JIRAPUB-009 regression, REQ-STICKYLINK-001)', () => {
+    const sq = cg.getSpecQueries();
+    const resolver = cg.getSpecLinkResolver();
+    const queries = (cg as unknown as { queries: import('../src/db/queries').QueryBuilder }).queries;
+    const now = Date.now();
+
+    // A requirement whose body — and therefore contentHash — does NOT change
+    // when a sibling requirement is appended to the same spec file.
+    const REQ1_HASH = 'req1-hash';
+    sq.insertSpec({
+      id: 'REQ-JP-1',
+      kind: 'requirement',
+      title: 'Publish',
+      body: 'req one body',
+      format: 'markdown',
+      sourcePath: 'specs/jira.md',
+      contentHash: REQ1_HASH,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const node = makeNode('src/publish.ts', 'publishSpec', 'function', 1, 'publishSpec()');
+    queries.insertNode(node);
+
+    // Extraction pass 1: apply the `implementations:` declaration (0.7),
+    // then the agent verifies the link (state → verified, confidence stays 0.7).
+    const specsById = new Map([['REQ-JP-1', sq.getSpecById('REQ-JP-1')!]]);
+    resolver.applyDeclarationCandidates(
+      [
+        {
+          specId: 'REQ-JP-1',
+          targetFilePath: 'src/publish.ts',
+          targetQualifiedName: 'publishSpec',
+          targetNodeKind: 'function',
+          kind: 'implements',
+        },
+      ],
+      specsById
+    );
+    const linkId = sq.getLinksBySpec('REQ-JP-1')[0]!.id;
+    sq.updateSpecLinkState(linkId, 'verified', null, now);
+    expect(sq.getLinkById(linkId)!.state).toBe('verified');
+
+    // Append a 3rd requirement to the file → the whole spec is re-extracted,
+    // re-running applyDeclarationCandidates for REQ-JP-1 with its UNCHANGED
+    // contentHash (same equal 0.7 confidence). Without the sticky guard this
+    // silently reset the verified link back to `implemented`.
+    resolver.applyDeclarationCandidates(
+      [
+        {
+          specId: 'REQ-JP-1',
+          targetFilePath: 'src/publish.ts',
+          targetQualifiedName: 'publishSpec',
+          targetNodeKind: 'function',
+          kind: 'implements',
+        },
+      ],
+      specsById
+    );
+
+    expect(sq.getLinkById(linkId)!.state).toBe('verified'); // preserved
+  });
+
   // ===========================================================================
   // Transitive spec-tier inheritance — REQ-DOMAIN-002 (getInheritedLinks)
   // ===========================================================================

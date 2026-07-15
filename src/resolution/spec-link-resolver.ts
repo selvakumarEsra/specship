@@ -35,6 +35,7 @@ import {
   SpecLink,
   SpecLinkState,
   SpecLinkProvenance,
+  STICKY_SPEC_LINK_STATES,
 } from '../types';
 import { QueryBuilder } from '../db/queries';
 import { SpecQueries } from '../db/spec-queries';
@@ -56,8 +57,11 @@ const CODE_COMMENT_VERIFIES = /@verifies\s+([A-Za-z][A-Za-z0-9_.-]*)/g;
  * `orphaned` is NOT sticky: when the logical target reappears (e.g. the
  * symbol was restored or a rename was reverted), the resolver auto-reattaches
  * the link to `implemented` (REQ-LINKFIX-001) — no agent re-assert needed.
+ *
+ * Defined in `types.ts` as {@link STICKY_SPEC_LINK_STATES} so the DB upsert
+ * layer can reuse the exact same set (REQ-STICKYLINK-001).
  */
-const STICKY_STATES: Set<SpecLinkState> = new Set(['verified', 'broken']);
+const STICKY_STATES = STICKY_SPEC_LINK_STATES;
 
 /**
  * Normalize a qualified name to its canonical dotted form: every `::`
