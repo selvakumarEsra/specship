@@ -15,6 +15,10 @@ description: Every SpecShip command and the flags it accepts.
 | `specship query <search>` | Search for symbols in the codebase |
 | `specship files` | Show project file structure from the index |
 | `specship reflect [path]` | Mine ingested transcripts for self-improvement proposals (memory rules, skills, hooks) |
+| `specship memory` | Capture lessons to memory and review/manage stored memory items. |
+| `specship memory capture` | Capture a lesson/anti-pattern as a human-gated memory rule (lesson text on stdin). |
+| `specship memory list` | List the memory rules SpecShip has applied (reflect-managed store). |
+| `specship memory remove <id>` | Remove a SpecShip-managed memory rule by id (previewed; pass --yes to write). |
 | `specship fitness [path]` | Check architecture-fitness rules against the code graph (CI gate; exits non-zero on violation) |
 | `specship check [path]` | Run the enforcement gate (drift + fitness + maintainability + behaviour); exits non-zero on a gating failure |
 | `specship serve` | Start SpecShip as an MCP server for AI assistants, an HTTP API for the desktop UI, or both |
