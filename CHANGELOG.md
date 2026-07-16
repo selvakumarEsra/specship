@@ -20,7 +20,7 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixes
 
-- Verified and broken spec links no longer silently reset to unverified when a spec is re-extracted for an unrelated reason (for example, appending another requirement to the same spec file) — a link's verdict is now preserved as long as the requirement's own text hasn't changed. Only an actual edit to that requirement re-opens it for re-verification.
+- Verified and broken spec links no longer silently reset to unverified when a spec is re-extracted for an unrelated reason (for example, appending another requirement to the same spec file) — a link's verdict is now preserved as long as the requirement's own text hasn't changed. Editing the requirement itself now flags its links as drifted (so they show up for re-verification) instead of quietly dropping the verdict.
 
 ## [0.19.1] - 2026-07-15
 
