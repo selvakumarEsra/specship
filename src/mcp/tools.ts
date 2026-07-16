@@ -412,6 +412,7 @@ import {
   handleSpecshipJiraStart,
   handleSpecshipJiraTrack,
   handleSpecshipJiraPublish,
+  handleSpecshipJiraTransition,
 } from './jira-tools';
 
 export const tools: ToolDefinition[] = [
@@ -1285,6 +1286,10 @@ export class ToolHandler {
             projectRoot: cg.getProjectRoot(),
           });
         }
+        case 'specship_jira_transition':
+          // transition moves a tracked issue to a target state (or lists the
+          // available ones) — independent of the code graph (REQ-JIRATRANS-001).
+          return await handleSpecshipJiraTransition(args);
         default:
           return this.errorResult(`Unknown tool: ${toolName}`);
       }

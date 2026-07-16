@@ -3497,10 +3497,69 @@ jira
       const kind = creds.deployment === 'cloud' ? 'JIRA Cloud' : 'JIRA Data Center';
       // Never print the credential — only the resolved identity.
       success(`Connected to ${kind} as ${result.displayName ?? 'unknown user'}.`);
+
+      // Validate the configured lifecycle transition names against a live
+      // workflow so a name the workflow can't fire is visible now, not a
+      // silent skip at completion time (REQ-JIRATRANS-002).
+      const { validateConfiguredTransitions } = await import('../mcp/jira-tools');
+      const v = await validateConfiguredTransitions(client, creds.transitions ?? {});
+      if (!v.verified) {
+        info('Configured transitions: could not verify (no accessible issue to sample).');
+      } else {
+        info(
+          `Configured transitions (checked against ${v.sampleKey}; available from its ` +
+            `current state: ${v.available.join(', ') || 'none'}):`,
+        );
+        for (const c of v.checks) {
+          if (c.found) info(`  ✓ ${c.role} "${c.configured}"`);
+          else
+            warn(
+              `  ✗ ${c.role} "${c.configured}" — not offered from ${v.sampleKey}'s current state`,
+            );
+        }
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       const label = err instanceof JiraAuthError ? 'Authentication failed' : 'Connection failed';
       error(`${label}: ${msg}`);
+      process.exit(1);
+    }
+  });
+
+/**
+ * specship jira transition — move a tracked issue to a target state, or list
+ * the transitions it currently offers (REQ-JIRATRANS-001). Reuses the client's
+ * skip-tolerant transition: a target the workflow doesn't offer is reported
+ * with the available states and nothing is written.
+ */
+jira
+  .command('transition <key> [state]')
+  .description(
+    'Transition a JIRA issue to <state>, or list its available transitions when <state> is omitted (or with --list).',
+  )
+  .option('--list', 'list the available transitions instead of applying one')
+  .action(async (key: string, state: string | undefined, options: { list?: boolean }) => {
+    const { resolveJiraCredentials, JiraClient } = await import('../jira');
+    try {
+      const creds = resolveJiraCredentials();
+      const client = new JiraClient(creds);
+      if (options.list || !state) {
+        const names = (await client.listTransitions(key)).map((t) => t.name);
+        success(
+          names.length
+            ? `${key} can transition to: ${names.join(', ')}.`
+            : `${key} has no available transitions from its current state.`,
+        );
+        return;
+      }
+      const res = await client.transitionIssue(key, state);
+      if ('transitioned' in res) {
+        success(`Moved ${key} to "${res.transitioned}".`);
+      } else {
+        warn(`Did not transition ${key} — ${res.reason}.`);
+      }
+    } catch (err) {
+      error(`JIRA transition failed: ${err instanceof Error ? err.message : String(err)}`);
       process.exit(1);
     }
   });
