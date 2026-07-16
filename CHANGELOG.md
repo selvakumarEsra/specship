@@ -9,6 +9,9 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+
+## [0.20.0] - 2026-07-16
+
 ### New Features
 
 - Publish a spec to JIRA with the new `specship_jira_publish` tool: it creates a Story whose Sub-tasks mirror the spec's acceptance criteria, records the issue key in the spec so branches, PRs, and tracking pick it up automatically, and is safe to re-run (it updates the existing Story instead of duplicating it). After authoring a spec with JIRA connected, SpecShip now offers this in one prompt.
@@ -704,3 +707,4 @@ Thanks @andreinknv for the substantive draft this release was based on.
 [0.18.1]: https://github.com/selvakumarEsra/specship/releases/tag/v0.18.1
 [0.19.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.19.0
 [0.19.1]: https://github.com/selvakumarEsra/specship/releases/tag/v0.19.1
+[0.20.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.20.0
