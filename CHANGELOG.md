@@ -17,6 +17,8 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - New `specship jira release <version>` command stamps a released version onto your JIRA issues as fixVersion with a shipped-in comment, creating the project version if needed; re-running it is a no-op.
 - When no publish project is set, SpecShip now shows the JIRA projects your account can access and lets you choose — interactively during `specship jira configure` (or via its new `--project` flag), and as a pick-list when publishing a spec.
 - `specship_jira_track` now also lists published specs and flags issues that were edited in JIRA after publishing, so specs and their JIRA mirrors can't silently diverge.
+- New `specship jira transition <key> [state]` command (and a `specship_jira_transition` tool) move a JIRA issue to any state its workflow offers — or list the available transitions when you omit the state. A state the workflow can't reach is reported with the options instead of applied, so nothing is written by mistake.
+- `specship jira test` now checks your configured lifecycle transition names (In Progress / In Review / Done) against your live JIRA workflow and flags any it can't fire, so a workflow that lacks (say) an "In Review" state surfaces up front instead of silently skipping when a run completes.
 
 ### Fixes
 

@@ -305,6 +305,30 @@ export const jiraToolDefinitions: ToolDefinition[] = [
       required: ['spec_id'],
     },
   },
+  {
+    name: 'specship_jira_transition',
+    description:
+      'Transition a JIRA issue to a target workflow state (e.g., "In Progress", ' +
+      '"Done"). With no state, lists the transitions the issue currently offers. ' +
+      "A state the issue's workflow doesn't offer is reported with the available " +
+      'states and nothing is written — never applied, never an error.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        key: {
+          type: 'string',
+          description: 'The issue key to transition, e.g., "PROJ-123". Required.',
+        },
+        state: {
+          type: 'string',
+          description:
+            'Target state name or transition id (e.g., "Done"). Omit to list the ' +
+            "issue's currently available transitions.",
+        },
+      },
+      required: ['key'],
+    },
+  },
 ];
 
 /**
@@ -557,6 +581,137 @@ export async function handleSpecshipJiraIssue(
     // Defensive: never let an unexpected error leak internals.
     return errorResult('Failed to fetch the JIRA issue.');
   }
+}
+
+/**
+ * Handle `specship_jira_transition` (REQ-JIRATRANS-001). Move a tracked issue
+ * to a target state, or — with no `state` — list the transitions the issue
+ * currently offers. Reuses `JiraClient.transitionIssue`, so a target the
+ * workflow doesn't offer returns a skip that names the available states and
+ * writes nothing (REQ-JIRATRANS-001.A4); auth/host faults surface the client's
+ * credential-free error (A5). Independent of the code graph.
+ */
+export async function handleSpecshipJiraTransition(
+  args: Record<string, unknown>,
+): Promise<ToolResult> {
+  const notConfigured = notConfiguredResult();
+  if (notConfigured) return notConfigured;
+
+  const key =
+    typeof args.key === 'string' && args.key.trim() ? args.key.trim() : undefined;
+  if (!key) {
+    return textResult(
+      'An issue key is required (e.g., "PROJ-123"). Pass it as the "key" argument.',
+    );
+  }
+  const state =
+    typeof args.state === 'string' && args.state.trim()
+      ? args.state.trim()
+      : undefined;
+
+  try {
+    const creds = resolveJiraCredentials();
+    const client = new JiraClient(creds);
+
+    // No target → list the currently available transitions (A3).
+    if (!state) {
+      const names = (await client.listTransitions(key)).map((t) => t.name);
+      return textResult(
+        names.length
+          ? `${key} can transition to: ${names.join(', ')}.`
+          : `${key} has no available transitions from its current state.`,
+      );
+    }
+
+    const res = await client.transitionIssue(key, state);
+    if ('transitioned' in res) {
+      return textResult(`Moved ${key} to "${res.transitioned}".`);
+    }
+    // Skip (A4) — the reason already names the available states.
+    return textResult(`Did not transition ${key} — ${res.reason}.`);
+  } catch (err) {
+    // JiraError messages are credential-free by construction (REQ-JIRA-009).
+    if (err instanceof JiraError) {
+      return errorResult(err.message);
+    }
+    return errorResult('Failed to transition the JIRA issue.');
+  }
+}
+
+/** One configured lifecycle transition checked against a sampled issue's workflow. */
+export interface TransitionCheck {
+  role: 'inProgress' | 'inReview' | 'done';
+  configured: string;
+  /** Whether `configured` is among the sampled issue's currently available transitions. */
+  found: boolean;
+}
+
+/** Result of {@link validateConfiguredTransitions} (REQ-JIRATRANS-002). */
+export interface TransitionValidation {
+  /** False when no issue could be sampled or its transitions couldn't be read (A4). */
+  verified: boolean;
+  /** The issue whose live transitions were sampled, or null when none was available. */
+  sampleKey: string | null;
+  /** The sampled issue's currently available transition names. */
+  available: string[];
+  /** Per-configured-transition presence. Empty when `verified` is false. */
+  checks: TransitionCheck[];
+}
+
+/** Minimal client slice {@link validateConfiguredTransitions} needs (eases testing). */
+export interface TransitionValidationClient {
+  listMyIssues(opts?: { project?: string }): Promise<JiraIssueListResult>;
+  listTransitions(key: string): Promise<Array<{ id: string; name: string }>>;
+}
+
+/**
+ * Validate the configured lifecycle transition names against a live workflow
+ * (REQ-JIRATRANS-002). Samples one issue (an explicit `sampleKey`, else the
+ * first assigned issue) and reads the transitions it currently offers, then
+ * reports whether each configured name (`inProgress`/`inReview`/`done`) is
+ * among them. When no issue can be sampled or its transitions can't be read,
+ * returns `verified: false` — a "couldn't verify", never a false "missing"
+ * and never a throw (A4). Availability is state-scoped: it reflects the sampled
+ * issue's CURRENT state, which the caller surfaces so the check isn't misread
+ * as the whole workflow.
+ */
+export async function validateConfiguredTransitions(
+  client: TransitionValidationClient,
+  transitions: { inProgress?: string; inReview?: string; done?: string },
+  opts: { project?: string; sampleKey?: string } = {},
+): Promise<TransitionValidation> {
+  let sampleKey = opts.sampleKey ?? null;
+  if (!sampleKey) {
+    try {
+      const { issues } = await client.listMyIssues({ project: opts.project });
+      sampleKey = issues[0]?.key ?? null;
+    } catch {
+      sampleKey = null;
+    }
+  }
+  if (!sampleKey) {
+    return { verified: false, sampleKey: null, available: [], checks: [] };
+  }
+
+  let available: string[];
+  try {
+    available = (await client.listTransitions(sampleKey)).map((t) => t.name);
+  } catch {
+    return { verified: false, sampleKey, available: [], checks: [] };
+  }
+
+  const lower = new Set(available.map((n) => n.toLowerCase()));
+  const roles: Array<[TransitionCheck['role'], string]> = [
+    ['inProgress', transitions.inProgress ?? 'In Progress'],
+    ['inReview', transitions.inReview ?? 'In Review'],
+    ['done', transitions.done ?? 'Done'],
+  ];
+  const checks: TransitionCheck[] = roles.map(([role, configured]) => ({
+    role,
+    configured,
+    found: lower.has(configured.toLowerCase()),
+  }));
+  return { verified: true, sampleKey, available, checks };
 }
 
 /**
