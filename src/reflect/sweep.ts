@@ -93,3 +93,40 @@ export function capture(
   // Return the stored row (state may differ if it already existed).
   return store.list().find((p) => p.contentHash === proposal.contentHash) ?? proposal;
 }
+
+/**
+ * Explicit lesson capture (MEMLESSON-DOC, REQ-MEMLESSON-001): the anti-pattern
+ * analog of {@link capture}. Turns a stated mistake + the rule to avoid
+ * repeating it into a `memory_rule` proposal — targeting a portable
+ * `~/.claude/memory` note (`scope: 'portable'`) or a marked block in the
+ * project CLAUDE.md (`scope: 'project'`). Same store, same content-hash
+ * convergence, same human gate as mined proposals: nothing reaches disk until
+ * the user applies it.
+ */
+export function captureLesson(
+  db: SqliteDatabase,
+  ctx: ReflectContext,
+  input: { title: string; content: string; scope: 'project' | 'portable' },
+  now: () => number = () => Date.now(),
+): Proposal {
+  const store = new ReflectStore(db, now);
+  const title = input.title.trim();
+  const proposal = buildProposal(ctx, {
+    type: 'memory_rule',
+    severity: 'info',
+    scope: input.scope,
+    nameSeed: `lesson-${title}`,
+    title: `Lesson: ${title}`,
+    body:
+      'Explicitly captured via `specship memory capture` — an anti-pattern to ' +
+      'avoid repeating, awaiting your review.',
+    content: input.content.trim(),
+    evidence: {
+      sessions: [],
+      prompts: [],
+      detail: 'explicitly captured (specship memory capture)',
+    },
+  });
+  store.upsertMined([proposal]);
+  return store.list().find((p) => p.contentHash === proposal.contentHash) ?? proposal;
+}

@@ -12,7 +12,7 @@ export { mineProposals, projectPathForms } from './miner';
 export { buildProposal, learningMarkers, memoryNoteMarker } from './targets';
 export { previewProposal, applyProposal, undoProposal, lineDiff } from './apply';
 export { ReflectStore } from './store';
-export { analyze, sweep, capture } from './sweep';
+export { analyze, sweep, capture, captureLesson } from './sweep';
 export type { AnalyzeResult, SweepResult } from './sweep';
 export { sessionsTouchingFiles, sessionOutcome } from './session-outcomes';
 export type { SessionOutcome } from './session-outcomes';

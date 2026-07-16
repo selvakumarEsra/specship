@@ -1495,6 +1495,66 @@ program
   });
 
 /**
+ * specship memory — capture lessons to memory and review/manage stored items
+ * (MEMLESSON-DOC). `capture` turns a stated mistake into a human-gated
+ * memory_rule proposal (REQ-MEMLESSON-001); nothing is written until it is
+ * applied (dashboard Improvements / `specship reflect`).
+ */
+const memory = program
+  .command('memory')
+  .description('Capture lessons to memory and review/manage stored memory items.');
+
+memory
+  .command('capture')
+  .description('Capture a lesson/anti-pattern as a human-gated memory rule (lesson text on stdin).')
+  .requiredOption('--title <title>', 'short title for the lesson')
+  .option(
+    '--target <target>',
+    'where apply would write it: "memory" (portable ~/.claude note, default) or "claude-md" (project CLAUDE.md)',
+    'memory',
+  )
+  .option('--path <projectRoot>', 'project root (default: cwd)')
+  .option('-j, --json', 'output the created proposal as JSON')
+  .action(async (options: { title: string; target?: string; path?: string; json?: boolean }) => {
+    const projectPath = resolveProjectPath(options.path);
+    const target = options.target === 'claude-md' ? 'claude-md' : 'memory';
+    try {
+      if (!isInitialized(projectPath)) {
+        error(`SpecShip not initialized in ${projectPath}`);
+        process.exit(1);
+      }
+      // Lesson content on stdin so a multi-line "mistake + rule to avoid it"
+      // survives shell quoting (mirrors `specship reflect --capture`).
+      const chunks: Buffer[] = [];
+      for await (const c of process.stdin) chunks.push(c as Buffer);
+      const content = Buffer.concat(chunks).toString('utf-8').trim();
+      if (!content) {
+        error(
+          'memory capture expects the lesson on stdin (pipe or heredoc): the mistake + the rule to avoid repeating it.',
+        );
+        process.exit(1);
+      }
+      const { SpecShip } = await loadSpecShip();
+      const cg = await SpecShip.open(projectPath);
+      const p = cg.reflectCaptureLesson({ title: options.title, content, target });
+      if (options.json) {
+        // eslint-disable-next-line no-console
+        console.log(JSON.stringify(p, null, 2));
+      } else {
+        info(`Captured lesson as proposal ${p.contentHash.slice(0, 12)} (${p.state}): ${p.title}`);
+        info(
+          `Target: ${p.targetKind === 'claude_md' ? 'project CLAUDE.md' : 'portable ~/.claude memory note'} — nothing written yet.`,
+        );
+        info('Review + apply from the dashboard Improvements page (preview-diff → confirm), or `specship reflect`.');
+      }
+      cg.destroy();
+    } catch (err) {
+      error(`memory capture failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(1);
+    }
+  });
+
+/**
  * specship maintainability
  *
  * Report graph-derived maintainability signals (REQ-MAINT-003) — coupling, size

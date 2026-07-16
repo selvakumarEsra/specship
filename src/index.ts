@@ -54,6 +54,7 @@ import {
   analyze as reflectAnalyzeImpl,
   sweep as reflectSweepImpl,
   capture as reflectCaptureImpl,
+  captureLesson as reflectCaptureLessonImpl,
   ReflectStore,
   previewProposal,
   applyProposal,
@@ -473,6 +474,27 @@ export class SpecShip {
    */
   reflectCapture(input: { title: string; content: string }): Proposal {
     return reflectCaptureImpl(this.db.getDb(), this.reflectContext(), input);
+  }
+
+  /**
+   * Explicitly capture a lesson / anti-pattern as a human-gated `memory_rule`
+   * proposal (MEMLESSON-DOC, REQ-MEMLESSON-001) so the agent doesn't repeat the
+   * mistake. `target` picks where apply would write: `'memory'` → a portable
+   * `~/.claude/memory` note (default), `'claude-md'` → a marked block in the
+   * project CLAUDE.md. Same lifecycle as mined proposals — nothing lands on disk
+   * until the user applies it.
+   */
+  reflectCaptureLesson(input: {
+    title: string;
+    content: string;
+    target?: 'memory' | 'claude-md';
+  }): Proposal {
+    const scope = input.target === 'claude-md' ? 'project' : 'portable';
+    return reflectCaptureLessonImpl(this.db.getDb(), this.reflectContext(), {
+      title: input.title,
+      content: input.content,
+      scope,
+    });
   }
 
   /** Run a sweep: analyze + return new high-severity proposals to notify on. */
