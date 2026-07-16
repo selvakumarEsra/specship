@@ -16,9 +16,11 @@ import {
   captureLesson,
   previewProposal,
   applyProposal,
+  undoProposal,
   ReflectStore,
   ReflectContext,
 } from '../src/reflect';
+import type { Proposal } from '../src/reflect/types';
 
 let dir: string;
 let conn: DatabaseConnection;
@@ -97,5 +99,71 @@ describe('REQ-MEMLESSON-001 — capture a lesson as a human-gated memory rule', 
     const b = captureLesson(db, ctx, { title: 'T', content: LESSON, scope: 'project' });
     expect(a.contentHash).not.toBe(b.contentHash);
     expect(new ReflectStore(db).list().filter((x) => x.type === 'memory_rule')).toHaveLength(2);
+  });
+});
+
+/**
+ * Capture a lesson, write it to disk, and mark it applied in the store — the
+ * exact composition the `specship memory list`/`remove`/`edit` CLI performs.
+ * @verifies REQ-MEMLESSON-002
+ */
+function applyAndStore(title: string, content: string, scope: 'portable' | 'project'): Proposal {
+  const p = captureLesson(db, ctx, { title, content, scope });
+  applyProposal(p, ctx.homeDir);
+  new ReflectStore(db).setState(p.contentHash, 'applied');
+  return p;
+}
+
+describe('REQ-MEMLESSON-002 — review the stored memory items', () => {
+  it('A1: applied memory-rule lessons appear in the reflect-managed list, labeled by target', () => {
+    applyAndStore('Note lesson', LESSON, 'portable');
+    applyAndStore('MD lesson', 'Always X before Y.', 'project');
+    const items = new ReflectStore(db).list('applied').filter((p) => p.type === 'memory_rule');
+    expect(items).toHaveLength(2);
+    expect(items.some((p) => p.targetKind === 'memory_note')).toBe(true);
+    expect(items.some((p) => p.targetKind === 'claude_md')).toBe(true);
+  });
+  it('A2: an empty store lists nothing (reported cleanly, not an error)', () => {
+    expect(new ReflectStore(db).list('applied').filter((p) => p.type === 'memory_rule')).toEqual([]);
+  });
+});
+
+/** @verifies REQ-MEMLESSON-003 */
+function removeApplied(p: Proposal): string {
+  return undoProposal(p, ctx.homeDir);
+}
+
+describe('REQ-MEMLESSON-003 — remove or update a stored memory item', () => {
+  it('A1: removing an applied memory note strips exactly the note file', () => {
+    const p = applyAndStore('Removable', LESSON, 'portable');
+    expect(fs.existsSync(p.targetPath)).toBe(true);
+    expect(removeApplied(p)).toBe('undone');
+    expect(fs.existsSync(p.targetPath)).toBe(false);
+  });
+
+  it('A1: removing an applied CLAUDE.md rule strips only its marked block, leaving surrounding content', () => {
+    const mdPath = path.join(ctx.projectRoot, 'CLAUDE.md');
+    fs.writeFileSync(mdPath, '# Keep me\n\nSurrounding content.\n');
+    const p = applyAndStore('MD rule', 'Rule body here.', 'project');
+    expect(fs.readFileSync(mdPath, 'utf-8')).toContain('Rule body here.');
+    removeApplied(p);
+    const after = fs.readFileSync(mdPath, 'utf-8');
+    expect(after).toContain('# Keep me');
+    expect(after).toContain('Surrounding content.');
+    expect(after).not.toContain('Rule body here.');
+  });
+
+  it('A2: update (remove old + apply new) converges to the new body on disk', () => {
+    const oldP = applyAndStore('Evolving', 'Old body.', 'portable');
+    const next = captureLesson(db, ctx, { title: 'Evolving', content: 'New body.', scope: 'portable' });
+    undoProposal(oldP, ctx.homeDir);
+    expect(applyProposal(next, ctx.homeDir)).toBe('applied');
+    const body = fs.readFileSync(next.targetPath, 'utf-8');
+    expect(body).toContain('New body.');
+    expect(body).not.toContain('Old body.');
+  });
+
+  it('A4: a non-existent item resolves to null (CLI reports "not found", writes nothing)', () => {
+    expect(new ReflectStore(db).get('deadbeefdeadbeef')).toBeNull();
   });
 });

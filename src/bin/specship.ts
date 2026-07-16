@@ -1554,6 +1554,142 @@ memory
     }
   });
 
+// Body text of a memory_rule proposal's payload (the note or the CLAUDE.md block).
+function memoryRuleBody(p: { payload: { kind: string; note?: string; block?: string } }): string {
+  if (p.payload.kind === 'memory_note') return p.payload.note ?? '';
+  if (p.payload.kind === 'claude_md') return p.payload.block ?? '';
+  return '';
+}
+
+memory
+  .command('list')
+  .description('List the memory rules SpecShip has applied (reflect-managed store).')
+  .option('--path <projectRoot>', 'project root (default: cwd)')
+  .option('-j, --json', 'output as JSON')
+  .action(async (options: { path?: string; json?: boolean }) => {
+    const projectPath = resolveProjectPath(options.path);
+    try {
+      if (!isInitialized(projectPath)) {
+        error(`SpecShip not initialized in ${projectPath}`);
+        process.exit(1);
+      }
+      const { SpecShip } = await loadSpecShip();
+      const cg = await SpecShip.open(projectPath);
+      const items = cg.reflectList('applied').filter((p) => p.type === 'memory_rule');
+      if (options.json) {
+        // eslint-disable-next-line no-console
+        console.log(JSON.stringify(items, null, 2));
+        cg.destroy();
+        return;
+      }
+      if (items.length === 0) {
+        info('No memory items yet — capture one with `specship memory capture`.');
+        cg.destroy();
+        return;
+      }
+      for (const p of items) {
+        const target = p.targetKind === 'claude_md' ? 'CLAUDE.md' : 'memory note';
+        success(`${p.contentHash.slice(0, 12)}  [${target}]  ${p.title}`);
+      }
+      cg.destroy();
+    } catch (err) {
+      error(`memory list failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(1);
+    }
+  });
+
+memory
+  .command('remove <id>')
+  .description('Remove a SpecShip-managed memory rule by id (previewed; pass --yes to write).')
+  .option('--yes', 'actually remove it (without this it is a dry-run preview)')
+  .option('--path <projectRoot>', 'project root (default: cwd)')
+  .action(async (id: string, options: { yes?: boolean; path?: string }) => {
+    const projectPath = resolveProjectPath(options.path);
+    try {
+      if (!isInitialized(projectPath)) {
+        error(`SpecShip not initialized in ${projectPath}`);
+        process.exit(1);
+      }
+      const { SpecShip } = await loadSpecShip();
+      const cg = await SpecShip.open(projectPath);
+      const p =
+        cg.reflectGet(id) ??
+        cg.reflectList().find((x) => x.type === 'memory_rule' && x.contentHash.startsWith(id));
+      if (!p || p.type !== 'memory_rule') {
+        error(`No SpecShip-managed memory rule found for "${id}".`);
+        cg.destroy();
+        process.exit(1);
+      }
+      info(`Will remove from ${p.targetPath}:`);
+      // eslint-disable-next-line no-console
+      console.log(memoryRuleBody(p));
+      if (!options.yes) {
+        info('Dry-run — nothing changed. Re-run with --yes to remove.');
+        cg.destroy();
+        return;
+      }
+      const outcome = cg.reflectUndo(p.contentHash);
+      if (outcome === 'undone') success(`Removed ${p.contentHash.slice(0, 12)}: ${p.title}`);
+      else info(`Nothing on disk to remove for ${p.contentHash.slice(0, 12)} (already gone).`);
+      cg.destroy();
+    } catch (err) {
+      error(`memory remove failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(1);
+    }
+  });
+
+memory
+  .command('edit <id>')
+  .description("Replace a memory rule's body with new content on stdin (previewed; pass --yes to write).")
+  .option('--yes', 'actually apply the update (without this it is a dry-run before→after preview)')
+  .option('--path <projectRoot>', 'project root (default: cwd)')
+  .action(async (id: string, options: { yes?: boolean; path?: string }) => {
+    const projectPath = resolveProjectPath(options.path);
+    try {
+      if (!isInitialized(projectPath)) {
+        error(`SpecShip not initialized in ${projectPath}`);
+        process.exit(1);
+      }
+      const chunks: Buffer[] = [];
+      for await (const c of process.stdin) chunks.push(c as Buffer);
+      const content = Buffer.concat(chunks).toString('utf-8').trim();
+      if (!content) {
+        error('memory edit expects the new body on stdin (pipe or heredoc).');
+        process.exit(1);
+      }
+      const { SpecShip } = await loadSpecShip();
+      const cg = await SpecShip.open(projectPath);
+      const old =
+        cg.reflectGet(id) ??
+        cg.reflectList().find((x) => x.type === 'memory_rule' && x.contentHash.startsWith(id));
+      if (!old || old.type !== 'memory_rule') {
+        error(`No SpecShip-managed memory rule found for "${id}".`);
+        cg.destroy();
+        process.exit(1);
+      }
+      const title = old.title.replace(/^Lesson:\s*/, '');
+      const target: 'memory' | 'claude-md' = old.targetKind === 'claude_md' ? 'claude-md' : 'memory';
+      const next = cg.reflectCaptureLesson({ title, content, target });
+      info(`Update ${old.contentHash.slice(0, 12)} — before → after:`);
+      // eslint-disable-next-line no-console
+      console.log('--- before ---\n' + memoryRuleBody(old) + '\n--- after ---\n' + memoryRuleBody(next));
+      if (!options.yes) {
+        info('Dry-run — nothing changed. Re-run with --yes to apply the update.');
+        cg.destroy();
+        return;
+      }
+      cg.reflectUndo(old.contentHash);
+      const outcome = cg.reflectApply(next.contentHash);
+      success(
+        `Updated: removed ${old.contentHash.slice(0, 12)}, applied ${next.contentHash.slice(0, 12)} (${outcome}).`,
+      );
+      cg.destroy();
+    } catch (err) {
+      error(`memory edit failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(1);
+    }
+  });
+
 /**
  * specship maintainability
  *
