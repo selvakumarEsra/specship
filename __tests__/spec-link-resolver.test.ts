@@ -719,6 +719,146 @@ describe.skipIf(!fts5Available)('SpecLinkResolver drift transitions (REQ-DRIFT-P
 });
 
 /**
+ * Sticky link → drifted(spec) in one step (STICKYLINK-DOC, REQ-STICKYLINK-002):
+ * when a verified/broken link's spec body changes, re-extraction must NOT flip
+ * it through the intermediate `implemented` (that's REQ-STICKYLINK-001's job to
+ * prevent) — instead the spec-axis downgrade lands in a single transition to
+ * `drifted(spec)`, emitted by markSpecDrifted with exactly one push notice. The
+ * code-axis path (resolveAll) is unaffected and still preserves sticky.
+ */
+describe.skipIf(!fts5Available)('SpecLinkResolver sticky spec-drift (REQ-STICKYLINK-002)', () => {
+  let dir: string;
+  let cg: SpecShip;
+
+  beforeEach(async () => {
+    dir = tempDir();
+    cg = await SpecShip.init(dir);
+  });
+
+  afterEach(async () => {
+    cg?.close();
+    clean(dir);
+  });
+
+  /**
+   * Seed a spec + verified link via applyDeclarationCandidates (the real
+   * extraction entry point), then hand back the ids and the resolver.
+   */
+  function seedVerified(specId: string, hash: string) {
+    const sq = cg.getSpecQueries();
+    const resolver = cg.getSpecLinkResolver();
+    const queries = (cg as unknown as { queries: import('../src/db/queries').QueryBuilder }).queries;
+    const now = Date.now();
+    sq.insertSpec({
+      id: specId, kind: 'requirement', title: 'X', body: 'body v1', format: 'markdown',
+      sourcePath: 'specs/x.md', contentHash: hash, createdAt: now, updatedAt: now,
+    });
+    const node = makeNode('src/impl.ts', 'doThing', 'function', 1, 'doThing()');
+    queries.insertNode(node);
+    resolver.applyDeclarationCandidates(
+      [{
+        specId, targetFilePath: 'src/impl.ts', targetQualifiedName: 'doThing',
+        targetNodeKind: 'function', kind: 'implements',
+      }],
+      new Map([[specId, sq.getSpecById(specId)!]])
+    );
+    const linkId = sq.getLinksBySpec(specId)[0]!.id;
+    // Agent verifies the link (state → verified). specHashAtLink stays `hash`.
+    sq.updateSpecLinkState(linkId, 'verified', null, now);
+    return { sq, resolver, queries, linkId };
+  }
+
+  it('edited spec body → ONE transition to drifted(spec), never observed as implemented (A1/A2)', () => {
+    const { sq, resolver, linkId } = seedVerified('REQ-SD-1', 'hash-v1');
+    expect(sq.getLinkById(linkId)!.state).toBe('verified');
+
+    // Spec body edited → whole spec re-extracted: applyDeclarationCandidates
+    // re-upserts the link (would-be `implemented`), THEN markSpecDrifted runs
+    // in the same pass with the new hash. Order mirrors index.ts.
+    resolver.applyDeclarationCandidates(
+      [{
+        specId: 'REQ-SD-1', targetFilePath: 'src/impl.ts', targetQualifiedName: 'doThing',
+        targetNodeKind: 'function', kind: 'implements',
+      }],
+      new Map([['REQ-SD-1', sq.getSpecById('REQ-SD-1')!]])
+    );
+    // A2: the re-upsert preserved the sticky verdict — never wrote `implemented`.
+    expect(sq.getLinkById(linkId)!.state).toBe('verified');
+
+    const stats = {
+      scanned: 0, reresolved: 0, orphaned: 0, driftedCode: 0,
+      candidatesApplied: 0, commentLinksApplied: 0, reattached: 0,
+      transitions: [] as import('../src/resolution/spec-link-resolver').DriftTransition[],
+    };
+    const flipped = resolver.markSpecDrifted('REQ-SD-1', 'hash-v2', stats);
+
+    // A1: exactly one transition, straight from verified → drifted(spec).
+    expect(flipped).toBe(1);
+    expect(stats.transitions).toEqual([
+      { specId: 'REQ-SD-1', fromState: 'verified', axis: 'spec', symbol: 'doThing' },
+    ]);
+    const link = sq.getLinkById(linkId)!;
+    expect(link.state).toBe('drifted');
+    expect(link.driftAxis).toBe('spec');
+  });
+
+  it('broken link with a changed spec hash also transitions to drifted(spec) (A3)', () => {
+    const { sq, resolver, linkId } = seedVerified('REQ-SD-2', 'hash-v1');
+    sq.updateSpecLinkState(linkId, 'broken', null, Date.now());
+    expect(sq.getLinkById(linkId)!.state).toBe('broken');
+
+    const stats = {
+      scanned: 0, reresolved: 0, orphaned: 0, driftedCode: 0,
+      candidatesApplied: 0, commentLinksApplied: 0, reattached: 0,
+      transitions: [] as import('../src/resolution/spec-link-resolver').DriftTransition[],
+    };
+    resolver.markSpecDrifted('REQ-SD-2', 'hash-v2', stats);
+    expect(stats.transitions).toEqual([
+      { specId: 'REQ-SD-2', fromState: 'broken', axis: 'spec', symbol: 'doThing' },
+    ]);
+    expect(sq.getLinkById(linkId)!.state).toBe('drifted');
+    expect(sq.getLinkById(linkId)!.driftAxis).toBe('spec');
+  });
+
+  it('already-drifted link re-drifting on another hash emits no second transition (A4)', () => {
+    const { sq, resolver, linkId } = seedVerified('REQ-SD-3', 'hash-v1');
+    resolver.markSpecDrifted('REQ-SD-3', 'hash-v2'); // verified → drifted(spec)
+    expect(sq.getLinkById(linkId)!.state).toBe('drifted');
+
+    const stats = {
+      scanned: 0, reresolved: 0, orphaned: 0, driftedCode: 0,
+      candidatesApplied: 0, commentLinksApplied: 0, reattached: 0,
+      transitions: [] as import('../src/resolution/spec-link-resolver').DriftTransition[],
+    };
+    resolver.markSpecDrifted('REQ-SD-3', 'hash-v3', stats);
+    expect(stats.transitions).toHaveLength(0); // no second transition
+    expect(sq.getLinkById(linkId)!.state).toBe('drifted');
+  });
+
+  it('unchanged spec hash keeps a sticky link verified (STICKYLINK-001 on this path)', () => {
+    const { sq, resolver, linkId } = seedVerified('REQ-SD-4', 'hash-v1');
+    const flipped = resolver.markSpecDrifted('REQ-SD-4', 'hash-v1'); // same hash
+    expect(flipped).toBe(0);
+    expect(sq.getLinkById(linkId)!.state).toBe('verified');
+  });
+
+  it('A5: code-axis drift via resolveAll still preserves a sticky link (markSpecDrifted change does not leak)', () => {
+    const { sq, resolver, queries, linkId } = seedVerified('REQ-SD-5', 'hash-v1');
+
+    // Code symbol moves (signature changes) but the SPEC hash is unchanged.
+    queries.deleteNodesByFile('src/impl.ts');
+    queries.insertNode(makeNode('src/impl.ts', 'doThing', 'function', 1, 'doThing(x, y)'));
+
+    const stats = resolver.resolveAll();
+    // Sticky (verified) is preserved on the code axis — resolveOneLink's sticky
+    // guard, unaffected by the markSpecDrifted change.
+    expect(sq.getLinkById(linkId)!.state).toBe('verified');
+    expect(stats.driftedCode).toBe(0);
+    expect(stats.transitions).toHaveLength(0);
+  });
+});
+
+/**
  * Orphan auto-reattach (LINKFIX-DOC, REQ-LINKFIX-001): an orphaned link whose
  * logical target reappears goes back to `implemented` without an agent
  * re-assert. Sticky states (`verified`, `broken`) are never touched.

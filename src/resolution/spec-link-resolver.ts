@@ -446,8 +446,18 @@ export class SpecLinkResolver {
 
   /**
    * Mark every link of `specId` as `drifted(spec)` because the spec's
-   * `contentHash` changed since the link was established. Sticky states
-   * (`verified`, `broken`) are left alone.
+   * `contentHash` changed since the link was established.
+   *
+   * This is the SOLE authority for the sticky+spec-drift transition
+   * (REQ-STICKYLINK-002). `upsertSpecLink` deliberately preserves a sticky
+   * (`verified`/`broken`) verdict on every re-upsert regardless of hash — so a
+   * re-extraction never writes the intermediate `implemented` on a sticky link
+   * — and hands the spec-axis downgrade to us. We take a sticky link whose
+   * spec hash CHANGED straight to `drifted(spec)` in one step (never observed
+   * as `implemented` in between) and record exactly one push-notice transition.
+   * A sticky link whose hash is UNCHANGED is left verified (REQ-STICKYLINK-001);
+   * the code-axis drift path lives in `resolveOneLink`/`resolveAll`, which is
+   * unaffected by this method (REQ-STICKYLINK-002.A5).
    *
    * The agent's job after seeing drift: re-read the spec, update code if
    * needed, call specship_link_verify to take state back to `verified`.
@@ -456,7 +466,9 @@ export class SpecLinkResolver {
     const now = Date.now();
     let count = 0;
     for (const link of this.specQueries.getLinksBySpec(specId)) {
-      if (STICKY_STATES.has(link.state)) continue;
+      // Unchanged spec body → nothing drifts (keeps a sticky verdict sticky,
+      // REQ-STICKYLINK-001). Checked FIRST so a sticky link only proceeds when
+      // its hash genuinely moved.
       if (link.specHashAtLink === newSpecHash) continue;
       this.specQueries.updateSpecLinkState(link.id, 'drifted', 'spec', now);
       count++;

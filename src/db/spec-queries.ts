@@ -659,17 +659,20 @@ export class SpecQueries {
       if (newConfidence < existingConfidence) {
         return existing.id;
       }
-      // Sticky-state guard (REQ-STICKYLINK-001): when the existing row is in a
-      // terminal-ish state (`verified`/`broken`) AND the spec body hasn't moved
-      // (same spec_hash_at_link), preserve its verdict — a plain re-extraction
-      // of the spec (e.g. appending an unrelated requirement) must not silently
-      // reset a verified/broken link back to `implemented`. Only a genuine
-      // spec-hash change is allowed to drive the downgrade path. Everything
-      // else (resolved node id, signature, provenance, confidence, metadata)
-      // still refreshes so the link stays current.
-      const preserve =
-        STICKY_SPEC_LINK_STATES.has(existing.state) &&
-        existing.specHashAtLink === link.specHashAtLink;
+      // Sticky-state guard (REQ-STICKYLINK-001 / -002): when the existing row is
+      // in a terminal-ish state (`verified`/`broken`), preserve its verdict on
+      // EVERY re-upsert — regardless of whether the spec body moved. A plain
+      // re-extraction of the spec (e.g. appending an unrelated requirement) must
+      // not silently reset a verified/broken link back to `implemented`
+      // (STICKYLINK-001); and even when the spec body DID move, the sticky link
+      // must not be flipped to the intermediate `implemented` here — the
+      // spec-axis downgrade to `drifted(spec)` is owned by
+      // `markSpecDrifted` (spec-link-resolver.ts), which runs in the same
+      // extraction pass and holds the `stats` needed to emit exactly one
+      // push-notice transition (REQ-STICKYLINK-002). Everything else (resolved
+      // node id, signature, provenance, confidence, metadata) still refreshes
+      // here so the link stays current.
+      const preserve = STICKY_SPEC_LINK_STATES.has(existing.state);
       this.db
         .prepare(
           `

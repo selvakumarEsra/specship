@@ -193,12 +193,27 @@ describe.skipIf(!fts5Available)('upsertSpecLink sticky-state guard (REQ-STICKYLI
     expect(link.state).toBe('drifted'); // guard does not apply
   });
 
-  it('negative: sticky link re-upsert with a CHANGED spec hash downgrades (legit drift path)', () => {
+  it('sticky link re-upsert with a CHANGED spec hash is still preserved by upsertSpecLink alone (REQ-STICKYLINK-002)', () => {
+    // REQ-STICKYLINK-002 moved the spec-axis downgrade off the write boundary:
+    // upsertSpecLink now preserves a sticky verdict REGARDLESS of hash, so
+    // re-extraction never writes the intermediate `implemented`. The downgrade
+    // to `drifted(spec)` is applied by the resolver's markSpecDrifted (which
+    // holds the stats needed for the one push-notice transition) — asserted
+    // end-to-end below and in spec-link-resolver.test.ts.
     const id = seedLink('verified', 1000);
     reUpsert('implemented', 2000, { specHashAtLink: 'spec-hash-v2' });
 
-    const link = sq.getLinkById(id)!;
-    expect(link.state).toBe('implemented'); // hash moved → downgrade proceeds
-    expect(link.specHashAtLink).toBe('spec-hash-v2');
+    // upsertSpecLink in isolation: verdict preserved, no intermediate downgrade.
+    const afterUpsert = sq.getLinkById(id)!;
+    expect(afterUpsert.state).toBe('verified');
+    expect(afterUpsert.driftAxis).toBeNull();
+
+    // markSpecDrifted then drives the sticky+hash-changed link straight to
+    // drifted(spec) in one step — never observed as `implemented`.
+    const flipped = cg.getSpecLinkResolver().markSpecDrifted('REQ-1', 'spec-hash-v2');
+    expect(flipped).toBe(1);
+    const drifted = sq.getLinkById(id)!;
+    expect(drifted.state).toBe('drifted');
+    expect(drifted.driftAxis).toBe('spec');
   });
 });
