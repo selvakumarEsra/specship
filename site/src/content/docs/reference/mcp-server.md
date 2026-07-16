@@ -14,7 +14,7 @@ Agents configured by the installer launch this automatically. When a `.specship/
 <!-- GENERATED:mcp-tools START — derived from source by scripts/generate-reference-docs.mjs; do not edit by hand -->
 **Core (always available):** `specship_callees` · `specship_callers` · `specship_drifted` · `specship_explore` · `specship_files` · `specship_fitness` · `specship_impact` · `specship_link_assert` · `specship_link_verify` · `specship_maintainability` · `specship_node` · `specship_search` · `specship_spec` · `specship_status`
 
-**JIRA integration (opt-in, `specship install --with-jira`):** `specship_jira_issue` · `specship_jira_issues` · `specship_jira_pick` · `specship_jira_publish` · `specship_jira_start` · `specship_jira_track`
+**JIRA integration (opt-in, `specship install --with-jira`):** `specship_jira_issue` · `specship_jira_issues` · `specship_jira_pick` · `specship_jira_publish` · `specship_jira_start` · `specship_jira_track` · `specship_jira_transition`
 
 **Designer integration (opt-in + experimental, `--with-designer`):** `designer_ask` · `designer_handoff` · `designer_list` · `designer_prompt` · `designer_session` · `designer_snapshot`
 <!-- GENERATED:mcp-tools END -->

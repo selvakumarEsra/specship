@@ -19,6 +19,7 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `specship_jira_track` now also lists published specs and flags issues that were edited in JIRA after publishing, so specs and their JIRA mirrors can't silently diverge.
 - New `specship jira transition <key> [state]` command (and a `specship_jira_transition` tool) move a JIRA issue to any state its workflow offers — or list the available transitions when you omit the state. A state the workflow can't reach is reported with the options instead of applied, so nothing is written by mistake.
 - `specship jira test` now checks your configured lifecycle transition names (In Progress / In Review / Done) against your live JIRA workflow and flags any it can't fire, so a workflow that lacks (say) an "In Review" state surfaces up front instead of silently skipping when a run completes.
+- New `specship memory` commands let you teach SpecShip from mistakes: `memory capture` records a lesson or anti-pattern as a reviewable memory rule — targeting a portable `~/.claude` memory note or your project `CLAUDE.md` — so a mistake you don't want repeated gets loaded into the next session; `memory list` shows the memory rules SpecShip has applied; and `memory remove` / `memory edit` take an item down or revise its body, each previewed before it's written. Human-gated and reversible like every reflection change: nothing is written until you confirm.
 
 ### Fixes
 
