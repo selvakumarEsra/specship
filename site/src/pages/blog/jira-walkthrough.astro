@@ -1,0 +1,153 @@
+---
+import Article from '../../layouts/Article.astro';
+---
+<Article slug="jira-walkthrough">
+  <svg slot="figure" viewBox="0 0 980 440" preserveAspectRatio="xMidYMid slice">
+    <defs><radialGradient id="jw" cx="50%" cy="16%" r="74%"><stop offset="0" stop-color="rgba(38,132,255,0.16)"/><stop offset="1" stop-color="rgba(38,132,255,0)"/></radialGradient></defs>
+    <rect width="980" height="440" fill="url(#jw)"/>
+    <!-- numbered step rail -->
+    <g font-family="Geist Mono, monospace">
+      <g><circle cx="150" cy="150" r="26" fill="rgba(10,12,16,0.55)" stroke="#2684FF" stroke-width="2"/><text x="150" y="157" font-size="20" fill="#78AAFF" text-anchor="middle">1</text><text x="150" y="205" font-size="13" fill="rgba(150,165,200,0.72)" text-anchor="middle">connect</text></g>
+      <g><circle cx="340" cy="150" r="26" fill="rgba(10,12,16,0.55)" stroke="#5B93F2" stroke-width="2"/><text x="340" y="157" font-size="20" fill="#8FB4FF" text-anchor="middle">2</text><text x="340" y="205" font-size="13" fill="rgba(150,165,200,0.72)" text-anchor="middle">pick</text></g>
+      <g><circle cx="530" cy="150" r="26" fill="rgba(10,12,16,0.55)" stroke="#A586F5" stroke-width="2"/><text x="530" y="157" font-size="20" fill="#C0A8FF" text-anchor="middle">3</text><text x="530" y="205" font-size="13" fill="rgba(150,165,200,0.72)" text-anchor="middle">publish</text></g>
+      <g><circle cx="720" cy="150" r="26" fill="rgba(10,12,16,0.55)" stroke="#E5A50A" stroke-width="2"/><text x="720" y="157" font-size="20" fill="#F0C24A" text-anchor="middle">4</text><text x="720" y="205" font-size="13" fill="rgba(150,165,200,0.72)" text-anchor="middle">implement</text></g>
+      <g><circle cx="880" cy="150" r="30" fill="rgba(10,12,16,0.55)" stroke="#46C26B" stroke-width="2.4"/><path d="M867 150 L878 161 L896 139" fill="none" stroke="#46C26B" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"/><text x="880" y="205" font-size="13" fill="rgba(120,210,150,0.9)" text-anchor="middle">verified PR</text></g>
+    </g>
+    <g stroke="rgba(150,165,200,0.4)" stroke-width="2" fill="none" stroke-dasharray="6 7">
+      <path d="M176 150 H314"/><path d="M366 150 H504"/><path d="M556 150 H694"/><path d="M746 150 H846"/>
+    </g>
+    <g font-family="Geist Mono, monospace" font-size="14" fill="rgba(170,185,220,0.62)">
+      <text x="150" y="300">specship jira configure</text>
+      <text x="150" y="322">specship_jira_pick PROJ-142</text>
+      <text x="150" y="344">specship_jira_publish REQ-…   → Story + Sub-tasks</text>
+      <text x="150" y="366">specship_jira_start PROJ-142  → In Progress → In Review → Done</text>
+    </g>
+  </svg>
+
+  <p>The other JIRA post explains <em>why</em> SpecShip routes a ticket through a spec instead of straight into the model. This one is the hands-on version: a start-to-finish walkthrough of driving a real ticket to a merged, linked, test-passing pull request — starting from nothing, and ending with the advanced knobs. Follow it top to bottom the first time; after that, each step stands alone.</p>
+  <p>You'll do it in two registers. Most of the loop is <strong>agent-native</strong> — you ask Claude Code in plain language and it calls the <code>specship_jira_*</code> MCP tools. A few pieces are <strong>terminal commands</strong> you run yourself: connecting, verifying, transitioning, releasing. Both talk to the same local, secret-safe client.</p>
+
+  <div class="callout">
+    <div class="co-ic" style="background:color-mix(in srgb,#2684FF 16%,transparent);color:#2684FF"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4M12 18v4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M2 12h4M18 12h4M4.9 19.1l2.8-2.8M16.3 7.7l2.8-2.8"/></svg></div>
+    <div class="co-body"><strong>Before you start.</strong> You need the SpecShip CLI installed, a project initialized (<code>specship init</code>), the integration enabled (<code>specship install --with-jira</code>), and a JIRA account. Everything below is scoped to a solo-dev loop: one issue at a time, and the two irreversible calls — marking an issue Done and merging the PR — always stay yours.</div>
+  </div>
+
+  <h2>Step 1 — Connect once, and locally</h2>
+  <p>Point SpecShip at your JIRA instance. Credentials are written to <code>~/.specship/jira.json</code> (mode <code>0600</code>, user-level, <strong>never</strong> in the project), so nothing can ride into a commit. Cloud authenticates with an email + <a href="https://id.atlassian.com/manage-profile/security/api-tokens">API token</a>; Data Center / Server uses a <a href="https://confluence.atlassian.com/enterprise/using-personal-access-tokens-1026032365.html">personal access token</a>. SpecShip infers the deployment from what you give it.</p>
+  <div class="codeblock">
+    <div class="cb-bar"><div class="traffic"><i style="background:#F2555A"></i><i style="background:#E5A50A"></i><i style="background:#46C26B"></i></div><span class="fn">step 1 — connect</span></div>
+    <pre><span class="c-com"># JIRA Cloud</span>
+specship jira configure --base-url https://acme.atlassian.net --email you@acme.com --api-token &lt;token&gt;
+
+<span class="c-com"># JIRA Data Center / Server</span>
+specship jira configure --base-url https://jira.internal --pat &lt;token&gt;
+
+<span class="c-com"># verify — prints "connected as &lt;name&gt;", never the token</span>
+specship jira test</pre>
+  </div>
+  <p><code>specship jira test</code> does two jobs now: it confirms the connection <em>and</em> checks the lifecycle transition names you'll rely on later (more on that in Step 6). On success it prints <code>connected as &lt;your name&gt;</code> — the token is never echoed back.</p>
+
+  <h2>Step 2 — Find your work, and pick a ticket</h2>
+  <p>Ask Claude Code what's on your plate. "Assigned to me" resolves from your token — you never type your name.</p>
+  <div class="codeblock">
+    <div class="cb-bar"><div class="traffic"><i style="background:#F2555A"></i><i style="background:#E5A50A"></i><i style="background:#46C26B"></i></div><span class="fn">step 2 — find + pick</span></div>
+    <pre><span class="c-com"># in a Claude Code session:</span>
+"list my JIRA issues"                 <span class="c-com"># → specship_jira_issues</span>
+"show me PROJ-142"                    <span class="c-com"># → specship_jira_issue (read it in full)</span>
+"pick PROJ-142"                       <span class="c-com"># → specship_jira_pick</span></pre>
+  </div>
+  <p><strong>Pick</strong> is the pivot. It turns raw ticket text into a contract: the issue's <strong>summary becomes the spec title</strong>, its <strong>description becomes the body</strong>, and its <strong>sub-tasks become acceptance criteria</strong>. What lands under <code>specs/</code> is a well-formed spec that indexes into the graph like any other — a reviewable body, independently-checkable criteria, and (once built) a link to the exact code that satisfies it. Re-picking the same key updates the spec in place; it never forks.</p>
+
+  <h2>Step 3 — Publish the spec back to JIRA</h2>
+  <p>Picking pulls a ticket <em>in</em>. Publishing pushes an authored spec back <em>out</em> — the reverse direction, and new in this release. <code>specship_jira_publish</code> creates a JIRA <strong>Story</strong> from the spec whose <strong>Sub-tasks mirror the acceptance criteria</strong>, then writes the new issue key into the spec's frontmatter so every branch, PR, commit, and tracking view carries it. It's idempotent: re-publishing an already-keyed spec updates the Story and creates only the missing Sub-tasks — never a duplicate.</p>
+  <div class="codeblock">
+    <div class="cb-bar"><div class="traffic"><i style="background:#F2555A"></i><i style="background:#E5A50A"></i><i style="background:#46C26B"></i></div><span class="fn">step 3 — publish</span></div>
+    <pre><span class="c-com"># turn an authored spec into a Story + Sub-tasks in JIRA</span>
+"publish REQ-CHECKOUT-001 to JIRA"    <span class="c-com"># → specship_jira_publish</span></pre>
+  </div>
+  <p>If you haven't set a default project, SpecShip shows the projects your account can actually access and lets you choose — during <code>specship jira configure --project</code>, or as a pick-list at publish time. This step is optional: if you started from <code>pick</code> (a ticket already exists), you can skip straight to Step 4. Publish is for specs you authored in the repo first and want mirrored onto the board.</p>
+
+  <h2>Step 4 — Implement it, behind the plan gate</h2>
+  <p><code>start</code> hands the spec to the bundled spec-implement workflow — plan, approve, implement, verify, link — in an isolated git worktree, pausing at the plan/approve gate before a single line is written.</p>
+  <div class="codeblock">
+    <div class="cb-bar"><div class="traffic"><i style="background:#F2555A"></i><i style="background:#E5A50A"></i><i style="background:#46C26B"></i></div><span class="fn">step 4 — implement</span></div>
+    <pre><span class="c-com"># start the workflow — pauses at the plan gate</span>
+"start PROJ-142"                      <span class="c-com"># → specship_jira_start</span>
+
+<span class="c-com"># review the plan, then approve to proceed</span>
+specship workflow approve &lt;run-id&gt;</pre>
+  </div>
+  <div class="callout">
+    <div class="co-ic" style="background:color-mix(in srgb,#46C26B 16%,transparent);color:#46C26B"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/></svg></div>
+    <div class="co-body"><strong>A PR only when the tests pass.</strong> Once the plan is approved and the implementation completes <em>and</em> verifies, SpecShip raises a pull request via <code>gh</code> — the issue key on the branch, title, and body, so JIRA's development panel links it back. A run whose tests fail raises <em>no</em> PR. It's never auto-merged or auto-closed.</div>
+  </div>
+
+  <h2>Step 5 — Watch the board move on its own</h2>
+  <p>You don't touch JIRA during any of this — SpecShip writes status at the moments that matter. On <strong>start</strong> it assigns the issue to you and moves it toward <strong>In Progress</strong>. On <strong>PR raised</strong> it moves toward <strong>In Review</strong> and comments the PR link. And as you <strong>verify acceptance criteria</strong>, each proven criterion advances its published Sub-task toward Done — and the Story itself advances once every Sub-task is done. A spec that later <em>drifts</em> posts a one-time comment on its issue, so the board notices when code moves out from under a ticket.</p>
+  <div class="codeblock">
+    <div class="cb-bar"><div class="traffic"><i style="background:#F2555A"></i><i style="background:#E5A50A"></i><i style="background:#46C26B"></i></div><span class="fn">step 5 — track</span></div>
+    <pre><span class="c-com"># where does every picked/published issue stand? (live JIRA read)</span>
+"track my JIRA issues"                <span class="c-com"># → specship_jira_track</span>
+specship jira track                   <span class="c-com"># …or from the terminal</span></pre>
+  </div>
+  <p><code>track</code> joins each issue's local SpecShip work-state with a fresh JIRA status read, and flags any published spec that was edited in JIRA after publishing — so a spec and its mirror can't silently diverge.</p>
+
+  <h2>Step 6 — Advanced: transitions your workflow can actually fire</h2>
+  <p>Every JIRA project has a different workflow. SpecShip's status write-back is skip-tolerant by design — a transition your workflow doesn't offer is reported and skipped, never forced. But a <em>silent</em> skip is easy to miss, so two things make the workflow visible and controllable.</p>
+  <p>First, <code>specship jira test</code> now validates your configured lifecycle names against a real issue and tells you which ones the workflow can't fire:</p>
+  <div class="codeblock">
+    <div class="cb-bar"><div class="traffic"><i style="background:#F2555A"></i><i style="background:#E5A50A"></i><i style="background:#46C26B"></i></div><span class="fn">step 6a — validate transitions</span></div>
+    <pre>$ specship jira test
+<span class="c-com">✓ Connected to JIRA Cloud as Ada Lovelace.</span>
+<span class="c-com">ℹ Configured transitions (checked against PROJ-142; available: To Do, In Progress, Done):</span>
+<span class="c-com">ℹ   ✓ inProgress "In Progress"</span>
+<span class="c-com">⚠   ✗ inReview "In Review" — not offered from PROJ-142's current state</span>
+<span class="c-com">ℹ   ✓ done "Done"</span></pre>
+  </div>
+  <p>Second, <code>specship jira transition</code> moves an issue to any state its workflow offers — or lists the options when you omit the target. A state the workflow can't reach is reported with the available states instead of applied, so nothing is written by mistake.</p>
+  <div class="codeblock">
+    <div class="cb-bar"><div class="traffic"><i style="background:#F2555A"></i><i style="background:#E5A50A"></i><i style="background:#46C26B"></i></div><span class="fn">step 6b — drive a transition</span></div>
+    <pre><span class="c-com"># list what this issue can transition to right now</span>
+specship jira transition PROJ-142 --list
+
+<span class="c-com"># move it (a target the workflow lacks is reported, not applied)</span>
+specship jira transition PROJ-142 "Done"</pre>
+  </div>
+  <p>Point the configured names at states your project actually has — set <code>transitionInProgress</code> / <code>transitionInReview</code> / <code>transitionDone</code> in <code>~/.specship/jira.json</code>, or the matching <code>SPECSHIP_JIRA_TRANSITION_*</code> environment variables. If your board has no "In Review" state, point <code>inReview</code> at one it does (or add the state in JIRA) so completion advances visibly instead of skipping.</p>
+
+  <h2>Step 7 — Advanced: stamp a release onto the board</h2>
+  <p>When the work ships, record it on the tickets. <code>specship jira release</code> sets a version as the <code>fixVersion</code> on each issue — creating the project version if it doesn't exist — and adds a one-line "shipped in" comment. Re-running it is a no-op: no duplicate version, fixVersion, or comment.</p>
+  <div class="codeblock">
+    <div class="cb-bar"><div class="traffic"><i style="background:#F2555A"></i><i style="background:#E5A50A"></i><i style="background:#46C26B"></i></div><span class="fn">step 7 — release</span></div>
+    <pre><span class="c-com"># default: every published spec's issue key under specs/</span>
+specship jira release 1.4.0
+
+<span class="c-com"># or an explicit set</span>
+specship jira release 1.4.0 --keys PROJ-142,PROJ-143 --project PROJ</pre>
+  </div>
+
+  <h2>Step 8 — Advanced: headless, corporate TLS, and secrets</h2>
+  <p>For CI and secret managers, every field has an environment override — <code>SPECSHIP_JIRA_BASE_URL</code>, <code>SPECSHIP_JIRA_EMAIL</code>, <code>SPECSHIP_JIRA_API_TOKEN</code>, <code>SPECSHIP_JIRA_PAT</code>, <code>SPECSHIP_JIRA_DEPLOYMENT</code>, <code>SPECSHIP_JIRA_PROJECT</code>, and <code>SPECSHIP_JIRA_CONFIG</code> — so you can run without any credentials file on disk. An env var overrides the stored value, per field.</p>
+  <p>Enterprise Data Center instances often sit behind a certificate your machine doesn't trust. Point SpecShip at your corporate CA bundle (preferred) or, as a last resort on a trusted network, disable verification — both scoped to JIRA requests only:</p>
+  <div class="codeblock">
+    <div class="cb-bar"><div class="traffic"><i style="background:#F2555A"></i><i style="background:#E5A50A"></i><i style="background:#46C26B"></i></div><span class="fn">step 8 — corporate TLS</span></div>
+    <pre><span class="c-com"># preferred: trust your corporate CA (PEM) for JIRA requests only</span>
+specship jira configure --base-url https://jira.internal:8443/jira --pat &lt;token&gt; --ca-cert /path/corporate-ca.pem
+
+<span class="c-com"># last resort, trusted networks only (prints a warning)</span>
+specship jira configure --base-url https://jira.internal:8443/jira --pat &lt;token&gt; --insecure-tls</pre>
+  </div>
+  <div class="pullquote">
+    <p>The token is never logged, printed, or echoed into any output, error, JIRA comment, or the graph. Every request is host-locked to your base URL and refuses a redirect to a different host. The closest you get to seeing it is <code>connected as &lt;name&gt;</code>.</p>
+  </div>
+
+  <h2>The whole loop, on one screen</h2>
+  <p>That's the full range — from a first <code>configure</code> to release stamping. In practice a normal day is three lines: <em>pick</em> a ticket, <em>start</em> it, approve the plan; the board moves itself and a linked, test-passing PR is waiting. Everything else — publish, transitions, release, TLS — is there when you need it and out of the way when you don't.</p>
+  <div class="codeblock">
+    <div class="cb-bar"><div class="traffic"><i style="background:#F2555A"></i><i style="background:#E5A50A"></i><i style="background:#46C26B"></i></div><span class="fn">a normal day</span></div>
+    <pre>"pick PROJ-142"        <span class="c-com"># ticket → spec</span>
+"start PROJ-142"       <span class="c-com"># plan gate → approve → implement → verify</span>
+<span class="c-com"># …a linked, test-passing PR is waiting; the board is already In Review.</span></pre>
+  </div>
+  <p>The last word — Done, and merge — is always yours.</p>
+</Article>

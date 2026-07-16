@@ -39,6 +39,16 @@ const doorArch = (stroke: string) =>
 
 export const posts: BlogPost[] = [
   {
+    slug: 'jira-walkthrough',
+    cat: 'integrations', catLabel: 'Integrations', catColor: '#2684FF',
+    title: 'Using JIRA with SpecShip: a step-by-step walkthrough',
+    dek: 'Hands-on, start to finish: connect your board, pick a ticket into a spec, publish it back as a Story with Sub-tasks, implement it behind the plan gate, and let the board move itself to In Review and Done — then the advanced knobs: transition control, workflow validation, release stamping, corporate TLS, and headless secrets.',
+    date: 'Jul 16, 2026', read: '9 min', feat: true,
+    tags: ['#jira', '#integrations', '#walkthrough', '#tutorial'],
+    thumbBg: 'rgba(38,132,255,0.10)',
+    thumb: `<svg viewBox="0 0 360 200" preserveAspectRatio="xMidYMid slice"><rect width="360" height="200" fill="rgba(38,132,255,0.08)"/><g font-family="Geist Mono, monospace"><circle cx="58" cy="100" r="18" fill="none" stroke="#2684FF" stroke-width="2.2"/><text x="58" y="106" font-size="15" fill="#78AAFF" text-anchor="middle">1</text><circle cx="140" cy="100" r="18" fill="none" stroke="#5B93F2" stroke-width="2.2"/><text x="140" y="106" font-size="15" fill="#8FB4FF" text-anchor="middle">2</text><circle cx="222" cy="100" r="18" fill="none" stroke="#A586F5" stroke-width="2.2"/><text x="222" y="106" font-size="15" fill="#C0A8FF" text-anchor="middle">3</text><circle cx="304" cy="100" r="21" fill="none" stroke="#46C26B" stroke-width="2.6"/><path d="M295 100 L302 108 L314 90" fill="none" stroke="#46C26B" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></g><g stroke="rgba(150,165,200,0.4)" stroke-width="2" stroke-dasharray="5 5"><path d="M76 100 H122"/><path d="M158 100 H204"/><path d="M240 100 H283"/></g></svg>`,
+  },
+  {
     slug: 'jira-integration',
     cat: 'integrations', catLabel: 'Integrations', catColor: '#2684FF',
     title: 'Drive work from your JIRA board: pick an id, get a reviewed PR',

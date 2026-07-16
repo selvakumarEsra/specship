@@ -84,7 +84,10 @@ Every field can come from an environment variable instead of the stored file, so
 | `SPECSHIP_JIRA_DEPLOYMENT` | Force `cloud` or `datacenter` instead of inferring |
 | `SPECSHIP_JIRA_CA_CERT` | Path to a PEM CA bundle for a corporate/self-signed certificate |
 | `SPECSHIP_JIRA_INSECURE_TLS` | `1`/`true` disables certificate verification for JIRA requests only (last resort) |
+| `SPECSHIP_JIRA_PROJECT` | Default project key for publishing a spec (skips the pick-list) |
 | `SPECSHIP_JIRA_CONFIG` | Point at a config file other than `~/.specship/jira.json` |
+
+The lifecycle transition names also have overrides — `SPECSHIP_JIRA_TRANSITION_IN_PROGRESS`, `SPECSHIP_JIRA_TRANSITION_IN_REVIEW`, `SPECSHIP_JIRA_TRANSITION_DONE` (see [Status write-back](#status-write-back)).
 
 An environment variable overrides the stored value.
 
@@ -98,9 +101,17 @@ The list → pick → start flow is agent-native — you ask Claude Code in conv
 | `specship_jira_issue` | Fetches a single issue by key — its summary, description, status, and type. An unknown or forbidden key is reported clearly. |
 | `specship_jira_pick` | Fetches an issue and drafts a spec from it under `specs/`: summary → title, description → body, subtasks → acceptance criteria. Re-picking the same issue updates its spec in place rather than duplicating it, and records the source issue key. |
 | `specship_jira_start` | Runs the spec-implement workflow on the generated spec and surfaces its plan/approve gate. |
-| `specship_jira_track` | A read-only table of every issue you've brought into SpecShip, joining its SpecShip work-state with a live JIRA status read. Never re-picks or re-starts anything. |
+| `specship_jira_track` | A read-only table of every issue you've brought into SpecShip, joining its SpecShip work-state with a live JIRA status read. Also flags any published spec edited in JIRA after publishing. Never re-picks or re-starts anything. |
+| `specship_jira_publish` | The reverse of `pick`: publishes an authored spec back to JIRA as a Story whose Sub-tasks mirror its acceptance criteria, and records the new key in the spec's frontmatter. Idempotent — re-publishing updates the Story and creates only missing Sub-tasks. |
+| `specship_jira_transition` | Moves an issue to a target workflow state, or lists the states it currently offers. A target the workflow doesn't offer is reported with the available states, never applied. |
 
-`specship jira track` is also available as a terminal command for a quick status view outside a session.
+`specship jira track` is also available as a terminal command for a quick status view outside a session, as are `specship jira transition` and `specship jira release`.
+
+## Publish a spec back to JIRA
+
+`pick` pulls a ticket *in*; `specship_jira_publish` pushes an authored spec back *out* — the reverse direction. It creates a JIRA **Story** from the spec whose **Sub-tasks mirror the acceptance criteria**, then writes the created key into the spec's frontmatter so branches, PRs, commits, and `track` all carry it. Publishing is idempotent: re-publishing an already-keyed spec updates the Story and creates only the missing Sub-tasks — never a duplicate.
+
+If you author a spec in the repo first (rather than starting from `pick`), the spec authoring flow offers to publish it when JIRA is configured. When no default project is set, SpecShip lists the projects your account can access and lets you choose — during `specship jira configure --project`, or as a pick-list at publish time.
 
 ## The pull request
 
@@ -116,10 +127,50 @@ SpecShip moves the issue at the moments that matter, so your board stays in sync
 
 - **On start** — assigns the issue to you and transitions it toward "In Progress".
 - **On PR raised** — transitions the issue toward "In Review" and comments the PR link on the ticket.
+- **On verified acceptance evidence** — each proven criterion advances its published Sub-task toward Done, and the Story advances once every Sub-task is done. A spec that later drifts posts a one-time comment on its issue.
 
-Because JIRA workflows differ per project, the transition names are configurable — set `transitionInProgress` / `transitionInReview` in `~/.specship/jira.json`, or the `SPECSHIP_JIRA_TRANSITION_IN_PROGRESS` / `SPECSHIP_JIRA_TRANSITION_IN_REVIEW` environment variables. They default to `"In Progress"` and `"In Review"`.
+Because JIRA workflows differ per project, the transition names are configurable — set `transitionInProgress` / `transitionInReview` / `transitionDone` in `~/.specship/jira.json`, or the `SPECSHIP_JIRA_TRANSITION_IN_PROGRESS` / `SPECSHIP_JIRA_TRANSITION_IN_REVIEW` / `SPECSHIP_JIRA_TRANSITION_DONE` environment variables. They default to `"In Progress"`, `"In Review"`, and `"Done"`.
 
-SpecShip degrades gracefully: if a configured transition doesn't exist in your project's workflow, it still comments the PR link and tells you it skipped the move rather than erroring, and a JIRA hiccup on start never blocks your local work from beginning. SpecShip **never** performs the "Done"/close transition automatically — that stays your call.
+SpecShip degrades gracefully: if a configured transition doesn't exist in your project's workflow, it still comments the PR link and tells you it skipped the move rather than erroring, and a JIRA hiccup on start never blocks your local work from beginning. Raising and merging the PR stays your call — SpecShip never auto-merges.
+
+## Transitions and workflow validation
+
+Two commands make the workflow visible and controllable, since every project's states differ.
+
+`specship jira transition` moves an issue to any state its workflow offers — or lists the options when you omit the target. A state the workflow can't reach is reported with the available states instead of applied, so nothing is written by mistake:
+
+```bash
+# list what an issue can transition to right now
+specship jira transition PROJ-142 --list
+
+# move it (a target the workflow lacks is reported, not applied)
+specship jira transition PROJ-142 "Done"
+```
+
+`specship jira test` now also validates your configured lifecycle names against a real issue and flags any the workflow can't fire — so a board with no "In Review" state surfaces up front instead of silently skipping when a run completes:
+
+```
+$ specship jira test
+✓ Connected to JIRA Cloud as Ada Lovelace.
+ℹ Configured transitions (checked against PROJ-142; available: To Do, In Progress, Done):
+ℹ   ✓ inProgress "In Progress"
+⚠   ✗ inReview "In Review" — not offered from PROJ-142's current state
+ℹ   ✓ done "Done"
+```
+
+If a name is unmatched, point it at a state your project actually has (or add the state in JIRA).
+
+## Stamp a release onto the board
+
+When the work ships, `specship jira release <version>` sets that version as the `fixVersion` on each issue — creating the project version if it doesn't exist — and adds a one-line "shipped in" comment. Re-running it is a no-op: no duplicate version, fixVersion, or comment.
+
+```bash
+# default: every published spec's issue key under specs/
+specship jira release 1.4.0
+
+# or an explicit set of keys / project
+specship jira release 1.4.0 --keys PROJ-142,PROJ-143 --project PROJ
+```
 
 ## Security
 

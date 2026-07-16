@@ -435,9 +435,15 @@ specship callers <symbol>        # Find what calls a function/method (--limit, -
 specship callees <symbol>        # Find what a function/method calls (--limit, --json)
 specship impact <symbol>         # Analyze what code is affected by changing a symbol (--depth, --json)
 specship affected [files...]     # Find test files affected by changes (see below)
-specship jira configure          # Connect to JIRA (--base-url, --email/--api-token or --pat, --deployment)
-specship jira test               # Verify the JIRA connection
+specship jira configure          # Connect to JIRA (--base-url, --email/--api-token or --pat, --deployment, --project)
+specship jira test               # Verify the connection + validate configured transition names against your workflow
 specship jira track              # Status of issues SpecShip has picked (--project, --path)
+specship jira transition <key> [state]  # Move an issue to a state, or list its available transitions (--list)
+specship jira release <version>  # Stamp a fixVersion + "shipped in" comment onto issues (--keys, --project)
+specship memory capture          # Capture a lesson/anti-pattern as a reviewable memory rule (--title, --target; text on stdin)
+specship memory list             # List the memory rules SpecShip has applied
+specship memory remove <id>      # Remove a memory rule (previewed; --yes to write)
+specship memory edit <id>        # Replace a memory rule's body (previewed; --yes to write)
 specship serve --mcp             # Start MCP server
 ```
 
@@ -486,7 +492,7 @@ When running as an MCP server, SpecShip exposes these tools to Claude Code:
 | `specship_files` | Get indexed file structure (faster than filesystem scanning) |
 | `specship_status` | Check index health and statistics |
 
-The JIRA integration adds five more (`specship_jira_issues`, `_issue`, `_pick`, `_start`, `_track`) — see below.
+The JIRA integration adds seven more (`specship_jira_issues`, `_issue`, `_pick`, `_start`, `_track`, `_publish`, `_transition`) — see below.
 
 ---
 
@@ -524,16 +530,22 @@ calls the JIRA MCP tools:
 | `specship_jira_issue` | Fetch one issue by key. |
 | `specship_jira_pick` | Draft a well-formed spec from an issue under `specs/` (summary → title, description → body, subtasks → acceptance criteria). Re-picking updates it in place. |
 | `specship_jira_start` | Run the spec-implement workflow on the generated spec; pauses at its plan/approve gate. |
-| `specship_jira_track` | A read-only table joining each picked issue's SpecShip work-state with its live JIRA status. |
+| `specship_jira_track` | A read-only table joining each picked issue's SpecShip work-state with its live JIRA status; flags specs edited in JIRA after publishing. |
+| `specship_jira_publish` | The reverse of pick — publish an authored spec back as a Story whose Sub-tasks mirror its acceptance criteria, key written into the spec. Idempotent. |
+| `specship_jira_transition` | Move an issue to a state its workflow offers, or list the options; an unavailable target is reported, never applied. |
 
 When the plan is approved **and** the implementation's tests pass, SpecShip
 raises a pull request with the GitHub CLI — the issue key rides the branch,
 title, and body so JIRA's development panel links it back. A failing run raises
 no PR, and the PR is never auto-merged or auto-closed (you decide Done). On start
 it assigns the issue to you and moves it toward "In Progress"; on PR raised it
-moves it toward "In Review" and comments the PR link. Transition names are
-configurable and it degrades gracefully when one doesn't exist. The token is
-never logged and every request is locked to the host you configured.
+moves it toward "In Review" and comments the PR link; as you verify acceptance
+criteria, each proven one advances its published Sub-task toward Done. Transition
+names are configurable — `specship jira test` validates them against your live
+workflow, and `specship jira transition` drives any state by hand — and status
+write-back degrades gracefully when a transition doesn't exist. `specship jira
+release <version>` stamps a fixVersion + "shipped in" comment onto the issues.
+The token is never logged and every request is locked to the host you configured.
 
 See the [JIRA integration guide](https://specship.cc/guides/jira/) for the full
 walkthrough.
