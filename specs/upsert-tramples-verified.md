@@ -73,6 +73,7 @@ the sync push notice. The link is never observed in an intermediate
 implementations:
   - src/resolution/spec-link-resolver.ts:SpecLinkResolver.markSpecDrifted
   - src/resolution/spec-link-resolver.ts:SpecLinkResolver.applyDeclarationCandidates
+  - src/db/spec-queries.ts:SpecQueries.upsertSpecLink
 
 ## Acceptance
 <!-- id: REQ-STICKYLINK-002.A1 -->
