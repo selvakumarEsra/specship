@@ -113,7 +113,7 @@ describe.skipIf(!fts5Available)('upsertSpecLink sticky-state guard (REQ-STICKYLI
     });
   }
 
-  /** Re-upsert the same logical key (equal confidence) with `state`. */
+  /** Re-upsert the same logical key (equal confidence) with `state`. @verifies REQ-STICKYLINK-001 */
   function reUpsert(
     state: SpecLinkState,
     at: number,

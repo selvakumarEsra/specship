@@ -743,6 +743,7 @@ describe.skipIf(!fts5Available)('SpecLinkResolver sticky spec-drift (REQ-STICKYL
   /**
    * Seed a spec + verified link via applyDeclarationCandidates (the real
    * extraction entry point), then hand back the ids and the resolver.
+   * @verifies REQ-STICKYLINK-002
    */
   function seedVerified(specId: string, hash: string) {
     const sq = cg.getSpecQueries();
