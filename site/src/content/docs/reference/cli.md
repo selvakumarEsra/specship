@@ -30,6 +30,7 @@ description: Every SpecShip command and the flags it accepts.
 | `specship install` | Install specship MCP server into Claude Code |
 | `specship doctor [path]` | Diagnose a SpecShip install (runtime · FTS5 · MCP boot · index). Exits non-zero on a usage-blocking failure. |
 | `specship starter-prompt [path]` | Print a suggested first flow/impact prompt for this project (used by the /specship:explore door). |
+| `specship cheatsheet` | Print the SpecShip session cheat-sheet (used by the SessionStart hook). |
 | `specship uninstall` | Completely remove SpecShip (wiring, indexes, ~/.specship data, and the binary) |
 | `specship drifted [path]` | List spec links in concerning states (drifted, broken, orphaned). |
 | `specship domain-gaps [path]` | List code entities and specs not yet covered by a domain fact (the domain gap-seed). Feeds the /specship:spec domain … |
@@ -133,6 +134,7 @@ Every `SPECSHIP_*` variable the shipped code reads:
 - `SPECSHIP_MCP_DEBUG`
 - `SPECSHIP_MCP_TOOLS`
 - `SPECSHIP_MODEL`
+- `SPECSHIP_NO_CHEATSHEET`
 - `SPECSHIP_NO_DAEMON`
 - `SPECSHIP_NO_RELAUNCH`
 - `SPECSHIP_NO_STEERING`

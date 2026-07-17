@@ -233,6 +233,15 @@ const SPECSHIP_HOOKS = [
     // only when the queue is non-empty (DRIFT-PUSH-DOC, REQ-DRIFT-PUSH-002).
     hook: { type: 'command', command: 'specship sync --quiet --drift-summary' },
   },
+  {
+    event: 'SessionStart',
+    // `startup` only (not `startup|resume`): the cheat-sheet is a fixed
+    // capability map, so it prints once when a session begins and never on
+    // resume (CHEATSHEET-DOC, REQ-CHEAT-003). Distinct matcher → its own
+    // SessionStart group beside the sync hook above.
+    matcher: 'startup',
+    hook: { type: 'command', command: 'specship cheatsheet' },
+  },
 ] as const;
 
 /**

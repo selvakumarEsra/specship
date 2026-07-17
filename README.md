@@ -46,7 +46,7 @@ specship install --with-jira --with-designer              # also enable the opti
 specship install --no-sdd                                 # retrieval-only (skip the spec-driven layer)
 ```
 
-<sub>`specship install` is **wiring-only** — it never installs the binary or touches npm (get the CLI via step 1, or the offline bundle). It writes the SpecShip MCP server into `~/.claude.json` (global) or `./.mcp.json` (project-local; `--path <repo>` targets a specific repo), the auto-allow permissions list into Claude's `settings.json`, all slash commands, the spec-driven-development steering (on by default; `--no-sdd` opts out), and a per-prompt nudge that steers the agent to the graph before Read/Grep. The two integrations that talk to an external service — **JIRA** (your Atlassian instance) and **Designer** (claude.ai, experimental) — are strictly opt-in via `--with-jira` / `--with-designer`, and a later plain re-install preserves them.</sub>
+<sub>`specship install` is **wiring-only** — it never installs the binary or touches npm (get the CLI via step 1, or the offline bundle). It writes the SpecShip MCP server into `~/.claude.json` (global) or `./.mcp.json` (project-local; `--path <repo>` targets a specific repo), the auto-allow permissions list into Claude's `settings.json`, all slash commands, the spec-driven-development steering (on by default; `--no-sdd` opts out), a per-prompt nudge that steers the agent to the graph before Read/Grep, and a session-start cheat-sheet of SpecShip's commands (`SPECSHIP_NO_CHEATSHEET=1` to silence). The two integrations that talk to an external service — **JIRA** (your Atlassian instance) and **Designer** (claude.ai, experimental) — are strictly opt-in via `--with-jira` / `--with-designer`, and a later plain re-install preserves them.</sub>
 
 <details>
 <summary><strong>Environment variables — every runtime switch</strong></summary>
@@ -62,6 +62,7 @@ An actual environment variable (shell `export`, or Claude Code's `settings.json`
 | Variable | What it does |
 |---|---|
 | `SPECSHIP_NO_STEERING=1` | Turn off the per-prompt "use the graph first" nudge |
+| `SPECSHIP_NO_CHEATSHEET=1` | Turn off the session-start cheat-sheet of SpecShip commands |
 | `SPECSHIP_COMPACT=0` | Disable the smaller-model output compaction entirely |
 | `SPECSHIP_MODEL=<model>` | Force the model tier for compaction (normally auto-detected) |
 | `SPECSHIP_INTEGRATIONS` | Written by the installer for `--with-jira`/`--with-designer` — which optional tool groups the MCP server exposes |

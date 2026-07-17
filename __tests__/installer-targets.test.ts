@@ -628,6 +628,63 @@ describe('Claude target — specifics', () => {
     expect(sessionHooks[0]?.async).toBeUndefined(); // SessionStart is sync
   });
 
+  it('install writes the startup-only cheatsheet SessionStart hook (REQ-CHEAT-005.A1, REQ-CHEAT-003.A1)', () => {
+    const file = path.join(tmpHome, '.claude', 'settings.json');
+    claudeTarget.install('global', { autoAllow: true });
+
+    const settings = JSON.parse(fs.readFileSync(file, 'utf-8'));
+    // The cheat-sheet hook lives under a `startup` matcher — NOT `startup|resume`
+    // — so it never fires on resume (REQ-CHEAT-003).
+    const startupGroup = settings.hooks?.SessionStart?.find((g: any) => g.matcher === 'startup');
+    expect(startupGroup).toBeDefined();
+    const commands = (startupGroup?.hooks ?? []).map((h: any) => h.command);
+    expect(commands).toContain('specship cheatsheet');
+    // Not registered on any resume-matching group.
+    const resumeCommands = (settings.hooks?.SessionStart ?? [])
+      .filter((g: any) => /resume/.test(g.matcher))
+      .flatMap((g: any) => (g.hooks ?? []).map((h: any) => h.command));
+    expect(resumeCommands).not.toContain('specship cheatsheet');
+  });
+
+  it('re-running install leaves the cheatsheet hook unchanged, not duplicated (REQ-CHEAT-005.A2)', () => {
+    const file = path.join(tmpHome, '.claude', 'settings.json');
+    claudeTarget.install('global', { autoAllow: true });
+    claudeTarget.install('global', { autoAllow: true });
+
+    const settings = JSON.parse(fs.readFileSync(file, 'utf-8'));
+    const startupCommands = (settings.hooks?.SessionStart ?? [])
+      .filter((g: any) => g.matcher === 'startup')
+      .flatMap((g: any) => (g.hooks ?? []).map((h: any) => h.command));
+    expect(startupCommands.filter((c: string) => c === 'specship cheatsheet')).toHaveLength(1);
+  });
+
+  it('uninstall removes the cheatsheet hook (REQ-CHEAT-005.A3)', () => {
+    const file = path.join(tmpHome, '.claude', 'settings.json');
+    claudeTarget.install('global', { autoAllow: true });
+    claudeTarget.uninstall('global');
+
+    const settings = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf-8')) : {};
+    const allCommands = Object.values(settings.hooks ?? {}).flatMap((groups: any) =>
+      (groups as any[]).flatMap((g) => (g.hooks ?? []).map((h: any) => h.command)),
+    );
+    expect(allCommands).not.toContain('specship cheatsheet');
+  });
+
+  it('the plugin hooks.json ships the same cheatsheet hook the installer writes (REQ-CHEAT-006)', () => {
+    // Parity: a plugin install (hooks/hooks.json) and a CLI install must
+    // provision the identical SessionStart cheatsheet hook, or the two paths
+    // drift. Read both sources and compare.
+    const pluginHooks = JSON.parse(
+      fs.readFileSync(path.join(__dirname, '..', 'hooks', 'hooks.json'), 'utf-8'),
+    );
+    const startupGroup = (pluginHooks.hooks?.SessionStart ?? []).find(
+      (g: any) => g.matcher === 'startup',
+    );
+    expect(startupGroup).toBeDefined();
+    const commands = (startupGroup?.hooks ?? []).map((h: any) => h.command);
+    expect(commands).toContain('specship cheatsheet');
+  });
+
   it('install does NOT write sync hooks when autoAllow is off', () => {
     const settingsPath = path.join(tmpHome, '.claude', 'settings.json');
     claudeTarget.install('global', { autoAllow: false });
