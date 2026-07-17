@@ -39,6 +39,7 @@ The settings-file chain currently covers the behavior switches (`SPECSHIP_NO_STE
 | Variable | What it does | Default |
 |---|---|---|
 | `SPECSHIP_NO_STEERING=1` | Turn off the per-prompt "use the graph first" nudge | steering on |
+| `SPECSHIP_NO_CHEATSHEET=1` | Turn off the session-start cheat-sheet of SpecShip commands (prints once per session startup) | cheat-sheet on |
 | `SPECSHIP_COMPACT=0` | Disable smaller-model output compaction entirely (also disables the tier-specific rendering) | compaction auto by model |
 | `SPECSHIP_MODEL=<id>` | Force the model tier for compaction — normally detected automatically from the session | auto-detect |
 | `SPECSHIP_INTEGRATIONS` | Which optional tool groups the MCP server exposes (`jira`, `designer`). The installer writes this into the MCP entry for `--with-jira` / `--with-designer`; you rarely set it by hand | none (local-only core) |

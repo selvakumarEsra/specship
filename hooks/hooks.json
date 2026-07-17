@@ -21,6 +21,15 @@
             "command": "specship sync --quiet"
           }
         ]
+      },
+      {
+        "matcher": "startup",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "specship cheatsheet"
+          }
+        ]
       }
     ],
     "UserPromptSubmit": [

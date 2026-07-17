@@ -27,7 +27,7 @@ specship install
 - Writes the MCP server entry so Claude Code launches `specship serve --mcp`.
 - Adds the read-only `specship_*` tools to Claude Code's auto-allow list, so you aren't prompted on every query.
 - Installs the slash commands and the `specship-explorer` subagent.
-- Adds the auto-sync hooks (re-index after the agent edits files; catch up on session start) and the per-prompt steering nudge.
+- Adds the auto-sync hooks (re-index after the agent edits files; catch up on session start), the per-prompt steering nudge, and a session-start cheat-sheet of SpecShip's commands (`SPECSHIP_NO_CHEATSHEET=1` to silence).
 - For a project-local install, initializes the target repo's `.specship/` and builds its index.
 
 If the `specship` command isn't on your PATH yet, the installer warns (Claude Code launches it by name) and points at both acquisition routes — it never runs them for you.

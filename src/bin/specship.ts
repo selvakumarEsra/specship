@@ -2760,6 +2760,23 @@ program
   });
 
 /**
+ * specship cheatsheet — print the user-facing session cheat-sheet
+ * (CHEATSHEET-DOC). Installed as a startup-only `SessionStart` hook; emits a
+ * `{ systemMessage }` payload the harness renders to the human. Silent when
+ * `SPECSHIP_NO_CHEATSHEET` is set (REQ-CHEAT-004). Distinct from
+ * `starter-prompt` (dynamic first-run flow) — this is the static capability map.
+ */
+program
+  .command('cheatsheet')
+  .description('Print the SpecShip session cheat-sheet (used by the SessionStart hook).')
+  .action(async () => {
+    const { buildCheatsheetPayload } = await import('../activation/cheatsheet');
+    const payload = buildCheatsheetPayload();
+    if (payload) process.stdout.write(JSON.stringify(payload) + '\n');
+    process.exit(0);
+  });
+
+/**
  * specship spec-nudge  (internal — installed as a UserPromptSubmit hook)
  *
  * Reads the UserPromptSubmit JSON payload from stdin and, when the prompt

@@ -54,10 +54,15 @@
           {
             "type": "command",
             "command": "specship sync --quiet --drift-summary"
-          },
+          }
+        ]
+      },
+      {
+        "matcher": "startup",
+        "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/hooks/specship-tips.sh"
+            "command": "specship cheatsheet"
           }
         ]
       }
