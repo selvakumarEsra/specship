@@ -9,10 +9,12 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+
+## [0.21.0] - 2026-07-17
+
 ### New Features
 
 - SpecShip now greets you with a one-screen cheat-sheet at the start of a session — the four doors, explore-first retrieval, JIRA, the drift/health gate, lessons/memory, and the verify chain — so the commands are discoverable without leaving the terminal. It prints once when a session starts (not on resume), and you can silence it with `SPECSHIP_NO_CHEATSHEET=1`.
-
 
 ## [0.20.0] - 2026-07-16
 
@@ -712,3 +714,4 @@ Thanks @andreinknv for the substantive draft this release was based on.
 [0.19.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.19.0
 [0.19.1]: https://github.com/selvakumarEsra/specship/releases/tag/v0.19.1
 [0.20.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.20.0
+[0.21.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.21.0
