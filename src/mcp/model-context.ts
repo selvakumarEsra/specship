@@ -17,6 +17,7 @@
 
 import * as fs from 'fs';
 import { modelMarkerPath, writeJsonAtomic, readJsonSafe } from '../statusline/paths';
+import { findNearestSpecShipRoot } from '../directory';
 import { resolveSetting } from '../config/runtime-settings';
 
 export type ModelTier = 'haiku' | 'sonnet' | 'full';
@@ -40,6 +41,34 @@ export function recordSessionModel(projectRoot: string, model: string): void {
     writeJsonAtomic(p, { v: 1, model, at: Date.now() } satisfies ModelMarker);
   } catch {
     /* a marker write must never affect the status line */
+  }
+}
+
+/**
+ * Seed the model marker from a SessionStart hook payload (REQ-MODCTX-001.A6).
+ * Closes the first-prompt blind spot: a brand-new session has no assistant
+ * turn to tail-read and no status-line render yet, but SessionStart's stdin
+ * JSON carries an optional `model` before any turn exists. Best-effort on
+ * every axis — the `model` field may be absent (e.g. after `/clear` or
+ * conversation recovery), the JSON unparseable, or the cwd outside any
+ * initialized project — and it never throws (the caller is a hook whose
+ * real job is printing the cheat-sheet).
+ */
+export function recordModelFromSessionStart(rawStdin: string): void {
+  try {
+    const j = JSON.parse(rawStdin) as { model?: unknown; cwd?: unknown };
+    const model =
+      typeof j.model === 'string' && j.model
+        ? j.model
+        : typeof (j.model as { id?: unknown } | undefined)?.id === 'string'
+          ? (j.model as { id: string }).id
+          : null;
+    if (!model || typeof j.cwd !== 'string' || !j.cwd) return;
+    const root = findNearestSpecShipRoot(j.cwd);
+    if (!root) return;
+    recordSessionModel(root, model);
+  } catch {
+    /* seeding must never affect the hook */
   }
 }
 

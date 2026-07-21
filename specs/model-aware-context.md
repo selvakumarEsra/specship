@@ -53,10 +53,21 @@ Unknown model → no compaction (honest default: never compact blind).
   `SPECSHIP_NO_STEERING` — but never in uninitialized projects.
 - **Status line (bonus channel).** When installed, it records the model it
   receives on every render.
+- **SessionStart hook (first-prompt seed).** The transcript channel has a
+  blind spot: a brand-new session's first prompt has no assistant turn yet,
+  so it runs at the `full` tier. Claude Code's `SessionStart` hook input
+  carries an optional `model` field before any assistant turn exists; the
+  `specship cheatsheet` command (already installed as a SessionStart hook)
+  reads its stdin JSON and, when a model is present and the session's `cwd`
+  resolves to an initialized project, records the marker. Best-effort: a
+  missing/absent `model` (e.g. after `/clear` or conversation recovery),
+  unparseable stdin, or an uninitialized project records nothing, and
+  seeding never affects the cheat-sheet payload or exit code.
 
 implementations:
   - src/mcp/model-context.ts:readModelFromTranscript
   - src/mcp/model-context.ts:detectModelTier
+  - src/mcp/model-context.ts:recordModelFromSessionStart
   - src/statusline/index.ts:buildSegment
 
 ## Acceptance
@@ -77,6 +88,12 @@ implementations:
 - Transcript reading is tail-bounded (a large transcript is not read whole)
   and tolerant: malformed lines and a missing/unreadable transcript record
   nothing and never fail the hook.
+<!-- id: REQ-MODCTX-001.A6 -->
+- A SessionStart hook payload carrying `model` and a `cwd` inside an
+  initialized project records the marker before any assistant turn exists;
+  a payload without `model`, with unparseable JSON, or with a `cwd` outside
+  any initialized project records nothing — and in every case the
+  cheat-sheet output is unaffected.
 
 <!-- id: REQ-MODCTX-002 -->
 ## On a lower tier, SpecShip prose MUST compact — code MUST NOT
@@ -137,3 +154,44 @@ through unchanged regardless of tier.
 ## Acceptance
 <!-- id: REQ-MODCTX-004.A1 -->
 - A jira/designer tool result on the haiku tier is byte-identical to full.
+
+<!-- id: REQ-MODCTX-005 -->
+## The auto-switch MUST be visible to the human user
+
+REQ-MODCTX-003 made compaction visible to the *agent* (the in-response
+compact-mode line); the human never sees tool results, so today the
+auto-switch is silent to the user. When the session's model resolves to a
+non-`full` tier and compaction is active, the status line renders a dim
+element telling the user SpecShip is optimizing its output for the smaller
+model (e.g. `⛁ optimizing for Haiku`).
+
+Honesty bounds this element the same way it bounds the rest of the status
+line: it appears ONLY when compaction would actually apply — it resolves
+through the same tier resolution the MCP server uses, so `SPECSHIP_COMPACT=0`
+hides it and a `SPECSHIP_MODEL` override drives it. The wording asserts
+optimization, never reduction ("optimizing for", not "trimmed" — the user
+must not read it as degraded answers). Rendering stays pure: the caller
+resolves the tier; `renderSegment` only formats. [needs review: element
+placement (identity line vs header line) and exact wording.]
+
+implementations:
+  - src/statusline/index.ts:buildSegment
+  - src/statusline/render.ts:renderSegment
+  - src/mcp/model-context.ts:detectModelTier
+
+## Acceptance
+<!-- id: REQ-MODCTX-005.A1 -->
+- A status-line render in an initialized project whose stdin model maps to
+  the haiku tier includes an element naming the optimization and the tier
+  (e.g. "optimizing for Haiku"); a sonnet-tier model names Sonnet.
+<!-- id: REQ-MODCTX-005.A2 -->
+- On the full tier (e.g. Fable/Opus) the element is absent and the rendered
+  line is byte-identical to today's output.
+<!-- id: REQ-MODCTX-005.A3 -->
+- With `SPECSHIP_COMPACT=0` the element is absent even when the model maps
+  to haiku — the indicator never claims an optimization that is disabled.
+<!-- id: REQ-MODCTX-005.A4 -->
+- Under `NO_COLOR` the element renders as plain text with no ANSI escapes.
+<!-- id: REQ-MODCTX-005.A5 -->
+- Tier resolution failing (unreadable marker/settings) drops the element
+  and never breaks the rendered line.

@@ -16,7 +16,7 @@ import { readStatuslineCache } from './cache';
 import { readSessionMarker } from './session-marker';
 import { readActiveRun } from './active-run';
 import { readUsageLimits, usageFromStatuslineInput, contextFromStatuslineInput, resolveCtxWarnPct } from './usage-limits';
-import { recordSessionModel } from '../mcp/model-context';
+import { recordSessionModel, detectModelTier } from '../mcp/model-context';
 import { renderSegment } from './render';
 import { selectStatuslineTip } from './tips';
 
@@ -167,6 +167,20 @@ export function buildSegment(rawStdin: string, noColor = !!process.env.NO_COLOR)
   // never affects the rendered line.
   if (root && model) recordSessionModel(root, model);
 
+  // Model-compaction indicator (REQ-MODCTX-005): resolve the tier through the
+  // SAME chain the MCP server uses (marker + SPECSHIP_MODEL/SPECSHIP_COMPACT),
+  // so the user-facing element only appears when compaction is actually
+  // active. Any resolution failure drops the element, never the line (A5).
+  let compact: 'haiku' | 'sonnet' | null = null;
+  if (root) {
+    try {
+      const tier = detectModelTier(root);
+      if (tier !== 'full') compact = tier;
+    } catch {
+      compact = null;
+    }
+  }
+
   // Usage limits are account-wide (not per-project), so resolve them regardless
   // of whether we found a SpecShip project. Primary source is Claude's own
   // status-line `rate_limits` on stdin (real, includes reset times); an external
@@ -202,5 +216,6 @@ export function buildSegment(rawStdin: string, noColor = !!process.env.NO_COLOR)
     noColor,
     header,
     tip,
+    compact,
   });
 }

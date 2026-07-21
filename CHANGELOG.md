@@ -13,6 +13,8 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - SpecShip now greets you with a one-screen cheat-sheet at the start of a session — the four doors, explore-first retrieval, JIRA, the drift/health gate, lessons/memory, and the verify chain — so the commands are discoverable without leaving the terminal. It prints once when a session starts (not on resume), and you can silence it with `SPECSHIP_NO_CHEATSHEET=1`.
 - The status-line segment now shows a rotating one-line SpecShip usage tip below its metrics — an ambient reminder of what `specship_explore`, `specship_impact`, and the spec commands can do — cycling on a timer so it stays fresh without flickering. Silence it with `SPECSHIP_NO_STATUSLINE_TIPS=1`.
+- When your session runs on a smaller model (Haiku, or Sonnet), the status line now shows a dim "optimizing for Haiku/Sonnet" note so you can see SpecShip has automatically switched to its compact, small-model-friendly output. It appears only while the optimization is actually active and disappears when you switch back to a frontier model or set `SPECSHIP_COMPACT=0`.
+- The small-model optimization now kicks in from the very first prompt of a new session: SpecShip learns the session's model the moment the session starts, instead of only after the first response, so even the opening question gets the right output mode.
 
 
 ## [0.20.0] - 2026-07-16

@@ -2770,6 +2770,22 @@ program
   .command('cheatsheet')
   .description('Print the SpecShip session cheat-sheet (used by the SessionStart hook).')
   .action(async () => {
+    // Seed the model marker from the SessionStart payload (REQ-MODCTX-001.A6)
+    // so the very first prompt of a brand-new session already runs at the
+    // right tier — the transcript channel has no assistant turn to read yet.
+    // TTY-guarded: a human running `specship cheatsheet` by hand has no piped
+    // stdin, and waiting on it would hang the command.
+    if (!process.stdin.isTTY) {
+      const chunks: Buffer[] = [];
+      try {
+        for await (const c of process.stdin) chunks.push(c as Buffer);
+      } catch { /* no stdin — nothing to seed */ }
+      const raw = Buffer.concat(chunks).toString('utf-8').trim();
+      if (raw) {
+        const { recordModelFromSessionStart } = await import('../mcp/model-context');
+        recordModelFromSessionStart(raw);
+      }
+    }
     const { buildCheatsheetPayload } = await import('../activation/cheatsheet');
     const payload = buildCheatsheetPayload();
     if (payload) process.stdout.write(JSON.stringify(payload) + '\n');

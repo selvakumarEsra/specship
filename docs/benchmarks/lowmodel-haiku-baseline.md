@@ -61,11 +61,56 @@ finding 3).
 - **Haiku, medium repo:** ≤1 Read, ≤7 turns. (Baseline meets it: 0 Reads.)
 - Frontier bar unchanged (~0 Read/Grep within the explore budget).
 
+## 2026-07-21 follow-up — v2 banner on the medium repo (fills the empty cells)
+
+**Measured 2026-07-21 · Claude Code 2.1.210 · `EVAL_MODEL=haiku` ·
+specship 0.21.0 local build (main 7fbd5c5 + MODCTX-005/001.A6 working tree) ·
+excalidraw @ 656 files · headless · 2 runs/arm ·
+harness `audit.sh local` + `run-all.sh`.**
+
+Arms: `without` (empty MCP) · `with, fresh session` (no marker — the
+pre-A6 first-prompt state) · `with, features ON` (marker pre-seeded
+`claude-haiku-4-5`; v2 assert-completeness banner active — verified in the
+stream: `⛁ compact mode (haiku)` present in every ON with-run).
+
+| Arm | r-a | r-b |
+|---|---|---|
+| without | Ag1+Bash27+R23 · $0.309 | Ag1+Bash25+R20 · $0.241 |
+| with, fresh (no marker) | 3cg+1TS/0R/5t/36s/**$0.090** | 1cg+1search+Ag1+Bash25+R21 · $0.340 |
+| with, features ON (v2) | 3cg+1TS/**0R**/5t/29s/**$0.071** | 1cg+1TS/**0R**/3t/20s/**$0.033** |
+| (ON's paired without) | Ag1+Bash22+R18 · 147s · $0.201 | Ag1+Bash21+R19 · 167s · $0.224 |
+
+Findings:
+
+5. **Features ON beat every other arm, 2/2 — the v2 banner holds on medium.**
+   Both ON runs: 0 Reads, 0 Bash, no subagent, within the 2-call explore
+   budget (+1 ToolSearch to load schemas), 3–7× cheaper than the without
+   arm. Best run on record for this repo (1 explore / 3 turns / $0.033).
+   No re-read spiral: the small-repo v1 pathology did not reappear.
+6. **The dominant haiku variance is subagent delegation, and it hit the
+   FRESH arm.** In fresh r-b, Haiku delegated to an Explore subagent that
+   ignored specship and ran Bash25+R21 ($0.340 — costlier than without).
+   The marker-seeded arm never delegated (n=2 — small, but consistent with
+   REQ-LOWMODEL-002's anti-subagent template; headless runs can't exercise
+   the steering hook, so the mechanism can't be confirmed here). This is
+   the measured value of REQ-MODCTX-001.A6 (SessionStart marker seeding):
+   it converts the fresh-session arm into the ON arm from the first prompt.
+7. **Menu trim still unmeasured** — "tools exposed: 14" in every arm,
+   marker seeded or not (same mechanics as finding 2). REQ-LOWMODEL-004
+   remains on-trial.
+8. **Numbered hops (REQ-LOWMODEL-003) were not exercised**: this question's
+   explore queries didn't surface a connected Flow section (no `— via`
+   lines in any with-run). Needs a flow-endpoint phrasing ("how does
+   mutateElement reach renderStaticScene") to measure.
+
 ## Gate status
 
 - REQ-MODCTX-002/003 (compaction + banner): **validated** with the v2
   banner (n=2/arm; the small-n caveat applies, but the v1→v2 delta was
-  consistent and mechanistically explained).
+  consistent and mechanistically explained). **2026-07-21: re-validated on
+  the medium repo** — v2 ON beat every arm 2/2 (finding 5), closing the
+  cells the 07-12 run left empty. REQ-LOWMODEL-005.A2's small+medium bar
+  is now met with the current banner.
 - REQ-LOWMODEL-003 (numbered hops): active in the ON arms; no adverse
   signal; excalidraw ON matched or beat OFF.
 - REQ-LOWMODEL-004 (menu trim): **unmeasured** (finding 2) — remains

@@ -66,6 +66,14 @@ export interface RenderInput {
    * no env). Rendered dim as the LAST line, below telemetry.
    */
   tip?: string | null;
+  /**
+   * Active model-compaction tier (REQ-MODCTX-005), or null/undefined to omit
+   * the indicator. The caller resolves the tier through the same chain the MCP
+   * server uses (`detectModelTier` — marker, `SPECSHIP_MODEL`, `SPECSHIP_COMPACT`),
+   * so this module stays pure and the element is only ever shown when
+   * compaction is actually active. Never `'full'` — the caller maps full → null.
+   */
+  compact?: 'haiku' | 'sonnet' | null;
   /** When true, emit no ANSI escapes. */
   noColor: boolean;
 }
@@ -147,7 +155,7 @@ function paint(noColor: boolean, code: number, s: string): string {
  * a minimal `◈ specship … ◈` when caches are absent rather than erroring.
  */
 export function renderSegment(input: RenderInput): string {
-  const { cache, marker, run, usage, now, context, ctxWarnPct, noColor, header, tip } = input;
+  const { cache, marker, run, usage, now, context, ctxWarnPct, noColor, header, tip, compact } = input;
   const c = (code: number, s: string) => paint(noColor, code, s);
 
   const orn = c(COLOR.orn, '◈');
@@ -197,6 +205,14 @@ export function renderSegment(input: RenderInput): string {
   if (run) {
     const label = run.specId ? `${run.specId}·${run.status}` : run.status;
     parts.push(c(COLOR.run, `${label}${etaSuffix(run)}`));
+  }
+
+  // Model-compaction indicator (REQ-MODCTX-005) — tells the USER the
+  // auto-switch happened; the agent already sees it inside tool results.
+  // Wording asserts optimization, never reduction, and the caller only sets
+  // `compact` when compaction is actually active (honesty rule).
+  if (compact) {
+    parts.push(c(COLOR.dim, `⛁ optimizing for ${compact === 'haiku' ? 'Haiku' : 'Sonnet'}`));
   }
 
   // Telemetry elements render on their own SECOND line (REQ-STATUSLINE-010):
