@@ -11,14 +11,9 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### New Features
 
-- SpecShip now plugs into a daily scrum/kanban flow. Ask for your JIRA issues with `sprint: "active"` (or use the new `/specship:day` command) to pull just your active-sprint board — your work for the day — then pick and start one. And when you spot a new task mid-implementation, the new `specship_jira_add_task` files it under its epic/story for you: if the taskship planning tool is installed it routes through taskship so the plan stays the source of truth, otherwise it creates a watermarked JIRA issue (a Sub-task under a story, a Task under an epic) that taskship can adopt later.
-
-
-## [0.21.0] - 2026-07-17
-
-### New Features
-
 - SpecShip now greets you with a one-screen cheat-sheet at the start of a session — the four doors, explore-first retrieval, JIRA, the drift/health gate, lessons/memory, and the verify chain — so the commands are discoverable without leaving the terminal. It prints once when a session starts (not on resume), and you can silence it with `SPECSHIP_NO_CHEATSHEET=1`.
+- The status-line segment now shows a rotating one-line SpecShip usage tip below its metrics — an ambient reminder of what `specship_explore`, `specship_impact`, and the spec commands can do — cycling on a timer so it stays fresh without flickering. Silence it with `SPECSHIP_NO_STATUSLINE_TIPS=1`.
+
 
 ## [0.20.0] - 2026-07-16
 
@@ -718,4 +713,3 @@ Thanks @andreinknv for the substantive draft this release was based on.
 [0.19.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.19.0
 [0.19.1]: https://github.com/selvakumarEsra/specship/releases/tag/v0.19.1
 [0.20.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.20.0
-[0.21.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.21.0

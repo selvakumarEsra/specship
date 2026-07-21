@@ -3,7 +3,7 @@ id: SHIP-STATUSLINE-DOC
 title: SpecShip status-line segment
 owner: core
 priority: medium
-version: 4
+version: 5
 ---
 
 <!-- id: SHIP-STATUSLINE-DOC -->
@@ -423,3 +423,59 @@ implementations:
 - Empty or unparseable stdin renders no header line at all — the degraded output stays a single line (REQ-STATUSLINE-001.A2).
 <!-- id: REQ-STATUSLINE-012.A6 -->
 - Under `NO_COLOR`, the header line contains no ANSI escape sequences.
+
+<!-- id: REQ-STATUSLINE-013 -->
+## The segment MUST append a rotating, dimmed usage-tip line that advances on a fixed time interval
+
+The segment surfaces an ambient SpecShip usage tip — a single short line of
+capability guidance (e.g. "specship_explore answers flow questions in 1 call")
+drawn from a curated set. This is SpecShip's supported stand-in for Claude
+Code's built-in spinner tips, which are hardcoded and cannot be customized by a
+third party.
+
+The tip line renders LAST, below the telemetry line, extending the fixed stack
+order of REQ-STATUSLINE-010 to: header, identity, telemetry, tip. It is
+styled dim so it reads as secondary and never competes with the scannable
+identity line, and it never alters the content of the lines above it.
+
+Which tip shows MUST advance deterministically on a fixed time interval, derived
+from the same clock the reader already holds (`now`), so that the tip is stable
+within an interval and does not flicker on sub-second repaints, and so a test
+can pin the clock and assert the chosen tip. The reader resolves the tip text;
+the renderer stays pure (no clock, no env, no I/O), consistent with the other
+requirements.
+
+Two constraints from the document body carry through:
+
+- **Honesty.** A tip MUST NOT state a tokens-saved, cost-saved, or
+  time-saved figure — the same fabrication ban as the identity line. Tips are
+  capability reminders, not benchmark claims.
+- **Performance.** Selecting and rendering the tip MUST NOT open the SQLite
+  database, spawn a process, or do network I/O.
+
+The tip is shown by default and MUST be silenceable via a
+`SPECSHIP_NO_STATUSLINE_TIPS` environment opt-out, matching the
+`SPECSHIP_NO_CHEATSHEET` convention. When opt-out is set, and on the empty or
+unparseable-stdin degraded path (REQ-STATUSLINE-001.A2), no tip line is emitted.
+
+implementations:
+  - src/statusline/render.ts:renderSegment
+  - src/statusline/index.ts:buildSegment
+  - src/statusline/tips.ts:selectStatuslineTip
+  - src/statusline/tips.ts:STATUSLINE_TIPS
+
+## Acceptance
+<!-- id: REQ-STATUSLINE-013.A1 -->
+- When tips are enabled and the segment renders normally, the final output line is a single tip line positioned below the telemetry line, and the header, identity, and telemetry lines above it are byte-for-byte unchanged from what they render without the tip feature.
+<!-- id: REQ-STATUSLINE-013.A2 -->
+- Holding the curated tip set fixed, rendering at two `now` values that fall in the same time bucket selects the same tip; rendering at two `now` values one interval apart selects the next tip in the set, wrapping to the first after the last (`floor(now / interval) mod count`).
+<!-- id: REQ-STATUSLINE-013.A3 -->
+- The curated tip set contains at least four distinct tips, and no tip contains a tokens-saved, cost-saved, or time-saved figure.
+<!-- id: REQ-STATUSLINE-013.A4 -->
+- With `SPECSHIP_NO_STATUSLINE_TIPS` set to a non-empty value, no tip line is emitted and the segment output is identical to the pre-feature output; an unset or empty value renders the tip.
+<!-- id: REQ-STATUSLINE-013.A5 -->
+- Empty or unparseable stdin renders no tip line — the degraded output stays a single line (REQ-STATUSLINE-001.A2).
+<!-- id: REQ-STATUSLINE-013.A6 -->
+- Under `NO_COLOR`, the tip line contains no ANSI escape sequences (the dim styling is stripped) while its text still renders.
+<!-- id: REQ-STATUSLINE-013.A7 -->
+- Selecting and rendering the tip opens no SQLite connection, spawns no child process, and performs no network I/O.

@@ -63,6 +63,7 @@ An actual environment variable (shell `export`, or Claude Code's `settings.json`
 |---|---|
 | `SPECSHIP_NO_STEERING=1` | Turn off the per-prompt "use the graph first" nudge |
 | `SPECSHIP_NO_CHEATSHEET=1` | Turn off the session-start cheat-sheet of SpecShip commands |
+| `SPECSHIP_NO_STATUSLINE_TIPS=1` | Turn off the rotating usage tip on the status-line segment |
 | `SPECSHIP_COMPACT=0` | Disable the smaller-model output compaction entirely |
 | `SPECSHIP_MODEL=<model>` | Force the model tier for compaction (normally auto-detected) |
 | `SPECSHIP_INTEGRATIONS` | Written by the installer for `--with-jira`/`--with-designer` — which optional tool groups the MCP server exposes |

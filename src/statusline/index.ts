@@ -18,6 +18,7 @@ import { readActiveRun } from './active-run';
 import { readUsageLimits, usageFromStatuslineInput, contextFromStatuslineInput, resolveCtxWarnPct } from './usage-limits';
 import { recordSessionModel } from '../mcp/model-context';
 import { renderSegment } from './render';
+import { selectStatuslineTip } from './tips';
 
 export * from './types';
 export { writeStatuslineCache } from './cache';
@@ -177,10 +178,17 @@ export function buildSegment(rawStdin: string, noColor = !!process.env.NO_COLOR)
   const context = contextFromStatuslineInput(rawStdin);
   const ctxWarnPct = resolveCtxWarnPct();
 
+  // Rotating usage tip (REQ-STATUSLINE-013): shown by default, silenced by the
+  // `SPECSHIP_NO_STATUSLINE_TIPS` opt-out (matching `SPECSHIP_NO_CHEATSHEET`).
+  // Gated on `header` — i.e. an identified session — so empty/unparseable stdin
+  // renders no tip and the degraded output stays a single line (A5 / 001.A2).
+  // Time-bucketed from `now` so the tip is deterministic and non-flickery (A2).
+  const tip = header && !process.env.SPECSHIP_NO_STATUSLINE_TIPS ? selectStatuslineTip(now) : null;
+
   if (!root) {
     // No SpecShip project here — render the idle degraded line (still with the
     // header when stdin identified the session).
-    return renderSegment({ cache: null, marker: null, run: null, usage, now, context, ctxWarnPct, noColor, header });
+    return renderSegment({ cache: null, marker: null, run: null, usage, now, context, ctxWarnPct, noColor, header, tip });
   }
 
   return renderSegment({
@@ -193,5 +201,6 @@ export function buildSegment(rawStdin: string, noColor = !!process.env.NO_COLOR)
     ctxWarnPct,
     noColor,
     header,
+    tip,
   });
 }
