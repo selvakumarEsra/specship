@@ -9,7 +9,7 @@
  * but only accepts `claude` / `auto` / `all` / `none`.)
  */
 
-import { execSync, execFileSync } from 'child_process';
+import { execSync, execFileSync, spawn } from 'child_process';
 import * as os from 'os';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -274,7 +274,55 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
     clack.note('cd your-project\nspecship init -i', 'Quick start');
   }
 
+  // Step 6: offer integration setup for whatever was just enabled
+  // (INSTALL-INTEG-SETUP-DOC). Interactive-only; --yes plans nothing.
+  await runEnabledIntegrationSetup(clack, {
+    withJira: opts.withJira,
+    withDesigner: opts.withDesigner,
+    useDefaults,
+  });
+
   clack.outro('Done! Restart Claude Code to use SpecShip.');
+}
+
+/**
+ * Build + run the post-install integration-setup plan (INSTALL-INTEG-SETUP-DOC).
+ * The planner decides what to offer; the runner prompts + spawns. Both are
+ * best-effort — nothing here fails the install.
+ */
+async function runEnabledIntegrationSetup(
+  clack: Awaited<ReturnType<typeof importESM>>,
+  input: { withJira?: boolean; withDesigner?: boolean; useDefaults: boolean },
+): Promise<void> {
+  if (!input.withJira && !input.withDesigner) return;
+  const {
+    planIntegrationSetup,
+    runIntegrationSetup,
+    commandOnPath,
+  } = await import('./integration-setup');
+
+  const jiraConfigured = (): boolean => {
+    try {
+      // Any resolvable base URL (env or ~/.specship/jira.json) counts as
+      // configured; resolveJiraCredentials throws when nothing is set.
+      const { resolveJiraCredentials } = require('../jira/config') as typeof import('../jira/config');
+      resolveJiraCredentials();
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const plan = planIntegrationSetup(input, { jiraConfigured, commandOnPath });
+
+  const spawnSetup = (command: string, args: string[]): Promise<number> =>
+    new Promise((resolve) => {
+      const child = spawn(command, args, { stdio: 'inherit' });
+      child.on('error', () => resolve(127));
+      child.on('exit', (code) => resolve(code ?? 1));
+    });
+
+  await runIntegrationSetup(plan, clack as unknown as import('./integration-setup').SetupClack, spawnSetup);
 }
 
 export interface RunUninstallerOptions {
