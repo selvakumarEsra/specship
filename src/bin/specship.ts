@@ -888,6 +888,17 @@ program
       if (drifted > 0) {
         console.log(`⚠ ${drifted} spec link(s) drifted — review with /specship:check drifted`);
       }
+      // CLAUDE.md governance findings ride the same SessionStart line
+      // (CLAUDEMD-DOC, REQ-CLAUDEMD-003) — silent at zero.
+      try {
+        const { readClaudeMdAudit } = require('../claudemd/audit') as typeof import('../claudemd/audit');
+        const audit = readClaudeMdAudit(projectPath);
+        if (audit && audit.findings.length > 0) {
+          console.log(`⚠ ${audit.findings.length} CLAUDE.md finding(s) — review with /specship:check claudemd`);
+        }
+      } catch {
+        /* surfacing is best-effort */
+      }
     };
 
     try {

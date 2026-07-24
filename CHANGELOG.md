@@ -15,6 +15,7 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The status-line segment now shows a rotating one-line SpecShip usage tip below its metrics — an ambient reminder of what `specship_explore`, `specship_impact`, and the spec commands can do — cycling on a timer so it stays fresh without flickering. Silence it with `SPECSHIP_NO_STATUSLINE_TIPS=1`.
 - When your session runs on a smaller model (Haiku, or Sonnet), the status line now shows a dim "optimizing for Haiku/Sonnet" note so you can see SpecShip has automatically switched to its compact, small-model-friendly output. It appears only while the optimization is actually active and disappears when you switch back to a frontier model or set `SPECSHIP_COMPACT=0`.
 - The small-model optimization now kicks in from the very first prompt of a new session: SpecShip learns the session's model the moment the session starts, instead of only after the first response, so even the opening question gets the right output mode.
+- SpecShip now keeps your CLAUDE.md hierarchy healthy automatically: every sync audits the root and nested CLAUDE.md files for bloat, verbatim duplication between root and modules, references to paths that no longer exist, and modules that deserve their own file — surfacing findings on the session-start summary line and in `/specship:check claudemd`. Fixes are always drafted for your approval; SpecShip never rewrites a CLAUDE.md on its own.
 
 
 ## [0.20.0] - 2026-07-16
