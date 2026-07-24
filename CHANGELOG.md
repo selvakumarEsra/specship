@@ -9,6 +9,10 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### New Features
+
+- SpecShip now plugs into a daily scrum/kanban flow. Ask for your JIRA issues with `sprint: "active"` (or use the new `/specship:day` command) to pull just your active-sprint board — your work for the day — then pick and start one. And when you spot a new task mid-implementation, the new `specship_jira_add_task` files it under its epic/story for you: if the taskship planning tool is installed it routes through taskship so the plan stays the source of truth, otherwise it creates a watermarked JIRA issue (a Sub-task under a story, a Task under an epic) that taskship can adopt later.
+
 
 ## [0.21.0] - 2026-07-17
 

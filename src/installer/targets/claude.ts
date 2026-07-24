@@ -134,6 +134,7 @@ const GOVERNANCE_TIER_COMMANDS = [
   'specship/spec.md',  // intent loop: view / new / fast / design / implement / review / triage / behaviour / domain
   'specship/check.md', // gate & health: check / drifted / fix / relink / health
   'specship/learn.md', // capture door: crystallize this session's workflow as a skill proposal (LEARN-DOC)
+  'specship/day.md',   // daily door: my sprint board → pick → start; add-task for discovered work (TASKSHIP-BRIDGE-DOC)
   // The design→code flows (design-implement / design-loop) folded into the
   // intent door's `design` sub-route (WORKFLOW-DOORS-DOC, REQ-DOORS-004); their
   // standalone command files are retired via LEGACY_SHIPPED_COMMANDS below.

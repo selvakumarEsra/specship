@@ -413,6 +413,7 @@ import {
   handleSpecshipJiraTrack,
   handleSpecshipJiraPublish,
   handleSpecshipJiraTransition,
+  handleSpecshipJiraAddTask,
 } from './jira-tools';
 
 export const tools: ToolDefinition[] = [
@@ -1290,6 +1291,13 @@ export class ToolHandler {
           // transition moves a tracked issue to a target state (or lists the
           // available ones) — independent of the code graph (REQ-JIRATRANS-001).
           return await handleSpecshipJiraTransition(args);
+        case 'specship_jira_add_task': {
+          // add_task creates a discovered task under its epic/story, routed by
+          // taskship availability (TASKSHIP-BRIDGE-DOC, REQ-TASKSHIP-003). Needs
+          // the project root to probe for taskship + spawn its CLI.
+          const cg = this.getSpecShip(args.projectPath as string | undefined);
+          return await handleSpecshipJiraAddTask(args, { projectRoot: cg.getProjectRoot() });
+        }
         default:
           return this.errorResult(`Unknown tool: ${toolName}`);
       }
