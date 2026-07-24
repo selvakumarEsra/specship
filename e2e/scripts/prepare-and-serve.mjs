@@ -7,7 +7,7 @@
  *      so Playwright owns the lifecycle (it polls /api/status for readiness and
  *      SIGTERMs us on teardown).
  *
- * The suite drives the built SPA (REQ-DESKTOP-032): `serve --ui --web-dir
+ * The suite drives the built SPA (REQ-DESKTOP-032): `desktop --web-dir
  * <ui/dist>` serves ui/dist with its SPA fallback. The SPA is the dashboard's
  * only surface (REQ-DESKTOP-033 — the server-rendered dashboard retired), so
  * no flag is needed to select it.
@@ -48,7 +48,7 @@ const env = await buildFixture();
 const child = spawn(
   'node',
   [
-    BIN, 'serve', '--ui',
+    BIN, 'desktop',
     '--web-dir', WEB_DIR,
     '--host', HOST, '--port', String(PORT),
     '--path', FIXTURE, '--ingest', '--no-watch',
