@@ -9,6 +9,9 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+
+## [0.21.1] - 2026-07-24
+
 ### New Features
 
 - SpecShip now plugs into a daily scrum/kanban flow. Ask for your JIRA issues with `sprint: "active"` (or use the new `/specship:day` command) to pull just your active-sprint board — your work for the day — then pick and start one. And when you spot a new task mid-implementation, the new `specship_jira_add_task` files it under its epic/story for you: if the taskship planning tool is installed it routes through taskship so the plan stays the source of truth, otherwise it creates a watermarked JIRA issue (a Sub-task under a story, a Task under an epic) that taskship can adopt later.
@@ -18,7 +21,6 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Installing an integration now offers to finish setting it up: after `specship install --with-jira` or `--with-designer`, the installer asks whether to configure JIRA credentials or launch the Designer browser session right then, running the same `specship jira configure` / `designer setup` step for you. It's offered only in an interactive install — `specship install --yes` still just enables the tools and leaves setup for later — and declining or a hiccup never affects the install itself.
 - The dashboard now has its own command: run `specship desktop` instead of `specship serve --ui`. It takes the same options (`--port`, `--host`, `--ingest`/`--no-ingest`, `--web-dir`, `--no-web`, `--no-watch`) plus `--mcp` to also start the MCP server in the same process. `specship serve` is now just the MCP server; running `specship serve --ui` prints a short note pointing you at `specship desktop`.
 - SpecShip now keeps your CLAUDE.md hierarchy healthy automatically: every sync audits the root and nested CLAUDE.md files for bloat, verbatim duplication between root and modules, references to paths that no longer exist, and modules that deserve their own file — surfacing findings on the session-start summary line and in `/specship:check claudemd`. Fixes are always drafted for your approval; SpecShip never rewrites a CLAUDE.md on its own.
-
 
 ## [0.21.0] - 2026-07-17
 
@@ -725,3 +727,4 @@ Thanks @andreinknv for the substantive draft this release was based on.
 [0.19.1]: https://github.com/selvakumarEsra/specship/releases/tag/v0.19.1
 [0.20.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.20.0
 [0.21.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.21.0
+[0.21.1]: https://github.com/selvakumarEsra/specship/releases/tag/v0.21.1
