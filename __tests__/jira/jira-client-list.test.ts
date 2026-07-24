@@ -163,6 +163,35 @@ describe('JiraClient.listMyIssues', () => {
     expect(jql).toContain('project = "PR\\"OJ"');
   });
 
+  // TASKSHIP-BRIDGE-DOC, REQ-TASKSHIP-001 — the sprint filter.
+  it('REQ-TASKSHIP-001.A1: sprint:"active" adds the openSprints() clause', async () => {
+    fetchMock.mockResolvedValue(searchResponse([]));
+    const client = new JiraClient(CLOUD);
+    await client.listMyIssues({ sprint: 'active' });
+
+    const jql = requestedJql();
+    expect(jql).toContain('assignee = currentUser()');
+    expect(jql).toContain('sprint in openSprints()');
+    expect(jql).toContain('ORDER BY updated DESC');
+  });
+
+  it('REQ-TASKSHIP-001.A2: no sprint filter is byte-identical to today (no sprint JQL)', async () => {
+    fetchMock.mockResolvedValue(searchResponse([]));
+    const client = new JiraClient(CLOUD);
+    await client.listMyIssues();
+    expect(requestedJql()).toBe('assignee = currentUser() ORDER BY updated DESC');
+  });
+
+  it('REQ-TASKSHIP-001.A3: project and sprint filters compose', async () => {
+    fetchMock.mockResolvedValue(searchResponse([]));
+    const client = new JiraClient(CLOUD);
+    await client.listMyIssues({ project: 'PROJ', sprint: 'active' });
+
+    const jql = requestedJql();
+    expect(jql).toContain('project = "PROJ"');
+    expect(jql).toContain('sprint in openSprints()');
+  });
+
   it('A3: no assigned issues returns an empty list, not an error', async () => {
     fetchMock.mockResolvedValue(searchResponse([]));
     const client = new JiraClient(CLOUD);

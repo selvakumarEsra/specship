@@ -18,7 +18,9 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
+import { spawn } from 'child_process';
 import type { ToolDefinition, ToolResult } from './tools';
+import { detectTaskship, defaultTaskshipProbes, type TaskshipAvailability } from '../taskship/detect';
 import { loadJiraConfig, resolveJiraCredentials } from '../jira/config';
 import { JiraClient, MAX_ISSUE_RESULTS } from '../jira/client';
 import {
@@ -192,7 +194,8 @@ export const jiraToolDefinitions: ToolDefinition[] = [
     name: 'specship_jira_issues',
     description:
       'List the JIRA issues assigned to you (resolved from your configured ' +
-      'token — you never type your own name). Optionally narrow to a project.',
+      'token — you never type your own name). Optionally narrow to a project, ' +
+      'or to your active sprint ("my tasks for today") with sprint:"active".',
     inputSchema: {
       type: 'object',
       properties: {
@@ -200,6 +203,12 @@ export const jiraToolDefinitions: ToolDefinition[] = [
           type: 'string',
           description:
             'Optional project key to narrow the list (e.g., "PROJ"). Omit to list all your assigned issues.',
+        },
+        sprint: {
+          type: 'string',
+          enum: ['active'],
+          description:
+            'Set to "active" to return only issues on an open sprint — your board for the day. Omit for all your assigned issues.',
         },
       },
     },
@@ -327,6 +336,48 @@ export const jiraToolDefinitions: ToolDefinition[] = [
         },
       },
       required: ['key'],
+    },
+  },
+  {
+    name: 'specship_jira_add_task',
+    description:
+      'Add a task you identified mid-implementation under its epic/story. If ' +
+      'the taskship PM tool is installed, this routes through it (so its ' +
+      'plan.yaml stays the source of truth and it cascades to JIRA); otherwise ' +
+      'it creates the JIRA issue directly — a Sub-task under a Story, a Task ' +
+      'under an Epic — watermarked so taskship can adopt it later.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        parent: {
+          type: 'string',
+          description:
+            "The parent's id: a JIRA key (e.g., \"PROJ-45\") when creating in JIRA, " +
+            "or taskship's story/epic id when taskship is installed. Required.",
+        },
+        title: {
+          type: 'string',
+          description: 'Short title of the new task. Required.',
+        },
+        parent_kind: {
+          type: 'string',
+          enum: ['story', 'epic'],
+          description:
+            'Whether the parent is a story or an epic (decides the JIRA issue type: ' +
+            'Sub-task under a story, Task under an epic). Defaults to "story".',
+        },
+        type: {
+          type: 'string',
+          description:
+            'taskship subtype tag for the task (e.g., "code", "test", "defect"). ' +
+            'Defaults to "task". Recorded as a taskship:type:* label on the JIRA fallback.',
+        },
+        description: {
+          type: 'string',
+          description: 'Optional longer description for the task.',
+        },
+      },
+      required: ['parent', 'title'],
     },
   },
 ];
@@ -528,11 +579,14 @@ export async function handleSpecshipJiraIssues(
     typeof args.project === 'string' && args.project.trim()
       ? args.project.trim()
       : undefined;
+  // Sprint filter (TASKSHIP-BRIDGE-DOC, REQ-TASKSHIP-001): only "active" is a
+  // recognized value; anything else is ignored (falls back to all issues).
+  const sprint = args.sprint === 'active' ? 'active' as const : undefined;
 
   try {
     const creds = resolveJiraCredentials();
     const client = new JiraClient(creds);
-    const result = await client.listMyIssues({ project });
+    const result = await client.listMyIssues({ project, sprint });
     return textResult(formatIssues(result.issues, { project }));
   } catch (err) {
     // JiraError messages are credential-free by construction (REQ-JIRA-009).
@@ -1518,5 +1572,138 @@ export async function handleSpecshipJiraPublish(
       return errorResult(err.message);
     }
     return errorResult('Failed to publish the spec to JIRA.');
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Add-task under an epic/story (TASKSHIP-BRIDGE-DOC, REQ-TASKSHIP-003)
+// ---------------------------------------------------------------------------
+
+/** Outcome of routing a discovered task through taskship. */
+export type TaskshipAddResult = { ok: true; detail: string } | { ok: false; error: string };
+
+/** Injected deps so the routing/label logic is testable without live services. */
+export interface JiraAddTaskDeps {
+  projectRoot: string;
+  /** taskship availability — defaults to the real probes bound to projectRoot. */
+  detect?: () => TaskshipAvailability;
+  /** Route a task through taskship — defaults to spawning `taskship raise`. */
+  runTaskshipAdd?: (input: {
+    parent: string;
+    parentKind: 'story' | 'epic';
+    title: string;
+    type: string;
+  }) => Promise<TaskshipAddResult>;
+  /** JIRA client factory — defaults to the configured credentials. */
+  makeJiraClient?: () => JiraClient;
+  /** External-id generator for the fallback watermark — defaults to a uuid. */
+  genExternalId?: () => string;
+}
+
+/** taskship watermark + type labels the fallback stamps (REQ-TASKSHIP-003.A4). */
+function taskshipLabels(externalId: string, type: string): string[] {
+  const tag = type.trim().toLowerCase().replace(/[^a-z0-9._-]/g, '-') || 'task';
+  return [`taskship:${externalId}`, `taskship:type:${tag}`, 'taskship:source:specship'];
+}
+
+/** Default taskship route: `taskship raise --{story|epic} <parent> --title <title>`. */
+function defaultRunTaskshipAdd(projectRoot: string) {
+  return (input: { parent: string; parentKind: 'story' | 'epic'; title: string; type: string }): Promise<TaskshipAddResult> =>
+    new Promise((resolve) => {
+      const args = ['raise', `--${input.parentKind}`, input.parent, '--title', input.title];
+      let stderr = '';
+      try {
+        const child = spawn('taskship', args, { cwd: projectRoot, stdio: ['ignore', 'ignore', 'pipe'] });
+        child.stderr?.on('data', (d) => { stderr += String(d); });
+        child.on('error', (err) => resolve({ ok: false, error: err.message }));
+        child.on('exit', (code) =>
+          code === 0
+            ? resolve({ ok: true, detail: `taskship raise --${input.parentKind} ${input.parent}` })
+            : resolve({ ok: false, error: stderr.trim() || `taskship raise exited with code ${code ?? 'null'}` }),
+        );
+      } catch (err) {
+        resolve({ ok: false, error: err instanceof Error ? err.message : String(err) });
+      }
+    });
+}
+
+/**
+ * Handle `specship_jira_add_task` (REQ-TASKSHIP-003). Create a task a developer
+ * identified mid-implementation under its epic/story, routed by taskship
+ * availability:
+ *  - taskship present → route through it (canonical); on its failure, surface
+ *    the error and DO NOT also write JIRA (no orphan issue).
+ *  - taskship absent → create the JIRA issue directly: Sub-task under a Story,
+ *    Task under an Epic, watermarked so taskship can adopt it later.
+ */
+export async function handleSpecshipJiraAddTask(
+  args: Record<string, unknown>,
+  deps: JiraAddTaskDeps,
+): Promise<ToolResult> {
+  const parent = typeof args.parent === 'string' && args.parent.trim() ? args.parent.trim() : undefined;
+  if (!parent) {
+    return textResult('A parent id is required (a JIRA key like "PROJ-45", or a taskship story/epic id). Pass it as "parent".');
+  }
+  const title = typeof args.title === 'string' && args.title.trim() ? args.title.trim() : undefined;
+  if (!title) {
+    return textResult('A task title is required. Pass it as "title".');
+  }
+  const parentKind: 'story' | 'epic' = args.parent_kind === 'epic' ? 'epic' : 'story';
+  const type = typeof args.type === 'string' && args.type.trim() ? args.type.trim() : 'task';
+  const description = typeof args.description === 'string' && args.description.trim() ? args.description.trim() : undefined;
+
+  const detect = deps.detect ?? (() => detectTaskship(defaultTaskshipProbes(deps.projectRoot)));
+  const availability = detect();
+
+  // --- taskship route (canonical when present) ---------------------------
+  if (availability.available) {
+    const run = deps.runTaskshipAdd ?? defaultRunTaskshipAdd(deps.projectRoot);
+    let res: TaskshipAddResult;
+    try {
+      res = await run({ parent, parentKind, title, type });
+    } catch (err) {
+      res = { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+    if (res.ok) {
+      return textResult(
+        `Added "${title}" under ${parentKind} ${parent} via taskship (${res.detail}). ` +
+          'taskship owns the plan and will cascade it to JIRA — no JIRA issue was created directly.',
+      );
+    }
+    // Canonical-owner rule: surface the failure, never silently write JIRA
+    // (that would orphan an issue taskship can't reconcile).
+    return errorResult(
+      `taskship is installed but adding the task through it failed: ${res.error}. ` +
+        'No JIRA issue was created. Fix taskship (or add the task in taskship directly) and retry.',
+    );
+  }
+
+  // --- JIRA fallback (taskship absent) -----------------------------------
+  try {
+    const client = deps.makeJiraClient ? deps.makeJiraClient() : new JiraClient(resolveJiraCredentials());
+    const issueType = parentKind === 'epic' ? 'Task' : 'Sub-task';
+    // Derive the project key from the parent JIRA key prefix (PROJ-45 → PROJ),
+    // falling back to the configured default project.
+    const projectFromParent = /^([A-Za-z][A-Za-z0-9_]+)-\d+$/.exec(parent)?.[1];
+    const projectKey = projectFromParent ?? resolveJiraCredentials().project ?? '';
+    const externalId = (deps.genExternalId ?? randomUUID)();
+    const created = await client.createIssue({
+      projectKey,
+      issueType,
+      summary: title,
+      description,
+      parentKey: parent,
+      labels: taskshipLabels(externalId, type),
+    });
+    return textResult(
+      `Created ${created.key} (${issueType}) under ${parentKind} ${parent}, ` +
+        `watermarked \`taskship:${externalId}\` so \`taskship onboard ${created.key}\` can adopt it later. ` +
+        '(taskship is not installed, so this was created directly in JIRA.)',
+    );
+  } catch (err) {
+    if (err instanceof JiraError) {
+      return errorResult(err.message);
+    }
+    return errorResult('Failed to create the task in JIRA.');
   }
 }

@@ -117,13 +117,20 @@ export class JiraClient {
    *  - 401 / 403 → `JiraAuthError`; redirect / network / non-200 →
    *    `JiraConfigError` (A4) — never a partial or fabricated list.
    */
-  async listMyIssues(opts?: { project?: string }): Promise<JiraIssueListResult> {
+  async listMyIssues(opts?: { project?: string; sprint?: 'active' }): Promise<JiraIssueListResult> {
     let jql = 'assignee = currentUser()';
     if (opts?.project && opts.project.trim()) {
       // Quote-escape the project so an embedded quote can't break out of the
       // JQL string literal (injection guard). JQL escapes `"` as `\"`.
       const escaped = opts.project.trim().replace(/\\/g, '\\\\').replace(/"/g, '\\"');
       jql = `project = "${escaped}" AND ${jql}`;
+    }
+    // Sprint filter (TASKSHIP-BRIDGE-DOC, REQ-TASKSHIP-001): scope to the
+    // active sprint so a developer pulls "my tasks for today" rather than
+    // every issue ever assigned. `openSprints()` is a JQL function (no user
+    // input), so there is nothing to escape.
+    if (opts?.sprint === 'active') {
+      jql = `${jql} AND sprint in openSprints()`;
     }
     jql += ' ORDER BY updated DESC';
 
@@ -346,6 +353,8 @@ export class JiraClient {
     summary: string;
     description?: string;
     parentKey?: string;
+    /** Optional labels — e.g. the taskship watermark (REQ-TASKSHIP-003.A4). */
+    labels?: string[];
   }): Promise<{ key: string; id: string }> {
     const projectKey = (fields.projectKey ?? '').trim();
     if (!projectKey) {
@@ -353,6 +362,7 @@ export class JiraClient {
         'A JIRA project key is required to create an issue (configure "project" or pass one).',
       );
     }
+    const labels = (fields.labels ?? []).map((l) => l.trim()).filter(Boolean);
     const body: any = {
       fields: {
         project: { key: projectKey },
@@ -362,6 +372,7 @@ export class JiraClient {
           ? { description: fields.description }
           : {}),
         ...(fields.parentKey ? { parent: { key: fields.parentKey } } : {}),
+        ...(labels.length ? { labels } : {}),
       },
     };
     const created = await this.write('/rest/api/2/issue', body);
