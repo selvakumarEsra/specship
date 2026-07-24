@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { captureConsoleErrors } from '../lib/console';
 
 /**
- * The dashboard-renders-live-data guard, ported to the built SPA. `serve --ui`
+ * The dashboard-renders-live-data guard, ported to the built SPA. `specship desktop`
  * serves the real app which fetches `/api/*` same-origin at
  * 127.0.0.1 — the exact condition the CORS/blank-dashboard class of bug (#55)
  * regressed on. If those fetches were cross-origin-blocked the KPI tiles would

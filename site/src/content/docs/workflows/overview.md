@@ -88,7 +88,7 @@ The same YAML runs from any of:
 | Surface | How |
 |---|---|
 | **CLI** | `specship workflow run <name> --input KEY=VAL` — what most users do most of the time. |
-| **Desktop Web UI** | `specship serve --ui` exposes a *Run* button per workflow with a generated input form, then routes to the live run page. |
+| **Desktop Web UI** | `specship desktop` exposes a *Run* button per workflow with a generated input form, then routes to the live run page. |
 | **GitHub Actions** | A runner action that takes a `workflow:` name and inputs, runs against the cloned repo, posts events back as PR comments. Approvals via PR reaction. |
 
 You author once. Where it runs is the user's choice.

@@ -5,7 +5,7 @@ description: SpecShip ingests ~/.claude/projects/*.jsonl transcripts in the back
 
 SpecShip ships with deep integration into Claude Code's native data — the JSONL transcripts that Claude Code writes to `~/.claude/projects/<project>/<sessionId>.jsonl` for every session.
 
-A background ingest watcher (started in-process by `specship serve --ui`) tails those files, parses them, and writes per-session, per-prompt, and per-tool-call rows into SpecShip's SQLite. The desktop UI then exposes the data five ways:
+A background ingest watcher (started in-process by `specship desktop`) tails those files, parses them, and writes per-session, per-prompt, and per-tool-call rows into SpecShip's SQLite. The desktop UI then exposes the data five ways:
 
 | Surface | What it answers |
 |---|---|
@@ -41,7 +41,7 @@ Most teams running Claude Code at scale don't measure any of this. SpecShip surf
 
 ## How the ingest watcher runs
 
-When `specship serve --ui` starts, three things happen in parallel:
+When `specship desktop` starts, three things happen in parallel:
 
 1. The Fastify HTTP server binds `127.0.0.1:4242` and serves both the API and the desktop SPA.
 2. The codegraph engine opens the project's SQLite (or the picker's selected project, if you boot projectless).
@@ -53,12 +53,12 @@ The watcher runs in-process; pass `--ingest` to be explicit, or `--no-web` to ru
 
 ## Install as a desktop app
 
-The SpecShip Desktop UI is a **Progressive Web App (PWA)** — once `specship serve --ui` is running and you open `http://127.0.0.1:4242`, Chromium browsers offer to install it as a standalone desktop app:
+The SpecShip Desktop UI is a **Progressive Web App (PWA)** — once `specship desktop` is running and you open `http://127.0.0.1:4242`, Chromium browsers offer to install it as a standalone desktop app:
 
 - **Chrome / Edge:** click the **install icon** in the address bar (a monitor with a down-arrow), or open the **⋮** menu → **Apps → Install this site as an app…**, then confirm **Install**.
 - **Safari (macOS 14+):** **File → Add to Dock**.
 
-The installed app opens in its own frameless window — no browser chrome (`display: standalone`) — with its own Dock / taskbar icon and app-switcher entry, using SpecShip's icon and dark `#0B0D11` theme. It still talks to the local `127.0.0.1:4242` server, so keep `specship serve --ui` running (or start it first); the app is the front-end, the CLI server is the back-end.
+The installed app opens in its own frameless window — no browser chrome (`display: standalone`) — with its own Dock / taskbar icon and app-switcher entry, using SpecShip's icon and dark `#0B0D11` theme. It still talks to the local `127.0.0.1:4242` server, so keep `specship desktop` running (or start it first); the app is the front-end, the CLI server is the back-end.
 
 Because the app registers a service worker that caches its shell, the window still opens and shows your last-loaded data even when the server is momentarily down — see [Offline mode](#offline-mode) below.
 

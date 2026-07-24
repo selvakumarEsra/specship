@@ -78,7 +78,7 @@ The cache read rate is the **single most controllable knob** for keeping Claude 
 
 A team running Claude Code 20+ hours a week typically sees the cache read rate move from ~40% to ~75% after adopting these — about a **2.5× reduction in real input-token cost**.
 
-The Costs page lives in the desktop UI — start it with `specship serve --ui` and open **Costs**. It shows the per-day spend, the week-over-week change, a by-model breakdown, and the top prompts by cost. The **Compare** page breaks each project's cost down per model and lists its top tools.
+The Costs page lives in the desktop UI — start it with `specship desktop` and open **Costs**. It shows the per-day spend, the week-over-week change, a by-model breakdown, and the top prompts by cost. The **Compare** page breaks each project's cost down per model and lists its top tools.
 
 ## Compare projects
 

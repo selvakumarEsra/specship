@@ -24,7 +24,7 @@ import Article from '../../layouts/Article.astro';
     <polyline points="578 213 590 220 578 227" fill="none" stroke="rgba(150,165,200,0.5)" stroke-width="2"/>
   </svg>
 
-  <p>SpecShip's dashboard is the loopback UI you get from <code>specship serve --ui</code> — stat tiles, the spec funnel, a drift queue, a tool-call heatmap, cost analytics. It was an Angular single-page app, and for most people it Just Worked. Then an enterprise user tried to build SpecShip from source inside their network and it fell over: their internal npm registry didn't carry a few of the dashboard's dependencies, and the build died.</p>
+  <p>SpecShip's dashboard is the loopback UI you get from <code>specship desktop</code> — stat tiles, the spec funnel, a drift queue, a tool-call heatmap, cost analytics. It was an Angular single-page app, and for most people it Just Worked. Then an enterprise user tried to build SpecShip from source inside their network and it fell over: their internal npm registry didn't carry a few of the dashboard's dependencies, and the build died.</p>
   <p>The root cause wasn't a bug. It was the <em>shape</em> of the dependency tree.</p>
 
   <h2>640 packages, and the ones you can't mirror</h2>
@@ -43,6 +43,6 @@ import Article from '../../layouts/Article.astro';
   <p>The enterprise need was a viewer, not an editor, so the dashboard is now <strong>read-only</strong>. That let the biggest single dependency — the Monaco editor — go entirely: specs render as formatted Markdown instead of in a code editor, and the write paths that came with it are gone. You still launch and approve workflows, edit specs, and run everything else the way you always did — from the CLI and the <code>/specship:*</code> slash commands. The dashboard shows you the state; Claude Code and the CLI change it.</p>
 
   <h2>Same look, and a smaller core</h2>
-  <p>None of this changed the design. The dashboard reuses the exact same design tokens it always had, so it reads as the same product — just rendered a different way. And because the dashboard is now optional and self-contained, there's a new <code>npm run build:core</code> that builds just the CLI and MCP server: if all you want is the Claude Code integration, you can skip the dashboard's tree completely and every command except <code>serve --ui</code> still works.</p>
+  <p>None of this changed the design. The dashboard reuses the exact same design tokens it always had, so it reads as the same product — just rendered a different way. And because the dashboard is now optional and self-contained, there's a new <code>npm run build:core</code> that builds just the CLI and MCP server: if all you want is the Claude Code integration, you can skip the dashboard's tree completely and every command except <code>desktop</code> still works.</p>
   <p>The whole thing was written as a spec first — <code>DASH-LEAN-DOC</code> — with the dependency ceiling, the read-only contract, and the page-parity set as testable requirements, then implemented against it. If you're building SpecShip behind a firewall, it now installs like anything else.</p>
 </Article>

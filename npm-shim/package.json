@@ -1,6 +1,6 @@
 {
   "name": "specship-cli",
-  "version": "0.21.0",
+  "version": "0.21.1",
   "description": "Unscoped CLI shim for @specship/specship. Lets users run `npx specship-cli …` without remembering the scope. The `specship` binary it installs is identical to the scoped package's.",
   "license": "MIT",
   "bin": {
@@ -11,7 +11,7 @@
     "README.md"
   ],
   "dependencies": {
-    "@specship/specship": "0.21.0"
+    "@specship/specship": "0.21.1"
   },
   "engines": {
     "node": ">=20.0.0 <25.0.0"

@@ -1197,6 +1197,16 @@ export class SpecShip {
           }
         }
 
+        // CLAUDE.md governance audit (CLAUDEMD-DOC, REQ-CLAUDEMD-001):
+        // fingerprint-guarded and best-effort — detection only, surfaced via
+        // the drift channels; rewrites stay human-gated in the check door.
+        try {
+          const { runClaudeMdAudit } = await import('./claudemd/audit');
+          runClaudeMdAudit(this.projectRoot);
+        } catch {
+          /* a governance pass must never affect the sync */
+        }
+
         this.refreshStatuslineCache();
         return result;
       } finally {

@@ -18,7 +18,7 @@ data" same-origin/CORS class of bug (e.g. #55).
    transcript JSONL under a throwaway `$HOME` (→ cost / tool-call / heatmap
    analytics). Nothing touches your real project or `~/.claude`.
 3. Boots the real server over the SPA:
-   `specship serve --ui --web-dir <repo>/ui/dist --path <fixture>`.
+   `specship desktop --web-dir <repo>/ui/dist --path <fixture>`.
    The SPA is the dashboard's only surface (REQ-DESKTOP-033 — the
    server-rendered dashboard retired), served with its client-side-routing
    fallback; no flag is needed to select it.

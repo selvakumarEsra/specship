@@ -63,6 +63,7 @@ An actual environment variable (shell `export`, or Claude Code's `settings.json`
 |---|---|
 | `SPECSHIP_NO_STEERING=1` | Turn off the per-prompt "use the graph first" nudge |
 | `SPECSHIP_NO_CHEATSHEET=1` | Turn off the session-start cheat-sheet of SpecShip commands |
+| `SPECSHIP_NO_STATUSLINE_TIPS=1` | Turn off the rotating usage tip on the status-line segment |
 | `SPECSHIP_COMPACT=0` | Disable the smaller-model output compaction entirely |
 | `SPECSHIP_MODEL=<model>` | Force the model tier for compaction (normally auto-detected) |
 | `SPECSHIP_INTEGRATIONS` | Written by the installer for `--with-jira`/`--with-designer` — which optional tool groups the MCP server exposes |
@@ -195,7 +196,7 @@ The handful of cases where manual `specship sync` makes sense: the watcher is di
 
 ## Dashboard
 
-`specship serve --ui` boots a single-process Fastify server that renders the dashboard **server-side** on `http://127.0.0.1:4242/`. One port serves both the API and the dashboard. No Electron, no SPA build, no auth — loopback only, and its dependency tree stays lean enough to install behind a locked-down registry.
+`specship desktop` boots a single-process Fastify server that renders the dashboard **server-side** on `http://127.0.0.1:4242/`. One port serves both the API and the dashboard. No Electron, no SPA build, no auth — loopback only, and its dependency tree stays lean enough to install behind a locked-down registry.
 
 ![SpecShip Desktop dashboard — stat tiles, recent neighborhood mini-graph, tips, tool-call heatmap and recent-prompt rollup at a glance](https://raw.githubusercontent.com/selvakumarEsra/specship/main/assets/screenshots/dashboard.png?v=1)
 

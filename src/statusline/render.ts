@@ -59,6 +59,21 @@ export interface RenderInput {
   context?: number | null;
   /** Context-usage warning threshold (percent); CTX escalates at/above it. */
   ctxWarnPct?: number;
+  /**
+   * Resolved rotating usage-tip text (REQ-STATUSLINE-013), or null/undefined to
+   * omit the tip line. The caller selects which tip by time bucket and honors the
+   * `SPECSHIP_NO_STATUSLINE_TIPS` opt-out, so this module stays pure (no clock,
+   * no env). Rendered dim as the LAST line, below telemetry.
+   */
+  tip?: string | null;
+  /**
+   * Active model-compaction tier (REQ-MODCTX-005), or null/undefined to omit
+   * the indicator. The caller resolves the tier through the same chain the MCP
+   * server uses (`detectModelTier` — marker, `SPECSHIP_MODEL`, `SPECSHIP_COMPACT`),
+   * so this module stays pure and the element is only ever shown when
+   * compaction is actually active. Never `'full'` — the caller maps full → null.
+   */
+  compact?: 'haiku' | 'sonnet' | null;
   /** When true, emit no ANSI escapes. */
   noColor: boolean;
 }
@@ -140,7 +155,7 @@ function paint(noColor: boolean, code: number, s: string): string {
  * a minimal `◈ specship … ◈` when caches are absent rather than erroring.
  */
 export function renderSegment(input: RenderInput): string {
-  const { cache, marker, run, usage, now, context, ctxWarnPct, noColor, header } = input;
+  const { cache, marker, run, usage, now, context, ctxWarnPct, noColor, header, tip, compact } = input;
   const c = (code: number, s: string) => paint(noColor, code, s);
 
   const orn = c(COLOR.orn, '◈');
@@ -192,6 +207,14 @@ export function renderSegment(input: RenderInput): string {
     parts.push(c(COLOR.run, `${label}${etaSuffix(run)}`));
   }
 
+  // Model-compaction indicator (REQ-MODCTX-005) — tells the USER the
+  // auto-switch happened; the agent already sees it inside tool results.
+  // Wording asserts optimization, never reduction, and the caller only sets
+  // `compact` when compaction is actually active (honesty rule).
+  if (compact) {
+    parts.push(c(COLOR.dim, `⛁ optimizing for ${compact === 'haiku' ? 'Haiku' : 'Sonnet'}`));
+  }
+
   // Telemetry elements render on their own SECOND line (REQ-STATUSLINE-010):
   // the SpecShip identity stays scannable while capacity bars get room.
   const telemetry: string[] = [];
@@ -221,9 +244,17 @@ export function renderSegment(input: RenderInput): string {
   const identityLine = `${orn} ${brand}${sep}${parts.join(sep)} ${orn}`;
   const telemetryLine = telemetry.length > 0 ? `${orn} ${telemetry.join(sep)} ${orn}` : null;
 
-  // Fixed stack order: header, identity, telemetry (REQ-STATUSLINE-010). The
-  // identity line is always present; the two optional lines collapse out so
-  // there is never a leading/trailing/interior blank line.
-  const lines = [headerLine, identityLine, telemetryLine].filter((l): l is string => l !== null);
+  // Rotating usage tip (REQ-STATUSLINE-013) — a dim capability reminder on its
+  // own LAST line, below telemetry. The caller has already resolved which tip
+  // (time bucket) and honored the opt-out; null here means no tip line. It never
+  // alters the lines above it, and the dim styling strips to plain text under
+  // NO_COLOR (REQ-STATUSLINE-013.A6).
+  const tipLine = tip ? c(COLOR.dim, `💡 ${tip}`) : null;
+
+  // Fixed stack order: header, identity, telemetry, tip (REQ-STATUSLINE-010,
+  // extended by REQ-STATUSLINE-013). The identity line is always present; the
+  // optional lines collapse out so there is never a leading/trailing/interior
+  // blank line.
+  const lines = [headerLine, identityLine, telemetryLine, tipLine].filter((l): l is string => l !== null);
   return lines.join('\n');
 }

@@ -25,7 +25,7 @@ export const BIN = path.join(REPO_ROOT, 'dist', 'bin', 'specship.js');
 
 /** Everything the harness writes lives under here and is wiped each run. */
 export const WORK = path.join(E2E_DIR, '.tmp');
-/** The indexed fixture project `serve --ui --path` points at. */
+/** The indexed fixture project `desktop --path` points at. */
 export const FIXTURE = path.join(WORK, 'fixture');
 /** A fake $HOME so the transcript ingest watcher reads seeded JSONL, never
  *  the developer's real ~/.claude/projects. */
