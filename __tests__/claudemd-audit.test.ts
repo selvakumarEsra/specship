@@ -71,6 +71,13 @@ describe('claudemd audit', () => {
     expect(stale[0]!.detail).toContain('src/gone.ts');
   });
 
+  it('resolves mentions relative to the nested file before the root', () => {
+    write('CLAUDE.md', '# root\n');
+    write('src/mod/CLAUDE.md', '# mod\n\nThe registry is `targets/registry.ts`.\n');
+    write('src/mod/targets/registry.ts', 'export {};\n');
+    expect(kinds(auditClaudeMd(dir))).not.toContain('stale-path');
+  });
+
   it('does not flag URLs, scoped packages, or globs as stale paths', () => {
     write('CLAUDE.md', '# root\n\nUse `@specship/specship` from `https://npmjs.com/x` matching `src/**/*.ts`.\n');
     expect(kinds(auditClaudeMd(dir))).not.toContain('stale-path');

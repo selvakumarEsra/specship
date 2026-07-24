@@ -219,12 +219,15 @@ export function auditClaudeMd(projectRoot: string): ClaudeMdAudit {
     }
   }
 
-  // Stale path references.
+  // Stale path references. A mention resolves relative to the CLAUDE.md's
+  // own directory first (nested files naturally use module-relative paths),
+  // then the project root.
   for (const rel of claudeMds) {
     const body = bodies.get(rel);
     if (body === undefined) continue;
+    const ownDir = path.join(projectRoot, path.dirname(rel));
     for (const p of pathMentions(body)) {
-      if (!fs.existsSync(path.join(projectRoot, p))) {
+      if (!fs.existsSync(path.join(ownDir, p)) && !fs.existsSync(path.join(projectRoot, p))) {
         findings.push({
           kind: 'stale-path',
           file: rel,
