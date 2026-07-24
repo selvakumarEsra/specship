@@ -11,7 +11,6 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### New Features
 
-- SpecShip now greets you with a one-screen cheat-sheet at the start of a session — the four doors, explore-first retrieval, JIRA, the drift/health gate, lessons/memory, and the verify chain — so the commands are discoverable without leaving the terminal. It prints once when a session starts (not on resume), and you can silence it with `SPECSHIP_NO_CHEATSHEET=1`.
 - The status-line segment now shows a rotating one-line SpecShip usage tip below its metrics — an ambient reminder of what `specship_explore`, `specship_impact`, and the spec commands can do — cycling on a timer so it stays fresh without flickering. Silence it with `SPECSHIP_NO_STATUSLINE_TIPS=1`.
 - When your session runs on a smaller model (Haiku, or Sonnet), the status line now shows a dim "optimizing for Haiku/Sonnet" note so you can see SpecShip has automatically switched to its compact, small-model-friendly output. It appears only while the optimization is actually active and disappears when you switch back to a frontier model or set `SPECSHIP_COMPACT=0`.
 - The small-model optimization now kicks in from the very first prompt of a new session: SpecShip learns the session's model the moment the session starts, instead of only after the first response, so even the opening question gets the right output mode.
@@ -19,6 +18,12 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The dashboard now has its own command: run `specship desktop` instead of `specship serve --ui`. It takes the same options (`--port`, `--host`, `--ingest`/`--no-ingest`, `--web-dir`, `--no-web`, `--no-watch`) plus `--mcp` to also start the MCP server in the same process. `specship serve` is now just the MCP server; running `specship serve --ui` prints a short note pointing you at `specship desktop`.
 - SpecShip now keeps your CLAUDE.md hierarchy healthy automatically: every sync audits the root and nested CLAUDE.md files for bloat, verbatim duplication between root and modules, references to paths that no longer exist, and modules that deserve their own file — surfacing findings on the session-start summary line and in `/specship:check claudemd`. Fixes are always drafted for your approval; SpecShip never rewrites a CLAUDE.md on its own.
 
+
+## [0.21.0] - 2026-07-17
+
+### New Features
+
+- SpecShip now greets you with a one-screen cheat-sheet at the start of a session — the four doors, explore-first retrieval, JIRA, the drift/health gate, lessons/memory, and the verify chain — so the commands are discoverable without leaving the terminal. It prints once when a session starts (not on resume), and you can silence it with `SPECSHIP_NO_CHEATSHEET=1`.
 
 ## [0.20.0] - 2026-07-16
 
@@ -718,3 +723,4 @@ Thanks @andreinknv for the substantive draft this release was based on.
 [0.19.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.19.0
 [0.19.1]: https://github.com/selvakumarEsra/specship/releases/tag/v0.19.1
 [0.20.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.20.0
+[0.21.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.21.0
