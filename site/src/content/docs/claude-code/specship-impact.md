@@ -3,7 +3,7 @@ title: SpecShip Impact
 description: Is SpecShip earning its keep? Measured tokens its tools spent vs. a conservative estimate of tokens saved — per prompt, session, project, and all projects.
 ---
 
-The **SpecShip Impact** page (in the desktop UI — `specship serve --ui`) answers one question: *is SpecShip earning its keep?* It keeps two numbers deliberately apart.
+The **SpecShip Impact** page (in the desktop UI — `specship desktop`) answers one question: *is SpecShip earning its keep?* It keeps two numbers deliberately apart.
 
 ## The two numbers
 

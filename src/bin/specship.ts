@@ -22,7 +22,7 @@
  *   specship affected [files]   Find test files affected by changes
  */
 
-import { Command } from 'commander';
+import { Command, Option } from 'commander';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
@@ -161,7 +161,7 @@ function sniffClaudeSlugCwd(claudeRoot: string, slug: string): string | null {
 }
 
 /**
- * Auto-pick a default project for `specship serve --ui` when the user
+ * Auto-pick a default project for `specship desktop` when the user
  * didn't pass `-p` and the cwd isn't initialized either. Walks
  * `~/.claude/projects/*` (Claude Code's per-project transcript dirs),
  * resolves each slug back to a real path, and returns the most-recently-
@@ -1473,7 +1473,7 @@ program
 
       if (result.empty || result.open.length === 0) {
         info('No proposals yet — not enough signal in the ingested transcripts.');
-        info('Tip: run the dashboard with `specship serve --ui --ingest` to build transcript history.');
+        info('Tip: run the dashboard with `specship desktop --ingest` to build transcript history.');
         cg.destroy();
         return;
       }
@@ -1964,20 +1964,148 @@ program
 /**
  * specship serve
  */
+interface DesktopOptions {
+  path?: string;
+  port?: string;
+  host?: string;
+  ingest?: boolean;
+  webDir?: string;
+  web?: boolean;
+  watch?: boolean;
+  mcp?: boolean;
+}
+
+/**
+ * `specship desktop` (DESKTOP-CMD-DOC, REQ-DESKTOP-CMD-001): boot the
+ * in-process Fastify server + built desktop SPA, optionally also starting
+ * MCP stdio (`--mcp`) against the resolved project. This is the behavior the
+ * retired `serve --ui` branch carried, now under its own verb.
+ */
+async function runDesktop(options: DesktopOptions): Promise<void> {
+  const projectPath = options.path ? resolveProjectPath(options.path) : undefined;
+
+  // Commander sets watch=false when --no-watch is passed. Route it through
+  // the same env-var chokepoint the watcher and MCP server already honor.
+  if (options.watch === false) {
+    process.env.SPECSHIP_NO_WATCH = '1';
+  }
+
+  try {
+    // Project root resolution:
+    //   1. `-p <path>` if passed.
+    //   2. The current cwd if it has been `specship init`-ed.
+    //   3. Most-recently-touched initialized project under
+    //      ~/.claude/projects/ — so a user who runs `specship desktop`
+    //      from anywhere lands on the project they were last active in.
+    //   4. None — server boots projectless, the desktop picker prompts
+    //      the user to choose one (analytics endpoints return 409 until
+    //      a primary exists).
+    let root: string | null = null;
+    if (projectPath) {
+      root = projectPath;
+      if (!isInitialized(root)) {
+        error(`SpecShip not initialized in ${root}. Run \`specship init -i\` first.`);
+        process.exit(1);
+      }
+    } else if (isInitialized(process.cwd())) {
+      root = process.cwd();
+    } else {
+      root = await pickRecentInitializedProject();
+    }
+
+    const port = options.port ? parseInt(options.port, 10) : 4242;
+    const host = options.host ?? '127.0.0.1';
+
+    // Lazy-load the server package via dist path. The npm bin is
+    // packaged with the server already built under
+    // node_modules/@specship/specship-server, OR (dev) the
+    // sibling server/dist directory.
+    const { createServer } = await loadServerPackage();
+
+    // The dashboard is the built desktop SPA, served in-process by the
+    // server itself (REQ-DESKTOP-033 — the server-rendered dashboard
+    // retired). `--no-web` opts out to run API-only.
+    const serveUi = options.web !== false;
+    // Resolve the SPA static dir:
+    //   - headless (--no-web): no SPA.
+    //   - otherwise the built SPA — explicit --web-dir, else auto-detect
+    //     the bundled ui/dist (webDir === undefined triggers the probe).
+    const webDir = !serveUi ? null : (options.webDir ?? undefined);
+
+    // The JSONL ingest watcher now starts in-process inside createServer
+    // when `ingest: true`. The server owns its lifecycle; CLI just toggles.
+    const handle = await createServer({
+      projectRoot: root ?? undefined,
+      host,
+      port,
+      ingest: options.ingest !== false,
+      webDir,
+      verbose: false,
+    });
+    console.error(chalk.bold('\nSpecShip Desktop server\n'));
+    console.error(chalk.green(getGlyphs().ok) + ` HTTP API: ${handle.url}`);
+    if (root) {
+      console.error(chalk.dim(`  project: ${root}`));
+    } else {
+      console.error(chalk.yellow(getGlyphs().warn) + ' no primary project — pick one in the dashboard');
+      console.error(chalk.dim('  analytics endpoints will return 409 until one is selected'));
+    }
+    if (serveUi) {
+      console.error(chalk.green(getGlyphs().ok) + ` Dashboard: ${handle.url}/`);
+    }
+    if (options.ingest !== false) {
+      console.error(chalk.dim('  Claude Code transcript ingest watcher active'));
+    }
+    if (options.mcp) {
+      if (!root) {
+        console.error(chalk.yellow(getGlyphs().warn) + ' --mcp needs an initialized project — skipping MCP stdio');
+      } else {
+        // Also start MCP stdio in this process. The two are unrelated
+        // surfaces hitting the same specship instance, both safe under WAL.
+        const { MCPServer } = await import('../mcp/index');
+        const mcp = new MCPServer(root);
+        void mcp.start();
+        console.error(chalk.green(getGlyphs().ok) + ' MCP stdio: running');
+      }
+    }
+
+    const shutdown = async () => {
+      console.error(chalk.dim('shutting down…'));
+      await handle.stop();
+      process.exit(0);
+    };
+    process.on('SIGINT', () => { void shutdown(); });
+    process.on('SIGTERM', () => { void shutdown(); });
+    // Server now runs until terminated.
+  } catch (err) {
+    error(`Failed to start desktop server: ${err instanceof Error ? err.message : String(err)}`);
+    process.exit(1);
+  }
+}
+
 program
   .command('serve')
-  .description('Start SpecShip as an MCP server for AI assistants, an HTTP API for the desktop UI, or both')
+  .description('Start SpecShip as an MCP server for AI assistants (stdio transport)')
   .option('-p, --path <path>', 'Project path (optional for MCP mode, uses rootUri from client)')
   .option('--mcp', 'Run as MCP server (stdio transport)')
-  .option('--ui', 'Run as HTTP API server for the SpecShip Desktop UI (binds 127.0.0.1)')
-  .option('--port <n>', 'HTTP port when --ui is set (default 4242)')
-  .option('--host <h>', 'HTTP bind host when --ui is set (default 127.0.0.1)')
-  .option('--ingest', 'Enable Claude Code JSONL transcript watcher (only when --ui is set)')
-  .option('--web-dir <path>', 'Path to a built desktop SPA (index.html lives here); auto-detected by default from the bundled ui/dist')
-  .option('--no-web', 'Run --ui headless (API only, no SPA)')
+  // `--ui` (and its companions) moved to `specship desktop` (DESKTOP-CMD-DOC,
+  // REQ-DESKTOP-CMD-002). Kept as HIDDEN options so the invocation errors with
+  // a pointer to the new command instead of commander's bare "unknown option".
+  .addOption(new Option('--ui', 'Moved to `specship desktop`').hideHelp())
+  .addOption(new Option('--port <n>', 'Moved to `specship desktop`').hideHelp())
+  .addOption(new Option('--host <h>', 'Moved to `specship desktop`').hideHelp())
+  .addOption(new Option('--ingest', 'Moved to `specship desktop`').hideHelp())
+  .addOption(new Option('--web-dir <path>', 'Moved to `specship desktop`').hideHelp())
   .option('--no-watch', 'Disable the file watcher (no auto-sync; useful on slow filesystems like WSL2 /mnt drives)')
-  .action(async (options: { path?: string; mcp?: boolean; ui?: boolean; port?: string; host?: string; ingest?: boolean; webDir?: string; web?: boolean; watch?: boolean }) => {
+  .action(async (options: { path?: string; mcp?: boolean; ui?: boolean; port?: string; host?: string; ingest?: boolean; webDir?: string; watch?: boolean }) => {
     const projectPath = options.path ? resolveProjectPath(options.path) : undefined;
+
+    // The dashboard moved to its own verb (REQ-DESKTOP-CMD-002.A1): fail loud
+    // with a pointer rather than silently ignoring a UI-only flag.
+    if (options.ui || options.port || options.host || options.ingest || options.webDir) {
+      error('The dashboard moved to its own command. Run `specship desktop` (see `specship desktop --help`).');
+      process.exit(1);
+    }
 
     // Commander sets watch=false when --no-watch is passed. Route it through
     // the same env-var chokepoint the watcher and MCP server already honor.
@@ -1986,98 +2114,6 @@ program
     }
 
     try {
-      if (options.ui) {
-        // HTTP API mode. Boots the specship server + optional JSONL
-        // ingest watcher. Optionally also starts MCP stdio in parallel.
-        //
-        // Project root resolution:
-        //   1. `-p <path>` if passed.
-        //   2. The current cwd if it has been `specship init`-ed.
-        //   3. Most-recently-touched initialized project under
-        //      ~/.claude/projects/ — so a user who runs `specship serve --ui`
-        //      from anywhere lands on the project they were last active in.
-        //   4. None — server boots projectless, the desktop picker prompts
-        //      the user to choose one (analytics endpoints return 409 until
-        //      a primary exists).
-        let root: string | null = null;
-        if (projectPath) {
-          root = projectPath;
-          if (!isInitialized(root)) {
-            error(`SpecShip not initialized in ${root}. Run \`specship init -i\` first.`);
-            process.exit(1);
-          }
-        } else if (isInitialized(process.cwd())) {
-          root = process.cwd();
-        } else {
-          root = await pickRecentInitializedProject();
-        }
-
-        const port = options.port ? parseInt(options.port, 10) : 4242;
-        const host = options.host ?? '127.0.0.1';
-
-        // Lazy-load the server package via dist path. The npm bin is
-        // packaged with the server already built under
-        // node_modules/@specship/specship-server, OR (dev) the
-        // sibling server/dist directory.
-        const { createServer } = await loadServerPackage();
-
-        // The dashboard is the built desktop SPA, served in-process by the
-        // server itself (REQ-DESKTOP-033 — the server-rendered dashboard
-        // retired). `--no-web` opts out to run API-only.
-        const serveUi = options.web !== false;
-        // Resolve the SPA static dir:
-        //   - headless (--no-web): no SPA.
-        //   - otherwise the built SPA — explicit --web-dir, else auto-detect
-        //     the bundled ui/dist (webDir === undefined triggers the probe).
-        const webDir = !serveUi ? null : (options.webDir ?? undefined);
-
-        // The JSONL ingest watcher now starts in-process inside createServer
-        // when `ingest: true`. The server owns its lifecycle; CLI just toggles.
-        const handle = await createServer({
-          projectRoot: root ?? undefined,
-          host,
-          port,
-          ingest: options.ingest !== false,
-          webDir,
-          verbose: false,
-        });
-        console.error(chalk.bold('\nSpecShip Desktop server\n'));
-        console.error(chalk.green(getGlyphs().ok) + ` HTTP API: ${handle.url}`);
-        if (root) {
-          console.error(chalk.dim(`  project: ${root}`));
-        } else {
-          console.error(chalk.yellow(getGlyphs().warn) + ' no primary project — pick one in the dashboard');
-          console.error(chalk.dim('  analytics endpoints will return 409 until one is selected'));
-        }
-        if (serveUi) {
-          console.error(chalk.green(getGlyphs().ok) + ` Dashboard: ${handle.url}/`);
-        }
-        if (options.ingest !== false) {
-          console.error(chalk.dim('  Claude Code transcript ingest watcher active'));
-        }
-        if (options.mcp) {
-          if (!root) {
-            console.error(chalk.yellow(getGlyphs().warn) + ' --mcp needs an initialized project — skipping MCP stdio');
-          } else {
-            // Also start MCP stdio in this process. The two are unrelated
-            // surfaces hitting the same specship instance, both safe under WAL.
-            const { MCPServer } = await import('../mcp/index');
-            const mcp = new MCPServer(root);
-            void mcp.start();
-            console.error(chalk.green(getGlyphs().ok) + ' MCP stdio: running');
-          }
-        }
-
-        const shutdown = async () => {
-          console.error(chalk.dim('shutting down…'));
-          await handle.stop();
-          process.exit(0);
-        };
-        process.on('SIGINT', () => { void shutdown(); });
-        process.on('SIGTERM', () => { void shutdown(); });
-        // Server now runs until terminated.
-        return;
-      }
       if (options.mcp) {
         // Start MCP server - it handles initialization lazily based on rootUri from client
         const { MCPServer } = await import('../mcp/index');
@@ -2114,6 +2150,26 @@ program
       error(`Failed to start server: ${err instanceof Error ? err.message : String(err)}`);
       process.exit(1);
     }
+  });
+
+/**
+ * specship desktop (DESKTOP-CMD-DOC) — the local dashboard + HTTP API, the
+ * surface formerly reached via `serve --ui`.
+ */
+program
+  .command('desktop')
+  .description('Start the SpecShip Desktop dashboard + HTTP API (binds 127.0.0.1)')
+  .option('-p, --path <path>', 'Project path (default: cwd, else your most recent initialized project)')
+  .option('--port <n>', 'HTTP port (default 4242)')
+  .option('--host <h>', 'HTTP bind host (default 127.0.0.1)')
+  .option('--ingest', 'Enable the Claude Code JSONL transcript watcher', true)
+  .option('--no-ingest', 'Disable the Claude Code JSONL transcript watcher')
+  .option('--web-dir <path>', 'Path to a built desktop SPA (index.html lives here); auto-detected by default from the bundled ui/dist')
+  .option('--no-web', 'Run headless (API only, no dashboard SPA)')
+  .option('--no-watch', 'Disable the file watcher (no auto-sync; useful on slow filesystems like WSL2 /mnt drives)')
+  .option('--mcp', 'Also start the MCP stdio server against the resolved project')
+  .action(async (options: DesktopOptions) => {
+    await runDesktop(options);
   });
 
 /**

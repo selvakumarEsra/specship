@@ -21,7 +21,8 @@ description: Every SpecShip command and the flags it accepts.
 | `specship memory remove <id>` | Remove a SpecShip-managed memory rule by id (previewed; pass --yes to write). |
 | `specship fitness [path]` | Check architecture-fitness rules against the code graph (CI gate; exits non-zero on violation) |
 | `specship check [path]` | Run the enforcement gate (drift + fitness + maintainability + behaviour); exits non-zero on a gating failure |
-| `specship serve` | Start SpecShip as an MCP server for AI assistants, an HTTP API for the desktop UI, or both |
+| `specship serve` | Start SpecShip as an MCP server for AI assistants (stdio transport) |
+| `specship desktop` | Start the SpecShip Desktop dashboard + HTTP API (binds 127.0.0.1) |
 | `specship unlock [path]` | Remove a stale lock file that is blocking indexing |
 | `specship callers <symbol>` | Find all functions/methods that call a specific symbol |
 | `specship callees <symbol>` | Find all functions/methods that a specific symbol calls |

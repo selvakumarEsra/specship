@@ -82,7 +82,7 @@ export interface ServerOptions {
    * Leave `undefined` to auto-detect the SPA shipped alongside the server
    * build (`resolveDefaultWebDir()` — the bundle's `dist/ui/`, or the
    * workspace's `ui/dist/`). Pass `null` to serve no SPA at all (API only) —
-   * the `specship serve --ui --no-web` CLI does this to run headless.
+   * the `specship desktop --no-web` CLI does this to run headless.
    */
   webDir?: string | null;
 }

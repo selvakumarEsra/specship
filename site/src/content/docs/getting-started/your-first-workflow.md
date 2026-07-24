@@ -105,7 +105,7 @@ The agent has:
 In another terminal:
 
 ```bash
-specship serve --ui --open
+specship desktop
 ```
 
 Your browser opens at `http://127.0.0.1:4242/runs/c8a4f3b2`. The page shows the run's DAG (lit green for completed nodes, amber for the paused gate), the live event timeline, and the artifact tabs.

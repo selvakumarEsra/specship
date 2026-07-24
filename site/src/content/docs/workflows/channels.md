@@ -48,7 +48,7 @@ The CLI is a thin client over SpecShip's runner; an approval issued via CLI and 
 
 ## Desktop dashboard
 
-`specship serve --ui` boots a single-process Fastify server that renders the dashboard **server-side** on `http://127.0.0.1:4242`. The dashboard is **read-only** — you launch and approve workflows from the CLI (`specship workflow run`) or the `/specship:*` slash commands, and watch the results here:
+`specship desktop` boots a single-process Fastify server that renders the dashboard **server-side** on `http://127.0.0.1:4242`. The dashboard is **read-only** — you launch and approve workflows from the CLI (`specship workflow run`) or the `/specship:*` slash commands, and watch the results here:
 
 - **Runs** lists every discovered run; open one for its persisted event timeline — `step_started`, `tool_called`, `artifact_created`, `approval_requested` — with timestamps.
 - Per-step artifacts (`plan.md`, `diff.md`, `test_results.md`) render inline.
