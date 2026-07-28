@@ -10,6 +10,17 @@
  * without mutating the machine's real install.
  */
 import path from 'node:path';
+import os from 'node:os';
+
+/**
+ * Resolve the bundle install dir the CLI uses to classify a running binary
+ * (`~/.specship`, overridable via `SPECSHIP_INSTALL_DIR`). Extracted so
+ * `specship_version` and the update command feed `detectInstallMethod` from
+ * one place.
+ */
+export function resolveInstallDir(env: NodeJS.ProcessEnv = process.env): string {
+  return env.SPECSHIP_INSTALL_DIR || path.join(os.homedir(), '.specship');
+}
 
 export type InstallMethod = 'bundle' | 'npm' | 'unknown';
 
