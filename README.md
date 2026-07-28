@@ -493,6 +493,7 @@ When running as an MCP server, SpecShip exposes these tools to Claude Code:
 | `specship_node` | Get one specific symbol's details + full source (returns every overload for an ambiguous name) |
 | `specship_files` | Get indexed file structure (faster than filesystem scanning) |
 | `specship_status` | Check index health and statistics |
+| `specship_version` | Identify the running MCP server — version, install method, where it was loaded from, node version |
 
 The JIRA integration adds seven more (`specship_jira_issues`, `_issue`, `_pick`, `_start`, `_track`, `_publish`, `_transition`) — see below.
 
