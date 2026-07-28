@@ -13,6 +13,7 @@ import { detectInstallMethod, resolveInstallDir } from '../src/update/updater';
 
 const text = (r: { content?: Array<{ text?: string }> }) => r.content?.[0]?.text ?? '';
 
+/** @verifies REQ-MCPVER-001 */
 describe('REQ-MCPVER-001 — specship_version', () => {
   it('A1: response contains the resolved package version verbatim', async () => {
     const handler = new ToolHandler(null);
