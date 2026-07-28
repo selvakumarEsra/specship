@@ -32,7 +32,9 @@ import {
 } from 'fs';
 import { clamp, validatePathWithinRoot, validateProjectPath } from '../utils';
 import { isGeneratedFile } from '../extraction/generated-detection';
-import { resolve as resolvePath } from 'path';
+import { resolve as resolvePath, dirname as pathDirname } from 'path';
+import { SpecShipPackageVersion } from './version';
+import { detectInstallMethod, resolveInstallDir } from '../update/updater';
 
 /** Maximum output length to prevent context bloat (characters) */
 const MAX_OUTPUT_LENGTH = 15000;
@@ -561,6 +563,14 @@ export const tools: ToolDefinition[] = [
     },
   },
   {
+    name: 'specship_version',
+    description: 'Identify the running SpecShip MCP server: package version, install method (bundle/npm/unknown), install dir, node version, and project root (if bound). Zero-arg, no index required — safe to call before any project is open.',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+    },
+  },
+  {
     name: 'specship_files',
     description: 'Indexed file tree with language + symbol counts. Faster than Glob for project layout.',
     inputSchema: {
@@ -787,6 +797,7 @@ export class ToolHandler {
         'specship_explore',
         'specship_search',
         'specship_node',
+        'specship_version',
       ]);
       if (stats.fileCount < TINY_REPO_FILE_THRESHOLD) {
         // Designer tools are not code-graph tools — the tiny-repo flow-question
@@ -1202,6 +1213,13 @@ export class ToolHandler {
       // its own verbose worktree warning but still flows through the
       // staleness wrapper so its pending-files section stays consistent
       // with what the read tools surface.
+      // specship_version (REQ-MCPVER-001): zero-arg identity probe. Answered
+      // before the worktree/staleness/compaction wrappers so it works with no
+      // project open and never touches the DB.
+      if (toolName === 'specship_version') {
+        return this.handleVersion();
+      }
+
       let result: ToolResult;
       switch (toolName) {
         case 'specship_search':
@@ -3143,6 +3161,42 @@ export class ToolHandler {
       lines.push(`**Called by ←** ${callers.slice(0, TRAIL_CAP).map(fmt).join(', ')}${callers.length > TRAIL_CAP ? `, +${callers.length - TRAIL_CAP} more` : ''}`);
     }
     return lines.join('\n');
+  }
+
+  /**
+   * Handle specship_version (REQ-MCPVER-001). Identifies the running MCP
+   * server process — the version an agent's tools are being served by,
+   * how it was installed, node version, and (if bound) the project root.
+   * Zero-arg, synchronous, never touches the DB, safe with no project.
+   */
+  private handleVersion(): ToolResult {
+    const binDirname = pathDirname(__filename);
+    const installDir = resolveInstallDir();
+    const installMethod = detectInstallMethod(binDirname, installDir);
+    let projectRoot: string | null = null;
+    if (this.cg) {
+      try {
+        projectRoot = this.cg.getProjectRoot();
+      } catch {
+        projectRoot = null;
+      }
+    }
+    // The package root this very module was loaded from — the answer to "which
+    // install is serving me?", which is NOT necessarily the bundle dir the
+    // classifier tests against, and NOT the `specship` on PATH. Same two-levels-
+    // up resolution `version.ts` uses to read package.json.
+    const loadedFrom = resolvePath(__dirname, '..', '..');
+    const lines = [
+      '## SpecShip Version',
+      '',
+      `**version:** ${SpecShipPackageVersion}`,
+      `**installMethod:** ${installMethod}`,
+      `**loadedFrom:** ${loadedFrom}`,
+      `**installDir:** ${installDir}`,
+      `**node:** ${process.version}`,
+      `**projectRoot:** ${projectRoot ?? 'null'}`,
+    ];
+    return this.textResult(lines.join('\n'));
   }
 
   /**

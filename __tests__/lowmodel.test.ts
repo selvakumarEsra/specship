@@ -159,6 +159,10 @@ describe.skipIf(!fts5Available)('handler-level (REQ-LOWMODEL-001/003/004)', () =
       expect(fullList).toContain(t);
       expect(haikuList).not.toContain(t);
     }
+    // REQ-MCPVER-001.A4: specship_version survives both the tiny-repo and
+    // haiku menu trims — it's the identity probe, always available.
+    expect(fullList).toContain('specship_version');
+    expect(haikuList).toContain('specship_version');
     expect(names()).toEqual(fullList); // back to full after env cleared
   });
 
