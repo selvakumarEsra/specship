@@ -9,10 +9,12 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+
+## [0.21.2] - 2026-07-28
+
 ### New Features
 
 - You can now ask Claude Code which SpecShip is actually answering your questions. A new version tool reports the version of the running server along with how it was installed and where it was loaded from — which is not always the same install as the `specship` on your `PATH`. That difference is the usual reason a session keeps behaving like an older release after you upgrade.
-
 
 ## [0.21.1] - 2026-07-24
 
@@ -732,3 +734,4 @@ Thanks @andreinknv for the substantive draft this release was based on.
 [0.20.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.20.0
 [0.21.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.21.0
 [0.21.1]: https://github.com/selvakumarEsra/specship/releases/tag/v0.21.1
+[0.21.2]: https://github.com/selvakumarEsra/specship/releases/tag/v0.21.2
