@@ -892,8 +892,20 @@ async function advanceJiraForVerifiedAcceptance(
     const creds = resolveJiraCredentials();
     const { JiraClient } = await import('../jira/client');
     const { advanceSubtaskForAcceptance } = await import('../jira/publish');
+    const client = new JiraClient(creds);
+    // Milestone: criterion_verified (REQ-JIRATEAM-003.A1/A2). Keyed by
+    // spec + criterion id so each verified criterion gets exactly one
+    // comment. Soft-fails to a local note — never blocks the advance.
+    const { postMilestoneComment } = await import('../jira/milestone-comment');
+    await postMilestoneComment(
+      client,
+      issueKey,
+      'criterion_verified',
+      { specId: reqId, criterionIds: [acceptanceSpecId] },
+      { projectRoot: cg.getProjectRoot() },
+    );
     const outcome = await advanceSubtaskForAcceptance(
-      new JiraClient(creds),
+      client,
       issueKey,
       acceptance.title || acceptance.body || '',
       creds.transitions?.done ?? 'Done'

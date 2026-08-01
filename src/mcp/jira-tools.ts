@@ -44,6 +44,10 @@ import {
 } from '../jira/publish';
 import { enumeratePublishedSpecs } from '../jira/published-specs';
 import {
+  postMilestoneComment,
+  type MilestoneJiraClient,
+} from '../jira/milestone-comment';
+import {
   raisePullRequest as defaultRaisePullRequest,
   buildPrTitle,
   buildPrBody,
@@ -151,6 +155,7 @@ async function pushJiraReviewStatus(
   key: string,
   prUrl: string,
   make: () => JiraStatusContext,
+  specId?: string,
 ): Promise<string | null> {
   let ctx: JiraStatusContext;
   try {
@@ -174,9 +179,33 @@ async function pushJiraReviewStatus(
   }
 
   // The PR-link comment is posted regardless of the transition outcome (A3).
+  // Milestone: pr_raised (REQ-JIRATEAM-003.A1/A2). The dispatcher itself is
+  // idempotent (single comment per issue+specId), watermarked, and
+  // soft-fails to a local note — so a JIRA hiccup here never undoes the
+  // raised PR. Fall back to a plain addComment only for fake clients that
+  // don't implement the milestone shape.
+  const maybe = ctx.client as unknown as Partial<MilestoneJiraClient>;
+  const canMilestone =
+    typeof maybe.listCommentsDetailed === 'function' &&
+    typeof maybe.updateComment === 'function' &&
+    typeof maybe.addComment === 'function';
   try {
-    await ctx.client.addComment(key, `SpecShip raised a pull request: ${prUrl}`);
-    notes.push(`commented the PR link on ${key}`);
+    if (canMilestone) {
+      const r = await postMilestoneComment(
+        maybe as MilestoneJiraClient,
+        key,
+        'pr_raised',
+        { specId: specId ?? key, prUrl },
+      );
+      if (r.status === 'soft_failed') {
+        notes.push(`couldn't comment the PR link on ${key} (${r.reason ?? 'unknown'})`);
+      } else {
+        notes.push(`commented the PR link on ${key}`);
+      }
+    } else {
+      await ctx.client.addComment(key, `SpecShip raised a pull request: ${prUrl}`);
+      notes.push(`commented the PR link on ${key}`);
+    }
   } catch (err) {
     notes.push(`couldn't comment the PR link on ${key} (${errMsg(err)})`);
   }
@@ -1003,7 +1032,7 @@ export async function handleJiraRunCompletion(
     // Only on a raised PR — a failed raise never advances the issue (below),
     // matching REQ-JIRA-005.A2 (leave it in-progress). Never throws.
     const make = deps.makeJiraClient ?? defaultMakeJiraClient;
-    const note = await pushJiraReviewStatus(issueKey, outcome.url, make);
+    const note = await pushJiraReviewStatus(issueKey, outcome.url, make, jira.specId);
     if (note) log(note);
   } else {
     // A3 (of REQ-JIRA-006) / A2 (of REQ-JIRA-005): report the reason; the

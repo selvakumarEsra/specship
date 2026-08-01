@@ -3523,6 +3523,28 @@ program
             process.exit(1);
           }
           executor.approve(arg, options.comment);
+          // Milestone: plan_approved (REQ-JIRATEAM-003.A1). Only fires for a
+          // JIRA-tracked run (metadata.jira present) — a non-JIRA run is a
+          // silent no-op. Soft-fails internally, so a JIRA hiccup never
+          // reverses the approval.
+          try {
+            const run = cg.getSpecQueries().getWorkflowRunById(arg);
+            const jira = (run?.metadata as { jira?: { issueKey?: string; specId?: string } } | undefined)?.jira;
+            if (jira?.issueKey) {
+              const { resolveJiraCredentials, JiraClient } = await import('../jira');
+              const { postMilestoneComment } = await import('../jira/milestone-comment');
+              const creds = resolveJiraCredentials();
+              await postMilestoneComment(
+                new JiraClient(creds),
+                jira.issueKey,
+                'plan_approved',
+                { specId: jira.specId ?? jira.issueKey },
+                { projectRoot },
+              );
+            }
+          } catch {
+            /* soft-fail — the approval already committed. */
+          }
           // eslint-disable-next-line no-console
           console.log(`Run ${arg} approved. Call \`specship workflow resume ${arg}\` to continue.`);
           break;
@@ -3984,6 +4006,9 @@ jira
         .split(',')
         .map((k) => k.trim())
         .filter(Boolean);
+      // Map issue key → spec id for the release_stamped milestone (so the
+      // marker keys on both the spec and the version — REQ-JIRATEAM-003).
+      const issueKeyToSpecId = new Map<string, string>();
       if (keys.length === 0) {
         // Default: every spec under <root>/specs with a jira_issue key.
         const projectRoot = path.resolve(options.path ?? process.cwd());
@@ -3991,8 +4016,13 @@ jira
         try {
           for (const name of fs.readdirSync(specsDir)) {
             if (!name.toLowerCase().endsWith('.md')) continue;
-            const key = readSpecJiraKey(path.join(specsDir, name));
-            if (key) keys.push(key);
+            const abs = path.join(specsDir, name);
+            const key = readSpecJiraKey(abs);
+            if (!key) continue;
+            keys.push(key);
+            const idLine =
+              /^id:\s*([^\r\n]+)$/m.exec(fs.readFileSync(abs, 'utf8'))?.[1]?.trim();
+            if (idLine) issueKeyToSpecId.set(key, idLine);
           }
         } catch {
           /* no specs dir → empty keys, handled below */
@@ -4005,7 +4035,9 @@ jira
       }
 
       const client = new JiraClient(creds);
-      const result = await releaseIssues(client, projectKey, version, keys);
+      const result = await releaseIssues(client, projectKey, version, keys, {
+        specIdForIssue: (k) => issueKeyToSpecId.get(k),
+      });
       const stamped = result.issues.filter((i) => i.fixVersionAdded).length;
       const commented = result.issues.filter((i) => i.commented).length;
       success(

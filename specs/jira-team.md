@@ -135,7 +135,17 @@ only: no per-command chatter.
 implementations:
   - src/jira/client.ts:JiraClient.addComment
   - src/jira/client.ts:JiraClient.listComments
+  - src/jira/milestone-comment.ts:postMilestoneComment
+  - src/jira/milestone-comment.ts:milestoneMarker
+  - src/jira/milestone-comment.ts:renderMilestoneBody
+  - src/jira/milestone-comment.ts:isPublicEvidenceUrl
+  - src/jira/publish.ts:commentSpecDrift
   - src/jira/publish.ts:commentDriftTransitionsOnJira
+  - src/jira/publish.ts:releaseIssues
+  - src/jira/auto-publish.ts:autoPublishSpecsOnSync
+
+verifies:
+  - __tests__/jira/milestone-comment.test.ts
 
 ## Acceptance
 <!-- id: REQ-JIRATEAM-003.A1 -->
