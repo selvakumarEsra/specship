@@ -168,7 +168,20 @@ issues: producing it never transitions, edits, or creates issues.
 
 implementations:
   - src/jira/coverage.ts:buildCoverageReport
+  - src/jira/coverage.ts:formatCoverageMarkdown
+  - src/jira/coverage.ts:rollupCoverageState
+  - src/jira/published-specs.ts:enumeratePublishedSpecs
+  - src/jira/publish.ts:upsertWatermarkedComment
+  - src/jira/client.ts:JiraClient.listSprintIssues
+  - src/jira/client.ts:JiraClient.listCommentsDetailed
+  - src/jira/client.ts:JiraClient.updateComment
+  - src/mcp/jira-tools.ts:handleSpecshipJiraCoverage
   - src/mcp/jira-tools.ts:handleSpecshipJiraTrack
+
+verifies:
+  - __tests__/jira/jira-coverage.test.ts
+  - __tests__/jira/jira-coverage-post.test.ts
+  - __tests__/jira/jira-coverage-mcp.test.ts
 
 ## Acceptance
 <!-- id: REQ-JIRATEAM-004.A1 -->

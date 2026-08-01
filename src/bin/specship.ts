@@ -3915,6 +3915,48 @@ jira
   });
 
 /**
+ * specship jira coverage — sprint coverage report (REQ-JIRATEAM-004). Joins
+ * the bound project's active (or named) sprint to spec truth. Read-only by
+ * default; `--post <issueKey>` upserts a single watermarked JIRA comment.
+ */
+jira
+  .command('coverage')
+  .description('Sprint coverage report joining JIRA sprint issues to spec truth (read-only unless --post).')
+  .option('--project <key>', 'JIRA project key (default: configured publish project)')
+  .option('--sprint <name>', 'named sprint (default: the project\'s open sprint)')
+  .option('--post <issueKey>', 'upsert the report as a watermarked comment on this issue (edit-in-place)')
+  .option('--path <projectRoot>', 'project root (default: cwd)')
+  .action(async (options: { project?: string; sprint?: string; post?: string; path?: string }) => {
+    const projectRoot = path.resolve(options.path ?? process.cwd());
+    if (!isInitialized(projectRoot)) {
+      error(`SpecShip not initialized in ${projectRoot}. Run \`specship init -i\` first.`);
+      process.exit(1);
+    }
+    const { SpecShip } = await loadSpecShip();
+    const { handleSpecshipJiraCoverage } = await import('../mcp/jira-tools');
+    const cg = await SpecShip.open(projectRoot);
+    try {
+      const args: Record<string, unknown> = {};
+      if (options.project) args.project = options.project;
+      if (options.sprint) args.sprint = options.sprint;
+      if (options.post) {
+        args.post = true;
+        args.issue_key = options.post;
+      }
+      const result = await handleSpecshipJiraCoverage(args, {
+        specQueries: cg.getSpecQueries(),
+        projectRoot,
+      });
+      const out = result.content.map((c) => c.text).join('\n');
+      // eslint-disable-next-line no-console
+      console.log(out);
+      if (result.isError) process.exit(1);
+    } finally {
+      cg.close();
+    }
+  });
+
+/**
  * specship jira release — stamp a released version onto issues
  * (REQ-JIRAPUB-007): ensure the project version exists, add it as fixVersion
  * on each issue, and add one shipped-in comment. Idempotent — a re-run

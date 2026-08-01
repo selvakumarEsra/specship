@@ -413,6 +413,7 @@ import {
   handleSpecshipJiraPick,
   handleSpecshipJiraStart,
   handleSpecshipJiraTrack,
+  handleSpecshipJiraCoverage,
   handleSpecshipJiraPublish,
   handleSpecshipJiraTransition,
   handleSpecshipJiraAddTask,
@@ -1292,6 +1293,16 @@ export class ToolHandler {
           // session's workflow runs) with its live JIRA status — read-only.
           const cg = this.getSpecShip(args.projectPath as string | undefined);
           return await handleSpecshipJiraTrack(args, {
+            specQueries: cg.getSpecQueries(),
+            projectRoot: cg.getProjectRoot(),
+          });
+        }
+        case 'specship_jira_coverage': {
+          // coverage joins the bound project's active sprint to spec truth —
+          // read-only by default; posts only when the caller opts in
+          // (REQ-JIRATEAM-004).
+          const cg = this.getSpecShip(args.projectPath as string | undefined);
+          return await handleSpecshipJiraCoverage(args, {
             specQueries: cg.getSpecQueries(),
             projectRoot: cg.getProjectRoot(),
           });
