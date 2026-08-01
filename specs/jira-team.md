@@ -98,6 +98,9 @@ implementations:
   - src/jira/publish.ts:writeBackJiraIdentity
   - src/jira/auto-publish.ts:autoPublishSpecsOnSync
 
+verifies:
+  - __tests__/jira/auto-publish-on-sync.test.ts
+
 ## Acceptance
 <!-- id: REQ-JIRATEAM-002.A1 -->
 - After sync on a bound repo, a newly-authored spec has a JIRA Story with one
