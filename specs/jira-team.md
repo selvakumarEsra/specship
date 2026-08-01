@@ -61,6 +61,9 @@ implementations:
   - src/jira/repo-config.ts:assertNoCredentialsInRepoConfig
   - src/jira/client.ts:JiraClient.verifyProjectAccess
 
+verifies:
+  - __tests__/jira/jira-repo-binding.test.ts
+
 ## Acceptance
 <!-- id: REQ-JIRATEAM-001.A1 -->
 - With a `jira` binding in `specship.config.json`, publish/pick/coverage
