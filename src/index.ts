@@ -1207,6 +1207,19 @@ export class SpecShip {
           /* a governance pass must never affect the sync */
         }
 
+        // JIRA auto-publish (REQ-JIRATEAM-002). Gated on a repo-committed
+        // binding: on an unbound repo this is a no-op and constructs no
+        // client. Best-effort — a JIRA fault never fails the sync.
+        try {
+          const { autoPublishSpecsOnSync } = await import('./jira/auto-publish');
+          result.jiraAutoPublish = await autoPublishSpecsOnSync({
+            specQueries: this.specQueries,
+            projectRoot: this.projectRoot,
+          });
+        } catch {
+          /* a JIRA fault must never fail a sync */
+        }
+
         this.refreshStatuslineCache();
         return result;
       } finally {
