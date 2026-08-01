@@ -3979,6 +3979,64 @@ jira
   });
 
 /**
+ * specship jira reconcile — detect JIRA-side edits and (with --apply) fold
+ * them back into the spec (REQ-JIRATEAM-005). Preview is read-only and the
+ * default; --apply must be paired with --issue plus the confirmed accept
+ * flags AND the fingerprint from the preview so an unreviewed apply is
+ * rejected by the handler's fingerprint gate.
+ */
+jira
+  .command('reconcile')
+  .description('Detect JIRA-side edits to published specs; --apply folds a confirmed diff back into the spec.')
+  .option('--issue <key>', 'narrow to one issue (required for --apply)')
+  .option('--apply', 'apply the confirmed diff — preview first and confirm the diff before using this')
+  .option('--accept-content', 'apply: accept the edited summary/description')
+  .option('--accept-subtask <key...>', 'apply: accept the proposed criterion for this JIRA Sub-task key (repeatable)')
+  .option('--expected-fingerprint <fp>', 'apply: the live fingerprint from the preview the user just approved')
+  .option('--path <projectRoot>', 'project root (default: cwd)')
+  .action(
+    async (options: {
+      issue?: string;
+      apply?: boolean;
+      acceptContent?: boolean;
+      acceptSubtask?: string[];
+      expectedFingerprint?: string;
+      path?: string;
+    }) => {
+      const projectRoot = path.resolve(options.path ?? process.cwd());
+      if (!isInitialized(projectRoot)) {
+        error(`SpecShip not initialized in ${projectRoot}. Run \`specship init -i\` first.`);
+        process.exit(1);
+      }
+      const { SpecShip } = await loadSpecShip();
+      const { handleSpecshipJiraReconcile } = await import('../mcp/jira-tools');
+      const cg = await SpecShip.open(projectRoot);
+      try {
+        const args: Record<string, unknown> = {};
+        args.mode = options.apply ? 'apply' : 'preview';
+        if (options.issue) args.issue_key = options.issue;
+        if (options.acceptContent) args.accept_content = true;
+        if (options.acceptSubtask && options.acceptSubtask.length > 0) {
+          args.accept_subtasks = options.acceptSubtask;
+        }
+        if (options.expectedFingerprint) {
+          args.expected_live_fingerprint = options.expectedFingerprint;
+        }
+        const result = await handleSpecshipJiraReconcile(args, {
+          specQueries: cg.getSpecQueries(),
+          projectRoot,
+        });
+        const out = result.content.map((c) => c.text).join('\n');
+        // eslint-disable-next-line no-console
+        console.log(out);
+        if (result.isError) process.exit(1);
+      } finally {
+        cg.close();
+      }
+    },
+  );
+
+/**
  * specship jira release — stamp a released version onto issues
  * (REQ-JIRAPUB-007): ensure the project version exists, add it as fixVersion
  * on each issue, and add one shipped-in comment. Idempotent — a re-run

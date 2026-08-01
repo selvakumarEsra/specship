@@ -379,6 +379,56 @@ export const jiraToolDefinitions: ToolDefinition[] = [
     },
   },
   {
+    name: 'specship_jira_reconcile',
+    description:
+      "Detect JIRA-side edits to published specs and (only with explicit user " +
+      'confirmation) fold them back into the spec (REQ-JIRATEAM-005). Two modes: ' +
+      '`mode: "preview"` (default) — read-only; enumerates every published spec ' +
+      "whose LIVE JIRA issue diverges from what publish wrote (edited summary/" +
+      'description, or a Sub-task added in JIRA with no matching acceptance ' +
+      'criterion) and returns a proposed spec amendment. `mode: "apply"` — ' +
+      'writes the previewed amendment to the spec file and re-publishes so the ' +
+      'fingerprint refreshes. **Preview first, then apply only after the user ' +
+      'has explicitly confirmed the exact diff in conversation.** Apply refuses ' +
+      "unless `expected_live_fingerprint` matches the issue's current live " +
+      'fingerprint — a value the caller MUST have just seen returned by a ' +
+      'preview call. No preview → no apply.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        mode: {
+          type: 'string',
+          enum: ['preview', 'apply'],
+          description:
+            'preview (default) returns divergences without touching any file; apply writes ' +
+            'the amendment after preview + explicit user confirmation.',
+        },
+        issue_key: {
+          type: 'string',
+          description:
+            'Optional: narrow preview to a single issue key (e.g., "PROJ-123"). Required for apply.',
+        },
+        accept_content: {
+          type: 'boolean',
+          description:
+            'apply only: fold the edited summary/description back into the spec.',
+        },
+        accept_subtasks: {
+          type: 'array',
+          items: { type: 'string' },
+          description:
+            'apply only: JIRA Sub-task keys whose proposed acceptance criteria the user has confirmed.',
+        },
+        expected_live_fingerprint: {
+          type: 'string',
+          description:
+            "apply only: the issue's live fingerprint from the preview the user just approved. " +
+            'apply refuses when this does not match the current live fingerprint (preview-first gate).',
+        },
+      },
+    },
+  },
+  {
     name: 'specship_jira_transition',
     description:
       'Transition a JIRA issue to a target workflow state (e.g., "In Progress", ' +
@@ -1420,11 +1470,25 @@ export async function handleSpecshipJiraTrack(
         });
       }
       if (pub.fingerprint && live) {
-        const liveFp = issueContentFingerprint(live.summary, live.description ?? '');
-        if (liveFp !== pub.fingerprint) {
+        // Delegate the divergence judgement to the reconcile module so the
+        // track view + the reconcile tool never disagree about "what counts as
+        // an edit". Sub-task diffs need the spec's acceptance criteria, which
+        // this row doesn't have — track only reports the content flag; a full
+        // preview lives in `specship_jira_reconcile`.
+        const { diffIssueVsSpec } = await import('../jira/reconcile');
+        const specView = {
+          specRelPath: pub.specRelPath,
+          requirementId: pub.issueKey,
+          title: pub.title,
+          body: '',
+          acceptance: [] as Array<{ id: string; text: string }>,
+        };
+        const report = diffIssueVsSpec(live, specView, pub.fingerprint);
+        if (report.content) {
           divergences.push(
             `⚠ ${pub.issueKey} was edited in JIRA after publish (spec: ${pub.specRelPath}) — ` +
-              're-publish with specship_jira_publish to refresh, or fold the JIRA edit back into the spec.',
+              'run specship_jira_reconcile to preview the JIRA-side changes, or ' +
+              're-publish with specship_jira_publish to refresh the fingerprint.',
           );
         }
       }
@@ -1844,3 +1908,367 @@ export async function handleSpecshipJiraCoverage(
     );
   }
 }
+
+// ---------------------------------------------------------------------------
+// Reconcile (REQ-JIRATEAM-005)
+// ---------------------------------------------------------------------------
+
+/** The read-only client slice `specship_jira_reconcile` needs. */
+export interface JiraReconcileClient {
+  getIssue(key: string): Promise<JiraIssueResult>;
+}
+
+/** Dependencies for `handleSpecshipJiraReconcile`. */
+export interface JiraReconcileDeps {
+  specQueries: unknown;
+  projectRoot: string;
+  /** Read-side factory (default: resolve creds + new JiraClient). */
+  makeJiraClient?: () => JiraReconcileClient;
+  /**
+   * Write-side factory used only in apply mode to re-publish and refresh the
+   * fingerprint. Defaults to the full `JiraClient` — tests stub this out so
+   * the suite never contacts a real host.
+   */
+  makePublishClient?: () => PublishJiraClient;
+}
+
+/** The subset of SpecQueries the reconcile handler reads. */
+interface ReconcileSpecQueries {
+  getSpecById?: (id: string) => {
+    id: string;
+    kind: string;
+    title: string;
+    body: string;
+    sourcePath: string;
+  } | null;
+  getSpecsByParent?: (id: string) => Array<{
+    id: string;
+    kind: string;
+    title: string;
+    body: string;
+  }>;
+}
+
+/**
+ * Load the requirement view a diff needs — id, title, body, acceptance — from
+ * the SpecQueries handle. `requirementId` is the frontmatter/heading id (which
+ * for a published spec is `reqIdForIssue(issueKey)`).
+ */
+function loadSpecView(
+  sq: ReconcileSpecQueries,
+  requirementId: string,
+  specRelPath: string,
+): import('../jira/reconcile').SpecViewForDiff | null {
+  const spec = sq.getSpecById?.(requirementId);
+  if (!spec || spec.kind !== 'requirement') return null;
+  const acceptance = (sq.getSpecsByParent?.(requirementId) ?? [])
+    .filter((c) => c.kind === 'acceptance')
+    .map((c) => ({ id: c.id, text: (c.title || c.body || '').trim() }))
+    .filter((c) => c.text.length > 0);
+  return {
+    specRelPath,
+    requirementId,
+    title: spec.title,
+    body: spec.body ?? '',
+    acceptance,
+  };
+}
+
+/** Format one report as a human-readable diff block. */
+function formatReconcileReport(report: import('../jira/reconcile').ReconcileReport): string {
+  const lines: string[] = [];
+  lines.push(`### ${report.issueKey} — ${report.specRelPath}`);
+  if (report.content) {
+    lines.push('');
+    lines.push('**Content divergence (edited in JIRA after publish)**');
+    lines.push('');
+    lines.push(`- Live summary: ${report.content.liveSummary}`);
+    lines.push(`- Live fingerprint: \`${report.content.liveFingerprint}\``);
+    lines.push(`- Stored fingerprint: \`${report.content.storedFingerprint}\``);
+    lines.push('');
+    lines.push('_Live description:_');
+    lines.push('');
+    lines.push(report.content.liveDescription || '_(empty)_');
+  }
+  if (report.subtasks.length > 0) {
+    lines.push('');
+    lines.push('**Sub-tasks added in JIRA (proposed new acceptance criteria)**');
+    lines.push('');
+    lines.push('| Sub-task | Proposed id | Proposed criterion |');
+    lines.push('| --- | --- | --- |');
+    for (const d of report.subtasks) {
+      lines.push(
+        `| ${cell(d.subtaskKey)} | ${cell(d.proposedCriterionId)} | ${cell(d.proposedCriterionText)} |`,
+      );
+    }
+  }
+  return lines.join('\n');
+}
+
+/**
+ * Handle `specship_jira_reconcile` (REQ-JIRATEAM-005).
+ *
+ * Two modes:
+ *   - preview (default, A3): enumerate every published spec, live-read the
+ *     issue, diff, and return the proposed spec amendment. NO writes.
+ *   - apply (A4): fold the previewed diff into the spec file and re-publish so
+ *     the fingerprint refreshes. Preview-gated: apply refuses unless
+ *     `expected_live_fingerprint` matches the issue's current live fingerprint,
+ *     which the caller MUST have just received from a preview call. This
+ *     encodes the "preview first, then explicit user confirmation" discipline.
+ */
+export async function handleSpecshipJiraReconcile(
+  args: Record<string, unknown>,
+  deps: JiraReconcileDeps,
+): Promise<ToolResult> {
+  const notConfigured = notConfiguredResult();
+  if (notConfigured) return notConfigured;
+
+  const { diffIssueVsSpec, reportHasDivergence } = await import('../jira/reconcile');
+  const {
+    appendAcceptanceCriterion,
+    applyContentAmendment,
+    amendSpecFile,
+  } = await import('../jira/spec-amend');
+
+  const mode = args.mode === 'apply' ? 'apply' : 'preview';
+  const issueKeyArg =
+    typeof args.issue_key === 'string' && args.issue_key.trim()
+      ? args.issue_key.trim()
+      : undefined;
+
+  const published = enumeratePublishedSpecs(deps.projectRoot);
+  const scope = issueKeyArg
+    ? published.filter((p) => p.issueKey === issueKeyArg)
+    : published;
+  if (scope.length === 0) {
+    return textResult(
+      issueKeyArg
+        ? `No published spec found for ${issueKeyArg} — reconcile only applies to specs with a jira_issue: key.`
+        : 'No published specs found — nothing to reconcile.',
+    );
+  }
+
+  let client: JiraReconcileClient;
+  try {
+    client = deps.makeJiraClient
+      ? deps.makeJiraClient()
+      : (new JiraClient(resolveJiraCredentials()) as unknown as JiraReconcileClient);
+  } catch (err) {
+    return errorResult(err instanceof Error ? err.message : String(err));
+  }
+
+  const sq = deps.specQueries as ReconcileSpecQueries;
+
+  if (mode === 'apply') {
+    if (!issueKeyArg) {
+      return errorResult(
+        'apply mode needs "issue_key". Run preview first, then apply the confirmed diff for one issue.',
+      );
+    }
+    const pub = scope[0]!;
+    let live: JiraIssue;
+    try {
+      live = (await client.getIssue(issueKeyArg)).issue;
+    } catch (err) {
+      return errorResult(err instanceof Error ? err.message : String(err));
+    }
+
+    // Preview-first gate (A3): apply refuses unless the caller-supplied
+    // `expected_live_fingerprint` matches the issue's current live
+    // fingerprint. That value only exists if the caller just saw it in a
+    // preview and the user confirmed it — no preview → no apply.
+    const expectedFp =
+      typeof args.expected_live_fingerprint === 'string'
+        ? args.expected_live_fingerprint.trim()
+        : '';
+    const liveFp = issueContentFingerprint(live.summary ?? '', live.description ?? '');
+    if (!expectedFp || expectedFp !== liveFp) {
+      return errorResult(
+        'apply refused: no matching preview. Run mode:"preview" for ' +
+          `${issueKeyArg}, show the user the diff, and re-call apply with the ` +
+          `expected_live_fingerprint from that preview (live fingerprint: ${liveFp}).`,
+      );
+    }
+
+    const requirementId = reqIdForIssue(issueKeyArg);
+    const specView = loadSpecView(sq, requirementId, pub.specRelPath);
+    if (!specView) {
+      return errorResult(
+        `Spec ${requirementId} not found in the index — run specship sync first.`,
+      );
+    }
+    const report = diffIssueVsSpec(live, specView, pub.fingerprint);
+
+    const acceptContent = args.accept_content === true;
+    const acceptSubtasks = Array.isArray(args.accept_subtasks)
+      ? (args.accept_subtasks as unknown[]).filter(
+          (k): k is string => typeof k === 'string',
+        )
+      : [];
+    if (!acceptContent && acceptSubtasks.length === 0) {
+      return errorResult(
+        'apply refused: nothing to accept. Pass accept_content: true and/or ' +
+          'accept_subtasks: [<Sub-task keys>] with the confirmed proposals.',
+      );
+    }
+
+    const notes: string[] = [];
+    if (acceptContent) {
+      if (!report.content) {
+        notes.push('accept_content: true but no content divergence — skipped.');
+      } else {
+        const out = amendSpecFile(deps.projectRoot, pub.absPath, (src) =>
+          applyContentAmendment(
+            src,
+            requirementId,
+            live.summary ?? '',
+            live.description ?? '',
+          ),
+        );
+        notes.push(out.detail);
+      }
+    }
+    for (const stKey of acceptSubtasks) {
+      const div = report.subtasks.find((d) => d.subtaskKey === stKey);
+      if (!div) {
+        notes.push(`${stKey}: no matching Sub-task divergence — skipped.`);
+        continue;
+      }
+      const out = amendSpecFile(deps.projectRoot, pub.absPath, (src) =>
+        appendAcceptanceCriterion(
+          src,
+          requirementId,
+          div.proposedCriterionId,
+          div.proposedCriterionText,
+        ),
+      );
+      notes.push(`${stKey} → ${div.proposedCriterionId}: ${out.detail}`);
+    }
+
+    // Re-publish so the fingerprint refreshes and the next preview reports
+    // no divergence. The publish source is built from what we JUST ACCEPTED
+    // — the live summary/description (when accepted) and the appended
+    // criteria — NOT from the SpecQueries index, which lags the file
+    // write until the caller runs `specship sync`.
+    try {
+      const publishClient = deps.makePublishClient
+        ? deps.makePublishClient()
+        : (client as unknown as PublishJiraClient);
+      const effectiveTitle = acceptContent ? live.summary ?? '' : specView.title;
+      const effectiveBody = acceptContent ? live.description ?? '' : specView.body;
+      const effectiveAcceptance = [
+        ...specView.acceptance,
+        ...report.subtasks
+          .filter((d) => acceptSubtasks.includes(d.subtaskKey))
+          .map((d) => ({ id: d.proposedCriterionId, text: d.proposedCriterionText })),
+      ];
+      const creds = resolveJiraCredentials();
+      const projectKey = creds.project;
+      if (projectKey) {
+        const result = await publishSpecToJira(
+          publishClient,
+          {
+            specId: requirementId,
+            title: effectiveTitle,
+            body: effectiveBody,
+            specRelPath: pub.specRelPath,
+            acceptance: effectiveAcceptance,
+          },
+          { projectKey },
+          issueKeyArg,
+        );
+        writeBackJiraIdentity(pub.absPath, issueKeyArg, {
+          fingerprint: result.fingerprint,
+          reId: null,
+          renameTo: null,
+        });
+        notes.push(`re-published ${issueKeyArg} and refreshed the fingerprint.`);
+      } else {
+        notes.push(
+          'skipped re-publish: no default JIRA project configured — pass project via specship_jira_publish to refresh the fingerprint.',
+        );
+      }
+    } catch (err) {
+      notes.push(
+        `re-publish failed (spec amended on disk): ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+
+    return textResult(
+      [
+        `Applied ${issueKeyArg} → ${pub.specRelPath}:`,
+        ...notes.map((n) => `- ${n}`),
+        '',
+        'Run `specship sync` so the index reflects the spec edits.',
+      ].join('\n'),
+    );
+  }
+
+  // preview mode (default): read + diff every published spec in scope.
+  const blocks: string[] = [];
+  const clean: string[] = [];
+  for (const pub of scope) {
+    let live: JiraIssue;
+    try {
+      live = (await client.getIssue(pub.issueKey)).issue;
+    } catch (err) {
+      blocks.push(
+        `### ${pub.issueKey} — ${pub.specRelPath}\n\n_JIRA read failed: ${
+          err instanceof Error ? err.message : String(err)
+        }_`,
+      );
+      continue;
+    }
+    const requirementId = reqIdForIssue(pub.issueKey);
+    const specView = loadSpecView(sq, requirementId, pub.specRelPath);
+    if (!specView) {
+      blocks.push(
+        `### ${pub.issueKey} — ${pub.specRelPath}\n\n_Spec ${requirementId} not in the index — run specship sync._`,
+      );
+      continue;
+    }
+    const report = diffIssueVsSpec(live, specView, pub.fingerprint);
+    if (!reportHasDivergence(report)) {
+      clean.push(pub.issueKey);
+      continue;
+    }
+    const liveFp = issueContentFingerprint(live.summary ?? '', live.description ?? '');
+    const machine =
+      '```json\n' +
+      JSON.stringify(
+        {
+          issue_key: pub.issueKey,
+          spec_rel_path: pub.specRelPath,
+          expected_live_fingerprint: liveFp,
+          content: report.content
+            ? { live_summary: report.content.liveSummary }
+            : null,
+          subtasks: report.subtasks.map((d) => ({
+            subtask_key: d.subtaskKey,
+            proposed_criterion_id: d.proposedCriterionId,
+            proposed_criterion_text: d.proposedCriterionText,
+          })),
+        },
+        null,
+        2,
+      ) +
+      '\n```';
+    blocks.push(`${formatReconcileReport(report)}\n\n${machine}`);
+  }
+
+  const header =
+    blocks.length === 0
+      ? 'No divergences — every published spec matches its JIRA issue.'
+      : `${blocks.length} issue${blocks.length === 1 ? '' : 's'} diverged.`;
+  const footer =
+    blocks.length > 0
+      ? '\n\n> Preview only — no file was modified. Show the diff to the user; only ' +
+        'after they explicitly confirm, call again with mode:"apply", issue_key, the ' +
+        'confirmed accept_content / accept_subtasks, and expected_live_fingerprint ' +
+        'from the JSON block above.'
+      : '';
+  const cleanNote = clean.length > 0 ? `\n\nIn sync: ${clean.join(', ')}.` : '';
+  return textResult(`${header}\n\n${blocks.join('\n\n')}${cleanNote}${footer}`);
+}
+
