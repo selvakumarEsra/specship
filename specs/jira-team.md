@@ -223,7 +223,19 @@ Accepting re-publishes, refreshing the fingerprint.
 
 implementations:
   - src/jira/publish.ts:issueContentFingerprint
+  - src/jira/reconcile.ts:diffIssueVsSpec
+  - src/jira/reconcile.ts:nextAcceptanceId
+  - src/jira/reconcile.ts:proposeCriterionFromSubtask
+  - src/jira/spec-amend.ts:applyContentAmendment
+  - src/jira/spec-amend.ts:appendAcceptanceCriterion
+  - src/jira/spec-amend.ts:amendSpecFile
   - src/mcp/jira-tools.ts:handleSpecshipJiraTrack
+  - src/mcp/jira-tools.ts:handleSpecshipJiraReconcile
+
+verifies:
+  - __tests__/jira/jira-reconcile.test.ts
+  - __tests__/jira/jira-spec-amend.test.ts
+  - __tests__/jira/jira-mcp-reconcile-tool.test.ts
 
 ## Acceptance
 <!-- id: REQ-JIRATEAM-005.A1 -->

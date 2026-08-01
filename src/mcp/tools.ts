@@ -351,6 +351,7 @@ interface PropertySchema {
   description: string;
   enum?: string[];
   default?: unknown;
+  items?: { type: string };
 }
 
 /**
@@ -415,6 +416,7 @@ import {
   handleSpecshipJiraTrack,
   handleSpecshipJiraCoverage,
   handleSpecshipJiraPublish,
+  handleSpecshipJiraReconcile,
   handleSpecshipJiraTransition,
   handleSpecshipJiraAddTask,
 } from './jira-tools';
@@ -1312,6 +1314,16 @@ export class ToolHandler {
           // records the key in the spec file (REQ-JIRAPUB-001/-002).
           const cg = this.getSpecShip(args.projectPath as string | undefined);
           return await handleSpecshipJiraPublish(args, {
+            specQueries: cg.getSpecQueries(),
+            projectRoot: cg.getProjectRoot(),
+          });
+        }
+        case 'specship_jira_reconcile': {
+          // reconcile detects JIRA-side edits to published specs and (only
+          // after preview + explicit user confirmation) folds them back into
+          // the spec (REQ-JIRATEAM-005).
+          const cg = this.getSpecShip(args.projectPath as string | undefined);
+          return await handleSpecshipJiraReconcile(args, {
             specQueries: cg.getSpecQueries(),
             projectRoot: cg.getProjectRoot(),
           });
