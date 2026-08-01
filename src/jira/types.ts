@@ -67,6 +67,32 @@ export interface JiraCredentials {
    * process-global. Last resort when no CA bundle is available.
    */
   insecureTls?: boolean;
+  /**
+   * Provenance of the resolved `project` (REQ-JIRATEAM-001). `"repo"` when
+   * a `jira` block in `specship.config.json` supplied the binding, `"user"`
+   * otherwise. Credentials are ALWAYS user-level regardless.
+   */
+  bindingSource?: 'repo' | 'user';
+  /** Absolute path to the repo config that supplied the binding, when any. */
+  bindingPath?: string;
+}
+
+/**
+ * Shape of the `jira` section inside the repo-committed
+ * `specship.config.json` (REQ-JIRATEAM-001). Non-credential binding only —
+ * a credential-shaped field here is rejected on load.
+ */
+export interface JiraRepoBinding {
+  /** JIRA project key every teammate publishes into, e.g. `ACME`. */
+  projectKey: string;
+  /** Issue type used when publishing a spec as a Story. */
+  storyIssueType?: string;
+  /** Issue type used when publishing an acceptance criterion as a Sub-task. */
+  subtaskIssueType?: string;
+  /** Optional board id/name scoping coverage & pick. */
+  board?: string | number;
+  /** Optional sprint id/name scoping coverage & pick. */
+  sprint?: string | number;
 }
 
 /**
@@ -94,6 +120,12 @@ export interface JiraConfig {
    * (REQ-JIRAPUB-001). A publish call may override it per invocation.
    */
   project?: string;
+  /**
+   * Team-lane repo binding (REQ-JIRATEAM-001) — usually authored inside
+   * the repo's `specship.config.json`, not here. Kept as an optional field
+   * so `JiraConfig` remains a superset for tools that ingest either shape.
+   */
+  jira?: JiraRepoBinding;
 }
 
 /**

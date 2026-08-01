@@ -4,5 +4,6 @@
 
 export * from './types';
 export * from './config';
+export * from './repo-config';
 export * from './auth';
 export * from './client';
