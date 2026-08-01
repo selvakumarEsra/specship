@@ -18,6 +18,7 @@
 import * as fs from 'fs';
 import * as https from 'https';
 import { buildAuthHeader } from './auth';
+import { wrapRepoBindingProjectError } from './repo-config';
 import {
   JiraCredentials,
   JiraConnectionResult,
@@ -57,6 +58,9 @@ export class JiraClient {
    * never process-global.
    */
   private readonly tls: { ca?: Buffer; rejectUnauthorized: boolean } | null;
+  /** Repo-binding provenance (REQ-JIRATEAM-001), used to enrich A4 errors. */
+  private readonly bindingSource?: 'repo' | 'user';
+  private readonly bindingPath?: string;
 
   constructor(creds: JiraCredentials) {
     // Normalize: strip trailing slashes so path joins are clean.
@@ -70,6 +74,8 @@ export class JiraClient {
     }
     this.authHeader = buildAuthHeader(creds);
     this.deployment = creds.deployment;
+    this.bindingSource = creds.bindingSource;
+    this.bindingPath = creds.bindingPath;
 
     if (creds.caCertPath || creds.insecureTls) {
       let ca: Buffer | undefined;
@@ -336,6 +342,33 @@ export class JiraClient {
       key: String(p?.key ?? ''),
       name: String(p?.name ?? ''),
     })).filter(p => p.key.length > 0);
+  }
+
+  /**
+   * Assert the authenticated user can see the given project
+   * (REQ-JIRATEAM-001.A4). `GET /rest/api/2/project/{key}` — a 401/403/404
+   * from the repo-bound project is re-thrown with the project, host, and
+   * the binding file's path, so the operator gets a directed message
+   * instead of a silent fallback to another project. Non-binding paths
+   * (user-level project) re-raise the original error unchanged.
+   */
+  async verifyProjectAccess(projectKey: string): Promise<void> {
+    const key = (projectKey ?? '').trim();
+    if (!key) {
+      throw new JiraConfigError('A JIRA project key is required.');
+    }
+    try {
+      await this.request(`/rest/api/2/project/${encodeURIComponent(key)}`);
+    } catch (err) {
+      if (this.bindingSource === 'repo' && this.bindingPath) {
+        throw wrapRepoBindingProjectError(err as Error, {
+          projectKey: key,
+          host: this.host,
+          bindingPath: this.bindingPath,
+        });
+      }
+      throw err;
+    }
   }
 
   /**

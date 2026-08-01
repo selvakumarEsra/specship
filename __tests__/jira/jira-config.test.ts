@@ -97,17 +97,34 @@ describe('loadJiraConfig', () => {
 });
 
 describe('resolveJiraCredentials', () => {
+  // Point resolution at an empty tmp dir so a repo-level `specship.config.json`
+  // in the real cwd can never contaminate these user-config-only tests.
+  const call = () => resolveJiraCredentials(tmp);
+
   it('reads from the config file', () => {
     writeCfg({
       baseUrl: 'https://acme.atlassian.net',
       email: 'jane@acme.com',
       apiToken: 'tok',
     });
-    const creds = resolveJiraCredentials();
+    const creds = call();
     expect(creds.baseUrl).toBe('https://acme.atlassian.net');
     expect(creds.deployment).toBe('cloud');
     expect(creds.email).toBe('jane@acme.com');
     expect(creds.apiToken).toBe('tok');
+  });
+
+  // REQ-JIRATEAM-001.A3 — with no repo binding, user-level project is used.
+  it('returns the user-level project when no repo config exists', () => {
+    writeCfg({
+      baseUrl: 'https://acme.atlassian.net',
+      email: 'jane@acme.com',
+      apiToken: 'tok',
+      project: 'SOLO',
+    });
+    const creds = call();
+    expect(creds.project).toBe('SOLO');
+    expect(creds.bindingSource).toBe('user');
   });
 
   // REQ-JIRA-007 — lifecycle transition names are configurable, with sensible

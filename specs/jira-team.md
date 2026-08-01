@@ -57,6 +57,9 @@ identity and the user level wins for credentials.
 
 implementations:
   - src/jira/config.ts:resolveJiraCredentials
+  - src/jira/repo-config.ts:loadRepoJiraBinding
+  - src/jira/repo-config.ts:assertNoCredentialsInRepoConfig
+  - src/jira/client.ts:JiraClient.verifyProjectAccess
 
 ## Acceptance
 <!-- id: REQ-JIRATEAM-001.A1 -->
