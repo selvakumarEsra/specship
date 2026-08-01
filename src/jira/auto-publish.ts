@@ -29,6 +29,7 @@ import {
   type SpecPublishSource,
 } from './publish';
 import { readSpecJiraKey } from './spec-writer';
+import { postMilestoneComment, type MilestoneJiraClient } from './milestone-comment';
 import * as fs from 'fs';
 
 export type AutoPublishStatus = 'published' | 'unchanged' | 'opted_out' | 'failed';
@@ -203,6 +204,13 @@ export async function autoPublishSpecsOnSync(
         jiraKey: result.key,
         subtasksCreated: result.subtasksCreated,
       });
+      // Milestone: spec_published (REQ-JIRATEAM-003.A1). Idempotent — the
+      // dispatcher itself skips when the marker already exists, so calling
+      // it on every publish (including refresh) is safe. Soft-fail so a
+      // milestone comment issue never breaks auto-publish (A3).
+      if (status === 'published') {
+        await postMilestoneOnSuccess(client, result.key, spec.id, deps.projectRoot);
+      }
     } catch (err) {
       // A4: one spec's failure never blocks the sync or its siblings.
       const msg = err instanceof Error ? err.message : String(err);
@@ -211,6 +219,34 @@ export async function autoPublishSpecsOnSync(
   }
 
   return { results };
+}
+
+/**
+ * Best-effort spec_published milestone comment. A fake `PublishJiraClient`
+ * (some tests) doesn't implement the milestone methods — probe first and
+ * silently skip when they're missing, so test seams stay narrow.
+ */
+async function postMilestoneOnSuccess(
+  client: PublishJiraClient,
+  issueKey: string,
+  specId: string,
+  projectRoot: string,
+): Promise<void> {
+  const maybe = client as unknown as Partial<MilestoneJiraClient>;
+  if (
+    typeof maybe.listCommentsDetailed !== 'function' ||
+    typeof maybe.addComment !== 'function' ||
+    typeof maybe.updateComment !== 'function'
+  ) {
+    return;
+  }
+  await postMilestoneComment(
+    maybe as MilestoneJiraClient,
+    issueKey,
+    'spec_published',
+    { specId },
+    { projectRoot },
+  );
 }
 
 /** One-line summary suitable for CLI output. */
