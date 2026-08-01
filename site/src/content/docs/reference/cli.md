@@ -43,6 +43,7 @@ description: Every SpecShip command and the flags it accepts.
 | `specship jira test` | Test the configured JIRA connection (uses ~/.specship/jira.json or SPECSHIP_JIRA_* env). |
 | `specship jira track` | Show each picked JIRA issue with its SpecShip work-state + live JIRA status. |
 | `specship jira coverage` | Sprint coverage report joining JIRA sprint issues to spec truth (read-only unless --post). |
+| `specship jira reconcile` | Detect JIRA-side edits to published specs; --apply folds a confirmed diff back into the spec. |
 | `specship jira release <version>` | Set <version> as fixVersion on JIRA issues (creating the project version if missing) with a shipped-in comment. |
 <!-- GENERATED:cli-commands END -->
 
