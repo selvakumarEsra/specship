@@ -171,6 +171,55 @@ export class JiraClient {
   }
 
   /**
+   * List issues in a project's active (or named) sprint (REQ-JIRATEAM-004).
+   * Read-only — no transitions, no edits. `project` is required; `sprint` is
+   * optional (omitted → `sprint in openSprints()`, the currently-open sprints
+   * of the board bound to the project). Both values are quote-escaped to
+   * prevent JQL injection. Bounded by `MAX_ISSUE_RESULTS`.
+   *
+   *  - 200 → `{ ok: true, issues }`; an empty list is a valid success.
+   *  - 401 / 403 → `JiraAuthError`; redirect / network / non-200 →
+   *    `JiraConfigError`.
+   */
+  async listSprintIssues(opts: { project: string; sprint?: string }): Promise<JiraIssueListResult> {
+    const project = (opts.project ?? '').trim();
+    if (!project) {
+      throw new JiraConfigError('A JIRA project key is required to list sprint issues.');
+    }
+    const escProject = project.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    let jql = `project = "${escProject}"`;
+    if (opts.sprint && opts.sprint.trim()) {
+      const escSprint = opts.sprint.trim().replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+      jql += ` AND sprint = "${escSprint}"`;
+    } else {
+      jql += ' AND sprint in openSprints()';
+    }
+    jql += ' ORDER BY updated DESC';
+
+    const params = new URLSearchParams({
+      jql,
+      fields: 'summary,status,issuetype',
+      maxResults: String(MAX_ISSUE_RESULTS),
+    });
+    const searchPath =
+      this.deployment === 'datacenter'
+        ? `/rest/api/2/search?${params.toString()}`
+        : `/rest/api/2/search/jql?${params.toString()}`;
+    const body = await this.request(searchPath);
+
+    const rawIssues: any[] = Array.isArray(body?.issues) ? body.issues : [];
+    const issues: JiraIssue[] = rawIssues.map(issue => ({
+      key: String(issue?.key ?? ''),
+      id: String(issue?.id ?? ''),
+      summary: String(issue?.fields?.summary ?? ''),
+      status: String(issue?.fields?.status?.name ?? ''),
+      issueType: String(issue?.fields?.issuetype?.name ?? ''),
+    }));
+
+    return { ok: true, issues };
+  }
+
+  /**
    * Fetch a single issue by its key (REQ-JIRA-003). Identity/authorization
    * ride the token — a key the user can't see is indistinguishable from a
    * missing one and both surface as `JiraNotFoundError` (A2). The key is
@@ -460,6 +509,48 @@ export class JiraClient {
     return raw
       .map(c => (typeof c?.body === 'string' ? c.body : ''))
       .filter(b => b.length > 0);
+  }
+
+  /**
+   * List comments with their JIRA-side ids (REQ-JIRATEAM-004.A3) so a caller
+   * can edit a specific comment in place instead of always appending. Same
+   * `GET /issue/{key}/comment` as `listComments`, but preserving each id.
+   */
+  async listCommentsDetailed(key: string): Promise<Array<{ id: string; body: string }>> {
+    const trimmed = (key ?? '').trim();
+    if (!trimmed) {
+      throw new JiraConfigError('An issue key is required (e.g., "PROJ-123").');
+    }
+    const body = await this.request(
+      `/rest/api/2/issue/${encodeURIComponent(trimmed)}/comment`,
+    );
+    const raw: any[] = Array.isArray(body?.comments) ? body.comments : [];
+    return raw
+      .map(c => ({
+        id: String(c?.id ?? ''),
+        body: typeof c?.body === 'string' ? c.body : '',
+      }))
+      .filter(c => c.id.length > 0 && c.body.length > 0);
+  }
+
+  /**
+   * Edit an existing comment in place (REQ-JIRATEAM-004.A3).
+   * `PUT /issue/{key}/comment/{id}` with `{ body }`; used by the sprint
+   * coverage report so re-posting updates the single watermarked comment.
+   */
+  async updateComment(key: string, commentId: string, body: string): Promise<void> {
+    const trimmed = (key ?? '').trim();
+    const id = (commentId ?? '').trim();
+    if (!trimmed || !id) {
+      throw new JiraConfigError(
+        'An issue key and comment id are required to update a comment.',
+      );
+    }
+    await this.write(
+      `/rest/api/2/issue/${encodeURIComponent(trimmed)}/comment/${encodeURIComponent(id)}`,
+      { body },
+      'PUT',
+    );
   }
 
   /**

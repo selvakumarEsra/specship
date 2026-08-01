@@ -38,11 +38,11 @@ import {
   publishSpecToJira,
   writeBackJiraIdentity,
   publishedSpecFilename,
-  readFrontmatterValue,
   issueContentFingerprint,
   type PublishJiraClient,
   type SpecPublishSource,
 } from '../jira/publish';
+import { enumeratePublishedSpecs } from '../jira/published-specs';
 import {
   raisePullRequest as defaultRaisePullRequest,
   buildPrTitle,
@@ -285,6 +285,41 @@ export const jiraToolDefinitions: ToolDefinition[] = [
           type: 'string',
           description:
             'Optional project key to narrow the live JIRA read (e.g., "PROJ"). Omit to read all your assigned issues.',
+        },
+      },
+    },
+  },
+  {
+    name: 'specship_jira_coverage',
+    description:
+      'Show a sprint coverage report joining the bound JIRA project\'s active ' +
+      '(or named) sprint to spec truth — every issue in the sprint with its ' +
+      'repo-side state (unspecced / specced / implemented / verified / drifted / ' +
+      'broken) and rollup totals. Read-only over JIRA by default; pass ' +
+      '`post: true` with `issue_key` to upsert the report as a single ' +
+      'watermarked comment on that issue (edited in place on re-post).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project: {
+          type: 'string',
+          description:
+            'JIRA project key to scope the sprint read (e.g., "PROJ"). Optional when a default project is configured.',
+        },
+        sprint: {
+          type: 'string',
+          description:
+            'Optional named sprint. Omit to use the project\'s currently open sprint(s).',
+        },
+        post: {
+          type: 'boolean',
+          description:
+            'Post the report as a single watermarked JIRA comment (edit-in-place). Defaults to false — never posts unless explicitly requested.',
+        },
+        issue_key: {
+          type: 'string',
+          description:
+            'When `post` is true, the anchor issue (e.g., an epic key) the coverage comment lands on. Required with `post`.',
         },
       },
     },
@@ -1373,48 +1408,9 @@ export async function handleSpecshipJiraTrack(
   );
 }
 
-/** A spec under specs/ that carries a published JIRA identity. */
-interface PublishedSpecRef {
-  issueKey: string;
-  title: string;
-  specRelPath: string;
-  fingerprint: string | null;
-}
-
-/**
- * Enumerate the specs under `<projectRoot>/specs/` whose frontmatter carries a
- * `jira_issue:` key (REQ-JIRAPUB-008). Best-effort filesystem scan — unreadable
- * files are skipped, and an absent specs/ dir yields an empty list.
- */
-function enumeratePublishedSpecs(projectRoot: string): PublishedSpecRef[] {
-  const specsDir = path.join(projectRoot, 'specs');
-  let entries: string[] = [];
-  try {
-    entries = fs.readdirSync(specsDir);
-  } catch {
-    return [];
-  }
-  const out: PublishedSpecRef[] = [];
-  for (const name of entries) {
-    if (!name.toLowerCase().endsWith('.md')) continue;
-    const full = path.join(specsDir, name);
-    try {
-      if (!fs.statSync(full).isFile()) continue;
-      const content = fs.readFileSync(full, 'utf8');
-      const issueKey = readFrontmatterValue(content, 'jira_issue');
-      if (!issueKey) continue;
-      out.push({
-        issueKey,
-        title: readSpecTitle(full, issueKey),
-        specRelPath: path.join('specs', name),
-        fingerprint: readFrontmatterValue(content, 'jira_fingerprint'),
-      });
-    } catch {
-      continue;
-    }
-  }
-  return out;
-}
+// `enumeratePublishedSpecs` / `PublishedSpecRef` moved to
+// `../jira/published-specs` so REQ-JIRATEAM-004's coverage report can share
+// the same source. Imported at the top of this file.
 
 /**
  * Dependencies for `handleSpecshipJiraPublish` (REQ-JIRAPUB-001/-002). The DB
@@ -1705,5 +1701,117 @@ export async function handleSpecshipJiraAddTask(
       return errorResult(err.message);
     }
     return errorResult('Failed to create the task in JIRA.');
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Sprint coverage (REQ-JIRATEAM-004)
+// ---------------------------------------------------------------------------
+
+/**
+ * Dependencies for `handleSpecshipJiraCoverage`. Threaded from the tool
+ * dispatcher — the DB handle enumerates specs + link states, `projectRoot`
+ * anchors the published-specs scan, and `makeJiraClient` is the injectable
+ * live-read seam (default resolves creds + a real `JiraClient`).
+ */
+export interface JiraCoverageDeps {
+  specQueries: unknown;
+  projectRoot: string;
+  makeJiraClient?: () => import('../jira/coverage').CoverageJiraClient & {
+    listCommentsDetailed?: (key: string) => Promise<Array<{ id: string; body: string }>>;
+    addComment?: (key: string, body: string) => Promise<{ id: string } | void>;
+    updateComment?: (key: string, id: string, body: string) => Promise<void>;
+  };
+}
+
+/**
+ * Handle `specship_jira_coverage` (REQ-JIRATEAM-004). Builds the sprint
+ * coverage report, renders markdown, and optionally upserts a single
+ * watermarked JIRA comment (A3) — never transitions or edits any issue (A4).
+ *
+ * SECURITY: no credential is echoed (REQ-JIRA-009); only public issue keys,
+ * titles, and statuses appear in output.
+ */
+export async function handleSpecshipJiraCoverage(
+  args: Record<string, unknown>,
+  deps: JiraCoverageDeps,
+): Promise<ToolResult> {
+  const notConfigured = notConfiguredResult();
+  if (notConfigured) return notConfigured;
+
+  const { buildCoverageReport, formatCoverageMarkdown, COVERAGE_COMMENT_WATERMARK } =
+    await import('../jira/coverage');
+  const { upsertWatermarkedComment } = await import('../jira/publish');
+
+  const post = args.post === true;
+  const issueKeyArg =
+    typeof args.issue_key === 'string' && args.issue_key.trim()
+      ? args.issue_key.trim()
+      : undefined;
+  if (post && !issueKeyArg) {
+    return textResult(
+      'Posting the coverage report needs an anchor issue — pass "issue_key" (e.g., the epic key) alongside "post": true.',
+    );
+  }
+
+  const sprint =
+    typeof args.sprint === 'string' && args.sprint.trim()
+      ? args.sprint.trim()
+      : undefined;
+
+  let creds: ReturnType<typeof resolveJiraCredentials>;
+  try {
+    creds = resolveJiraCredentials();
+  } catch (err) {
+    return errorResult(err instanceof Error ? err.message : String(err));
+  }
+  const project =
+    (typeof args.project === 'string' && args.project.trim()
+      ? args.project.trim()
+      : undefined) ?? creds.project;
+  if (!project) {
+    return textResult(
+      'No JIRA project configured. Pass "project", or configure a default with `specship jira configure --project <KEY>`.',
+    );
+  }
+
+  const client = deps.makeJiraClient
+    ? deps.makeJiraClient()
+    : new JiraClient(creds);
+
+  try {
+    const report = await buildCoverageReport({
+      client,
+      projectRoot: deps.projectRoot,
+      specQueries: deps.specQueries as import('../jira/coverage').CoverageSpecQueries,
+      project,
+      sprint,
+    });
+    const markdown = formatCoverageMarkdown(report);
+
+    if (!post) return textResult(markdown);
+
+    // Post path (A3): the only write this handler makes — a single watermarked
+    // comment, upserted in place on re-post. Never a transition/edit (A4).
+    const commentClient = client as unknown as {
+      listCommentsDetailed: (key: string) => Promise<Array<{ id: string; body: string }>>;
+      addComment: (key: string, body: string) => Promise<{ id: string } | void>;
+      updateComment: (key: string, id: string, body: string) => Promise<void>;
+    };
+    const result = await upsertWatermarkedComment(
+      commentClient,
+      issueKeyArg!,
+      COVERAGE_COMMENT_WATERMARK,
+      markdown,
+    );
+    const verb = result.action === 'updated' ? 'Updated existing' : 'Posted new';
+    return textResult(
+      `${markdown}\n\n> ${verb} coverage comment on ${issueKeyArg}.`,
+    );
+  } catch (err) {
+    if (err instanceof JiraError) return errorResult(err.message);
+    return errorResult(
+      `Failed to build the coverage report: ${err instanceof Error ? err.message : String(err)}`,
+    );
   }
 }
