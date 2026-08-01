@@ -9,6 +9,10 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### New Features
+
+- With a shared JIRA binding committed to your repo, every `specship sync` now publishes new specs and refreshes changed ones automatically — no per-spec prompt. Unchanged specs perform no JIRA writes (fingerprint short-circuit), any spec can opt out with `jira_publish: false` in its frontmatter, and a failure on one spec never blocks the sync or the others. On an unbound repo, sync behaves exactly as before and makes zero JIRA calls.
+
 
 ## [0.21.2] - 2026-07-28
 

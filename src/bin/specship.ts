@@ -912,10 +912,30 @@ program
       const { default: SpecShip } = await loadSpecShip();
       const cg = await SpecShip.open(projectPath);
 
+      // JIRA auto-publish (REQ-JIRATEAM-002): print the summary the sync's
+      // auto-publish pass produced. Silent when the repo has no binding
+      // (sync omits the field entirely). Never fails or blocks output.
+      const pushJiraAutoPublish = async (result: import('../extraction').SyncResult) => {
+        if (!result.jiraAutoPublish) return;
+        try {
+          const { summarizeAutoPublishReport } = await import('../jira/auto-publish');
+          const line = summarizeAutoPublishReport(result.jiraAutoPublish);
+          if (line) console.log(line);
+          for (const r of result.jiraAutoPublish.results) {
+            if (r.status === 'failed') {
+              console.log(`JIRA: ${r.specId} failed — ${r.note ?? 'unknown error'}`);
+            }
+          }
+        } catch {
+          /* summary is best-effort */
+        }
+      };
+
       if (options.quiet) {
         const result = await cg.sync();
         pushDriftNotices(result);
         await pushJiraDriftComments(cg, result);
+        await pushJiraAutoPublish(result);
         pushDriftSummary(cg);
         cg.destroy();
         return;
@@ -948,6 +968,7 @@ program
 
       pushDriftNotices(result);
       await pushJiraDriftComments(cg, result);
+      await pushJiraAutoPublish(result);
       pushDriftSummary(cg);
       clack.outro('Done');
       cg.destroy();

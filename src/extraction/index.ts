@@ -89,6 +89,12 @@ export interface SyncResult {
    * files changed or the spec pass didn't run.
    */
   driftedTransitions?: import('../resolution/spec-link-resolver').DriftTransition[];
+  /**
+   * Report of the JIRA auto-publish pass (REQ-JIRATEAM-002). Absent when no
+   * binding is present (the pass returns `{ skipped: 'unbound' }` in that
+   * case and SpecShip.sync omits the field).
+   */
+  jiraAutoPublish?: import('../jira/auto-publish').AutoPublishReport;
 }
 
 /**

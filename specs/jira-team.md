@@ -96,6 +96,7 @@ sync.
 implementations:
   - src/jira/publish.ts:publishSpecToJira
   - src/jira/publish.ts:writeBackJiraIdentity
+  - src/jira/auto-publish.ts:autoPublishSpecsOnSync
 
 ## Acceptance
 <!-- id: REQ-JIRATEAM-002.A1 -->
