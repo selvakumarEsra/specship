@@ -51,7 +51,9 @@ lost.
   plan mode, exit it first** (present the spec + the workflow's own gates as
   the plan) — the spec IS the plan, the workflow carries its own plan→approve
   gate, and plan mode blocks the `specship workflow run` launch
-  (REQ-DOORS-007).
+  (REQ-DOORS-007). **On a JIRA-bound repo, first pass the Board-first anchor
+  gate** (see below) — the resolved issue key is attached to the run as
+  `jira: <KEY>` in the spec frontmatter.
 - **`review <SPEC_ID>`** → a read-only rubric pass (see *Review* below); no edits.
 - **`triage <prompt>`** → the triage flow (route a bug / error / one-line
   enhancement to the existing spec it belongs to and append to it): see below.
@@ -383,6 +385,31 @@ targeted per-type questions, and **only on explicit confirmation** `Write` a
 `domain`-kind fact under `specs/domain/` (frontmatter `id: DOM-<AREA>-NNN`,
 `type:` one of term/rule/decision/constraint, linked via `depends_on`/`parent_id`).
 Then `specship sync`.
+
+## Board-first anchor gate (REQ-JIRATEAM-007)
+
+On a JIRA-bound repo, **every work-creating flow** — `implement`, `fast`,
+`triage`-that-writes, and any external `start` — first resolves a JIRA anchor
+before the workflow launches. Read-only routes (`list`, `ideas`, `review`,
+bare `SPEC_ID` detail, `domain`) are **never** gated.
+
+Steps for the gate:
+
+1. Call `mcp__specship__specship_jira_anchor` (or `resolveWorkAnchor` via the
+   library). Pass `issue_key` when the user typed one; otherwise pass
+   `picked_issue_key` when the caller has just picked one from
+   `specship_jira_issues`; otherwise omit both.
+2. **`unbound`** → the repo has no JIRA binding. Proceed unchanged.
+3. **`anchored`** → attach the returned key to the spec's frontmatter as
+   `jira: <KEY>` (if not already present) and pass it into the existing
+   pick→spec→implement pipeline.
+4. **`refused`** → print the tool's refusal verbatim (it already lists the
+   pickable epic-scoped work when applicable) and **exit** — do not run
+   `specship workflow run`. The fix is named (either `jira.epicKey` in
+   `specship.config.json` or a `specship_jira_pick <KEY>`).
+
+Note: `explore`, `search`, `callers`, `callees`, `impact`, `status`,
+`coverage`, and `track` are read-only retrieval and are NOT gated.
 
 ## After editing code for a spec
 

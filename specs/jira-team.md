@@ -307,7 +307,15 @@ no epic, no picked issue — refuses with the fix named. Read-only retrieval
 
 implementations:
   - src/mcp/jira-tools.ts:handleSpecshipJiraIssues
+  - src/mcp/jira-tools.ts:handleSpecshipJiraAnchor
   - src/jira/board-first.ts:resolveWorkAnchor
+  - src/jira/board-first.ts:formatRefusal
+  - src/jira/client.ts:JiraClient.listMyIssues
+  - commands/specship/spec.md
+
+verifies:
+  - __tests__/jira/board-first.test.ts
+  - __tests__/jira/jira-issues-epic-scoping.test.ts
 
 ## Acceptance
 <!-- id: REQ-JIRATEAM-007.A1 -->

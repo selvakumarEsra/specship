@@ -419,6 +419,7 @@ import {
   handleSpecshipJiraReconcile,
   handleSpecshipJiraTransition,
   handleSpecshipJiraAddTask,
+  handleSpecshipJiraAnchor,
 } from './jira-tools';
 
 export const tools: ToolDefinition[] = [
@@ -1332,6 +1333,10 @@ export class ToolHandler {
           // transition moves a tracked issue to a target state (or lists the
           // available ones) — independent of the code graph (REQ-JIRATRANS-001).
           return await handleSpecshipJiraTransition(args);
+        case 'specship_jira_anchor':
+          // Board-first anchor gate (REQ-JIRATEAM-007). Independent of the
+          // code graph — reads the repo binding + optionally calls JIRA.
+          return await handleSpecshipJiraAnchor(args);
         case 'specship_jira_add_task': {
           // add_task creates a discovered task under its epic/story, routed by
           // taskship availability (TASKSHIP-BRIDGE-DOC, REQ-TASKSHIP-003). Needs

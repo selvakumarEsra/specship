@@ -22,7 +22,9 @@ import { spawn } from 'child_process';
 import type { ToolDefinition, ToolResult } from './tools';
 import { detectTaskship, defaultTaskshipProbes, type TaskshipAvailability } from '../taskship/detect';
 import { loadJiraConfig, resolveJiraCredentials } from '../jira/config';
+import { loadRepoJiraBinding } from '../jira/repo-config';
 import { JiraClient, MAX_ISSUE_RESULTS } from '../jira/client';
+import { resolveWorkAnchor, formatRefusal } from '../jira/board-first';
 import {
   JiraError,
   type JiraIssue,
@@ -453,6 +455,29 @@ export const jiraToolDefinitions: ToolDefinition[] = [
     },
   },
   {
+    name: 'specship_jira_anchor',
+    description:
+      'Resolve the board-first work anchor for the current repo (REQ-JIRATEAM-007). ' +
+      'Returns "unbound" when the repo has no JIRA binding (callers proceed unchanged), ' +
+      'the anchored issue when one is explicit/picked, or refuses (with the epic-scoped ' +
+      'pickable list) when a bound repo has no anchor yet. Read-only: never writes.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        issue_key: {
+          type: 'string',
+          description:
+            'Optional: an explicit issue key to anchor on (e.g., "PROJ-123"). Skips the pick step.',
+        },
+        picked_issue_key: {
+          type: 'string',
+          description:
+            'Optional: the key just picked from a specship_jira_issues list — routed as the anchor.',
+        },
+      },
+    },
+  },
+  {
     name: 'specship_jira_add_task',
     description:
       'Add a task you identified mid-implementation under its epic/story. If ' +
@@ -604,7 +629,7 @@ function cell(s: string): string {
  * result hit the fetch cap. The caller relays this verbatim, so the output is
  * self-sufficient. Empty → one explicit line plus a short actionable note.
  */
-function formatIssues(issues: JiraIssue[], opts?: { project?: string }): string {
+function formatIssues(issues: JiraIssue[], opts?: { project?: string; epicKey?: string }): string {
   if (issues.length === 0) {
     return (
       'No issues assigned to you.\n\n' +
@@ -622,6 +647,7 @@ function formatIssues(issues: JiraIssue[], opts?: { project?: string }): string 
 
   const notes: string[] = [];
   if (opts?.project) notes.push(`Filtered to project ${cell(opts.project)}.`);
+  if (opts?.epicKey) notes.push(`Scoped to epic ${cell(opts.epicKey)}.`);
   if (issues.length >= MAX_ISSUE_RESULTS) {
     notes.push(`Showing the ${MAX_ISSUE_RESULTS} most recently updated.`);
   }
@@ -689,7 +715,7 @@ export async function handleSpecshipJiraIssues(
   const notConfigured = notConfiguredResult();
   if (notConfigured) return notConfigured;
 
-  const project =
+  const explicitProject =
     typeof args.project === 'string' && args.project.trim()
       ? args.project.trim()
       : undefined;
@@ -697,11 +723,29 @@ export async function handleSpecshipJiraIssues(
   // recognized value; anything else is ignored (falls back to all issues).
   const sprint = args.sprint === 'active' ? 'active' as const : undefined;
 
+  // Board-first (REQ-JIRATEAM-007.A1): with a repo binding and no explicit
+  // overrides, scope to the bound project's epic so the same tool that
+  // powers the pick flow surfaces the anchor-eligible open work.
+  let epicKey: string | undefined;
+  let project = explicitProject;
+  if (!explicitProject) {
+    try {
+      const { binding } = loadRepoJiraBinding(process.cwd());
+      if (binding) {
+        project = binding.projectKey;
+        if (binding.epicKey) epicKey = binding.epicKey;
+      }
+    } catch {
+      // A malformed repo config already surfaces via other paths; here we
+      // just skip the scoping rather than blocking a listing call.
+    }
+  }
+
   try {
     const creds = resolveJiraCredentials();
     const client = new JiraClient(creds);
-    const result = await client.listMyIssues({ project, sprint });
-    return textResult(formatIssues(result.issues, { project }));
+    const result = await client.listMyIssues({ project, sprint, epicKey });
+    return textResult(formatIssues(result.issues, { project, epicKey }));
   } catch (err) {
     // JiraError messages are credential-free by construction (REQ-JIRA-009).
     if (err instanceof JiraError) {
@@ -709,6 +753,57 @@ export async function handleSpecshipJiraIssues(
     }
     // Defensive: never let an unexpected error leak internals.
     return errorResult('Failed to list JIRA issues.');
+  }
+}
+
+/**
+ * Handle `specship_jira_anchor` (REQ-JIRATEAM-007). Thin wrapper over
+ * `resolveWorkAnchor` so slash-commands and external agents can query the
+ * board-first gate without duplicating logic. Always returns a plain-text
+ * result — anchored → an `Anchor:` line naming the key; refused → the
+ * canonical human refusal (with the pickable list when available); unbound
+ * → a one-liner so callers no-op cleanly.
+ */
+export async function handleSpecshipJiraAnchor(
+  args: Record<string, unknown>,
+): Promise<ToolResult> {
+  const explicitIssueKey =
+    typeof args.issue_key === 'string' && args.issue_key.trim()
+      ? args.issue_key.trim()
+      : undefined;
+  const pickedIssueKey =
+    typeof args.picked_issue_key === 'string' && args.picked_issue_key.trim()
+      ? args.picked_issue_key.trim()
+      : undefined;
+
+  try {
+    // A resolve that needs to call JIRA (explicit/picked key, or the pickable
+    // list on refusal) will hit `resolveJiraCredentials` inside the default
+    // makeClient — gate up-front so an unconfigured caller still gets the
+    // canonical pointer, not a stack.
+    if (explicitIssueKey || pickedIssueKey) {
+      const notConfigured = notConfiguredResult();
+      if (notConfigured) return notConfigured;
+    }
+    const res = await resolveWorkAnchor({
+      cwd: process.cwd(),
+      explicitIssueKey,
+      pickedIssueKey,
+    });
+    if (res.status === 'unbound') {
+      return textResult(
+        'Anchor: unbound — repo has no JIRA binding; work-creating flows proceed unchanged.',
+      );
+    }
+    if (res.status === 'anchored') {
+      return textResult(
+        `Anchor: ${res.anchor.issueKey} — ${res.anchor.summary} (source: ${res.anchor.source})`,
+      );
+    }
+    return errorResult(formatRefusal(res));
+  } catch (err) {
+    if (err instanceof JiraError) return errorResult(err.message);
+    return errorResult('Failed to resolve JIRA anchor.');
   }
 }
 

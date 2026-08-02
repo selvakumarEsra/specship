@@ -124,7 +124,15 @@ export class JiraClient {
    *  - 401 / 403 → `JiraAuthError`; redirect / network / non-200 →
    *    `JiraConfigError` (A4) — never a partial or fabricated list.
    */
-  async listMyIssues(opts?: { project?: string; sprint?: 'active' }): Promise<JiraIssueListResult> {
+  async listMyIssues(opts?: {
+    project?: string;
+    sprint?: 'active';
+    /**
+     * Board-first anchor scope (REQ-JIRATEAM-007.A1): narrow to open
+     * stories/tasks under this epic. Quote-escaped like `project`.
+     */
+    epicKey?: string;
+  }): Promise<JiraIssueListResult> {
     let jql = 'assignee = currentUser()';
     if (opts?.project && opts.project.trim()) {
       // Quote-escape the project so an embedded quote can't break out of the
@@ -138,6 +146,10 @@ export class JiraClient {
     // input), so there is nothing to escape.
     if (opts?.sprint === 'active') {
       jql = `${jql} AND sprint in openSprints()`;
+    }
+    if (opts?.epicKey && opts.epicKey.trim()) {
+      const escapedEpic = opts.epicKey.trim().replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+      jql = `${jql} AND parent = "${escapedEpic}"`;
     }
     jql += ' ORDER BY updated DESC';
 
