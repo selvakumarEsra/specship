@@ -34,6 +34,8 @@ import {
   REG_PACK_OBSOLETE_WATERMARK_PREFIX,
   type BuilderSpecQueries,
   type RegressionPackJiraClient,
+  computeDomainAreasByReqId,
+  renderDomainGapReport,
 } from '../../src/jira/regression-pack';
 import {
   writeRegressionCaseKeys,
@@ -104,10 +106,13 @@ function fakeQueries(opts: {
   linksBySpec?: Record<string, SpecLink[]>;
 }): BuilderSpecQueries {
   const bySpec = opts.linksBySpec ?? {};
+  const byId = new Map<string, Spec>();
+  for (const s of opts.specs) byId.set(s.id, s);
   return {
     getAllSpecs: () => opts.specs,
     getSpecsByParent: (pid: string) => opts.specs.filter((s) => s.parentId === pid),
     getLinksBySpec: (sid: string) => bySpec[sid] ?? [],
+    getSpecById: (id: string) => byId.get(id),
   };
 }
 
@@ -142,7 +147,15 @@ function makeFake(seed: FakeIssue[] = []) {
     async getIssue(key) {
       const i = issues.get(key);
       if (!i) throw new Error(`no such issue ${key}`);
-      return { ok: true, issue: { key: i.key, summary: i.summary, description: i.description } };
+      return {
+        ok: true,
+        issue: {
+          key: i.key,
+          summary: i.summary,
+          description: i.description,
+          ...(i.parentKey ? { parentKey: i.parentKey } : {}),
+        },
+      };
     },
     async createIssue(fields) {
       const key = `${fields.projectKey}-${next++}`;
@@ -162,6 +175,7 @@ function makeFake(seed: FakeIssue[] = []) {
       if (!i) throw new Error(`no such issue ${key}`);
       if (fields.summary !== undefined) i.summary = fields.summary;
       if (fields.description !== undefined) i.description = fields.description;
+      if (fields.parentKey !== undefined) i.parentKey = fields.parentKey;
       updated.push(key);
     },
     async listCommentsDetailed(key) {
@@ -251,10 +265,10 @@ describe('buildRegressionPack — REQ-JIRAREG-001 (A2, A4)', () => {
     expect(model.stories[0].domainArea).toBe('Uncategorised');
   });
 
-  it('groupCasesByDomain is a passthrough in 001 — same input, same output', () => {
+  it('groupCasesByDomain buckets by area — same shape as before REQ-JIRAREG-002', () => {
     const grouped = groupCasesByDomain([
-      { reqId: 'R1', criterionId: 'R1.A1', criterionText: 't', specPath: 's', tier: 'unknown', domainArea: 'Uncategorised' },
-      { reqId: 'R1', criterionId: 'R1.A2', criterionText: 'u', specPath: 's', tier: 'unknown', domainArea: 'Uncategorised' },
+      { reqId: 'R1', criterionId: 'R1.A1', criterionText: 't', specPath: 's', tier: 'unknown', domainArea: 'Uncategorised', areasAll: ['Uncategorised'], kind: 'executable' },
+      { reqId: 'R1', criterionId: 'R1.A2', criterionText: 'u', specPath: 's', tier: 'unknown', domainArea: 'Uncategorised', areasAll: ['Uncategorised'], kind: 'executable' },
     ]);
     expect(grouped.size).toBe(1);
     expect(grouped.get('Uncategorised')).toHaveLength(2);
@@ -403,6 +417,8 @@ describe('regression-pack helpers', () => {
       specPath: 'specs/x.md',
       tier: 'unknown',
       domainArea: 'Uncategorised',
+      areasAll: ['Uncategorised'],
+      kind: 'executable',
     });
     expect(body).toContain('REQ-X-001.A1');
     expect(body).toContain('specs/x.md');
@@ -700,5 +716,217 @@ describe('regression-pack labels', () => {
     const model = buildRegressionPack(sq);
     expect(model.cases[0].label.startsWith(REG_PACK_CASE_LABEL_PREFIX)).toBe(true);
     expect(model.cases[0].label).toContain('req-baz-001');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// REQ-JIRAREG-002 — domain-organised, gaps surfaced, idempotent reorg
+// ---------------------------------------------------------------------------
+
+function makeDomain(id: string, title: string, dependsOn: string | string[]): Spec {
+  return {
+    id,
+    kind: 'domain',
+    title,
+    body: title,
+    format: 'markdown',
+    sourcePath: `specs/domain/${id.toLowerCase()}.md`,
+    contentHash: 'd-hash',
+    version: 1,
+    createdAt: NOW,
+    updatedAt: NOW,
+    metadata: { depends_on: dependsOn },
+  };
+}
+
+describe('computeDomainAreasByReqId — REQ-JIRAREG-002 (walk)', () => {
+  it('finds a domain fact that directly depends_on the requirement', async () => {
+const req = makeReq('REQ-DOM-001', 'Payments');
+    const fact = makeDomain('DOMAIN-PAY', 'Payments', 'REQ-DOM-001');
+    const sq = fakeQueries({ specs: [req, fact] });
+    const idx = computeDomainAreasByReqId(sq);
+    expect(idx.get('REQ-DOM-001')?.map((f) => f.id)).toEqual(['DOMAIN-PAY']);
+  });
+
+  it('reaches a requirement transitively through a chained domain fact', () => {
+    // fact-detail depends_on fact-area; fact-area depends_on the requirement.
+    // Both facts count as areas the requirement inherits — the 2-hop shape
+    // the SpecLinkResolver walk supports (REQ-DOMAIN-002).
+    const req = makeReq('REQ-CHAIN-001', 'Chain');
+    const factArea = makeDomain('DOMAIN-AREA', 'Area', 'REQ-CHAIN-001');
+    const factDetail = makeDomain('DOMAIN-DETAIL', 'Detail', 'DOMAIN-AREA');
+    const sq = fakeQueries({ specs: [req, factArea, factDetail] });
+    const idx = computeDomainAreasByReqId(sq);
+    expect(idx.get('REQ-CHAIN-001')?.map((f) => f.id)).toEqual([
+      'DOMAIN-AREA',
+      'DOMAIN-DETAIL',
+    ]);
+  });
+
+  it('is cycle-safe when specs depend on each other', () => {
+    // Two facts point at each other AND at the requirement. Both facts govern
+    // the requirement; the BFS must terminate and each (req, fact) pair
+    // appears at most once.
+    const req = makeReq('REQ-CYC-001', 'Cycle');
+    const factA = makeDomain('DOMAIN-CA', 'A', ['DOMAIN-CB', 'REQ-CYC-001']);
+    const factB = makeDomain('DOMAIN-CB', 'B', ['DOMAIN-CA']);
+    const sq = fakeQueries({ specs: [req, factA, factB] });
+    const idx = computeDomainAreasByReqId(sq);
+    expect(idx.get('REQ-CYC-001')?.map((f) => f.id)).toEqual([
+      'DOMAIN-CA',
+      'DOMAIN-CB',
+    ]);
+  });
+
+  it('records both facts when two domain facts point at the same requirement, sorted by id', async () => {
+const req = makeReq('REQ-TWO-001', 'Two');
+    const factZ = makeDomain('DOMAIN-Z', 'Zed', 'REQ-TWO-001');
+    const factA = makeDomain('DOMAIN-A', 'Alpha', 'REQ-TWO-001');
+    const sq = fakeQueries({ specs: [req, factZ, factA] });
+    const idx = computeDomainAreasByReqId(sq);
+    expect(idx.get('REQ-TWO-001')?.map((f) => f.id)).toEqual(['DOMAIN-A', 'DOMAIN-Z']);
+  });
+});
+
+describe('buildRegressionPack — REQ-JIRAREG-002 (areas, cross-refs, gaps)', () => {
+  it('A1 single domain fact: case files under that fact\'s area', () => {
+    const req = makeReq('REQ-ONE-001', 'Only');
+    const a1 = makeAcceptance('REQ-ONE-001.A1', req.id, 'A1 body.', req.sourcePath);
+    const fact = makeDomain('DOMAIN-PAY', 'Payments', 'REQ-ONE-001');
+    const sq = fakeQueries({
+      specs: [req, a1, fact],
+      linksBySpec: { [req.id]: [makeLink(req.id, 'implements', 'implemented')] },
+    });
+    const model = buildRegressionPack(sq);
+    expect(model.cases).toHaveLength(1);
+    expect(model.cases[0].kind).toBe('executable');
+    expect(model.stories).toHaveLength(1);
+    expect(model.stories[0].domainArea).toBe('Payments');
+    expect(model.domainGaps).toEqual([]);
+  });
+
+  it('A1 two facts: one executable + one cross-ref, deterministic ordering', () => {
+    const req = makeReq('REQ-TWO-001', 'Two');
+    const a1 = makeAcceptance('REQ-TWO-001.A1', req.id, 'text.', req.sourcePath);
+    // Titles that would sort A after B — proves we sort by ID, not title.
+    const factA = makeDomain('DOMAIN-A', 'Zeta', 'REQ-TWO-001');
+    const factB = makeDomain('DOMAIN-B', 'Alpha', 'REQ-TWO-001');
+    const sq = fakeQueries({
+      specs: [req, a1, factA, factB],
+      linksBySpec: { [req.id]: [makeLink(req.id, 'implements', 'implemented')] },
+    });
+    const model = buildRegressionPack(sq);
+    // Two case rows: executable under DOMAIN-A ('Zeta'), cross-ref under DOMAIN-B ('Alpha').
+    expect(model.cases).toHaveLength(2);
+    const exec = model.cases.find((c) => c.kind === 'executable')!;
+    const xref = model.cases.find((c) => c.kind === 'crossref')!;
+    expect(exec.criterionId).toBe('REQ-TWO-001.A1');
+    expect(xref.criterionId).toBe('REQ-TWO-001.A1');
+    expect(exec.label.startsWith(REG_PACK_CASE_LABEL_PREFIX)).toBe(true);
+    expect(xref.label.startsWith('specship-regxref-')).toBe(true);
+    // Cross-ref body points back at the executable area (Zeta = DOMAIN-A's title).
+    expect(xref.description).toContain('Zeta');
+  });
+
+  it('A2 no domain link: case files under Uncategorised and a gap is reported', () => {
+    const req = makeReq('REQ-GAP-001', 'Gap');
+    const a1 = makeAcceptance('REQ-GAP-001.A1', req.id, 'x.', req.sourcePath);
+    const sq = fakeQueries({
+      specs: [req, a1],
+      linksBySpec: { [req.id]: [makeLink(req.id, 'implements', 'implemented')] },
+    });
+    const model = buildRegressionPack(sq);
+    expect(model.stories.map((s) => s.domainArea)).toEqual(['Uncategorised']);
+    expect(model.domainGaps).toEqual([
+      { reqId: 'REQ-GAP-001', specPath: req.sourcePath },
+    ]);
+    const report = renderDomainGapReport(model.domainGaps);
+    expect(report).toContain('/specship:spec domain');
+    expect(report).toContain('REQ-GAP-001');
+  });
+});
+
+describe('upsertRegressionPack — REQ-JIRAREG-002 (idempotent reorg, xref idempotency)', () => {
+  it('A3 moving a case from Uncategorised into a new area reparents in place — same key, no duplicate', async () => {
+    const req = makeReq('REQ-MOVE-001', 'Move');
+    const a1 = makeAcceptance('REQ-MOVE-001.A1', req.id, 'text.', req.sourcePath);
+    // First run: no domain fact → Uncategorised.
+    const sqBefore = fakeQueries({
+      specs: [req, a1],
+      linksBySpec: { [req.id]: [makeLink(req.id, 'implements', 'implemented')] },
+    });
+    const before = buildRegressionPack(sqBefore);
+    const fake = makeFake();
+    const first = await upsertRegressionPack(fake.client, before, { projectKey: 'PROJ' });
+    const caseKey = first.caseKeysByCriterion['REQ-MOVE-001.A1'];
+    expect(caseKey).toBeTruthy();
+    const uncatStoryKey = fake.issues.get(caseKey)!.parentKey!;
+
+    // Second run: add a domain fact → area is now "Payments".
+    const fact = makeDomain('DOMAIN-PAY', 'Payments', 'REQ-MOVE-001');
+    const sqAfter = fakeQueries({
+      specs: [req, a1, fact],
+      linksBySpec: { [req.id]: [makeLink(req.id, 'implements', 'implemented')] },
+    });
+    const after = buildRegressionPack(sqAfter);
+
+    fake.created.length = 0;
+    fake.updated.length = 0;
+    fake.commentsAdded.length = 0;
+    fake.labelsAdded.length = 0;
+    const result = await upsertRegressionPack(fake.client, after, { projectKey: 'PROJ' });
+
+    // Same case key — no duplicate.
+    expect(result.caseKeysByCriterion['REQ-MOVE-001.A1']).toBe(caseKey);
+    // Case's parent now points at the new Payments story (not the old Uncat one).
+    const newParent = fake.issues.get(caseKey)!.parentKey!;
+    expect(newParent).not.toBe(uncatStoryKey);
+    expect(fake.issues.get(newParent)!.summary).toContain('Payments');
+    // The case issue was updated (parent reassignment or body drift both count).
+    expect(fake.updated).toContain(caseKey);
+  });
+
+  it('a second identical run does not rewrite the parent (parent no-op)', async () => {
+    const req = makeReq('REQ-NOP-001', 'Nop');
+    const a1 = makeAcceptance('REQ-NOP-001.A1', req.id, 'text.', req.sourcePath);
+    const fact = makeDomain('DOMAIN-NOP', 'Nopland', 'REQ-NOP-001');
+    const sq = fakeQueries({
+      specs: [req, a1, fact],
+      linksBySpec: { [req.id]: [makeLink(req.id, 'implements', 'implemented')] },
+    });
+    const model = buildRegressionPack(sq);
+    const fake = makeFake();
+    await upsertRegressionPack(fake.client, model, { projectKey: 'PROJ' });
+    fake.created.length = 0;
+    fake.updated.length = 0;
+    const result = await upsertRegressionPack(fake.client, model, { projectKey: 'PROJ' });
+    expect(result.casesUpdated).toBe(0);
+    expect(result.casesSkipped).toBe(1);
+    expect(fake.updated).toHaveLength(0);
+  });
+
+  it('cross-ref idempotency: a re-run with two facts skips the executable AND the cross-ref', async () => {
+    const req = makeReq('REQ-XREF-001', 'Xref');
+    const a1 = makeAcceptance('REQ-XREF-001.A1', req.id, 'text.', req.sourcePath);
+    const factA = makeDomain('DOMAIN-A', 'A', 'REQ-XREF-001');
+    const factB = makeDomain('DOMAIN-B', 'B', 'REQ-XREF-001');
+    const sq = fakeQueries({
+      specs: [req, a1, factA, factB],
+      linksBySpec: { [req.id]: [makeLink(req.id, 'implements', 'implemented')] },
+    });
+    const model = buildRegressionPack(sq);
+    const fake = makeFake();
+    await upsertRegressionPack(fake.client, model, { projectKey: 'PROJ' });
+    fake.created.length = 0;
+    fake.updated.length = 0;
+    const result = await upsertRegressionPack(fake.client, model, { projectKey: 'PROJ' });
+    expect(result.casesCreated).toBe(0);
+    expect(result.casesUpdated).toBe(0);
+    expect(result.casesSkipped).toBe(1);
+    expect(result.crossRefsCreated).toBe(0);
+    expect(result.crossRefsUpdated).toBe(0);
+    expect(result.crossRefsSkipped).toBe(1);
+    expect(fake.created).toHaveLength(0);
+    expect(fake.updated).toHaveLength(0);
   });
 });

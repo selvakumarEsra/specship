@@ -86,9 +86,17 @@ requirements as domain gaps with the capture hand-off — organising the pack
 is also how the domain vocabulary gets completed.
 
 implementations:
+  - src/jira/regression-pack.ts:buildRegressionPack
+  - src/jira/regression-pack.ts:computeDomainAreasByReqId
   - src/jira/regression-pack.ts:groupCasesByDomain
-  - src/resolution/spec-link-resolver.ts:SpecLinkResolver.getInheritedLinks
-  - src/resolution/domain-gap-seed.ts:computeDomainGapSeed
+  - src/jira/regression-pack.ts:renderCrossReferenceBody
+  - src/jira/regression-pack.ts:renderDomainGapReport
+  - src/jira/regression-pack.ts:upsertLabelledIssue
+  - src/jira/client.ts:JiraClient.updateIssue
+  - src/resolution/spec-link-resolver.ts:sourceSpecIds
+
+verifies:
+  - __tests__/jira/regression-pack.test.ts
 
 ## Acceptance
 <!-- id: REQ-JIRAREG-002.A1 -->

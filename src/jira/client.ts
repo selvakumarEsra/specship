@@ -567,7 +567,7 @@ export class JiraClient {
    */
   async updateIssue(
     key: string,
-    fields: { summary?: string; description?: string },
+    fields: { summary?: string; description?: string; parentKey?: string },
   ): Promise<void> {
     const trimmed = (key ?? '').trim();
     if (!trimmed) {
@@ -576,6 +576,11 @@ export class JiraClient {
     const patch: Record<string, unknown> = {};
     if (fields.summary !== undefined) patch.summary = fields.summary;
     if (fields.description !== undefined) patch.description = fields.description;
+    // Parent reassignment (REQ-JIRAREG-002.A3) — a Sub-task or child issue can
+    // be moved to a new Story/Epic parent without touching its body. JIRA
+    // expects `fields.parent: { key: "PROJ-N" }`; caller is responsible for
+    // skipping the write when the parent hasn't changed.
+    if (fields.parentKey !== undefined) patch.parent = { key: fields.parentKey };
     if (Object.keys(patch).length === 0) return;
     await this.write(
       `/rest/api/2/issue/${encodeURIComponent(trimmed)}`,
