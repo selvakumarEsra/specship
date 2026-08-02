@@ -55,7 +55,10 @@ issue key.
 implementations:
   - src/jira/regression-pack.ts:buildRegressionPack
   - src/jira/regression-pack.ts:upsertRegressionPack
-  - src/jira/client.ts:JiraClient.createIssue
+  - src/jira/regression-pack.ts:renderCaseSteps
+  - src/jira/spec-writer.ts:writeRegressionCaseKeys
+  - src/jira/client.ts:JiraClient.searchIssuesByLabel
+  - src/mcp/jira-tools.ts:handleSpecshipJiraRegressionPack
 
 ## Acceptance
 <!-- id: REQ-JIRAREG-001.A1 -->

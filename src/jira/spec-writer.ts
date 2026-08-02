@@ -136,3 +136,129 @@ export function writeSpecFromIssue(
   fs.writeFileSync(target, markdown, 'utf8');
   return { path: target, created };
 }
+
+// ---------------------------------------------------------------------------
+// Regression-pack back-link (REQ-JIRAREG-001.A3)
+// ---------------------------------------------------------------------------
+
+const ID_MARKER_LINE = /^\s*<!--\s*id:\s*([^\s]+)\s*-->\s*$/;
+const REG_BULLET = /^\s*[-*]\s+([A-Z][A-Z0-9]+-\d+)\s*$/;
+const SECTION_HEADING = /^#{1,6}\s+/;
+const SPEC_KEYWORD_BLOCK = /^(implementations|verifies|regression_cases):\s*$/;
+
+/**
+ * Insert or update a `regression_cases:` back-link under the acceptance
+ * criterion marked `<!-- id: criterionId -->` (REQ-JIRAREG-001.A3). The block
+ * is trace-only metadata the markdown spec extractor ignores by design —
+ * `implementations:` and `verifies:` are the only keywords the extractor
+ * recognises, so a `regression_cases:` block cannot silently absorb their
+ * bullets. Idempotent: a re-run with the same key is a no-op.
+ *
+ * Returns `{ ok, changed, detail }` mirroring `writeBackImplementation`;
+ * never throws past a read/write failure.
+ */
+export function writeRegressionCaseKeys(
+  specPath: string,
+  criterionId: string,
+  issueKey: string,
+): { ok: boolean; changed: boolean; detail: string } {
+  try {
+    const source = fs.readFileSync(specPath, 'utf8');
+    const res = addRegressionCaseKeyToSource(source, criterionId, issueKey);
+    if (!res.changed) {
+      return {
+        ok: res.reason !== 'criterion-id-not-found',
+        changed: false,
+        detail:
+          res.reason === 'already-present'
+            ? 'regression_cases: block already lists this key'
+            : `marker <!-- id: ${criterionId} --> not found in ${specPath}`,
+      };
+    }
+    fs.writeFileSync(specPath, res.source, 'utf8');
+    return {
+      ok: true,
+      changed: true,
+      detail: `regression_cases: entry written to ${specPath}`,
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      changed: false,
+      detail: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+/** Pure text transform — extracted so the extractor-safety test drives it directly. */
+export function addRegressionCaseKeyToSource(
+  source: string,
+  criterionId: string,
+  issueKey: string,
+): { changed: boolean; source: string; reason?: 'already-present' | 'criterion-id-not-found' } {
+  const lines = source.split('\n');
+
+  let markerIdx = -1;
+  for (let i = 0; i < lines.length; i++) {
+    const m = (lines[i] ?? '').match(ID_MARKER_LINE);
+    if (m && m[1] === criterionId) {
+      markerIdx = i;
+      break;
+    }
+  }
+  if (markerIdx === -1) {
+    return { changed: false, source, reason: 'criterion-id-not-found' };
+  }
+
+  // Body of a criterion ends at the next id marker or heading — same
+  // structural boundary the extractor uses.
+  const bodyStart = markerIdx + 1;
+  let bodyEnd = lines.length;
+  for (let i = bodyStart; i < lines.length; i++) {
+    const line = lines[i] ?? '';
+    if (SECTION_HEADING.test(line) || ID_MARKER_LINE.test(line)) {
+      bodyEnd = i;
+      break;
+    }
+  }
+
+  let blockIdx = -1;
+  for (let i = bodyStart; i < bodyEnd; i++) {
+    if (/^regression_cases:\s*$/.test(lines[i] ?? '')) {
+      blockIdx = i;
+      break;
+    }
+  }
+
+  const bullet = `  - ${issueKey}`;
+
+  if (blockIdx !== -1) {
+    let lastBullet = blockIdx;
+    for (let i = blockIdx + 1; i < bodyEnd; i++) {
+      const line = lines[i] ?? '';
+      if (line.trim() === '') break;
+      const m = line.match(REG_BULLET);
+      if (!m) {
+        // Any non-matching non-blank line terminates the block cleanly —
+        // in particular an `implementations:` / `verifies:` keyword just
+        // below cannot be swept in.
+        if (SPEC_KEYWORD_BLOCK.test(line.trim())) break;
+        break;
+      }
+      if (m[1] === issueKey) {
+        return { changed: false, source, reason: 'already-present' };
+      }
+      lastBullet = i;
+    }
+    lines.splice(lastBullet + 1, 0, bullet);
+    return { changed: true, source: lines.join('\n') };
+  }
+
+  // No block yet — insert one, terminated by a blank line so the extractor's
+  // next-keyword scan cannot bleed across it.
+  let insertAt = bodyEnd;
+  while (insertAt > bodyStart && (lines[insertAt - 1] ?? '').trim() === '') insertAt--;
+  const block = ['', 'regression_cases:', bullet, ''];
+  lines.splice(insertAt, 0, ...block);
+  return { changed: true, source: lines.join('\n') };
+}

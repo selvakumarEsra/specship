@@ -4151,6 +4151,43 @@ jira
     }
   });
 
+/**
+ * specship jira regression-pack — generate or refresh the SpecShip Regression
+ * Pack in the bound JIRA project (REQ-JIRAREG-001). Idempotent; --dry-run
+ * prints the plan without any JIRA write.
+ */
+jira
+  .command('regression-pack')
+  .description('Generate / refresh the SpecShip Regression Pack in the bound JIRA project.')
+  .option('--project <key>', 'JIRA project key (default: configured publish project)')
+  .option('--dry-run', 'plan the pack and print counts without any JIRA write')
+  .option('--path <projectRoot>', 'project root (default: cwd)')
+  .action(async (options: { project?: string; dryRun?: boolean; path?: string }) => {
+    const projectRoot = path.resolve(options.path ?? process.cwd());
+    if (!isInitialized(projectRoot)) {
+      error(`SpecShip not initialized in ${projectRoot}. Run \`specship init -i\` first.`);
+      process.exit(1);
+    }
+    const { SpecShip } = await loadSpecShip();
+    const { handleSpecshipJiraRegressionPack } = await import('../mcp/jira-tools');
+    const cg = await SpecShip.open(projectRoot);
+    try {
+      const args: Record<string, unknown> = {};
+      if (options.project) args.project = options.project;
+      if (options.dryRun) args.dry_run = true;
+      const result = await handleSpecshipJiraRegressionPack(args, {
+        specQueries: cg.getSpecQueries(),
+        projectRoot,
+      });
+      const out = result.content.map((c) => c.text).join('\n');
+      // eslint-disable-next-line no-console
+      console.log(out);
+      if (result.isError) process.exit(1);
+    } finally {
+      cg.close();
+    }
+  });
+
 // Parse and run
 program.parse();
 
