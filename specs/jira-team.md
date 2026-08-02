@@ -346,10 +346,10 @@ pick/start) rather than duplicating it; the menu is the guided path, not a
 second implementation.
 
 implementations:
+  - commands/specship/jira.md
   - src/jira/client.ts:JiraClient.listEpics
   - src/mcp/jira-tools.ts:handleSpecshipJiraEpics
   - src/jira/repo-config.ts:updateRepoJiraBinding
-  - commands/specship/jira.md
 
 verifies:
   - __tests__/jira/jira-menu.test.ts
@@ -369,3 +369,4 @@ verifies:
 <!-- id: REQ-JIRATEAM-008.A4 -->
 - With JIRA unconfigured, the menu still opens and leads with the configure
   path instead of erroring.
+

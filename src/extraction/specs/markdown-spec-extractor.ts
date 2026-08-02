@@ -748,7 +748,14 @@ export class MarkdownSpecExtractor {
         const subline = (bodyLines[j] ?? '').trim();
         if (subline === '') continue;
         const m = subline.match(IMPL_REF);
-        if (!m) break;
+        if (!m) {
+          // A bullet that isn't `path:Symbol` (e.g. a bare-path pointer to a
+          // command markdown file) is a documented no-edge entry — skip it
+          // WITHOUT ending the block, so bullets after it still link
+          // (REQ-LINKWB-002.A3). Only a non-bullet line ends the block.
+          if (/^[-*]\s/.test(subline)) continue;
+          break;
+        }
         const refPath = m[1];
         const refSymbol = m[2];
         if (!refPath || !refSymbol) continue;

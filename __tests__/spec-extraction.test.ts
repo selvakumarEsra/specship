@@ -106,6 +106,32 @@ implementations:
     expect(result.linkCandidates[1]!.targetFilePath).toBe('src/auth/rate-limit.ts');
   });
 
+  // REQ-LINKWB-002.A3 — a bare-path bullet (documented no-edge pointer, e.g. a
+  // command markdown file) must be SKIPPED, not terminate the block. Regression:
+  // a bare path listed first silently killed every symbol bullet after it.
+  it('skips a bare-path bullet without terminating the implementations: block', () => {
+    const source = `---
+id: DOC
+---
+<!-- id: REQ-1 -->
+# A requirement
+
+implementations:
+  - commands/specship/jira.md
+  - src/auth/login.ts:authenticate
+  - also not a link bullet here
+  - src/auth/rate-limit.ts:enforce
+
+Body text ends the block.
+  - src/never/reached.ts:tooLate
+`;
+    const result = new MarkdownSpecExtractor('specs/x.md', source).extract();
+    expect(result.linkCandidates.map((c) => c.targetQualifiedName)).toEqual([
+      'authenticate',
+      'enforce',
+    ]);
+  });
+
   it('builds 3-level hierarchy: document → requirement → acceptance', () => {
     const source = `---
 id: DOC

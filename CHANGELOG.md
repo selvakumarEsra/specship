@@ -9,6 +9,10 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixes
+
+- Fixed a spec-indexing bug where a bare-path pointer (an `implementations:` bullet without a `:Symbol`, such as a pointer to a slash-command markdown file) listed before symbol bullets silently prevented every entry after it from producing a spec link. Non-symbol bullets are now skipped and the rest of the block links normally, regardless of bullet order.
+
 ### New Features
 
 - Teams can now commit a shared JIRA project binding to their repo, so every teammate and CI run targets the same JIRA project with zero per-machine setup. The binding carries only project identity (project key, issue types, board) — credentials stay in your user profile, and a credential accidentally placed in the repo file is rejected with an error naming the file and field. A binding that points at a project you can't access fails loudly with the project and host named, never silently falling back.
