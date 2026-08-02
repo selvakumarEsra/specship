@@ -422,6 +422,7 @@ import {
   handleSpecshipJiraAnchor,
   handleSpecshipJiraEpics,
   handleSpecshipJiraRegressionPack,
+  handleSpecshipJiraRegressionRecord,
 } from './jira-tools';
 
 export const tools: ToolDefinition[] = [
@@ -1349,6 +1350,16 @@ export class ToolHandler {
           // the project root to probe for taskship + spawn its CLI.
           const cg = this.getSpecShip(args.projectPath as string | undefined);
           return await handleSpecshipJiraAddTask(args, { projectRoot: cg.getProjectRoot() });
+        }
+        case 'specship_jira_regression_record': {
+          // Recorder for a single pack case result (REQ-JIRAREG-005). Needs
+          // the spec queries so it can upsert the validates-kind evidence
+          // link back onto the source criterion.
+          const cg = this.getSpecShip(args.projectPath as string | undefined);
+          return await handleSpecshipJiraRegressionRecord(args, {
+            specQueries: cg.getSpecQueries(),
+            projectRoot: cg.getProjectRoot(),
+          });
         }
         case 'specship_jira_regression_pack': {
           // Regression-pack generator (REQ-JIRAREG-001). Reads the loaded spec

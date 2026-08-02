@@ -21,12 +21,18 @@
  */
 
 import * as crypto from 'crypto';
-import type { Node, Spec, SpecLink } from '../types';
+import type { Node, Spec, SpecLink, SpecLinkState } from '../types';
 import {
   sourceSpecIds,
   INHERITED_LINK_MAX_DEPTH,
 } from '../resolution/spec-link-resolver';
 import { computeBehaviourSurface } from '../behaviour/behaviour-surface';
+import {
+  postMilestoneComment,
+  type MilestoneJiraClient,
+  type PostMilestoneResult,
+  type PackRunEvidence,
+} from './milestone-comment';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -1142,29 +1148,303 @@ export async function markCaseObsolete(
 }
 
 // ---------------------------------------------------------------------------
-// Run-result recorder — STUB (full body lands in REQ-JIRAREG-005).
+// Run-result recorder (REQ-JIRAREG-005)
 // ---------------------------------------------------------------------------
 
+/** The four terminal outcomes a pack run can report per case. */
+export type RegressionRunStatus = 'passed' | 'failed' | 'unexecuted' | 'obsolete';
+
+/** Who / what executed the case. */
+export type RegressionRunExecutor = 'human' | 'agent';
+
+/** Optional behaviour-harness identifier for agent-executed cases. */
+export type RegressionRunHarness = 'behaviour-e2e' | 'manual';
+
+/** One case result recorded by a pack run (REQ-JIRAREG-005). */
 export interface RegressionRunResult {
+  /** JIRA case key (e.g. `PROJ-42`). */
   caseKey: string;
-  verdict: 'passed' | 'failed' | 'skipped';
-  evidenceUrl?: string;
+  /** Source acceptance criterion id (e.g. `REQ-FOO-001.A2`). */
+  criterionId: string;
+  status: RegressionRunStatus;
+  executor: RegressionRunExecutor;
+  /** Behaviour-harness id when the agent executed the case; omit for manual. */
+  harness?: RegressionRunHarness;
+  /**
+   * Stable run identifier. A single run identifier per suite pass keys the
+   * comment-upsert (one comment per case per runId). Omit only for a one-off
+   * ad-hoc record — the recorder synthesises a timestamped id in that case.
+   */
+  runId?: string;
+  /** Freeform evidence pointers (log lines, error strings — never credentials). */
+  evidence?: {
+    logRef?: string;
+    error?: string;
+  };
+}
+
+/** Prefix of the recorder-owned comment marker. Body carries the runId + status. */
+export const REG_PACK_RUN_MARKER_PREFIX = '<!-- specship:regression-run';
+
+function runMarker(caseKey: string, runId: string): string {
+  return `${REG_PACK_RUN_MARKER_PREFIX} case=${caseKey} run=${runId} -->`;
 }
 
 /**
- * Record a pack-run result on a case issue. REQ-JIRAREG-001 keeps this a thin
- * stub — the full behaviour (watermarked comment upsert + `validates`-link
- * feedback into the graph) is REQ-JIRAREG-005's contract. Returns the intended
- * summary line so callers can preview.
+ * Structural client slice for the recorder — a superset of the pack upsert
+ * client with the comment-edit + workflow-transition surface.
  */
-export function recordRunResult(
-  _client: unknown,
-  result: RegressionRunResult,
-): { pending: true; summary: string } {
-  const parts = [`${result.caseKey}: ${result.verdict}`];
-  if (result.evidenceUrl) parts.push(result.evidenceUrl);
-  return {
-    pending: true,
-    summary: parts.join(' — ') + ' (REQ-JIRAREG-005 will land the full recorder)',
+export interface RunResultJiraClient extends MilestoneJiraClient {
+  transitionIssue(
+    key: string,
+    nameOrId: string,
+  ): Promise<{ ok: true; transitioned?: string; skipped?: string; reason?: string }>;
+}
+
+/**
+ * Minimal SpecQueries surface the recorder needs to upsert a `validates`
+ * spec-link pointing at the JIRA case as external evidence. Structural so
+ * tests can pass a fixture without wiring the full `SpecQueries` class.
+ */
+export interface RunResultSpecQueries {
+  getSpecById(id: string): Spec | undefined | null;
+  findLogicalLink(
+    specId: string,
+    targetFilePath: string,
+    targetQualifiedName: string,
+    kind: SpecLink['kind'],
+  ): SpecLink | null;
+  upsertSpecLink(link: Omit<SpecLink, 'id'>): number;
+  updateSpecLinkState(
+    id: number,
+    state: SpecLinkState,
+    driftAxis?: SpecLink['driftAxis'],
+    updatedAt?: number,
+  ): void;
+}
+
+export interface RecordRunResultDeps {
+  client: RunResultJiraClient;
+  /** Optional graph writer — omit to skip the spec-link write (comment-only). */
+  specQueries?: RunResultSpecQueries;
+  /** Injectable clock — tests pin the run timestamp. */
+  now?: () => number;
+  /** Workflow transition names to try; use the client's graceful-skip path. */
+  transitions?: {
+    passed?: string;
+    failed?: string;
   };
+}
+
+export interface RecordRunResultOutcome {
+  pending: false;
+  status: RegressionRunStatus;
+  /** Whether a `validates`-kind spec_link row was upserted or updated. */
+  linked: boolean;
+  /** Comment upsert outcome. */
+  comment: 'created' | 'updated' | 'skipped';
+  /** Transition outcome — `skipped` covers workflow-graceful skips + unexecuted. */
+  transition: 'moved' | 'skipped';
+  /** Present when status === 'failed'; the triage hand-off shown in the comment. */
+  triageHint?: string;
+}
+
+/** Rendered triage pointer surfaced on `failed` results (REQ-JIRAREG-005.A3). */
+function triageHint(criterionId: string): string {
+  return `Failed — triage with \`/specship:spec triage ${criterionId}\`.`;
+}
+
+function renderRunCommentBody(
+  result: RegressionRunResult,
+  runId: string,
+  timestamp: string,
+): string {
+  const lines: string[] = [];
+  lines.push(runMarker(result.caseKey, runId));
+  lines.push('');
+  lines.push(`SpecShip: regression run ${runId} recorded ${result.status}.`);
+  lines.push(`- Criterion: ${result.criterionId}`);
+  lines.push(`- Executor: ${result.executor}${result.harness ? ` (${result.harness})` : ''}`);
+  lines.push(`- Recorded: ${timestamp}`);
+  if (result.evidence?.logRef) lines.push(`- Log: ${result.evidence.logRef}`);
+  if (result.evidence?.error) lines.push(`- Error: ${result.evidence.error}`);
+  if (result.status === 'failed') {
+    lines.push('');
+    lines.push(triageHint(result.criterionId));
+  }
+  return lines.join('\n');
+}
+
+/**
+ * Record a pack-run result on a case issue (REQ-JIRAREG-005).
+ *
+ * Idempotent by (caseKey, runId): a second call with the same pair edits the
+ * prior comment in place. Pass → `Done` transition + validates-link state
+ * `verified`. Fail → `In Review` + `broken` + a triage hint line. Unexecuted →
+ * comment only; the case's workflow status and any existing validates-link
+ * state stay untouched (A3). External-evidence links use `jira://<CASE-KEY>`
+ * as the `targetFilePath` — {@link SpecLinkResolver} refuses to re-resolve
+ * that prefix, so a code-graph sync never flips the state to orphaned.
+ */
+export async function recordRunResult(
+  deps: RecordRunResultDeps,
+  result: RegressionRunResult,
+): Promise<RecordRunResultOutcome> {
+  const now = deps.now ?? Date.now;
+  const runId = (result.runId && result.runId.trim()) || `adhoc-${now()}`;
+  const marker = runMarker(result.caseKey, runId);
+  const body = renderRunCommentBody(result, runId, new Date(now()).toISOString());
+
+  // Comment upsert — keyed on (caseKey, runId) so a re-record edits in place.
+  const existing = await deps.client.listCommentsDetailed(result.caseKey);
+  const prior = existing.find((c) => c.body.startsWith(marker));
+  let commentAction: 'created' | 'updated' | 'skipped';
+  if (prior) {
+    if (prior.body === body) {
+      commentAction = 'skipped';
+    } else {
+      await deps.client.updateComment(result.caseKey, prior.id, body);
+      commentAction = 'updated';
+    }
+  } else {
+    await deps.client.addComment(result.caseKey, body);
+    commentAction = 'created';
+  }
+
+  // Transition — pass/fail only. Unexecuted + obsolete never touch workflow.
+  const transitions = deps.transitions ?? { passed: 'Done', failed: 'In Review' };
+  let transitionAction: 'moved' | 'skipped' = 'skipped';
+  if (result.status === 'passed' && transitions.passed) {
+    const t = await deps.client.transitionIssue(result.caseKey, transitions.passed);
+    transitionAction = t.transitioned ? 'moved' : 'skipped';
+  } else if (result.status === 'failed' && transitions.failed) {
+    const t = await deps.client.transitionIssue(result.caseKey, transitions.failed);
+    transitionAction = t.transitioned ? 'moved' : 'skipped';
+  }
+
+  // Validates-link upsert — jira://<CASE-KEY> is the external evidence
+  // pointer. Unexecuted / obsolete leave any existing link's state UNTOUCHED.
+  let linked = false;
+  if (deps.specQueries && (result.status === 'passed' || result.status === 'failed')) {
+    const nextState: SpecLinkState = result.status === 'passed' ? 'verified' : 'broken';
+    const targetFilePath = `jira://${result.caseKey}`;
+    const targetQualifiedName = result.caseKey;
+    const existingLink = deps.specQueries.findLogicalLink(
+      result.criterionId,
+      targetFilePath,
+      targetQualifiedName,
+      'validates',
+    );
+    const spec = deps.specQueries.getSpecById(result.criterionId);
+    const specHash = spec?.contentHash ?? existingLink?.specHashAtLink ?? '';
+    const ts = now();
+    const metadata: Record<string, unknown> = {
+      runId,
+      status: result.status,
+      executor: result.executor,
+    };
+    if (result.harness) metadata.harness = result.harness;
+    if (result.evidence) metadata.evidence = result.evidence;
+
+    if (existingLink) {
+      // Refresh metadata + state via updateSpecLinkState — the row already
+      // exists on the correct logical key so we don't need to re-upsert.
+      deps.specQueries.updateSpecLinkState(existingLink.id, nextState, null, ts);
+    } else {
+      deps.specQueries.upsertSpecLink({
+        specId: result.criterionId,
+        targetFilePath,
+        targetQualifiedName,
+        targetNodeKind: 'file',
+        kind: 'validates',
+        state: nextState,
+        driftAxis: null,
+        specHashAtLink: specHash,
+        provenance: 'agent-asserted',
+        confidence: 1.0,
+        metadata,
+        createdAt: ts,
+        updatedAt: ts,
+      });
+    }
+    linked = true;
+  }
+
+  return {
+    pending: false,
+    status: result.status,
+    linked,
+    comment: commentAction,
+    transition: transitionAction,
+    ...(result.status === 'failed' ? { triageHint: triageHint(result.criterionId) } : {}),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Pack-run summary (REQ-JIRAREG-005.A4)
+// ---------------------------------------------------------------------------
+
+export interface PackRunSummary {
+  runId: string;
+  results: RegressionRunResult[];
+  startedAt?: string;
+  finishedAt?: string;
+}
+
+/** Aggregate per-result counts + triage list from a run's recorded results. */
+export function summarizePackRun(summary: PackRunSummary): PackRunEvidence {
+  let passed = 0;
+  let failed = 0;
+  let unexecuted = 0;
+  let obsolete = 0;
+  const triage = new Set<string>();
+  for (const r of summary.results) {
+    switch (r.status) {
+      case 'passed':
+        passed++;
+        break;
+      case 'failed':
+        failed++;
+        triage.add(r.criterionId);
+        break;
+      case 'unexecuted':
+        unexecuted++;
+        break;
+      case 'obsolete':
+        obsolete++;
+        break;
+    }
+  }
+  const executed = passed + failed;
+  const ev: PackRunEvidence = {
+    runId: summary.runId,
+    executed,
+    passed,
+    failed,
+    unexecuted,
+    obsolete,
+    triageCriterionIds: [...triage].sort(),
+  };
+  if (summary.startedAt) ev.startedAt = summary.startedAt;
+  if (summary.finishedAt) ev.finishedAt = summary.finishedAt;
+  return ev;
+}
+
+/**
+ * Close a pack run: post (or edit-in-place) the single summary comment on the
+ * pack epic. The marker keys on the epic + kind — never on the runId — so a
+ * subsequent run's summary edits the prior comment rather than appending
+ * (REQ-JIRAREG-005.A4).
+ */
+export async function finalizePackRun(
+  client: MilestoneJiraClient,
+  epicKey: string,
+  summary: PackRunSummary,
+): Promise<PostMilestoneResult> {
+  const evidence = summarizePackRun(summary);
+  return postMilestoneComment(client, epicKey, 'pack_run_summary', {
+    // The pack epic is the "spec" the milestone comment records against here.
+    specId: epicKey,
+    packRun: evidence,
+  });
 }

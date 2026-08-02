@@ -115,7 +115,7 @@ describe('REQ-DOMAIN-005 — no new MCP tool; instructions pointer present', () 
     // + 4 spec (spec/link_assert/link_verify/drifted)
     // + 2 harness (maintainability/fitness — MAINT-DOC/FITNESS-DOC)
     // + 6 designer
-    // + 13 jira (specship_jira_issues — REQ-JIRA-002; specship_jira_issue —
+    // + 14 jira (specship_jira_issues — REQ-JIRA-002; specship_jira_issue —
     //   REQ-JIRA-003; specship_jira_pick — REQ-JIRA-004; specship_jira_start —
     //   REQ-JIRA-005; specship_jira_track — REQ-JIRA-008;
     //   specship_jira_coverage — REQ-JIRATEAM-004; specship_jira_reconcile —
@@ -123,8 +123,9 @@ describe('REQ-DOMAIN-005 — no new MCP tool; instructions pointer present', () 
     //   specship_jira_transition — REQ-JIRATRANS-001; specship_jira_add_task —
     //   REQ-TASKSHIP-003; specship_jira_anchor — REQ-JIRATEAM-007;
     //   specship_jira_epics — REQ-JIRATEAM-008;
-    //   specship_jira_regression_pack — REQ-JIRAREG-001) = 34.
-    expect(tools.length).toBe(34);
+    //   specship_jira_regression_pack — REQ-JIRAREG-001;
+    //   specship_jira_regression_record — REQ-JIRAREG-005) = 35.
+    expect(tools.length).toBe(35);
     expect(tools.some((t) => /domain/i.test(t.name))).toBe(false);
   });
 

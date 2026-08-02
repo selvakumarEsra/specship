@@ -18,7 +18,8 @@ export type MilestoneKind =
   | 'pr_raised'
   | 'criterion_verified'
   | 'drift_transition'
-  | 'release_stamped';
+  | 'release_stamped'
+  | 'pack_run_summary';
 
 /** Repo-side evidence for a milestone. Fields are kind-specific. */
 export interface MilestoneEvidence {
@@ -36,6 +37,27 @@ export interface MilestoneEvidence {
   /** Symbol / axis for `drift_transition`. */
   driftSymbol?: string;
   driftAxis?: string;
+  /**
+   * Pack-run summary evidence (REQ-JIRAREG-005.A4). One comment per pack
+   * epic, edited in place on the next run — the marker keys on the epic +
+   * kind so the runId (which changes every run) is carried in the body and
+   * doesn't spawn a new comment.
+   */
+  packRun?: PackRunEvidence;
+}
+
+/** Pack-run summary counts + timing (REQ-JIRAREG-005.A4). */
+export interface PackRunEvidence {
+  runId: string;
+  executed: number;
+  passed: number;
+  failed: number;
+  unexecuted: number;
+  obsolete: number;
+  startedAt?: string;
+  finishedAt?: string;
+  /** Criterion ids whose case failed and need triage. */
+  triageCriterionIds?: string[];
 }
 
 /** Structural slice — same shape as publish.ts's watermarked client. */
@@ -77,7 +99,39 @@ export function milestoneMarker(kind: MilestoneKind, ev: MilestoneEvidence): str
     if (ev.driftSymbol) parts.push(ev.driftSymbol);
     if (ev.driftFrom || ev.driftTo) parts.push(`${ev.driftFrom ?? ''}>${ev.driftTo ?? ''}`);
   }
+  // pack_run_summary intentionally does NOT include the runId in the marker —
+  // one summary comment per pack epic, edited in place on the next run
+  // (REQ-JIRAREG-005.A4). The runId travels inside the body.
   return `<!-- specship:milestone:${parts.join(':')} -->`;
+}
+
+/**
+ * Render the pack-run summary table (REQ-JIRAREG-005.A4). Deterministic
+ * ordering + a stable one-column-per-count shape so the diff between two
+ * runs is small.
+ */
+export function renderPackRunSummary(ev: PackRunEvidence): string {
+  const lines: string[] = [];
+  lines.push(`SpecShip: regression pack run ${ev.runId}.`);
+  lines.push('');
+  lines.push('| Executed | Passed | Failed | Unexecuted | Obsolete |');
+  lines.push('|---------:|-------:|-------:|-----------:|---------:|');
+  lines.push(
+    `| ${ev.executed} | ${ev.passed} | ${ev.failed} | ${ev.unexecuted} | ${ev.obsolete} |`,
+  );
+  if (ev.startedAt || ev.finishedAt) {
+    const started = ev.startedAt ?? '(unknown start)';
+    const finished = ev.finishedAt ?? '(in progress)';
+    lines.push('');
+    lines.push(`Started ${started} → finished ${finished}.`);
+  }
+  const triage = (ev.triageCriterionIds ?? []).slice().sort();
+  if (triage.length > 0) {
+    lines.push('');
+    lines.push('Triage-needed criteria:');
+    for (const id of triage) lines.push(`- ${id}`);
+  }
+  return lines.join('\n');
 }
 
 /**
@@ -181,6 +235,14 @@ export function renderMilestoneBody(
           : `SpecShip: release stamped for ${ev.specId}.`,
       );
       break;
+    case 'pack_run_summary': {
+      if (!ev.packRun) {
+        lines.push(`SpecShip: regression pack run for ${ev.specId}.`);
+      } else {
+        lines.push(renderPackRunSummary(ev.packRun));
+      }
+      break;
+    }
   }
   lines.push('', `— SpecShip v${version}`);
   return sanitizeBody(lines.join('\n'));

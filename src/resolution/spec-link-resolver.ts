@@ -221,6 +221,15 @@ export class SpecLinkResolver {
   private resolveOneLink(link: SpecLink, stats: SpecLinkResolverStats): void {
     stats.scanned++;
 
+    // External evidence pointers (REQ-JIRAREG-005) carry a scheme-prefixed
+    // `targetFilePath` that never resolves to a code node — a JIRA case key,
+    // for example. Leave their state (verified / broken / …) untouched: the
+    // recorder owns those transitions, and a code-graph re-resolve pass must
+    // not flip them to orphaned.
+    if (link.targetFilePath.startsWith('jira://')) {
+      return;
+    }
+
     const node = this.findLogicalTarget(
       link.targetFilePath,
       link.targetQualifiedName,

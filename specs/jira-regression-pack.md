@@ -194,7 +194,17 @@ one watermarked, edited-in-place summary comment on the pack epic (executed
 
 implementations:
   - src/jira/regression-pack.ts:recordRunResult
+  - src/jira/regression-pack.ts:finalizePackRun
+  - src/jira/regression-pack.ts:summarizePackRun
   - src/jira/milestone-comment.ts:postMilestoneComment
+  - src/jira/milestone-comment.ts:renderPackRunSummary
+  - src/resolution/spec-link-resolver.ts:SpecLinkResolver
+  - src/mcp/jira-tools.ts:handleSpecshipJiraRegressionRecord
+
+verifies:
+  - __tests__/jira/regression-pack-record.test.ts
+  - __tests__/jira/milestone-comment.test.ts
+  - __tests__/jira/spec-link-resolver-jira-guard.test.ts
 
 ## Acceptance
 <!-- id: REQ-JIRAREG-005.A1 -->
