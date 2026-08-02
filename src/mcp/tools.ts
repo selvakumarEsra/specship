@@ -1358,6 +1358,8 @@ export class ToolHandler {
           return await handleSpecshipJiraRegressionPack(args, {
             specQueries: cg.getSpecQueries(),
             projectRoot: cg.getProjectRoot(),
+            getLinkedNodesForReq: (reqId) => cg.getLinkedNodesForReq(reqId),
+            getNeighbourNodes: (nodeIds) => cg.getNeighbourNodes(nodeIds),
           });
         }
         default:

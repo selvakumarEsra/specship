@@ -236,9 +236,10 @@ describe('buildRegressionPack — REQ-JIRAREG-001 (A2, A4)', () => {
     // Case summary carries the id + criterion text (A2).
     expect(model.cases[0].summary).toContain('REQ-BAR-002.A1');
     expect(model.cases[0].summary).toContain('Reset email');
-    // Case body records the source criterion + spec path (A3).
+    // Case body records the source criterion id (A3). The spec PATH is not
+    // in the body — REQ-JIRAREG-004.A1 keeps white-box detail off the pack.
     expect(model.cases[0].description).toContain('Source: REQ-BAR-002.A1');
-    expect(model.cases[0].description).toContain(req2.sourcePath);
+    expect(model.cases[0].description).not.toContain(req2.sourcePath);
   });
 
   it('excludes authored-but-unimplemented requirements (A4)', () => {
@@ -267,8 +268,8 @@ describe('buildRegressionPack — REQ-JIRAREG-001 (A2, A4)', () => {
 
   it('groupCasesByDomain buckets by area — same shape as before REQ-JIRAREG-002', () => {
     const grouped = groupCasesByDomain([
-      { reqId: 'R1', criterionId: 'R1.A1', criterionText: 't', specPath: 's', tier: 'unknown', domainArea: 'Uncategorised', areasAll: ['Uncategorised'], kind: 'executable' },
-      { reqId: 'R1', criterionId: 'R1.A2', criterionText: 'u', specPath: 's', tier: 'unknown', domainArea: 'Uncategorised', areasAll: ['Uncategorised'], kind: 'executable' },
+      { reqId: 'R1', criterionId: 'R1.A1', criterionText: 't', specPath: 's', tier: 'backend', domainArea: 'Uncategorised', areasAll: ['Uncategorised'], kind: 'executable' },
+      { reqId: 'R1', criterionId: 'R1.A2', criterionText: 'u', specPath: 's', tier: 'backend', domainArea: 'Uncategorised', areasAll: ['Uncategorised'], kind: 'executable' },
     ]);
     expect(grouped.size).toBe(1);
     expect(grouped.get('Uncategorised')).toHaveLength(2);
@@ -409,20 +410,21 @@ describe('regression-pack helpers', () => {
     expect(readStoredFingerprint(desc)).toBe(fp);
   });
 
-  it('renderCaseSteps names the source criterion + spec (A3)', () => {
+  it('renderCaseSteps names the source criterion id but not the spec path (A3 + 004.A1)', () => {
     const body = renderCaseSteps({
       reqId: 'REQ-X-001',
       criterionId: 'REQ-X-001.A1',
       criterionText: 'It happens.',
       specPath: 'specs/x.md',
-      tier: 'unknown',
+      tier: 'backend',
       domainArea: 'Uncategorised',
       areasAll: ['Uncategorised'],
       kind: 'executable',
     });
     expect(body).toContain('REQ-X-001.A1');
-    expect(body).toContain('specs/x.md');
     expect(body).toContain('Source:');
+    // REQ-JIRAREG-004.A1: no file path leaks into the black-box body.
+    expect(body).not.toContain('specs/x.md');
   });
 
   it('recordRunResult is a REQ-JIRAREG-005 stub in this run', () => {
@@ -928,5 +930,175 @@ describe('upsertRegressionPack — REQ-JIRAREG-002 (idempotent reorg, xref idemp
     expect(result.crossRefsSkipped).toBe(1);
     expect(fake.created).toHaveLength(0);
     expect(fake.updated).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// REQ-JIRAREG-004 — black-box body, derived tier, rephrase flagging
+// ---------------------------------------------------------------------------
+
+import type { Node } from '../../src/types';
+import {
+  classifyCriterion,
+  deriveCaseTier,
+  renderRephraseReport,
+  renderCrossReferenceBody,
+  REG_PACK_TIER_LABEL_UI,
+  REG_PACK_TIER_LABEL_BACKEND,
+} from '../../src/jira/regression-pack';
+
+function makeNode(id: string, kind: Node['kind'], filePath: string): Node {
+  return {
+    id,
+    kind,
+    name: id,
+    qualifiedName: id,
+    filePath,
+    language: 'typescript',
+    startLine: 1,
+    endLine: 1,
+    startColumn: 0,
+    endColumn: 0,
+  };
+}
+
+describe('REQ-JIRAREG-004.A1 — case body is black-box (no paths, no symbols, no spec ptr)', () => {
+  function assertBlackBox(body: string): void {
+    // No source paths of any flavour.
+    expect(body).not.toMatch(/\bsrc\//);
+    expect(body).not.toMatch(/\.tsx?\b/);
+    expect(body).not.toMatch(/\.jsx?\b/);
+    expect(body).not.toContain('specs/');
+    // No inline traceability breadcrumb in the Steps block; the id lives only
+    // under the Reference section.
+    const stepsMatch = body.match(/Steps:\n([\s\S]*?)\n\nReference:/);
+    expect(stepsMatch).not.toBeNull();
+    const stepsSection = stepsMatch![1]!;
+    expect(stepsSection).not.toContain('REQ-');
+  }
+
+  it('renderCaseSteps: Steps section has no code refs and no `- Spec:` line', () => {
+    const body = renderCaseSteps({
+      reqId: 'REQ-BB-001',
+      criterionId: 'REQ-BB-001.A1',
+      criterionText: 'The response shows the updated count.',
+      specPath: 'src/foo/bar.ts',
+      tier: 'backend',
+      domainArea: 'Some Area',
+      areasAll: ['Some Area'],
+      kind: 'executable',
+    });
+    assertBlackBox(body);
+    expect(body).toContain('Tier: backend');
+    expect(body).toContain('Source: REQ-BB-001.A1');
+  });
+
+  it('renderCrossReferenceBody: same body invariants apply', () => {
+    const body = renderCrossReferenceBody(
+      {
+        reqId: 'REQ-BB-002',
+        criterionId: 'REQ-BB-002.A1',
+        criterionText: 'The message is displayed.',
+        specPath: 'src/x.ts',
+        tier: 'ui',
+        domainArea: 'Alt Area',
+        areasAll: ['Primary', 'Alt Area'],
+        kind: 'crossref',
+      },
+      'Primary',
+    );
+    expect(body).toContain('Tier: ui');
+    expect(body).not.toMatch(/\bsrc\//);
+    expect(body).not.toMatch(/\.tsx?\b/);
+    expect(body).not.toContain('specs/');
+    expect(body).toContain('Source: REQ-BB-002.A1');
+  });
+});
+
+describe('REQ-JIRAREG-004.A2 — tier derives from behaviour surface', () => {
+  it('(a) a requirement linked to a component node → tier `ui`', () => {
+    const req = makeReq('REQ-UI-001', 'UI-linked');
+    const acc = makeAcceptance('REQ-UI-001.A1', req.id, 'The screen shows a banner.', req.sourcePath);
+    const componentNode = makeNode('n-comp', 'component', 'src/ui/Banner.tsx');
+    const sq: BuilderSpecQueries = {
+      ...fakeQueries({
+        specs: [req, acc],
+        linksBySpec: { [req.id]: [makeLink(req.id, 'implements', 'implemented')] },
+      }),
+      getLinkedNodesForReq: () => [componentNode],
+      getNeighbourNodes: () => [],
+    };
+    expect(deriveCaseTier(req, sq)).toBe('ui');
+    const model = buildRegressionPack(sq);
+    expect(model.cases[0].tierLabel).toBe(REG_PACK_TIER_LABEL_UI);
+  });
+
+  it('(b) a requirement linked only to a backend function → tier `backend`', () => {
+    const req = makeReq('REQ-BE-001', 'Backend-linked');
+    const acc = makeAcceptance('REQ-BE-001.A1', req.id, 'The endpoint returns 200.', req.sourcePath);
+    const fnNode = makeNode('n-fn', 'function', 'src/handlers/payments.ts');
+    const sq: BuilderSpecQueries = {
+      ...fakeQueries({
+        specs: [req, acc],
+        linksBySpec: { [req.id]: [makeLink(req.id, 'implements', 'implemented')] },
+      }),
+      getLinkedNodesForReq: () => [fnNode],
+      getNeighbourNodes: () => [],
+    };
+    expect(deriveCaseTier(req, sq)).toBe('backend');
+    const model = buildRegressionPack(sq);
+    expect(model.cases[0].tierLabel).toBe(REG_PACK_TIER_LABEL_BACKEND);
+  });
+
+  it('(c) a requirement with no linked nodes → tier `backend` (never spurious ui)', () => {
+    const req = makeReq('REQ-NL-001', 'No-link');
+    const acc = makeAcceptance('REQ-NL-001.A1', req.id, 'The response contains a value.', req.sourcePath);
+    const sq: BuilderSpecQueries = {
+      ...fakeQueries({
+        specs: [req, acc],
+        linksBySpec: { [req.id]: [makeLink(req.id, 'implements', 'implemented')] },
+      }),
+      // No accessors present at all — mirrors a fixture / dry planner.
+    };
+    expect(deriveCaseTier(req, sq)).toBe('backend');
+    const model = buildRegressionPack(sq);
+    expect(model.cases[0].tierLabel).toBe(REG_PACK_TIER_LABEL_BACKEND);
+  });
+});
+
+describe('REQ-JIRAREG-004.A3 — vague / code-leaking criteria are flagged', () => {
+  it('vague criterion body ("system works correctly") lands in rephraseFlags', () => {
+    const req = makeReq('REQ-VG-001', 'Vague');
+    const acc = makeAcceptance('REQ-VG-001.A1', req.id, 'The system works correctly.', req.sourcePath);
+    const sq = fakeQueries({
+      specs: [req, acc],
+      linksBySpec: { [req.id]: [makeLink(req.id, 'implements', 'implemented')] },
+    });
+    const model = buildRegressionPack(sq);
+    expect(model.rephraseFlags).toHaveLength(1);
+    expect(model.rephraseFlags[0].criterionId).toBe('REQ-VG-001.A1');
+    expect(model.rephraseFlags[0].reason).toMatch(/observable/);
+    // The case is still emitted — the pack stays complete; the flag drives
+    // a human rephrase pass, not silent omission.
+    expect(model.cases).toHaveLength(1);
+    // The report renderer surfaces the flag with the id + reason.
+    const report = renderRephraseReport(model.rephraseFlags);
+    expect(report).toContain('REQ-VG-001.A1');
+    expect(report).toContain('observable');
+  });
+
+  it('code-leaking criterion (names a src path / .ts extension / backticked symbol) is flagged', () => {
+    expect(classifyCriterion('The response body matches src/foo.ts output.').reason).toMatch(/code/);
+    expect(classifyCriterion('When `handlePayment` returns, the row updates.').reason).toMatch(/code/);
+    expect(classifyCriterion('The response body is a `payments.ts` file.').reason).toMatch(/code/);
+  });
+
+  it('observable, black-box criterion is not flagged', () => {
+    expect(classifyCriterion('The tester receives a 429 response after the 6th attempt.').observable).toBe(true);
+    expect(classifyCriterion('The tester receives a 429 response after the 6th attempt.').reason).toBeUndefined();
+  });
+
+  it('renderRephraseReport is empty when no flags', () => {
+    expect(renderRephraseReport([])).toBe('');
   });
 });

@@ -9,6 +9,10 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### New Features
+
+- The SpecShip Regression Pack now derives a UI vs. backend tier for every case (from the requirement's linked code — a linked component or front-end file classifies as UI, everything else as backend) and tags each JIRA case with a `specship-tier-ui` / `specship-tier-backend` label, so testers can board-filter to just the UI or just the backend cases in one click. The tier also appears as a header line at the top of the case body. Case bodies are now strictly black-box: file paths, code symbols, and the source spec pointer no longer appear in the Steps or Reference sections. Criteria that read as vague ("system works correctly") or that echo code-shaped tokens (paths, `.ts` extensions, backticked identifiers) are flagged and printed in a separate "criteria needing rephrase" report after the pack upserts — the case is still emitted so the pack stays complete, and the flag drives a human rephrase pass. NOTE: the black-box body rewrite changes every case's fingerprint, so the first pack refresh after upgrading performs a one-time mass "updated" pass over existing cases (subsequent runs stay zero-write as normal).
+
 ### Fixes
 
 - Fixed a spec-indexing bug where a bare-path pointer (an `implementations:` bullet without a `:Symbol`, such as a pointer to a slash-command markdown file) listed before symbol bullets silently prevented every entry after it from producing a spec link. Non-symbol bullets are now skipped and the rest of the block links normally, regardless of bullet order.

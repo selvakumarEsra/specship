@@ -21,11 +21,12 @@
  */
 
 import * as crypto from 'crypto';
-import type { Spec, SpecLink } from '../types';
+import type { Node, Spec, SpecLink } from '../types';
 import {
   sourceSpecIds,
   INHERITED_LINK_MAX_DEPTH,
 } from '../resolution/spec-link-resolver';
+import { computeBehaviourSurface } from '../behaviour/behaviour-surface';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -41,8 +42,24 @@ export interface RegressionCase {
   criterionText: string;
   /** The requirement spec's source path (repo-relative). */
   specPath: string;
-  /** Behaviour tier — placeholder in 001, refined in REQ-JIRAREG-004. */
+  /**
+   * Behaviour tier derived from the requirement's behaviour surface
+   * (REQ-JIRAREG-004.A2): `'ui'` iff any linked or neighbour node is a
+   * component / lives in a front-end file, otherwise `'backend'`.
+   * `'unknown'` is retained for callers that construct cases without a
+   * graph in reach (fixtures, dry planners) — never emitted by
+   * {@link buildRegressionPack} which always resolves a concrete tier.
+   */
   tier: 'ui' | 'backend' | 'unknown';
+  /**
+   * True when the criterion body is too vague to execute against, or leaks
+   * code-shaped tokens (paths, symbols) the black-box pack must not echo
+   * (REQ-JIRAREG-004.A3). The case is still emitted so the pack stays
+   * complete; the report drives a human rephrase pass.
+   */
+  needsRephrase?: boolean;
+  /** Free-text reason surfaced by {@link renderRephraseReport}. */
+  rephraseReason?: string;
   /**
    * Domain area label for THIS case row — the area under which the case files.
    * A requirement with two domain facts produces two `RegressionCase` rows: an
@@ -92,6 +109,8 @@ export interface CasePlan {
   specPath: string;
   /** `'executable'` or `'crossref'` — cross-refs carry a different label prefix. */
   kind: 'executable' | 'crossref';
+  /** Tier label attached alongside the case marker (REQ-JIRAREG-004.A2). */
+  tierLabel: string;
 }
 
 /** One requirement with no domain-fact linkage — REQ-JIRAREG-002.A2. */
@@ -110,6 +129,19 @@ export interface RegressionPackModel {
    * `/specship:spec domain` capture flow (REQ-JIRAREG-002.A2).
    */
   domainGaps: DomainGap[];
+  /**
+   * Criteria the classifier flagged for human rephrase (REQ-JIRAREG-004.A3) —
+   * vague ("system works correctly") or leaking code-shaped tokens the
+   * black-box body must not echo. Rendered by {@link renderRephraseReport}.
+   */
+  rephraseFlags: RephraseFlag[];
+}
+
+/** One criterion flagged for rephrase (REQ-JIRAREG-004.A3). */
+export interface RephraseFlag {
+  criterionId: string;
+  specPath: string;
+  reason: string;
 }
 
 export interface UpsertContext {
@@ -185,6 +217,19 @@ export const REG_PACK_CASE_MARKER_LABEL = 'specship-regcase';
  */
 export const REG_PACK_OBSOLETE_LABEL = 'specship-reg-obsolete';
 
+/**
+ * Board-filterable tier labels (REQ-JIRAREG-004.A2) — testers can filter a
+ * board to just UI or just backend cases with a single label query. Attached
+ * to every executable + cross-ref case; the same tier is derived once per
+ * requirement so both rows in a two-area case carry the same label.
+ */
+export const REG_PACK_TIER_LABEL_UI = 'specship-tier-ui';
+export const REG_PACK_TIER_LABEL_BACKEND = 'specship-tier-backend';
+
+function tierLabel(tier: 'ui' | 'backend' | 'unknown'): string {
+  return tier === 'ui' ? REG_PACK_TIER_LABEL_UI : REG_PACK_TIER_LABEL_BACKEND;
+}
+
 export const REG_PACK_EPIC_WATERMARK = '<!-- specship:regression-pack v1 -->';
 export const REG_PACK_STORY_WATERMARK = '<!-- specship:regression-pack:story v1 -->';
 export const REG_PACK_CASE_WATERMARK = '<!-- specship:regression-pack:case v1 -->';
@@ -219,6 +264,20 @@ export interface BuilderSpecQueries {
    * a `Spec` so its own dependency chain can be followed to the next hop.
    */
   getSpecById(id: string): Spec | undefined | null;
+  /**
+   * Optional graph accessor (REQ-JIRAREG-004.A2): the resolved code nodes a
+   * requirement + its acceptance children link to. Populated by the CLI /
+   * MCP wiring; absent in test fixtures unless a fixture opts in. When
+   * absent, {@link deriveCaseTier} falls back to `'backend'` (never spurious
+   * `'ui'`).
+   */
+  getLinkedNodesForReq?(reqId: string): Node[];
+  /**
+   * Optional graph accessor (REQ-JIRAREG-004.A2): 1-hop caller/callee
+   * neighbours of the given nodes. Widens tier detection so a backend
+   * handler that renders a linked UI component still classifies as UI.
+   */
+  getNeighbourNodes?(nodeIds: readonly string[]): Node[];
 }
 
 // ---------------------------------------------------------------------------
@@ -310,12 +369,75 @@ function stripFingerprintTag(description: string): string {
 }
 
 /**
- * Render the executable steps + reference section for a case (REQ-JIRAREG-001.A3).
- * A Given/When/Then scaffold is emitted; REQ-JIRAREG-004 will refine phrasing.
+ * Derive a case's tier from the requirement's behaviour surface
+ * (REQ-JIRAREG-004.A2). Delegates the UI/backend split to
+ * {@link computeBehaviourSurface} so the classification stays consistent
+ * with `/ss-behaviour`. A requirement with no linked nodes (or a
+ * fixture-mode sq without graph accessors) resolves to `'backend'` —
+ * never spurious UI.
+ */
+export function deriveCaseTier(req: Spec, sq: BuilderSpecQueries): 'ui' | 'backend' {
+  const linked = sq.getLinkedNodesForReq?.(req.id) ?? [];
+  if (linked.length === 0) return 'backend';
+  const neighbours = sq.getNeighbourNodes?.(linked.map((n) => n.id)) ?? [];
+  const surface = computeBehaviourSurface({
+    requirementId: req.id,
+    requirementExists: true,
+    linkedNodes: linked,
+    neighbourNodes: neighbours,
+  });
+  return surface.ui.length > 0 ? 'ui' : 'backend';
+}
+
+/**
+ * Classify a criterion body for A3: does it name an observable outcome, and
+ * does it stay in black-box vocabulary? Two failure modes both flag the case
+ * for human rephrase (never silently vague, never leaking file paths /
+ * symbols into the pack):
+ *
+ * 1. **Vague** — no observable verb ("returns", "renders", "MUST", …) and
+ *    no reference to a concrete artefact ("response", "row", …).
+ * 2. **Code-shaped** — the text names a file path (`src/…`), a `.ts` / `.tsx`
+ *    / `.js` / `.jsx` extension, or a backticked identifier
+ *    (CamelCase / snake_case). Black-box cases must not echo white-box
+ *    detail; the flag drives a rephrase pass.
+ *
+ * Deterministic and cheap on purpose — the goal is surfacing the flags,
+ * not scoring prose.
+ */
+export function classifyCriterion(text: string): { observable: boolean; reason?: string } {
+  const t = text.trim();
+  if (!t) return { observable: false, reason: 'empty criterion text' };
+  // Code-shape check runs first: a criterion may name an observable outcome
+  // AND still leak code detail — the leak is the tighter constraint.
+  if (
+    /(^|[\s(`'"])src\//.test(t) ||
+    /\.(tsx?|jsx?|py|rb|go|rs|java|kt|swift|cs|php|css|scss|md|yml|yaml|json|sql)\b/i.test(t) ||
+    /`[A-Za-z_][A-Za-z0-9_]*`/.test(t) ||
+    /`[A-Za-z0-9_.-]+\/[A-Za-z0-9_./-]+`/.test(t)
+  ) {
+    return { observable: true, reason: 'criterion text contains code references' };
+  }
+  const observable =
+    /\b(MUST|SHOULD|shows?|displays?|renders?|returns?|responds?|emits?|creates?|updates?|deletes?|rejects?|accepts?|produces?|writes?|reads?|receives?|surfaces?|logs?|records?|sends?|opens?|closes?|starts?|stops?|fails?|succeeds?|passes?|blocks?|allows?|prevents?|prompts?|matches?|contains?|equals?|includes?|excludes?)\b/i.test(t) ||
+    /\b(response|request|message|row|file|status|code|body|header|payload|value|count|list|table|error|log|output|result|screen|button|link|form|field|dialog|banner|toast|page|route|endpoint)\b/i.test(t);
+  if (!observable) return { observable: false, reason: 'no observable outcome in criterion text' };
+  return { observable: true };
+}
+
+/**
+ * Render the executable steps + reference section for a case
+ * (REQ-JIRAREG-001.A3, REQ-JIRAREG-004.A1). Black-box body: Steps carry no
+ * file paths, no code symbols, and no `- Spec:` pointer — those are
+ * white-box detail belonging on the source spec, not on the tester's
+ * checklist. The tier lands as a header line (readable) AND as a JIRA label
+ * on the issue (board-filterable, see {@link tierLabel}).
  */
 export function renderCaseSteps(rc: RegressionCase): string {
   const lines: string[] = [];
   lines.push(REG_PACK_CASE_WATERMARK);
+  lines.push('');
+  lines.push(`Tier: ${rc.tier}`);
   lines.push('');
   lines.push('Steps:');
   lines.push('- Given the feature is available in a bound test environment');
@@ -324,11 +446,12 @@ export function renderCaseSteps(rc: RegressionCase): string {
   lines.push('');
   lines.push('Reference:');
   lines.push(`- Source: ${rc.reqId}.${criterionSuffix(rc.reqId, rc.criterionId)} — ${oneLineTrim(rc.criterionText)}`);
-  lines.push(`- Spec: ${rc.specPath}`);
-  lines.push(`- Tier: ${rc.tier}`);
   lines.push(`- Domain: ${rc.domainArea}`);
   if (rc.areasAll.length > 1) {
     lines.push(`- Also files under: ${rc.areasAll.filter((a) => a !== rc.domainArea).join(', ')}`);
+  }
+  if (rc.needsRephrase && rc.rephraseReason) {
+    lines.push(`- Needs rephrase: ${rc.rephraseReason}`);
   }
   return lines.join('\n');
 }
@@ -346,13 +469,14 @@ export function renderCrossReferenceBody(
   const lines: string[] = [];
   lines.push(REG_PACK_CASE_WATERMARK);
   lines.push('');
+  lines.push(`Tier: ${rc.tier}`);
+  lines.push('');
   lines.push(
     `This is a cross-reference. The executable case for ${rc.reqId}.${criterionSuffix(rc.reqId, rc.criterionId)} lives under the "${executableAreaLabel}" area — run it there.`,
   );
   lines.push('');
   lines.push('Reference:');
   lines.push(`- Source: ${rc.reqId}.${criterionSuffix(rc.reqId, rc.criterionId)} — ${oneLineTrim(rc.criterionText)}`);
-  lines.push(`- Spec: ${rc.specPath}`);
   lines.push(`- Executable area: ${executableAreaLabel}`);
   lines.push(`- Cross-referenced here as: ${rc.domainArea}`);
   return lines.join('\n');
@@ -399,6 +523,24 @@ function renderEpicDescription(totals: {
  * Render the domain-gap report the caller prints after upsert
  * (REQ-JIRAREG-002.A2). Empty when there are no gaps.
  */
+/**
+ * Render the rephrase report (REQ-JIRAREG-004.A3). Empty when zero flags —
+ * the caller conditionally prints it after the pack upsert, mirroring the
+ * domain-gap report shape.
+ */
+export function renderRephraseReport(flags: RephraseFlag[]): string {
+  if (flags.length === 0) return '';
+  const lines: string[] = [];
+  lines.push(
+    `Criteria needing rephrase — ${flags.length} criterion${flags.length === 1 ? '' : 'a'} flagged (REQ-JIRAREG-004.A3):`,
+  );
+  for (const f of flags) lines.push(`  · ${f.criterionId} (${f.specPath}): ${f.reason}`);
+  lines.push(
+    'Rewrite the criterion body in black-box terms (name the observable outcome, drop file paths / symbols) and re-run the pack; the case updates in place.',
+  );
+  return lines.join('\n');
+}
+
 export function renderDomainGapReport(gaps: DomainGap[]): string {
   if (gaps.length === 0) return '';
   const lines: string[] = [];
@@ -529,6 +671,7 @@ export function buildRegressionPack(
 
   const cases: RegressionCase[] = [];
   const domainGaps: DomainGap[] = [];
+  const rephraseFlags: RephraseFlag[] = [];
   for (const req of requirements) {
     if (!isRequirementImplementedPlus(sq, req.id)) continue;
     const criteria = sq
@@ -547,31 +690,43 @@ export function buildRegressionPack(
       // Once per requirement — A2 lists the REQ, not each criterion.
       domainGaps.push({ reqId: req.id, specPath: req.sourcePath });
     }
+    // Tier derived once per requirement (REQ-JIRAREG-004.A2): both executable
+    // and cross-ref rows for the same criterion carry the same tier.
+    const tier = deriveCaseTier(req, sq);
 
     for (const c of criteria) {
       const text = (c.title || c.body || '').trim();
       if (!text) continue;
-      // Executable case in the primary area.
-      cases.push({
+      const cls = classifyCriterion(text);
+      const needsRephrase = !cls.observable || Boolean(cls.reason);
+      if (needsRephrase && cls.reason) {
+        rephraseFlags.push({
+          criterionId: c.id,
+          specPath: req.sourcePath,
+          reason: cls.reason,
+        });
+      }
+      const base: Pick<
+        RegressionCase,
+        'reqId' | 'criterionId' | 'criterionText' | 'specPath' | 'tier' | 'areasAll' | 'needsRephrase' | 'rephraseReason'
+      > = {
         reqId: req.id,
         criterionId: c.id,
         criterionText: text,
         specPath: req.sourcePath,
-        tier: 'unknown', // REQ-JIRAREG-004 refines
-        domainArea: primaryArea,
+        tier,
         areasAll: areaTitles,
-        kind: 'executable',
-      });
+        ...(needsRephrase
+          ? { needsRephrase: true, rephraseReason: cls.reason ?? 'unspecified' }
+          : {}),
+      };
+      // Executable case in the primary area.
+      cases.push({ ...base, domainArea: primaryArea, kind: 'executable' });
       // Cross-references in every additional area.
       for (const extra of areaTitles.slice(1)) {
         cases.push({
-          reqId: req.id,
-          criterionId: c.id,
-          criterionText: text,
-          specPath: req.sourcePath,
-          tier: 'unknown',
+          ...base,
           domainArea: extra,
-          areasAll: areaTitles,
           kind: 'crossref',
           crossReferenceOf: c.id,
         });
@@ -615,6 +770,7 @@ export function buildRegressionPack(
         label,
         specPath: rc.specPath,
         kind: rc.kind,
+        tierLabel: tierLabel(rc.tier),
       });
     }
     const storySummary = oneLineTrim(`Regression: ${area}`);
@@ -643,7 +799,7 @@ export function buildRegressionPack(
     label: REG_PACK_EPIC_LABEL,
   };
 
-  return { epic, stories, cases: casePlans, domainGaps };
+  return { epic, stories, cases: casePlans, domainGaps, rephraseFlags };
 }
 
 // ---------------------------------------------------------------------------
@@ -857,7 +1013,7 @@ export async function upsertRegressionPack(
         c.summary,
         c.description,
         storyRes.outcome.key,
-        [REG_PACK_CASE_MARKER_LABEL],
+        [REG_PACK_CASE_MARKER_LABEL, c.tierLabel],
       );
       if (c.kind === 'crossref') {
         if (caseRes.outcome.action === 'created') crossRefsCreated++;
