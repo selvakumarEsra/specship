@@ -346,10 +346,10 @@ pick/start) rather than duplicating it; the menu is the guided path, not a
 second implementation.
 
 implementations:
-  - commands/specship/jira.md
   - src/jira/client.ts:JiraClient.listEpics
   - src/mcp/jira-tools.ts:handleSpecshipJiraEpics
   - src/jira/repo-config.ts:updateRepoJiraBinding
+  - commands/specship/jira.md
 
 verifies:
   - __tests__/jira/jira-menu.test.ts
