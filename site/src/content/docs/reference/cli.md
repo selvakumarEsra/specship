@@ -41,6 +41,7 @@ description: Every SpecShip command and the flags it accepts.
 | `specship jira` | Connect SpecShip to a JIRA instance (Cloud or Data Center). |
 | `specship jira configure` | Save JIRA credentials to ~/.specship/jira.json (0600) and test the connection. |
 | `specship jira test` | Test the configured JIRA connection (uses ~/.specship/jira.json or SPECSHIP_JIRA_* env). |
+| `specship jira bind` | Write the repo JIRA binding into specship.config.json (project, epic). |
 | `specship jira track` | Show each picked JIRA issue with its SpecShip work-state + live JIRA status. |
 | `specship jira coverage` | Sprint coverage report joining JIRA sprint issues to spec truth (read-only unless --post). |
 | `specship jira reconcile` | Detect JIRA-side edits to published specs; --apply folds a confirmed diff back into the spec. |
