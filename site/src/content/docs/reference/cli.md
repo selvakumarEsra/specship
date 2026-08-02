@@ -46,6 +46,8 @@ description: Every SpecShip command and the flags it accepts.
 | `specship jira coverage` | Sprint coverage report joining JIRA sprint issues to spec truth (read-only unless --post). |
 | `specship jira reconcile` | Detect JIRA-side edits to published specs; --apply folds a confirmed diff back into the spec. |
 | `specship jira release <version>` | Set <version> as fixVersion on JIRA issues (creating the project version if missing) with a shipped-in comment. |
+| `specship jira regression-pack` | Generate / refresh the SpecShip Regression Pack in the bound JIRA project. |
+| `specship jira regression-record` | Record a regression pack case result (REQ-JIRAREG-005). |
 <!-- GENERATED:cli-commands END -->
 
 ## Query commands
