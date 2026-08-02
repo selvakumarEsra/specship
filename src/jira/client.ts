@@ -332,6 +332,42 @@ export class JiraClient {
   }
 
   /**
+   * List issues in `projectKey` that carry `label` (REQ-JIRAREG-001). Used
+   * by the regression-pack upsert to find its SpecShip-owned epic / stories /
+   * cases by watermark label — never for user-supplied JQL. The label is
+   * quote-escaped to defend against injection even though callers supply only
+   * the module's own hard-coded label prefixes.
+   */
+  async searchIssuesByLabel(
+    projectKey: string,
+    label: string,
+  ): Promise<Array<{ key: string; summary: string }>> {
+    const project = (projectKey ?? '').trim();
+    const lab = (label ?? '').trim();
+    if (!project || !lab) return [];
+    const escProject = project.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    const escLabel = lab.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    const jql = `project = "${escProject}" AND labels = "${escLabel}" ORDER BY created ASC`;
+    const params = new URLSearchParams({
+      jql,
+      fields: 'summary',
+      maxResults: String(MAX_ISSUE_RESULTS),
+    });
+    const searchPath =
+      this.deployment === 'datacenter'
+        ? `/rest/api/2/search?${params.toString()}`
+        : `/rest/api/2/search/jql?${params.toString()}`;
+    const body = await this.request(searchPath);
+    const raw: any[] = Array.isArray(body?.issues) ? body.issues : [];
+    return raw
+      .map((issue) => ({
+        key: String(issue?.key ?? ''),
+        summary: String(issue?.fields?.summary ?? ''),
+      }))
+      .filter((e) => e.key.length > 0);
+  }
+
+  /**
    * List the transitions the issue's current workflow state offers
    * (REQ-JIRA-007). `GET /issue/{key}/transitions`. Used to resolve a
    * configured transition name/id to an executable id before writing.

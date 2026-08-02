@@ -34,7 +34,14 @@ import {
   type JiraTransitionNames,
   type JiraTransitionResult,
 } from '../jira/types';
-import { writeSpecFromIssue, findSpecForIssueKey, readSpecJiraKey } from '../jira/spec-writer';
+import { writeSpecFromIssue, findSpecForIssueKey, readSpecJiraKey, writeRegressionCaseKeys } from '../jira/spec-writer';
+import {
+  buildRegressionPack,
+  upsertRegressionPack,
+  type BuilderSpecQueries,
+  type RegressionPackJiraClient,
+  type UpsertContext,
+} from '../jira/regression-pack';
 import { reqIdForIssue } from '../jira/spec-generator';
 import {
   publishSpecToJira,
@@ -535,6 +542,34 @@ export const jiraToolDefinitions: ToolDefinition[] = [
         },
       },
       required: ['parent', 'title'],
+    },
+  },
+  {
+    name: 'specship_jira_regression_pack',
+    description:
+      'Generate or refresh the SpecShip Regression Pack in the bound JIRA ' +
+      'project (REQ-JIRAREG-001): one watermarked epic → one domain-area ' +
+      'Story → one Sub-task per acceptance criterion of every implemented ' +
+      '(or verified) requirement. Idempotent — a re-run with nothing changed ' +
+      'performs zero JIRA writes; a criterion added, removed, or edited yields ' +
+      'exactly the matching create / update. Pass dry_run: true to preview the ' +
+      'plan without touching JIRA.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project: {
+          type: 'string',
+          description:
+            'Optional JIRA project key (e.g., "PROJ"). Defaults to the ' +
+            'configured publish project when omitted.',
+        },
+        dry_run: {
+          type: 'boolean',
+          description:
+            'When true, build the plan and report counts without creating or ' +
+            'updating any JIRA issue. Default: false.',
+        },
+      },
     },
   },
 ];
@@ -1973,6 +2008,106 @@ export async function handleSpecshipJiraAddTask(
       return errorResult(err.message);
     }
     return errorResult('Failed to create the task in JIRA.');
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Regression pack (REQ-JIRAREG-001)
+// ---------------------------------------------------------------------------
+
+/** Dependencies for `handleSpecshipJiraRegressionPack` — threaded like publish. */
+export interface JiraRegressionPackDeps {
+  specQueries: unknown;
+  projectRoot: string;
+  /** Client factory seam (default: resolve creds + new JiraClient). */
+  makeJiraClient?: () => RegressionPackJiraClient;
+}
+
+/**
+ * Handle `specship_jira_regression_pack` (REQ-JIRAREG-001). Builds the model
+ * from the loaded spec set, then upserts it against JIRA idempotently. A
+ * dry-run planning path returns the counts without any JIRA write.
+ */
+export async function handleSpecshipJiraRegressionPack(
+  args: Record<string, unknown>,
+  deps: JiraRegressionPackDeps,
+): Promise<ToolResult> {
+  const notConfigured = notConfiguredResult();
+  if (notConfigured) return notConfigured;
+
+  const dryRun = args.dry_run === true;
+  const sq = deps.specQueries as BuilderSpecQueries;
+  const model = buildRegressionPack(sq);
+  if (model.cases.length === 0) {
+    return textResult(
+      'No implemented (or verified) requirements found — the regression pack ' +
+        'has zero cases. Implement a spec and link its code before generating.',
+    );
+  }
+
+  try {
+    const creds = resolveJiraCredentials();
+    const projectKey =
+      (typeof args.project === 'string' && args.project.trim()
+        ? args.project.trim()
+        : undefined) ?? creds.project;
+    if (!projectKey) {
+      return textResult(
+        'No JIRA project is configured. Pass `project: "PROJ"` or save a ' +
+          'default with `specship jira configure --project <Key>`.',
+      );
+    }
+
+    const client: RegressionPackJiraClient = deps.makeJiraClient
+      ? deps.makeJiraClient()
+      : (new JiraClient(creds) as unknown as RegressionPackJiraClient);
+    const ctx: UpsertContext = { projectKey, dryRun };
+    const result = await upsertRegressionPack(client, model, ctx);
+
+    // Back-link written cases into their spec files (REQ-JIRAREG-001.A3) —
+    // spec-side traceability. Best-effort per case; a failure notes and
+    // moves on so a partial back-link never blocks the pack write itself.
+    const backlinkNotes: string[] = [];
+    if (!dryRun) {
+      const specPathById: Record<string, string> = {};
+      for (const c of model.cases) specPathById[c.criterionId] = c.specPath;
+      for (const [criterionId, issueKey] of Object.entries(result.caseKeysByCriterion)) {
+        const rel = specPathById[criterionId];
+        if (!rel) continue;
+        const absPath = path.isAbsolute(rel) ? rel : path.join(deps.projectRoot, rel);
+        const out = writeRegressionCaseKeys(absPath, criterionId, issueKey);
+        if (!out.ok && out.detail) backlinkNotes.push(`  · ${criterionId}: ${out.detail}`);
+      }
+    }
+
+    const lines: string[] = [];
+    lines.push(
+      `${dryRun ? 'Dry-run plan for' : 'Regression Pack upserted in'} ${projectKey}:`,
+    );
+    lines.push(
+      `- Epic: ${result.epicKey ?? '(none)'}${result.epicCreated ? ' (created)' : ''}`,
+    );
+    lines.push(
+      `- Stories: ${result.storiesCreated} created, ${result.storiesUpdated} updated, ${result.storiesSkipped} skipped`,
+    );
+    lines.push(
+      `- Cases: ${result.casesCreated} created, ${result.casesUpdated} updated, ${result.casesSkipped} skipped (of ${model.cases.length})`,
+    );
+    if (result.orphanedEpicKeys.length > 0) {
+      lines.push(
+        `- Extra pack-epics found (single-epic invariant): ${result.orphanedEpicKeys.join(', ')} — merge or delete them manually.`,
+      );
+    }
+    if (backlinkNotes.length > 0) {
+      lines.push('- Back-link notes:');
+      lines.push(...backlinkNotes);
+    }
+    return textResult(lines.join('\n'));
+  } catch (err) {
+    if (err instanceof JiraError) return errorResult(err.message);
+    return errorResult(
+      `Regression pack failed: ${err instanceof Error ? err.message : String(err)}`,
+    );
   }
 }
 

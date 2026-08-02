@@ -421,6 +421,7 @@ import {
   handleSpecshipJiraAddTask,
   handleSpecshipJiraAnchor,
   handleSpecshipJiraEpics,
+  handleSpecshipJiraRegressionPack,
 } from './jira-tools';
 
 export const tools: ToolDefinition[] = [
@@ -1348,6 +1349,16 @@ export class ToolHandler {
           // the project root to probe for taskship + spawn its CLI.
           const cg = this.getSpecShip(args.projectPath as string | undefined);
           return await handleSpecshipJiraAddTask(args, { projectRoot: cg.getProjectRoot() });
+        }
+        case 'specship_jira_regression_pack': {
+          // Regression-pack generator (REQ-JIRAREG-001). Reads the loaded spec
+          // set, plans an epic → domain-area → case hierarchy, and upserts it
+          // idempotently.
+          const cg = this.getSpecShip(args.projectPath as string | undefined);
+          return await handleSpecshipJiraRegressionPack(args, {
+            specQueries: cg.getSpecQueries(),
+            projectRoot: cg.getProjectRoot(),
+          });
         }
         default:
           return this.errorResult(`Unknown tool: ${toolName}`);
