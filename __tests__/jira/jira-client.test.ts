@@ -163,3 +163,88 @@ describe('JiraClient.testConnection', () => {
     expect(opts.headers.Authorization).toBe('Bearer pat-abc');
   });
 });
+
+describe('JiraClient.listEpics (REQ-JIRATEAM-006)', () => {
+  function searchResponse(
+    issues: Array<{ key: string; summary: string; status: string }>,
+  ): Partial<Response> {
+    return jsonResponse(200, {
+      issues: issues.map((i) => ({
+        key: i.key,
+        fields: { summary: i.summary, status: { name: i.status } },
+      })),
+    });
+  }
+
+  it('scopes the JQL to Epic + statusCategory != Done + project', async () => {
+    fetchMock.mockResolvedValue(
+      searchResponse([
+        { key: 'EPIC-1', summary: 'Q3 billing', status: 'In Progress' },
+        { key: 'EPIC-2', summary: 'Onboarding', status: 'To Do' },
+      ]),
+    );
+    const client = new JiraClient(CLOUD);
+    const epics = await client.listEpics('PROJ');
+    expect(epics).toEqual([
+      { key: 'EPIC-1', summary: 'Q3 billing', status: 'In Progress' },
+      { key: 'EPIC-2', summary: 'Onboarding', status: 'To Do' },
+    ]);
+    const url = String(fetchMock.mock.calls[0][0]);
+    const jql = new URL(url).searchParams.get('jql') ?? '';
+    expect(jql).toContain('project = "PROJ"');
+    expect(jql).toContain('issuetype = Epic');
+    expect(jql).toContain('statusCategory != Done');
+    expect(jql).toContain('ORDER BY updated DESC');
+    // Bounded, credential-carrying request.
+    expect(new URL(url).searchParams.get('maxResults')).toMatch(/^\d+$/);
+    const [, opts] = fetchMock.mock.calls[0];
+    expect(opts.redirect).toBe('manual');
+  });
+
+  it('quote-escapes the project value against JQL injection', async () => {
+    fetchMock.mockResolvedValue(searchResponse([]));
+    await new JiraClient(CLOUD).listEpics('PR"OJ');
+    const jql =
+      new URL(String(fetchMock.mock.calls[0][0])).searchParams.get('jql') ?? '';
+    expect(jql).toContain('project = "PR\\"OJ"');
+  });
+
+  it('returns an empty list on 200 with no issues', async () => {
+    fetchMock.mockResolvedValue(searchResponse([]));
+    const epics = await new JiraClient(CLOUD).listEpics('PROJ');
+    expect(epics).toEqual([]);
+  });
+
+  it('maps 401 to JiraAuthError', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(401, {}));
+    await expect(new JiraClient(CLOUD).listEpics('PROJ')).rejects.toBeInstanceOf(
+      JiraAuthError,
+    );
+  });
+
+  it('uses /search on Data Center, /search/jql on Cloud', async () => {
+    fetchMock.mockResolvedValue(searchResponse([]));
+    await new JiraClient(CLOUD).listEpics('PROJ');
+    expect(new URL(String(fetchMock.mock.calls[0][0])).pathname).toBe(
+      '/rest/api/2/search/jql',
+    );
+
+    fetchMock.mockClear();
+    fetchMock.mockResolvedValue(searchResponse([]));
+    await new JiraClient({
+      baseUrl: 'https://jira.acme.internal',
+      deployment: 'datacenter',
+      pat: 'pat-abc',
+    }).listEpics('PROJ');
+    expect(new URL(String(fetchMock.mock.calls[0][0])).pathname).toBe(
+      '/rest/api/2/search',
+    );
+  });
+
+  it('rejects an empty project key without a network call', async () => {
+    await expect(new JiraClient(CLOUD).listEpics('  ')).rejects.toBeInstanceOf(
+      JiraConfigError,
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});

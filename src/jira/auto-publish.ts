@@ -160,6 +160,15 @@ export async function autoPublishSpecsOnSync(
     };
 
     const existingKey = readSpecJiraKey(absPath);
+    // REQ-JIRATEAM-006: resolve the epic anchor — frontmatter first, then
+    // the binding default. `requireEpic` is off here so a bound repo whose
+    // spec pre-dates board-first intake doesn't hard-fail on every sync;
+    // the intake gate is what fences new specs. A refresh with no epic and
+    // no live parent still publishes unchanged Story text.
+    const specEpicKey =
+      readFrontmatterValue(fileContent, 'epicKey') ??
+      binding.binding.epicKey ??
+      undefined;
 
     // Fingerprint short-circuit (A1): an already-published spec whose
     // rendered Story fields match the last-published fingerprint performs
@@ -185,7 +194,7 @@ export async function autoPublishSpecsOnSync(
       const result = await publishSpecToJira(
         client,
         source,
-        { projectKey },
+        { projectKey, ...(specEpicKey ? { epicKey: specEpicKey } : {}) },
         existingKey,
       );
       // Frontmatter write-back stamps jira_issue: and the fingerprint. Never
@@ -195,6 +204,7 @@ export async function autoPublishSpecsOnSync(
         fingerprint: result.fingerprint,
         reId: null,
         renameTo: null,
+        ...(result.epicKey ? { epicKey: result.epicKey } : {}),
       });
       const status: AutoPublishStatus =
         result.created || result.subtasksCreated > 0 ? 'published' : 'unchanged';

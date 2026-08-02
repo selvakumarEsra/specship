@@ -22,6 +22,7 @@ import { wrapRepoBindingProjectError } from './repo-config';
 import {
   JiraCredentials,
   JiraConnectionResult,
+  JiraEpic,
   JiraIssue,
   JiraIssueListResult,
   JiraIssueResult,
@@ -240,7 +241,7 @@ export class JiraClient {
     // URL-encode the key: a slash or space in the key must not traverse the
     // path or split the request — encode it into a single path segment.
     const params = new URLSearchParams({
-      fields: 'summary,description,status,issuetype,subtasks',
+      fields: 'summary,description,status,issuetype,subtasks,parent',
     });
     const body = await this.request(
       `/rest/api/2/issue/${encodeURIComponent(trimmed)}?${params.toString()}`,
@@ -261,6 +262,12 @@ export class JiraClient {
       status: String(st?.fields?.status?.name ?? ''),
     }));
 
+    const parentRaw = fields?.parent;
+    const parentKey =
+      parentRaw && typeof parentRaw === 'object' && typeof parentRaw.key === 'string'
+        ? String(parentRaw.key)
+        : undefined;
+
     const issue: JiraIssue = {
       key: String(body?.key ?? trimmed),
       id: String(body?.id ?? ''),
@@ -269,9 +276,47 @@ export class JiraClient {
       issueType: String(fields.issuetype?.name ?? ''),
       description,
       subtasks,
+      ...(parentKey ? { parentKey } : {}),
     };
 
     return { ok: true, issue };
+  }
+
+  /**
+   * List open epics for a project (REQ-JIRATEAM-006). Scoped to `Epic`s
+   * whose statusCategory is not `Done`, ordered most-actionable-first, and
+   * bounded by `MAX_ISSUE_RESULTS`. The project value is quote-escaped to
+   * prevent JQL injection.
+   *
+   *  - 200 → the epic list (empty is a valid success).
+   *  - 401 / 403 → `JiraAuthError`; redirect / network / non-200 →
+   *    `JiraConfigError`.
+   */
+  async listEpics(projectKey: string): Promise<JiraEpic[]> {
+    const project = (projectKey ?? '').trim();
+    if (!project) {
+      throw new JiraConfigError('A JIRA project key is required to list epics.');
+    }
+    const escProject = project.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    const jql =
+      `project = "${escProject}" AND issuetype = Epic ` +
+      `AND statusCategory != Done ORDER BY updated DESC`;
+    const params = new URLSearchParams({
+      jql,
+      fields: 'summary,status',
+      maxResults: String(MAX_ISSUE_RESULTS),
+    });
+    const searchPath =
+      this.deployment === 'datacenter'
+        ? `/rest/api/2/search?${params.toString()}`
+        : `/rest/api/2/search/jql?${params.toString()}`;
+    const body = await this.request(searchPath);
+    const raw: any[] = Array.isArray(body?.issues) ? body.issues : [];
+    return raw.map((issue) => ({
+      key: String(issue?.key ?? ''),
+      summary: String(issue?.fields?.summary ?? ''),
+      status: String(issue?.fields?.status?.name ?? ''),
+    })).filter((e) => e.key.length > 0);
   }
 
   /**
