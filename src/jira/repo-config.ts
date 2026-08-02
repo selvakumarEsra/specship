@@ -124,7 +124,63 @@ export function loadRepoJiraBinding(
     binding.board = j.board;
   if (typeof j.sprint === 'string' || typeof j.sprint === 'number')
     binding.sprint = j.sprint;
+  if (typeof j.epicKey === 'string' && j.epicKey.trim())
+    binding.epicKey = j.epicKey.trim();
   return { binding, path: configPath };
+}
+
+/**
+ * Merge a partial `jira` binding patch into the committed
+ * `specship.config.json` (REQ-JIRATEAM-006 — used when the intake gate
+ * accepts a new default `epicKey`). Preserves every other top-level key
+ * (`enforce` and any unknown blocks) — same merge discipline as
+ * `enableGateChecks` in `src/enforce/enforce.ts`. Creates the file if
+ * absent. Never writes credential-adjacent fields.
+ */
+export function updateRepoJiraBinding(
+  projectRoot: string,
+  patch: Partial<JiraRepoBinding>,
+): { path: string; binding: JiraRepoBinding } {
+  const file = path.join(projectRoot, ENFORCE_CONFIG_FILE);
+  let cfg: { jira?: unknown; [k: string]: unknown } = {};
+  try {
+    const raw = fs.readFileSync(file, 'utf-8');
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      cfg = parsed as { jira?: unknown; [k: string]: unknown };
+    }
+  } catch {
+    // missing / unparseable → start fresh, preserving nothing
+  }
+  assertNoCredentialsInRepoConfig(cfg, file);
+  const existing =
+    cfg.jira && typeof cfg.jira === 'object' && !Array.isArray(cfg.jira)
+      ? (cfg.jira as Record<string, unknown>)
+      : {};
+  const merged: Record<string, unknown> = { ...existing };
+  for (const [k, v] of Object.entries(patch)) {
+    if (v === undefined) continue;
+    merged[k] = v;
+  }
+  if (typeof merged.projectKey !== 'string' || !merged.projectKey.trim()) {
+    throw new JiraConfigError(
+      `Cannot update ${file}: a "jira.projectKey" is required.`,
+    );
+  }
+  cfg.jira = merged;
+  fs.writeFileSync(file, JSON.stringify(cfg, null, 2) + '\n', 'utf-8');
+  const binding: JiraRepoBinding = { projectKey: String(merged.projectKey).trim() };
+  if (typeof merged.storyIssueType === 'string')
+    binding.storyIssueType = merged.storyIssueType;
+  if (typeof merged.subtaskIssueType === 'string')
+    binding.subtaskIssueType = merged.subtaskIssueType;
+  if (typeof merged.board === 'string' || typeof merged.board === 'number')
+    binding.board = merged.board;
+  if (typeof merged.sprint === 'string' || typeof merged.sprint === 'number')
+    binding.sprint = merged.sprint;
+  if (typeof merged.epicKey === 'string' && merged.epicKey.trim())
+    binding.epicKey = merged.epicKey.trim();
+  return { path: file, binding };
 }
 
 /**

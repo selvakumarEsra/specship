@@ -7,6 +7,7 @@ import {
   loadRepoJiraBinding,
   findRepoRoot,
   assertNoCredentialsInRepoConfig,
+  updateRepoJiraBinding,
 } from '../../src/jira/repo-config';
 import { JiraClient } from '../../src/jira/client';
 import { JiraConfigError, type JiraCredentials } from '../../src/jira/types';
@@ -107,6 +108,76 @@ describe('loadRepoJiraBinding', () => {
   it('throws when the jira block has no projectKey', () => {
     writeRepoCfg({ jira: { storyIssueType: 'Story' } });
     expect(() => loadRepoJiraBinding(repoRoot)).toThrow(JiraConfigError);
+  });
+
+  it('REQ-JIRATEAM-006: reads epicKey when present', () => {
+    writeRepoCfg({ jira: { projectKey: 'ACME', epicKey: 'ACME-99' } });
+    const { binding } = loadRepoJiraBinding(repoRoot);
+    expect(binding?.epicKey).toBe('ACME-99');
+  });
+});
+
+describe('updateRepoJiraBinding (REQ-JIRATEAM-006)', () => {
+  it('round-trips epicKey through load/update', () => {
+    writeRepoCfg({ jira: { projectKey: 'ACME' } });
+    const { binding } = updateRepoJiraBinding(repoRoot, { epicKey: 'ACME-99' });
+    expect(binding.epicKey).toBe('ACME-99');
+    const reload = loadRepoJiraBinding(repoRoot);
+    expect(reload.binding?.epicKey).toBe('ACME-99');
+    expect(reload.binding?.projectKey).toBe('ACME');
+  });
+
+  it('preserves the enforce block and unknown top-level keys', () => {
+    // Simulate a repo config with enforce gating and an unknown block.
+    writeRepoCfg({
+      jira: { projectKey: 'ACME', storyIssueType: 'Story' },
+      enforce: { gate: { drift: true } },
+      experimental: { flags: ['x'] },
+    });
+    updateRepoJiraBinding(repoRoot, { epicKey: 'ACME-1' });
+    const raw = JSON.parse(
+      fs.readFileSync(path.join(repoRoot, ENFORCE_CONFIG_FILE), 'utf-8'),
+    );
+    expect(raw.jira).toEqual({
+      projectKey: 'ACME',
+      storyIssueType: 'Story',
+      epicKey: 'ACME-1',
+    });
+    expect(raw.enforce).toEqual({ gate: { drift: true } });
+    expect(raw.experimental).toEqual({ flags: ['x'] });
+  });
+
+  it('coexists with enableGateChecks — either can run first', () => {
+    writeRepoCfg({ jira: { projectKey: 'ACME' } });
+    enableGateChecks(repoRoot, ['drift']);
+    updateRepoJiraBinding(repoRoot, { epicKey: 'ACME-42' });
+    const raw = JSON.parse(
+      fs.readFileSync(path.join(repoRoot, ENFORCE_CONFIG_FILE), 'utf-8'),
+    );
+    expect(raw.enforce?.gate?.drift).toBe(true);
+    expect(raw.jira?.epicKey).toBe('ACME-42');
+    // And now the reverse order — updating epicKey first then enabling a gate.
+    fs.rmSync(path.join(repoRoot, ENFORCE_CONFIG_FILE));
+    fs.writeFileSync(
+      path.join(repoRoot, ENFORCE_CONFIG_FILE),
+      JSON.stringify({ jira: { projectKey: 'ACME' } }, null, 2),
+    );
+    updateRepoJiraBinding(repoRoot, { epicKey: 'ACME-42' });
+    enableGateChecks(repoRoot, ['fitness']);
+    const raw2 = JSON.parse(
+      fs.readFileSync(path.join(repoRoot, ENFORCE_CONFIG_FILE), 'utf-8'),
+    );
+    expect(raw2.enforce?.gate?.fitness).toBe(true);
+    expect(raw2.jira?.epicKey).toBe('ACME-42');
+  });
+
+  it('refuses to write a credential-shaped field via patch', () => {
+    // A malicious caller shouldn't be able to sneak a credential in.
+    writeRepoCfg({ jira: { projectKey: 'ACME', apiToken: 'leaked' } });
+    // load rejects such a file, and update should refuse too.
+    expect(() =>
+      updateRepoJiraBinding(repoRoot, { epicKey: 'ACME-1' }),
+    ).toThrow(JiraConfigError);
   });
 });
 

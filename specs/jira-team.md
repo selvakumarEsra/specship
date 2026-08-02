@@ -266,9 +266,11 @@ The published Story is parented under that epic, and auto-publish
 
 implementations:
   - src/jira/repo-config.ts:loadRepoJiraBinding
+  - src/jira/repo-config.ts:updateRepoJiraBinding
   - src/jira/publish.ts:publishSpecToJira
   - src/jira/auto-publish.ts:autoPublishSpecsOnSync
   - src/jira/client.ts:JiraClient.listEpics
+  - commands/specship/spec.md
 
 ## Acceptance
 <!-- id: REQ-JIRATEAM-006.A1 -->

@@ -238,6 +238,39 @@ configured** (the `specship_jira_*` tools are present and not returning the
 - **JIRA not configured** → skip this section entirely — no prompt, no
   mention (REQ-JIRAPUB-003.A1).
 
+## Board-first intake gate (bound repo, REQ-JIRATEAM-006)
+
+When the repo carries a `jira` binding in `specship.config.json`, the JIRA
+offer above is **not optional** — a new spec MUST be created in JIRA under
+an epic before the authoring flow reports done. Resolve the epic in this
+order:
+
+1. Spec frontmatter `epicKey:` — if the draft already carries one, use it.
+2. Binding default `jira.epicKey` in `specship.config.json` — use it and
+   record it into the spec frontmatter.
+3. Offer to pick from the project's open epics (007 supplies the menu). Once
+   picked, write the chosen `epicKey:` into the spec frontmatter.
+
+Then publish. The published Story is parented under that epic, and the
+result is stamped into the spec's frontmatter (`jira_issue`, `epicKey`,
+`jira_fingerprint`).
+
+**Refusal (A3).** On a bound repo with no resolvable epic and the user
+declines to pick, **do NOT create an unanchored Story**. Print exactly:
+
+> Refusing to create a JIRA Story without an epic anchor. Set `jira.epicKey`
+> in `specship.config.json` (the committed binding) or pick an epic — I
+> won't create an unanchored Story.
+
+**Unbound repo (A5).** No binding → the intake gate does not apply. The
+plain JIRA offer above still runs when JIRA is user-level configured.
+
+**Re-publish (A4).** A later re-publish (from `auto-publish` on `sync`, or a
+manual re-publish) NEVER re-parents a live Story. If the spec's frontmatter
+`epicKey` differs from JIRA's live parent, SpecShip logs a `reparent_skipped`
+warning and leaves JIRA untouched — moving a Story between epics is a JIRA
+UI action, not a SpecShip side effect.
+
 ## Fast-path (`fast <description>`)
 
 For a solo dev who wants to record intent and move, **without** the brainstorm /
