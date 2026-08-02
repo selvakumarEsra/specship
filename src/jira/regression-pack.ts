@@ -96,6 +96,14 @@ export interface UpsertResult {
   casesCreated: number;
   casesUpdated: number;
   casesSkipped: number;
+  /**
+   * Cases newly marked obsolete on this run — REQ-JIRAREG-003.A3. A re-run
+   * that finds the same case already carrying the obsolete watermark + label
+   * does not re-count it (REQ-JIRAREG-003.A4).
+   */
+  casesObsoleted: number;
+  /** JIRA keys of cases marked obsolete on this run (in scan order). */
+  obsoletedCaseKeys: string[];
   /** Extra pack-epic issue keys found under the same label (single-epic invariant). */
   orphanedEpicKeys: string[];
   /** Per-case JIRA keys, keyed on `<reqId>.<criterionSuffix>` for back-linking. */
@@ -110,9 +118,38 @@ export const REG_PACK_EPIC_LABEL = 'specship-regression-pack';
 export const REG_PACK_DOMAIN_LABEL_PREFIX = 'specship-regdomain-';
 export const REG_PACK_CASE_LABEL_PREFIX = 'specship-regcase-';
 
+/**
+ * Stable marker label every regression case carries alongside its per-case
+ * slug label (REQ-JIRAREG-003). JIRA JQL cannot wildcard `labels`, so the
+ * orphan scan queries this fixed label to enumerate every case in the pack
+ * without touching the epic or area stories (which never carry it).
+ */
+export const REG_PACK_CASE_MARKER_LABEL = 'specship-regcase';
+
+/**
+ * Board-filterable label attached to cases whose source criterion no longer
+ * exists in the spec set (REQ-JIRAREG-003.A3). A comment alone would be
+ * invisible in a JIRA filter — this label makes `labels = "specship-reg-obsolete"`
+ * a valid JQL query. Never removed automatically.
+ */
+export const REG_PACK_OBSOLETE_LABEL = 'specship-reg-obsolete';
+
 export const REG_PACK_EPIC_WATERMARK = '<!-- specship:regression-pack v1 -->';
 export const REG_PACK_STORY_WATERMARK = '<!-- specship:regression-pack:story v1 -->';
 export const REG_PACK_CASE_WATERMARK = '<!-- specship:regression-pack:case v1 -->';
+
+/**
+ * Stable prefix of the obsolete-marker comment (REQ-JIRAREG-003.A3). The
+ * per-run body carries a timestamp, but the idempotency key here does NOT
+ * include the timestamp — a re-run with the same `reason` finds the prior
+ * marker via `body.startsWith(prefix + reason + " -->")` and writes nothing
+ * (REQ-JIRAREG-003.A4).
+ */
+export const REG_PACK_OBSOLETE_WATERMARK_PREFIX = '<!-- specship:regobsolete v1';
+
+function obsoleteWatermark(reason: string): string {
+  return `${REG_PACK_OBSOLETE_WATERMARK_PREFIX} reason=${reason} -->`;
+}
 
 const UNCATEGORISED_AREA = 'Uncategorised';
 
@@ -393,6 +430,21 @@ export interface RegressionPackJiraClient {
     key: string,
     fields: { summary?: string; description?: string },
   ): Promise<void>;
+  /**
+   * Enumerate an issue's comments with ids (REQ-JIRAREG-003.A3). Used by the
+   * obsolete-marker upsert to check for a prior marker before writing.
+   */
+  listCommentsDetailed(
+    key: string,
+  ): Promise<Array<{ id: string; body: string }>>;
+  /** Append a comment to an issue (REQ-JIRAREG-003.A3). */
+  addComment(key: string, body: string): Promise<{ id: string } | void>;
+  /**
+   * Add a label to an issue idempotently (REQ-JIRAREG-003.A3 + A4). Returns
+   * `{ added: false }` when the label is already present so a re-run is a
+   * zero-write. Implementations MUST NOT issue a PUT when the label is set.
+   */
+  addLabel(key: string, label: string): Promise<{ added: boolean }>;
 }
 
 interface UpsertOutcome {
@@ -414,6 +466,7 @@ async function upsertLabelledIssue(
   summary: string,
   description: string,
   parentKey: string | undefined,
+  extraLabels: string[] = [],
 ): Promise<{ outcome: UpsertOutcome; orphans: string[] }> {
   const matches = await client.searchIssuesByLabel(ctx.projectKey, label);
   const sorted = [...matches].sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
@@ -428,10 +481,21 @@ async function upsertLabelledIssue(
     const detail = await client.getIssue(canonical.key);
     const storedFp = readStoredFingerprint(detail.issue.description);
     if (storedFp === newFp) {
+      // Backfill any missing extra labels on a canonical issue that pre-dates
+      // them (REQ-JIRAREG-003 marker label rollout). `addLabel` is idempotent —
+      // a no-op when already set, so a re-run stays zero-write.
+      if (!ctx.dryRun) {
+        for (const extra of extraLabels) {
+          await client.addLabel(canonical.key, extra);
+        }
+      }
       return { outcome: { key: canonical.key, action: 'skipped' }, orphans };
     }
     if (!ctx.dryRun) {
       await client.updateIssue(canonical.key, { summary, description });
+      for (const extra of extraLabels) {
+        await client.addLabel(canonical.key, extra);
+      }
     }
     return { outcome: { key: canonical.key, action: 'updated' }, orphans };
   }
@@ -449,7 +513,7 @@ async function upsertLabelledIssue(
     issueType,
     summary,
     description,
-    labels: [label],
+    labels: [label, ...extraLabels],
     ...(parentKey ? { parentKey } : {}),
   });
   return { outcome: { key: created.key, action: 'created' }, orphans };
@@ -512,11 +576,32 @@ export async function upsertRegressionPack(
         c.summary,
         c.description,
         storyRes.outcome.key,
+        [REG_PACK_CASE_MARKER_LABEL],
       );
       if (caseRes.outcome.action === 'created') casesCreated++;
       else if (caseRes.outcome.action === 'updated') casesUpdated++;
       else casesSkipped++;
       caseKeysByCriterion[c.criterionId] = caseRes.outcome.key;
+    }
+  }
+
+  // Reconcile orphaned cases (REQ-JIRAREG-003.A3). Query every case in the
+  // pack via the fixed marker label — the epic and area stories never carry
+  // it, so this scan touches only cases. Any case whose key is not in the
+  // just-upserted set belongs to a criterion that no longer exists in the
+  // spec set (removed or superseded) → mark obsolete. Never deleted; run
+  // history stays intact.
+  const obsoletedCaseKeys: string[] = [];
+  let casesObsoleted = 0;
+  if (!ctx.dryRun) {
+    const expected = new Set(Object.values(caseKeysByCriterion));
+    const orphans = await findOrphanedCases(client, ctx.projectKey, expected);
+    for (const orphan of orphans) {
+      const outcome = await markCaseObsolete(client, orphan.key, 'removed');
+      if (outcome.action === 'obsoleted') {
+        casesObsoleted++;
+        obsoletedCaseKeys.push(orphan.key);
+      }
     }
   }
 
@@ -529,9 +614,77 @@ export async function upsertRegressionPack(
     casesCreated,
     casesUpdated,
     casesSkipped,
+    casesObsoleted,
+    obsoletedCaseKeys,
     orphanedEpicKeys: epicRes.orphans,
     caseKeysByCriterion,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Obsolete reconciliation (REQ-JIRAREG-003.A3)
+// ---------------------------------------------------------------------------
+
+/**
+ * Enumerate case issues in the pack (via the fixed case marker label) that are
+ * not in `expectedKeys` — the caller's set of case keys just upserted from the
+ * current model. The result is deterministic (sorted lex on key) so re-runs
+ * report obsolete work in the same order.
+ */
+export async function findOrphanedCases(
+  client: RegressionPackJiraClient,
+  projectKey: string,
+  expectedKeys: Set<string>,
+): Promise<Array<{ key: string; summary: string }>> {
+  const all = await client.searchIssuesByLabel(projectKey, REG_PACK_CASE_MARKER_LABEL);
+  return all
+    .filter((i) => !expectedKeys.has(i.key))
+    .sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+}
+
+export type MarkObsoleteOutcome =
+  | { action: 'obsoleted'; commentAdded: boolean; labelAdded: boolean }
+  | { action: 'skipped' };
+
+/**
+ * Mark a case obsolete on JIRA (REQ-JIRAREG-003.A3): attach a stable
+ * watermarked comment naming the reason AND add the board-filterable
+ * `specship-reg-obsolete` label. Both writes are idempotent — a re-run with
+ * the same reason finds the prior marker and adds nothing (A4).
+ *
+ * Never transitions the issue's workflow status (spec-driven correction:
+ * "no workflow transitions by default") and never deletes it — the run
+ * history and any prior evidence stay intact.
+ */
+export async function markCaseObsolete(
+  client: RegressionPackJiraClient,
+  issueKey: string,
+  reason: string,
+): Promise<MarkObsoleteOutcome> {
+  const watermark = obsoleteWatermark(reason);
+  const comments = await client.listCommentsDetailed(issueKey);
+  const hasMarker = comments.some((c) => c.body.startsWith(watermark));
+
+  const labelRes = await client.addLabel(issueKey, REG_PACK_OBSOLETE_LABEL);
+
+  if (hasMarker) {
+    // Idempotency: the comment marker is the source-of-truth signal that
+    // this case has already been marked obsolete for `reason`. A label-only
+    // add (backfill) does not count as a fresh obsoletion — the previous
+    // run already recorded it.
+    return { action: 'skipped' };
+  }
+
+  const body = [
+    watermark,
+    '',
+    `This regression case is obsolete: ${reason}.`,
+    `Marked ${new Date().toISOString()}.`,
+    'The issue is preserved so past run history stays intact; the pack ' +
+      'will no longer regenerate it.',
+  ].join('\n');
+  await client.addComment(issueKey, body);
+  return { action: 'obsoleted', commentAdded: true, labelAdded: labelRes.added };
 }
 
 // ---------------------------------------------------------------------------

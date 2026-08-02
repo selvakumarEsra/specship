@@ -2093,6 +2093,11 @@ export async function handleSpecshipJiraRegressionPack(
     lines.push(
       `- Cases: ${result.casesCreated} created, ${result.casesUpdated} updated, ${result.casesSkipped} skipped (of ${model.cases.length})`,
     );
+    if (result.casesObsoleted > 0) {
+      lines.push(
+        `- Obsoleted: ${result.casesObsoleted} case${result.casesObsoleted === 1 ? '' : 's'} (${result.obsoletedCaseKeys.join(', ')}) — kept for run history, labelled specship-reg-obsolete.`,
+      );
+    }
     if (result.orphanedEpicKeys.length > 0) {
       lines.push(
         `- Extra pack-epics found (single-epic invariant): ${result.orphanedEpicKeys.join(', ')} — merge or delete them manually.`,
