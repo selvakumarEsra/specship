@@ -115,8 +115,14 @@ changed performs no JIRA write.
 
 implementations:
   - src/jira/regression-pack.ts:upsertRegressionPack
+  - src/jira/regression-pack.ts:findOrphanedCases
+  - src/jira/regression-pack.ts:markCaseObsolete
+  - src/jira/client.ts:JiraClient.addLabel
   - src/jira/publish.ts:issueContentFingerprint
   - src/jira/publish.ts:upsertWatermarkedComment
+
+verifies:
+  - __tests__/jira/regression-pack.test.ts
 
 ## Acceptance
 <!-- id: REQ-JIRAREG-003.A1 -->

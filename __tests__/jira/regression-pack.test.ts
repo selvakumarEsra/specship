@@ -29,6 +29,9 @@ import {
   readStoredFingerprint,
   REG_PACK_EPIC_LABEL,
   REG_PACK_CASE_LABEL_PREFIX,
+  REG_PACK_CASE_MARKER_LABEL,
+  REG_PACK_OBSOLETE_LABEL,
+  REG_PACK_OBSOLETE_WATERMARK_PREFIX,
   type BuilderSpecQueries,
   type RegressionPackJiraClient,
 } from '../../src/jira/regression-pack';
@@ -120,10 +123,14 @@ interface FakeIssue {
 
 function makeFake(seed: FakeIssue[] = []) {
   const issues = new Map<string, FakeIssue>();
+  const commentsByKey = new Map<string, Array<{ id: string; body: string }>>();
   for (const s of seed) issues.set(s.key, { ...s });
   let next = 100;
+  let nextCommentId = 1;
   const created: string[] = [];
   const updated: string[] = [];
+  const commentsAdded: Array<{ key: string; body: string }> = [];
+  const labelsAdded: Array<{ key: string; label: string }> = [];
   const client: RegressionPackJiraClient = {
     async searchIssuesByLabel(_projectKey, label) {
       const out: Array<{ key: string; summary: string }> = [];
@@ -157,8 +164,31 @@ function makeFake(seed: FakeIssue[] = []) {
       if (fields.description !== undefined) i.description = fields.description;
       updated.push(key);
     },
+    async listCommentsDetailed(key) {
+      const i = issues.get(key);
+      if (!i) throw new Error(`no such issue ${key}`);
+      return (commentsByKey.get(key) ?? []).map((c) => ({ ...c }));
+    },
+    async addComment(key, body) {
+      const i = issues.get(key);
+      if (!i) throw new Error(`no such issue ${key}`);
+      const id = `C${nextCommentId++}`;
+      const list = commentsByKey.get(key) ?? [];
+      list.push({ id, body });
+      commentsByKey.set(key, list);
+      commentsAdded.push({ key, body });
+      return { id };
+    },
+    async addLabel(key, label) {
+      const i = issues.get(key);
+      if (!i) throw new Error(`no such issue ${key}`);
+      if (i.labels.includes(label)) return { added: false };
+      i.labels.push(label);
+      labelsAdded.push({ key, label });
+      return { added: true };
+    },
   };
-  return { client, issues, created, updated };
+  return { client, issues, created, updated, commentsAdded, labelsAdded, commentsByKey };
 }
 
 // ---------------------------------------------------------------------------
@@ -496,6 +526,168 @@ describe('writeRegressionCaseKeys — REQ-JIRAREG-001 (A3)', () => {
 // ---------------------------------------------------------------------------
 // Label + case-key wiring
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// REQ-JIRAREG-003 — idempotent maintenance (add / update / obsolete / zero-write)
+// ---------------------------------------------------------------------------
+
+describe('upsertRegressionPack — REQ-JIRAREG-003 (add/update/obsolete)', () => {
+  function buildModel(criteria: Array<{ suffix: string; text: string }>) {
+    const req = makeReq('REQ-MAINT-001', 'Maintainable pack');
+    const accs = criteria.map((c) =>
+      makeAcceptance(`REQ-MAINT-001.${c.suffix}`, req.id, c.text, req.sourcePath),
+    );
+    const sq = fakeQueries({
+      specs: [req, ...accs],
+      linksBySpec: { [req.id]: [makeLink(req.id, 'implements', 'implemented')] },
+    });
+    return buildRegressionPack(sq);
+  }
+
+  it('A1: adding a criterion creates exactly one new case; nothing else changes', async () => {
+    const before = buildModel([{ suffix: 'A1', text: 'First check.' }]);
+    const fake = makeFake();
+    await upsertRegressionPack(fake.client, before, { projectKey: 'PROJ' });
+
+    fake.created.length = 0;
+    fake.updated.length = 0;
+    fake.commentsAdded.length = 0;
+    fake.labelsAdded.length = 0;
+
+    const after = buildModel([
+      { suffix: 'A1', text: 'First check.' },
+      { suffix: 'A2', text: 'Second check.' },
+    ]);
+    const result = await upsertRegressionPack(fake.client, after, { projectKey: 'PROJ' });
+
+    expect(result.casesCreated).toBe(1);
+    expect(result.casesUpdated).toBe(0);
+    expect(result.casesObsoleted).toBe(0);
+    expect(fake.created).toHaveLength(1); // exactly one new case created
+    // No obsolete write path fired.
+    expect(fake.commentsAdded).toHaveLength(0);
+    expect(fake.labelsAdded).toHaveLength(0);
+    // Story + epic body legitimately refresh to reflect the new case count —
+    // that's fingerprint drift on the container bodies, not case-level churn.
+    // What A1 forbids is a duplicate case or an unrelated case edit.
+    for (const key of fake.updated) {
+      const issue = fake.issues.get(key)!;
+      expect(issue.issueType).not.toBe('Sub-task');
+    }
+  });
+
+  it('A2: editing a criterion updates its case in place — same key, no duplicate', async () => {
+    const before = buildModel([{ suffix: 'A1', text: 'Original text.' }]);
+    const fake = makeFake();
+    const first = await upsertRegressionPack(fake.client, before, { projectKey: 'PROJ' });
+    const caseKey = first.caseKeysByCriterion['REQ-MAINT-001.A1'];
+    expect(caseKey).toBeTruthy();
+
+    fake.created.length = 0;
+    fake.updated.length = 0;
+
+    const after = buildModel([{ suffix: 'A1', text: 'Edited text — different now.' }]);
+    const result = await upsertRegressionPack(fake.client, after, { projectKey: 'PROJ' });
+
+    expect(result.casesCreated).toBe(0);
+    expect(result.casesUpdated).toBe(1);
+    expect(result.casesObsoleted).toBe(0);
+    expect(result.caseKeysByCriterion['REQ-MAINT-001.A1']).toBe(caseKey); // same key
+    expect(fake.created).toHaveLength(0);
+    expect(fake.updated).toContain(caseKey);
+    // Updated body reflects new criterion text.
+    expect(fake.issues.get(caseKey)!.description).toContain('Edited text');
+  });
+
+  it('A3: removing a criterion marks the case obsolete (comment + label), issue preserved', async () => {
+    const before = buildModel([
+      { suffix: 'A1', text: 'Kept.' },
+      { suffix: 'A2', text: 'Removed later.' },
+    ]);
+    const fake = makeFake();
+    const first = await upsertRegressionPack(fake.client, before, { projectKey: 'PROJ' });
+    const keptKey = first.caseKeysByCriterion['REQ-MAINT-001.A1'];
+    const removedKey = first.caseKeysByCriterion['REQ-MAINT-001.A2'];
+    expect(removedKey).toBeTruthy();
+
+    fake.created.length = 0;
+    fake.updated.length = 0;
+    fake.commentsAdded.length = 0;
+    fake.labelsAdded.length = 0;
+
+    const after = buildModel([{ suffix: 'A1', text: 'Kept.' }]);
+    const result = await upsertRegressionPack(fake.client, after, { projectKey: 'PROJ' });
+
+    expect(result.casesObsoleted).toBe(1);
+    expect(result.obsoletedCaseKeys).toEqual([removedKey]);
+
+    // Original issue still exists (never deleted) — run history preserved.
+    expect(fake.issues.has(removedKey)).toBe(true);
+    // Kept case still there and skipped, not touched.
+    expect(fake.issues.has(keptKey)).toBe(true);
+
+    // Watermarked obsolete comment present with the reason.
+    const commentBodies = (fake.commentsByKey.get(removedKey) ?? []).map((c) => c.body);
+    expect(commentBodies.some((b) => b.startsWith(REG_PACK_OBSOLETE_WATERMARK_PREFIX))).toBe(true);
+    expect(commentBodies.some((b) => b.includes('reason=removed'))).toBe(true);
+    expect(commentBodies.some((b) => b.includes('obsolete'))).toBe(true);
+
+    // Board-filterable obsolete label attached.
+    expect(fake.issues.get(removedKey)!.labels).toContain(REG_PACK_OBSOLETE_LABEL);
+
+    // No destructive workflow transition happened; no updateIssue write on
+    // the obsoleted case body.
+    expect(fake.updated).not.toContain(removedKey);
+  });
+
+  it('A4: running maintenance twice in a row performs zero writes on the second run', async () => {
+    const model = buildModel([
+      { suffix: 'A1', text: 'One.' },
+      { suffix: 'A2', text: 'Two.' },
+    ]);
+    const fake = makeFake();
+
+    // Run 1: creates.
+    await upsertRegressionPack(fake.client, model, { projectKey: 'PROJ' });
+
+    // Now remove one criterion and run — one obsoletion happens (first-time write).
+    const trimmed = buildModel([{ suffix: 'A1', text: 'One.' }]);
+    await upsertRegressionPack(fake.client, trimmed, { projectKey: 'PROJ' });
+
+    fake.created.length = 0;
+    fake.updated.length = 0;
+    fake.commentsAdded.length = 0;
+    fake.labelsAdded.length = 0;
+
+    // Run 3: identical to run 2 → zero writes.
+    const result = await upsertRegressionPack(fake.client, trimmed, { projectKey: 'PROJ' });
+
+    expect(result.casesCreated).toBe(0);
+    expect(result.casesUpdated).toBe(0);
+    expect(result.casesObsoleted).toBe(0);
+    expect(fake.created).toHaveLength(0);
+    expect(fake.updated).toHaveLength(0);
+    expect(fake.commentsAdded).toHaveLength(0);
+    expect(fake.labelsAdded).toHaveLength(0);
+  });
+
+  it('every case carries the fixed case marker label alongside its per-case slug', async () => {
+    const model = buildModel([{ suffix: 'A1', text: 'x.' }]);
+    const fake = makeFake();
+    const result = await upsertRegressionPack(fake.client, model, { projectKey: 'PROJ' });
+    const caseKey = result.caseKeysByCriterion['REQ-MAINT-001.A1'];
+    const labels = fake.issues.get(caseKey)!.labels;
+    expect(labels).toContain(REG_PACK_CASE_MARKER_LABEL);
+    // Pack epic and area story MUST NOT carry the case marker label
+    // (orphan scan invariant).
+    expect(fake.issues.get(result.epicKey!)!.labels).not.toContain(REG_PACK_CASE_MARKER_LABEL);
+    for (const [, issue] of fake.issues) {
+      if (issue.issueType === 'Story') {
+        expect(issue.labels).not.toContain(REG_PACK_CASE_MARKER_LABEL);
+      }
+    }
+  });
+});
 
 describe('regression-pack labels', () => {
   it('every case has a stable slug label prefixed for JQL lookup', () => {

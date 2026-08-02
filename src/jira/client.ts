@@ -647,6 +647,35 @@ export class JiraClient {
   }
 
   /**
+   * Add a label to an issue idempotently (REQ-JIRAREG-003). Reads the current
+   * labels first and issues the PUT only when the label is missing — a re-run
+   * with the label already present is a zero-write. Uses the additive
+   * `update.labels add` shape so other labels are preserved.
+   */
+  async addLabel(key: string, label: string): Promise<{ added: boolean }> {
+    const trimmed = (key ?? '').trim();
+    const lab = (label ?? '').trim();
+    if (!trimmed || !lab) {
+      throw new JiraConfigError(
+        'An issue key and a label are required to add a label.',
+      );
+    }
+    const issue = await this.request(
+      `/rest/api/2/issue/${encodeURIComponent(trimmed)}?fields=labels`,
+    );
+    const current: string[] = Array.isArray(issue?.fields?.labels)
+      ? issue.fields.labels.map((v: unknown) => String(v))
+      : [];
+    if (current.includes(lab)) return { added: false };
+    await this.write(
+      `/rest/api/2/issue/${encodeURIComponent(trimmed)}`,
+      { update: { labels: [{ add: lab }] } },
+      'PUT',
+    );
+    return { added: true };
+  }
+
+  /**
    * Ensure a project version with `name` exists (REQ-JIRAPUB-007), creating
    * it when missing. Returns whether this call created it — a re-run finds
    * the existing version and creates nothing (A2).
