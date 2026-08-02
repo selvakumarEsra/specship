@@ -252,3 +252,105 @@ verifies:
 <!-- id: REQ-JIRATEAM-005.A4 -->
 - Confirming an amendment writes the spec, re-publishes the issue, and
   refreshes the fingerprint so the next reconcile reports no divergence.
+
+<!-- id: REQ-JIRATEAM-006 -->
+## On a bound repo, a new spec MUST be created in JIRA under an epic at authoring time
+
+Board-first intake, outbound half (settled 2026-08-02): when the repo binding
+is present, authoring a spec creates its JIRA issue **under an epic** as part
+of spec creation — not later, not optionally. The binding gains an `epicKey`
+as the default anchor; the authoring flow MAY offer a different epic from the
+project's open epics, and the chosen epic lands in the spec's frontmatter.
+The published Story is parented under that epic, and auto-publish
+(REQ-JIRATEAM-002) honours the same epic anchor on refresh.
+
+implementations:
+  - src/jira/repo-config.ts:loadRepoJiraBinding
+  - src/jira/publish.ts:publishSpecToJira
+  - src/jira/auto-publish.ts:autoPublishSpecsOnSync
+  - src/jira/client.ts:JiraClient.listEpics
+
+## Acceptance
+<!-- id: REQ-JIRATEAM-006.A1 -->
+- On a bound repo with an `epicKey`, finishing spec authoring creates the JIRA
+  Story under that epic before the flow reports done, and the spec frontmatter
+  records both the issue key and the epic key.
+<!-- id: REQ-JIRATEAM-006.A2 -->
+- The authoring flow can list the bound project's open epics and accept a
+  different epic than the binding default; the override is recorded in the
+  spec frontmatter and used for the Story's parent.
+<!-- id: REQ-JIRATEAM-006.A3 -->
+- On a bound repo with no resolvable epic (no `epicKey`, none chosen), spec
+  authoring refuses to complete, naming the fix — set `epicKey` in the binding
+  or pick an epic — rather than creating an unanchored Story.
+<!-- id: REQ-JIRATEAM-006.A4 -->
+- Auto-publish and re-publish keep the Story under its recorded epic; a
+  re-publish never detaches or re-parents the Story to a different epic
+  without a frontmatter change.
+<!-- id: REQ-JIRATEAM-006.A5 -->
+- On an unbound repo, spec authoring is unchanged — no epic requirement, no
+  JIRA call.
+
+<!-- id: REQ-JIRATEAM-007 -->
+## On a bound repo, starting work without a new spec MUST go through the board
+
+Board-first intake, inbound half: on a bound repo, every work-creating flow —
+implementing, fixing, starting an issue — is anchored to a JIRA issue. When
+the user starts work without naming a new spec, SpecShip lists the open
+stories and tasks from the bound project (scoped to the epic when one is
+bound) so they pick one to drive the work; picking routes into the existing
+issue-to-spec pipeline. A work-creating flow that can resolve no anchor —
+no epic, no picked issue — refuses with the fix named. Read-only retrieval
+(explore, search, status, coverage) is never blocked.
+
+implementations:
+  - src/mcp/jira-tools.ts:handleSpecshipJiraIssues
+  - src/jira/board-first.ts:resolveWorkAnchor
+
+## Acceptance
+<!-- id: REQ-JIRATEAM-007.A1 -->
+- On a bound repo, starting implementation without a new spec presents the
+  bound project's open stories/tasks (epic-scoped when an epic is bound) to
+  pick from; the picked issue flows into the existing pick→spec→implement
+  pipeline.
+<!-- id: REQ-JIRATEAM-007.A2 -->
+- A work-creating flow on a bound repo with no resolvable anchor (no epic
+  binding, no picked issue) refuses and names the fix; it never silently
+  proceeds unanchored.
+<!-- id: REQ-JIRATEAM-007.A3 -->
+- Read-only operations — explore, search, callers/callees, impact, status,
+  coverage, track — are never gated on an anchor, bound or not.
+<!-- id: REQ-JIRATEAM-007.A4 -->
+- On an unbound repo, all flows behave exactly as before — board-first is
+  strictly gated on the committed binding.
+
+<!-- id: REQ-JIRATEAM-008 -->
+## A JIRA menu MUST let the user configure the binding and choose their epic and issue interactively
+
+One interactive door for the whole board-first setup: a menu command that
+walks the user through the JIRA lifecycle — configure/verify the connection
+and repo binding, choose the default epic from the project's open epics, and
+browse the open stories/tasks to pick one and start work. Each menu action
+routes to the existing capability (binding write, epic selection, issue
+pick/start) rather than duplicating it; the menu is the guided path, not a
+second implementation.
+
+implementations:
+  - commands/specship/jira.md
+  - src/jira/client.ts:JiraClient.listEpics
+
+## Acceptance
+<!-- id: REQ-JIRATEAM-008.A1 -->
+- The menu offers at least: connection/binding status, configure or edit the
+  repo binding (project, epic), choose the default epic from the project's
+  open epics, and list open stories/tasks to pick and start one.
+<!-- id: REQ-JIRATEAM-008.A2 -->
+- Choosing an epic from the menu persists it as the binding's `epicKey`
+  (committed repo config), and the change is visible to the next authoring
+  flow without restart.
+<!-- id: REQ-JIRATEAM-008.A3 -->
+- Picking a story/task from the menu routes into the existing pick→start
+  pipeline — the same path REQ-JIRATEAM-007 uses — not a parallel one.
+<!-- id: REQ-JIRATEAM-008.A4 -->
+- With JIRA unconfigured, the menu still opens and leads with the configure
+  path instead of erroring.
