@@ -3866,6 +3866,49 @@ jira
   });
 
 /**
+ * specship jira bind — persist the repo's JIRA binding into
+ * specship.config.json (REQ-JIRATEAM-008.A2). The committed binding is what
+ * board-first flows read — the same file `updateRepoJiraBinding` writes.
+ * Credentials never live here; `assertNoCredentialsInRepoConfig` enforces it.
+ */
+jira
+  .command('bind')
+  .description('Write the repo JIRA binding into specship.config.json (project, epic).')
+  .option('--project <key>', 'JIRA project key to bind (e.g., "PROJ")')
+  .option('--epic <key>', 'Default epic key to anchor new work (e.g., "PROJ-42")')
+  .option('--path <projectRoot>', 'Project root (default: cwd)')
+  .action(async (options: { project?: string; epic?: string; path?: string }) => {
+    const projectRoot = path.resolve(options.path ?? process.cwd());
+    if (!options.project && !options.epic) {
+      error('Nothing to bind. Pass --project <KEY> and/or --epic <KEY>.');
+      process.exit(1);
+    }
+    try {
+      const { updateRepoJiraBinding, loadRepoJiraBinding } = await import('../jira/repo-config');
+      const patch: { projectKey?: string; epicKey?: string } = {};
+      if (options.project) patch.projectKey = options.project.trim().toUpperCase();
+      if (options.epic) patch.epicKey = options.epic.trim().toUpperCase();
+      // --epic alone requires an existing bound project (updateRepoJiraBinding
+      // insists on projectKey being present in the merged result).
+      if (!patch.projectKey) {
+        const { binding } = loadRepoJiraBinding(projectRoot);
+        if (!binding) {
+          error('No existing JIRA project binding. Pass --project <KEY> on the first bind.');
+          process.exit(1);
+        }
+      }
+      const { path: file, binding } = updateRepoJiraBinding(projectRoot, patch);
+      success(`Wrote JIRA binding to ${file}.`);
+      info(`  projectKey: ${binding.projectKey}`);
+      if (binding.epicKey) info(`  epicKey: ${binding.epicKey}`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      error(`Failed to write binding: ${msg}`);
+      process.exit(1);
+    }
+  });
+
+/**
  * specship jira transition — move a tracked issue to a target state, or list
  * the transitions it currently offers (REQ-JIRATRANS-001). Reuses the client's
  * skip-tolerant transition: a target the workflow doesn't offer is reported

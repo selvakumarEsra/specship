@@ -478,6 +478,24 @@ export const jiraToolDefinitions: ToolDefinition[] = [
     },
   },
   {
+    name: 'specship_jira_epics',
+    description:
+      'List the open epics for a JIRA project — powers the /specship:jira menu ' +
+      "epic-picker (REQ-JIRATEAM-008). With no `project`, uses the repo's bound " +
+      'project (specship.config.json → jira.projectKey); errors clearly if neither ' +
+      'is set. Read-only: never writes; ordered most-recently-updated first.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project: {
+          type: 'string',
+          description:
+            "Optional project key (e.g., \"PROJ\"). Omit to use the repo's bound project.",
+        },
+      },
+    },
+  },
+  {
     name: 'specship_jira_add_task',
     description:
       'Add a task you identified mid-implementation under its epic/story. If ' +
@@ -805,6 +823,72 @@ export async function handleSpecshipJiraAnchor(
     if (err instanceof JiraError) return errorResult(err.message);
     return errorResult('Failed to resolve JIRA anchor.');
   }
+}
+
+/**
+ * Handle `specship_jira_epics` (REQ-JIRATEAM-008). Lists open epics for a
+ * project — the picker source for the `/specship:jira` menu's "choose epic"
+ * step. With no `project`, falls back to the repo binding's `projectKey` so
+ * on a bound repo the caller doesn't have to duplicate the lookup.
+ */
+export async function handleSpecshipJiraEpics(
+  args: Record<string, unknown>,
+): Promise<ToolResult> {
+  const notConfigured = notConfiguredResult();
+  if (notConfigured) return notConfigured;
+
+  let project =
+    typeof args.project === 'string' && args.project.trim()
+      ? args.project.trim()
+      : undefined;
+  if (!project) {
+    try {
+      const { binding } = loadRepoJiraBinding(process.cwd());
+      if (binding) project = binding.projectKey;
+    } catch (err) {
+      if (err instanceof JiraError) return errorResult(err.message);
+    }
+  }
+  if (!project) {
+    return errorResult(
+      'No JIRA project. Pass `project`, or bind one with ' +
+        '`specship jira bind --project <KEY>` (writes specship.config.json).',
+    );
+  }
+
+  try {
+    const creds = resolveJiraCredentials();
+    const client = new JiraClient(creds);
+    const epics = await client.listEpics(project);
+    return textResult(formatEpics(epics, project));
+  } catch (err) {
+    if (err instanceof JiraError) return errorResult(err.message);
+    return errorResult('Failed to list JIRA epics.');
+  }
+}
+
+function formatEpics(
+  epics: { key: string; summary: string; status: string }[],
+  project: string,
+): string {
+  if (epics.length === 0) {
+    return (
+      `No open epics in project ${cell(project)}.\n\n` +
+      '> Note: only epics whose status category is not "Done" are listed.'
+    );
+  }
+  const table = [
+    '| Key | Summary | Status |',
+    '| --- | --- | --- |',
+    ...epics.map(
+      (e) => `| ${cell(e.key)} | ${cell(e.summary)} | ${cell(e.status)} |`,
+    ),
+  ].join('\n');
+  const notes = [`Project ${cell(project)}, ordered most-recently-updated first.`];
+  if (epics.length >= MAX_ISSUE_RESULTS) {
+    notes.push(`Showing the ${MAX_ISSUE_RESULTS} most recently updated.`);
+  }
+  return `${table}\n\n> Note: ${notes.join(' ')}`;
 }
 
 /**
