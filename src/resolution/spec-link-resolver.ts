@@ -146,7 +146,7 @@ export interface InheritedLinksResult {
 }
 
 /** Default cap on how deep the parent / depends_on chain is followed. */
-const INHERITED_LINK_MAX_DEPTH = 5;
+export const INHERITED_LINK_MAX_DEPTH = 5;
 
 /**
  * The spec ids a spec links to at the spec tier: its `parentId` plus every

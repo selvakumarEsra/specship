@@ -38,6 +38,7 @@ import { writeSpecFromIssue, findSpecForIssueKey, readSpecJiraKey, writeRegressi
 import {
   buildRegressionPack,
   upsertRegressionPack,
+  renderDomainGapReport,
   type BuilderSpecQueries,
   type RegressionPackJiraClient,
   type UpsertContext,
@@ -2093,6 +2094,13 @@ export async function handleSpecshipJiraRegressionPack(
     lines.push(
       `- Cases: ${result.casesCreated} created, ${result.casesUpdated} updated, ${result.casesSkipped} skipped (of ${model.cases.length})`,
     );
+    const xrefTotal =
+      result.crossRefsCreated + result.crossRefsUpdated + result.crossRefsSkipped;
+    if (xrefTotal > 0) {
+      lines.push(
+        `- Cross-refs: ${result.crossRefsCreated} created, ${result.crossRefsUpdated} updated, ${result.crossRefsSkipped} skipped`,
+      );
+    }
     if (result.casesObsoleted > 0) {
       lines.push(
         `- Obsoleted: ${result.casesObsoleted} case${result.casesObsoleted === 1 ? '' : 's'} (${result.obsoletedCaseKeys.join(', ')}) — kept for run history, labelled specship-reg-obsolete.`,
@@ -2106,6 +2114,11 @@ export async function handleSpecshipJiraRegressionPack(
     if (backlinkNotes.length > 0) {
       lines.push('- Back-link notes:');
       lines.push(...backlinkNotes);
+    }
+    const gapReport = renderDomainGapReport(model.domainGaps);
+    if (gapReport) {
+      lines.push('');
+      lines.push(gapReport);
     }
     return textResult(lines.join('\n'));
   } catch (err) {

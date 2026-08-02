@@ -22,6 +22,10 @@
 
 import * as crypto from 'crypto';
 import type { Spec, SpecLink } from '../types';
+import {
+  sourceSpecIds,
+  INHERITED_LINK_MAX_DEPTH,
+} from '../resolution/spec-link-resolver';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -40,10 +44,29 @@ export interface RegressionCase {
   /** Behaviour tier — placeholder in 001, refined in REQ-JIRAREG-004. */
   tier: 'ui' | 'backend' | 'unknown';
   /**
-   * Domain area label. Always `'Uncategorised'` in REQ-JIRAREG-001 —
-   * REQ-JIRAREG-002 assigns real domain areas from linked domain facts.
+   * Domain area label for THIS case row — the area under which the case files.
+   * A requirement with two domain facts produces two `RegressionCase` rows: an
+   * `executable` under the first area and a `crossref` under the second.
    */
   domainArea: string;
+  /**
+   * All domain areas the requirement links to (sorted by domain spec id).
+   * Same list on every case row derived from the requirement — useful for the
+   * cross-reference body pointing back at siblings.
+   */
+  areasAll: string[];
+  /**
+   * `'executable'` files as the primary case in the requirement's first area.
+   * `'crossref'` files as a pointer in each additional area — same spec, no
+   * duplicate steps — so a tester scanning either area finds the case.
+   */
+  kind: 'executable' | 'crossref';
+  /**
+   * When `kind === 'crossref'`, the criterion id of the executable sibling
+   * (always equals `criterionId` — the cross-ref carries the same source id;
+   * this field lets renderers name the pair without recomputing).
+   */
+  crossReferenceOf?: string;
 }
 
 export interface EpicPlan {
@@ -67,12 +90,26 @@ export interface CasePlan {
   description: string;
   label: string;
   specPath: string;
+  /** `'executable'` or `'crossref'` — cross-refs carry a different label prefix. */
+  kind: 'executable' | 'crossref';
+}
+
+/** One requirement with no domain-fact linkage — REQ-JIRAREG-002.A2. */
+export interface DomainGap {
+  reqId: string;
+  specPath: string;
 }
 
 export interface RegressionPackModel {
   epic: EpicPlan;
   stories: StoryPlan[];
   cases: CasePlan[];
+  /**
+   * Requirements that entered the pack with no domain-fact linkage. Rendered
+   * separately by {@link renderDomainGapReport} so the caller can prompt the
+   * `/specship:spec domain` capture flow (REQ-JIRAREG-002.A2).
+   */
+  domainGaps: DomainGap[];
 }
 
 export interface UpsertContext {
@@ -97,6 +134,14 @@ export interface UpsertResult {
   casesUpdated: number;
   casesSkipped: number;
   /**
+   * Cross-reference sub-tasks (secondary-area pointers, REQ-JIRAREG-002.A1) —
+   * counted separately from executable cases so a re-run's zero-write bar can
+   * be asserted per kind.
+   */
+  crossRefsCreated: number;
+  crossRefsUpdated: number;
+  crossRefsSkipped: number;
+  /**
    * Cases newly marked obsolete on this run — REQ-JIRAREG-003.A3. A re-run
    * that finds the same case already carrying the obsolete watermark + label
    * does not re-count it (REQ-JIRAREG-003.A4).
@@ -117,6 +162,12 @@ export interface UpsertResult {
 export const REG_PACK_EPIC_LABEL = 'specship-regression-pack';
 export const REG_PACK_DOMAIN_LABEL_PREFIX = 'specship-regdomain-';
 export const REG_PACK_CASE_LABEL_PREFIX = 'specship-regcase-';
+/**
+ * Cross-reference sub-tasks (REQ-JIRAREG-002.A1). Distinct prefix from the
+ * executable case label so a re-run finds the same cross-ref in the same area
+ * (idempotent) without conflating it with the primary case.
+ */
+export const REG_PACK_XREF_LABEL_PREFIX = 'specship-regxref-';
 
 /**
  * Stable marker label every regression case carries alongside its per-case
@@ -161,6 +212,13 @@ export interface BuilderSpecQueries {
   getAllSpecs(): Spec[];
   getSpecsByParent(parentId: string): Spec[];
   getLinksBySpec(specId: string): SpecLink[];
+  /**
+   * Point lookup used by the domain-area walk (REQ-JIRAREG-002). Mirrors
+   * {@link SpecLinkResolver.getInheritedLinks}'s traversal — we need to
+   * resolve each declared spec id (via `parentId` / `metadata.depends_on`) to
+   * a `Spec` so its own dependency chain can be followed to the next hop.
+   */
+  getSpecById(id: string): Spec | undefined | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -269,6 +327,34 @@ export function renderCaseSteps(rc: RegressionCase): string {
   lines.push(`- Spec: ${rc.specPath}`);
   lines.push(`- Tier: ${rc.tier}`);
   lines.push(`- Domain: ${rc.domainArea}`);
+  if (rc.areasAll.length > 1) {
+    lines.push(`- Also files under: ${rc.areasAll.filter((a) => a !== rc.domainArea).join(', ')}`);
+  }
+  return lines.join('\n');
+}
+
+/**
+ * Render a cross-reference sub-task body (REQ-JIRAREG-002.A1). Same source
+ * id, no duplicate steps — just a pointer at the executable sibling so a
+ * tester scanning this area finds it. The label is separate so the same
+ * criterion produces one issue per area, and a re-run stays idempotent.
+ */
+export function renderCrossReferenceBody(
+  rc: RegressionCase,
+  executableAreaLabel: string,
+): string {
+  const lines: string[] = [];
+  lines.push(REG_PACK_CASE_WATERMARK);
+  lines.push('');
+  lines.push(
+    `This is a cross-reference. The executable case for ${rc.reqId}.${criterionSuffix(rc.reqId, rc.criterionId)} lives under the "${executableAreaLabel}" area — run it there.`,
+  );
+  lines.push('');
+  lines.push('Reference:');
+  lines.push(`- Source: ${rc.reqId}.${criterionSuffix(rc.reqId, rc.criterionId)} — ${oneLineTrim(rc.criterionText)}`);
+  lines.push(`- Spec: ${rc.specPath}`);
+  lines.push(`- Executable area: ${executableAreaLabel}`);
+  lines.push(`- Cross-referenced here as: ${rc.domainArea}`);
   return lines.join('\n');
 }
 
@@ -281,27 +367,135 @@ function renderStoryDescription(area: string, caseCount: number): string {
   ].join('\n');
 }
 
-function renderEpicDescription(totals: { stories: number; cases: number }): string {
-  return [
+function renderEpicDescription(totals: {
+  stories: number;
+  cases: number;
+  domainGaps: number;
+}): string {
+  const lines = [
     REG_PACK_EPIC_WATERMARK,
     '',
     'SpecShip Regression Pack.',
     `${totals.stories} domain area${totals.stories === 1 ? '' : 's'}, ` +
       `${totals.cases} case${totals.cases === 1 ? '' : 's'}.`,
+  ];
+  if (totals.domainGaps > 0) {
+    lines.push(
+      `${totals.domainGaps} requirement${totals.domainGaps === 1 ? '' : 's'} filed under Uncategorised — capture the missing domain fact(s) with /specship:spec domain (REQ-JIRAREG-002.A2).`,
+    );
+  }
+  lines.push(
     '',
     'Each Sub-task under a domain-area Story is derived from one acceptance ' +
       'criterion of an implemented (or verified) requirement. Human testers ' +
       'can execute the cases directly; the agent can record run results (see ' +
       'REQ-JIRAREG-005). Re-generating the pack is idempotent — a criterion ' +
       'that has not changed produces zero JIRA writes.',
-  ].join('\n');
+  );
+  return lines.join('\n');
+}
+
+/**
+ * Render the domain-gap report the caller prints after upsert
+ * (REQ-JIRAREG-002.A2). Empty when there are no gaps.
+ */
+export function renderDomainGapReport(gaps: DomainGap[]): string {
+  if (gaps.length === 0) return '';
+  const lines: string[] = [];
+  lines.push(
+    `Domain gaps — ${gaps.length} requirement${gaps.length === 1 ? '' : 's'} filed under Uncategorised (REQ-JIRAREG-002.A2):`,
+  );
+  for (const g of gaps) lines.push(`  · ${g.reqId} — ${g.specPath}`);
+  lines.push(
+    'Capture the missing domain fact(s) with `/specship:spec domain` and re-run the pack; the next update moves the affected cases into their new area without duplicating them.',
+  );
+  return lines.join('\n');
+}
+
+/**
+ * Compute the domain areas each requirement inherits transitively, keyed on
+ * requirement id (REQ-JIRAREG-002.A1).
+ *
+ * Direction: domain facts declare `depends_on: REQ-...` (they point AT
+ * requirements, per DOMAIN-KNOWLEDGE-DOC), so a requirement's own spec-tier
+ * chain does NOT reach the domain facts that govern it. We walk in the
+ * OTHER direction — for each `domain` spec, follow its parent /
+ * `metadata.depends_on` chain outward and register that domain fact against
+ * every requirement it reaches.
+ *
+ * This mirrors {@link SpecLinkResolver.getInheritedLinks} — same BFS, same
+ * `sourceSpecIds` traversal, same depth cap ({@link INHERITED_LINK_MAX_DEPTH}).
+ * `sourceSpecIds` is imported from the resolver (single source of truth for
+ * "the spec-tier edges a spec has"), but the walk itself is reproduced here
+ * to keep the regression-pack module free of a `SpecLinkResolver` dependency
+ * (which would require threading `QueryBuilder` all the way through). Per the
+ * approval note, the mirror is deliberate; `BuilderSpecQueries` exposes only
+ * the point-lookup surface it needs (`getAllSpecs`, `getSpecById`) so the
+ * builder stays trivially fixture-able.
+ *
+ * Per-domain-fact BFS is cycle-guarded and depth-capped. Ordering of the
+ * output list is deterministic: domain spec ids sorted lex, deduped.
+ */
+export function computeDomainAreasByReqId(
+  sq: BuilderSpecQueries,
+): Map<string, Spec[]> {
+  const out = new Map<string, Spec[]>();
+  const seenPairs = new Set<string>(); // `${reqId}\0${domainId}`
+  const domainFacts = sq
+    .getAllSpecs()
+    .filter((s) => s.kind === 'domain')
+    // Deterministic outer order — matters for the primary-area pick.
+    .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+
+  for (const fact of domainFacts) {
+    // BFS from the fact outward through parent / depends_on. Mirrors
+    // SpecLinkResolver.getInheritedLinks; visited-set = string ids (we may
+    // not resolve every hop to an indexed Spec).
+    const visited = new Set<string>([fact.id]);
+    const queue: Array<{ id: string; depth: number }> = sourceSpecIds(fact).map(
+      (id) => ({ id, depth: 1 }),
+    );
+    while (queue.length > 0) {
+      const { id, depth } = queue.shift()!;
+      if (visited.has(id)) continue;
+      visited.add(id);
+      const src = sq.getSpecById(id);
+      if (!src) continue; // gap (unresolved id) — silently skip; not our concern
+      if (src.kind === 'requirement') {
+        const pairKey = `${src.id} ${fact.id}`;
+        if (!seenPairs.has(pairKey)) {
+          seenPairs.add(pairKey);
+          const bucket = out.get(src.id);
+          if (bucket) bucket.push(fact);
+          else out.set(src.id, [fact]);
+        }
+        // Continue walking — a domain fact that reaches a requirement AND its
+        // parent document still covers both; the requirement is the interesting
+        // hit for the pack, but we don't prune.
+      }
+      if (depth < INHERITED_LINK_MAX_DEPTH) {
+        for (const nextId of sourceSpecIds(src)) {
+          if (!visited.has(nextId)) queue.push({ id: nextId, depth: depth + 1 });
+        }
+      }
+    }
+  }
+
+  // Post-sort each bucket by domain spec id — the executable case picks
+  // buckets[0], and IDs are stable across renames (unlike titles).
+  for (const [reqId, facts] of out) {
+    out.set(
+      reqId,
+      [...facts].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)),
+    );
+  }
+  return out;
 }
 
 /**
  * Group cases by their pre-computed `domainArea`. In REQ-JIRAREG-001 every
- * case is `Uncategorised`, so this is a trivial passthrough. REQ-JIRAREG-002
- * will fold in domain-fact-derived areas — same input shape, same output
- * shape, richer bucketing.
+ * case was `Uncategorised`; REQ-JIRAREG-002 fills in real domain-fact areas
+ * — same input shape, same output shape, richer bucketing.
  */
 export function groupCasesByDomain(
   cases: RegressionCase[],
@@ -328,37 +522,89 @@ export function buildRegressionPack(
     .filter((s) => s.kind === 'requirement')
     .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 
+  // Precompute inverse map: which domain facts each requirement inherits.
+  // Ordering inside each list is stable-by-id so the "first area" pick below
+  // is deterministic across runs.
+  const domainAreasByReq = computeDomainAreasByReqId(sq);
+
   const cases: RegressionCase[] = [];
+  const domainGaps: DomainGap[] = [];
   for (const req of requirements) {
     if (!isRequirementImplementedPlus(sq, req.id)) continue;
     const criteria = sq
       .getSpecsByParent(req.id)
       .filter((c) => c.kind === 'acceptance')
       .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+    if (criteria.length === 0) continue;
+
+    const domainFacts = domainAreasByReq.get(req.id) ?? [];
+    const areaTitles: string[] =
+      domainFacts.length === 0
+        ? [UNCATEGORISED_AREA]
+        : domainFacts.map((f) => f.title || f.id);
+    const primaryArea = areaTitles[0]!;
+    if (domainFacts.length === 0) {
+      // Once per requirement — A2 lists the REQ, not each criterion.
+      domainGaps.push({ reqId: req.id, specPath: req.sourcePath });
+    }
+
     for (const c of criteria) {
       const text = (c.title || c.body || '').trim();
       if (!text) continue;
+      // Executable case in the primary area.
       cases.push({
         reqId: req.id,
         criterionId: c.id,
         criterionText: text,
         specPath: req.sourcePath,
         tier: 'unknown', // REQ-JIRAREG-004 refines
-        domainArea: UNCATEGORISED_AREA, // REQ-JIRAREG-002 refines
+        domainArea: primaryArea,
+        areasAll: areaTitles,
+        kind: 'executable',
       });
+      // Cross-references in every additional area.
+      for (const extra of areaTitles.slice(1)) {
+        cases.push({
+          reqId: req.id,
+          criterionId: c.id,
+          criterionText: text,
+          specPath: req.sourcePath,
+          tier: 'unknown',
+          domainArea: extra,
+          areasAll: areaTitles,
+          kind: 'crossref',
+          crossReferenceOf: c.id,
+        });
+      }
     }
   }
 
   const grouped = groupCasesByDomain(cases);
   const stories: StoryPlan[] = [];
   const casePlans: CasePlan[] = [];
-  for (const [area, group] of grouped) {
+  // Iterate areas in deterministic order — the map preserves insertion order,
+  // but a domain fact never inserted (all-crossref) shouldn't matter. Sort by
+  // area title so re-runs render stories in the same order regardless of
+  // requirement iteration order.
+  const areasSorted = [...grouped.keys()].sort((a, b) =>
+    a < b ? -1 : a > b ? 1 : 0,
+  );
+  for (const area of areasSorted) {
+    const group = grouped.get(area)!;
+    const areaLabel = `${REG_PACK_DOMAIN_LABEL_PREFIX}${slugify(area)}`;
     const areaCases: CasePlan[] = [];
     for (const rc of group) {
       const suffix = criterionSuffix(rc.reqId, rc.criterionId);
-      const label = `${REG_PACK_CASE_LABEL_PREFIX}${slugify(rc.reqId)}-${slugify(suffix)}`;
-      const summary = oneLineTrim(`${rc.reqId}.${suffix} — ${rc.criterionText}`);
-      const body = renderCaseSteps(rc);
+      const isXref = rc.kind === 'crossref';
+      const label = isXref
+        ? `${REG_PACK_XREF_LABEL_PREFIX}${slugify(rc.reqId)}-${slugify(suffix)}-${slugify(area)}`
+        : `${REG_PACK_CASE_LABEL_PREFIX}${slugify(rc.reqId)}-${slugify(suffix)}`;
+      const summary = isXref
+        ? oneLineTrim(`${rc.reqId}.${suffix} (xref: ${area}) — ${rc.criterionText}`)
+        : oneLineTrim(`${rc.reqId}.${suffix} — ${rc.criterionText}`);
+      const body = isXref
+        ? renderCrossReferenceBody(rc, rc.areasAll[0]!)
+        : renderCaseSteps(rc);
       const fp = regressionContentFingerprint(summary, body);
       const description = `${body}\n\n${fingerprintTag(fp)}`;
       areaCases.push({
@@ -368,9 +614,9 @@ export function buildRegressionPack(
         description,
         label,
         specPath: rc.specPath,
+        kind: rc.kind,
       });
     }
-    const areaLabel = `${REG_PACK_DOMAIN_LABEL_PREFIX}${slugify(area)}`;
     const storySummary = oneLineTrim(`Regression: ${area}`);
     const storyDesc = renderStoryDescription(area, areaCases.length);
     const storyFp = regressionContentFingerprint(storySummary, storyDesc);
@@ -388,6 +634,7 @@ export function buildRegressionPack(
   const epicDesc = renderEpicDescription({
     stories: stories.length,
     cases: casePlans.length,
+    domainGaps: domainGaps.length,
   });
   const epicFp = regressionContentFingerprint(epicSummary, epicDesc);
   const epic: EpicPlan = {
@@ -396,7 +643,7 @@ export function buildRegressionPack(
     label: REG_PACK_EPIC_LABEL,
   };
 
-  return { epic, stories, cases: casePlans };
+  return { epic, stories, cases: casePlans, domainGaps };
 }
 
 // ---------------------------------------------------------------------------
@@ -414,10 +661,23 @@ export interface RegressionPackJiraClient {
     projectKey: string,
     label: string,
   ): Promise<Array<{ key: string; summary: string }>>;
-  /** Fetch a single issue's summary + description — for fingerprint compare. */
+  /**
+   * Fetch a single issue's summary + description + current parent key — for
+   * fingerprint compare AND parent-reassignment no-op decision
+   * (REQ-JIRAREG-002.A3). `parentKey` MAY be `undefined` when the issue has
+   * no parent (a top-level issue or one JIRA didn't return a parent for).
+   */
   getIssue(
     key: string,
-  ): Promise<{ ok: true; issue: { key: string; summary: string; description: string } }>;
+  ): Promise<{
+    ok: true;
+    issue: {
+      key: string;
+      summary: string;
+      description: string;
+      parentKey?: string;
+    };
+  }>;
   createIssue(fields: {
     projectKey: string;
     issueType: string;
@@ -426,9 +686,15 @@ export interface RegressionPackJiraClient {
     parentKey?: string;
     labels?: string[];
   }): Promise<{ key: string; id: string }>;
+  /**
+   * Update an issue's summary, description, and/or parent (REQ-JIRAREG-002.A3
+   * needs parent reassignment when a case moves from Uncategorised to its new
+   * area). Callers pass only the fields that changed — a plain `parentKey`
+   * change with no body drift lands a `{ fields: { parent: { key } } }` PUT.
+   */
   updateIssue(
     key: string,
-    fields: { summary?: string; description?: string },
+    fields: { summary?: string; description?: string; parentKey?: string },
   ): Promise<void>;
   /**
    * Enumerate an issue's comments with ids (REQ-JIRAREG-003.A3). Used by the
@@ -480,7 +746,12 @@ async function upsertLabelledIssue(
     const newFp = regressionContentFingerprint(summary, stripFingerprintTag(description));
     const detail = await client.getIssue(canonical.key);
     const storedFp = readStoredFingerprint(detail.issue.description);
-    if (storedFp === newFp) {
+    // Parent reassignment (REQ-JIRAREG-002.A3): a case can move areas without
+    // any body drift when its requirement gains a domain fact. We detect the
+    // move by comparing stored parent vs desired; only writes when they differ.
+    const storedParent = detail.issue.parentKey;
+    const parentChanged = parentKey !== undefined && storedParent !== parentKey;
+    if (storedFp === newFp && !parentChanged) {
       // Backfill any missing extra labels on a canonical issue that pre-dates
       // them (REQ-JIRAREG-003 marker label rollout). `addLabel` is idempotent —
       // a no-op when already set, so a re-run stays zero-write.
@@ -492,7 +763,13 @@ async function upsertLabelledIssue(
       return { outcome: { key: canonical.key, action: 'skipped' }, orphans };
     }
     if (!ctx.dryRun) {
-      await client.updateIssue(canonical.key, { summary, description });
+      const patch: { summary?: string; description?: string; parentKey?: string } = {};
+      if (storedFp !== newFp) {
+        patch.summary = summary;
+        patch.description = description;
+      }
+      if (parentChanged) patch.parentKey = parentKey!;
+      await client.updateIssue(canonical.key, patch);
       for (const extra of extraLabels) {
         await client.addLabel(canonical.key, extra);
       }
@@ -551,7 +828,11 @@ export async function upsertRegressionPack(
   let casesCreated = 0;
   let casesUpdated = 0;
   let casesSkipped = 0;
+  let crossRefsCreated = 0;
+  let crossRefsUpdated = 0;
+  let crossRefsSkipped = 0;
   const caseKeysByCriterion: Record<string, string> = {};
+  const crossRefKeys: string[] = [];
 
   for (const story of model.stories) {
     const storyRes = await upsertLabelledIssue(
@@ -578,10 +859,20 @@ export async function upsertRegressionPack(
         storyRes.outcome.key,
         [REG_PACK_CASE_MARKER_LABEL],
       );
-      if (caseRes.outcome.action === 'created') casesCreated++;
-      else if (caseRes.outcome.action === 'updated') casesUpdated++;
-      else casesSkipped++;
-      caseKeysByCriterion[c.criterionId] = caseRes.outcome.key;
+      if (c.kind === 'crossref') {
+        if (caseRes.outcome.action === 'created') crossRefsCreated++;
+        else if (caseRes.outcome.action === 'updated') crossRefsUpdated++;
+        else crossRefsSkipped++;
+        crossRefKeys.push(caseRes.outcome.key);
+      } else {
+        if (caseRes.outcome.action === 'created') casesCreated++;
+        else if (caseRes.outcome.action === 'updated') casesUpdated++;
+        else casesSkipped++;
+        // The executable case's key is the traceability anchor. Cross-refs
+        // deliberately do NOT overwrite this — the spec-side back-link is
+        // one criterion → one canonical case key (the executable one).
+        caseKeysByCriterion[c.criterionId] = caseRes.outcome.key;
+      }
     }
   }
 
@@ -594,7 +885,11 @@ export async function upsertRegressionPack(
   const obsoletedCaseKeys: string[] = [];
   let casesObsoleted = 0;
   if (!ctx.dryRun) {
-    const expected = new Set(Object.values(caseKeysByCriterion));
+    // Both executable and cross-ref sub-tasks carry the case marker label, so
+    // both must be in `expected` — otherwise a live cross-ref would trip the
+    // obsolete scan every run (`caseKeysByCriterion` records only executables).
+    const expected = new Set<string>(Object.values(caseKeysByCriterion));
+    for (const k of crossRefKeys) expected.add(k);
     const orphans = await findOrphanedCases(client, ctx.projectKey, expected);
     for (const orphan of orphans) {
       const outcome = await markCaseObsolete(client, orphan.key, 'removed');
@@ -614,6 +909,9 @@ export async function upsertRegressionPack(
     casesCreated,
     casesUpdated,
     casesSkipped,
+    crossRefsCreated,
+    crossRefsUpdated,
+    crossRefsSkipped,
     casesObsoleted,
     obsoletedCaseKeys,
     orphanedEpicKeys: epicRes.orphans,
