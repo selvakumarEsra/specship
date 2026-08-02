@@ -348,6 +348,11 @@ second implementation.
 implementations:
   - commands/specship/jira.md
   - src/jira/client.ts:JiraClient.listEpics
+  - src/mcp/jira-tools.ts:handleSpecshipJiraEpics
+  - src/jira/repo-config.ts:updateRepoJiraBinding
+
+verifies:
+  - __tests__/jira/jira-menu.test.ts
 
 ## Acceptance
 <!-- id: REQ-JIRATEAM-008.A1 -->
