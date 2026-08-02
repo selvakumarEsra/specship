@@ -40,8 +40,13 @@ import {
   renderRephraseReport,
   upsertRegressionPack,
   renderDomainGapReport,
+  recordRunResult,
   type BuilderSpecQueries,
   type RegressionPackJiraClient,
+  type RegressionRunResult,
+  type RegressionRunStatus,
+  type RunResultJiraClient,
+  type RunResultSpecQueries,
   type UpsertContext,
 } from '../jira/regression-pack';
 import { reqIdForIssue } from '../jira/spec-generator';
@@ -544,6 +549,46 @@ export const jiraToolDefinitions: ToolDefinition[] = [
         },
       },
       required: ['parent', 'title'],
+    },
+  },
+  {
+    name: 'specship_jira_regression_record',
+    description:
+      'Record a regression pack case result on its JIRA issue (REQ-JIRAREG-005): ' +
+      'watermarked comment upserted per (case, runId), pass → Done + validates-link ' +
+      'verified, fail → In Review + broken + a triage hint, unexecuted → comment only ' +
+      '(no transition, no link-state churn). Idempotent per (case, runId).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        case: { type: 'string', description: 'JIRA case issue key (e.g., "PROJ-42").' },
+        criterion: {
+          type: 'string',
+          description: 'Source acceptance criterion id (e.g., "REQ-FOO-001.A2").',
+        },
+        result: {
+          type: 'string',
+          enum: ['passed', 'failed', 'unexecuted'],
+          description: 'Outcome of the pack case.',
+        },
+        executor: {
+          type: 'string',
+          enum: ['human', 'agent'],
+          description: 'Who ran the case. Defaults to "human".',
+        },
+        harness: {
+          type: 'string',
+          description: 'Optional behaviour harness id (e.g., "behaviour-e2e").',
+        },
+        run: {
+          type: 'string',
+          description:
+            'Stable run identifier — one comment per (case, run) so re-records edit in place.',
+        },
+        log_ref: { type: 'string', description: 'Optional log pointer for evidence.' },
+        error: { type: 'string', description: 'Optional error text (fail path).' },
+      },
+      required: ['case', 'criterion', 'result'],
     },
   },
   {
@@ -2145,6 +2190,81 @@ export async function handleSpecshipJiraRegressionPack(
     if (err instanceof JiraError) return errorResult(err.message);
     return errorResult(
       `Regression pack failed: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Regression pack: run-result recorder (REQ-JIRAREG-005)
+// ---------------------------------------------------------------------------
+
+export interface JiraRegressionRecordDeps {
+  specQueries: unknown;
+  projectRoot: string;
+  makeJiraClient?: () => RunResultJiraClient;
+}
+
+/** Handle `specship_jira_regression_record` (REQ-JIRAREG-005). */
+export async function handleSpecshipJiraRegressionRecord(
+  args: Record<string, unknown>,
+  deps: JiraRegressionRecordDeps,
+): Promise<ToolResult> {
+  const notConfigured = notConfiguredResult();
+  if (notConfigured) return notConfigured;
+
+  const caseKey = typeof args.case === 'string' ? args.case.trim() : '';
+  const criterionId = typeof args.criterion === 'string' ? args.criterion.trim() : '';
+  const status = typeof args.result === 'string' ? args.result.trim() : '';
+  if (!caseKey || !criterionId || !status) {
+    return errorResult(
+      'specship_jira_regression_record requires `case`, `criterion`, and `result`.',
+    );
+  }
+  const validStatuses: RegressionRunStatus[] = ['passed', 'failed', 'unexecuted'];
+  if (!validStatuses.includes(status as RegressionRunStatus)) {
+    return errorResult(
+      `Unsupported result "${status}" — expected one of: ${validStatuses.join(', ')}.`,
+    );
+  }
+
+  const result: RegressionRunResult = {
+    caseKey,
+    criterionId,
+    status: status as RegressionRunStatus,
+    executor: args.executor === 'agent' ? 'agent' : 'human',
+    ...(typeof args.harness === 'string' && args.harness.trim()
+      ? { harness: args.harness.trim() as RegressionRunResult['harness'] }
+      : {}),
+    ...(typeof args.run === 'string' && args.run.trim() ? { runId: args.run.trim() } : {}),
+    ...(typeof args.log_ref === 'string' || typeof args.error === 'string'
+      ? {
+          evidence: {
+            ...(typeof args.log_ref === 'string' ? { logRef: args.log_ref } : {}),
+            ...(typeof args.error === 'string' ? { error: args.error } : {}),
+          },
+        }
+      : {}),
+  };
+
+  try {
+    const creds = resolveJiraCredentials();
+    const client: RunResultJiraClient = deps.makeJiraClient
+      ? deps.makeJiraClient()
+      : (new JiraClient(creds) as unknown as RunResultJiraClient);
+    const outcome = await recordRunResult(
+      { client, specQueries: deps.specQueries as RunResultSpecQueries },
+      result,
+    );
+    const lines: string[] = [];
+    lines.push(
+      `${caseKey} recorded ${outcome.status} — comment ${outcome.comment}, transition ${outcome.transition}, validates-link ${outcome.linked ? 'updated' : 'untouched'}.`,
+    );
+    if (outcome.triageHint) lines.push(outcome.triageHint);
+    return textResult(lines.join('\n'));
+  } catch (err) {
+    if (err instanceof JiraError) return errorResult(err.message);
+    return errorResult(
+      `Regression record failed: ${err instanceof Error ? err.message : String(err)}`,
     );
   }
 }

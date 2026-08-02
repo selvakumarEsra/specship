@@ -25,6 +25,7 @@ import {
   groupCasesByDomain,
   renderCaseSteps,
   recordRunResult,
+  finalizePackRun,
   regressionContentFingerprint,
   readStoredFingerprint,
   REG_PACK_EPIC_LABEL,
@@ -427,11 +428,47 @@ describe('regression-pack helpers', () => {
     expect(body).not.toContain('specs/x.md');
   });
 
-  it('recordRunResult is a REQ-JIRAREG-005 stub in this run', () => {
-    const out = recordRunResult(null, { caseKey: 'PROJ-9', verdict: 'passed' });
-    expect(out.pending).toBe(true);
-    expect(out.summary).toContain('PROJ-9');
-    expect(out.summary).toContain('REQ-JIRAREG-005');
+  it('recordRunResult + finalizePackRun round-trip against fakes (smoke)', async () => {
+    const commentClient = {
+      comments: [] as Array<{ id: string; body: string }>,
+      async listCommentsDetailed(_key: string) {
+        return [...this.comments];
+      },
+      async addComment(_key: string, body: string) {
+        const id = `c${this.comments.length + 1}`;
+        this.comments.push({ id, body });
+        return { id };
+      },
+      async updateComment(_key: string, id: string, body: string) {
+        const idx = this.comments.findIndex((c) => c.id === id);
+        if (idx >= 0) this.comments[idx] = { id, body };
+      },
+      async transitionIssue(_key: string, name: string) {
+        return { ok: true as const, transitioned: name };
+      },
+    };
+    const out = await recordRunResult(
+      { client: commentClient },
+      {
+        caseKey: 'PROJ-9',
+        criterionId: 'REQ-X-001.A1',
+        status: 'passed',
+        executor: 'human',
+        runId: 'r1',
+      },
+    );
+    expect(out.pending).toBe(false);
+    expect(out.status).toBe('passed');
+    expect(out.comment).toBe('created');
+    expect(commentClient.comments).toHaveLength(1);
+
+    const finalized = await finalizePackRun(commentClient, 'PROJ-EPIC', {
+      runId: 'r1',
+      results: [
+        { caseKey: 'PROJ-9', criterionId: 'REQ-X-001.A1', status: 'passed', executor: 'human', runId: 'r1' },
+      ],
+    });
+    expect(finalized.status).toBe('created');
   });
 });
 

@@ -4190,6 +4190,76 @@ jira
     }
   });
 
+/**
+ * specship jira regression-record — record a single pack case result
+ * (REQ-JIRAREG-005). Comment + transition + validates-link feedback on the
+ * source criterion. `--run <id>` keys idempotency per (case, run).
+ */
+jira
+  .command('regression-record')
+  .description('Record a regression pack case result (REQ-JIRAREG-005).')
+  .requiredOption('--case <key>', 'JIRA case issue key (e.g., "PROJ-42")')
+  .requiredOption('--criterion <id>', 'source criterion id (e.g., "REQ-FOO-001.A2")')
+  .requiredOption('--result <status>', 'pass | fail | unexecuted', 'pass')
+  .option('--executor <who>', 'human | agent', 'human')
+  .option('--harness <id>', 'behaviour harness id (e.g., "behaviour-e2e")')
+  .option('--run <id>', 'stable run id — one comment per (case, run)')
+  .option('--log-ref <ref>', 'evidence log pointer')
+  .option('--error <text>', 'error text (fail path)')
+  .option('--path <projectRoot>', 'project root (default: cwd)')
+  .action(
+    async (options: {
+      case: string;
+      criterion: string;
+      result: string;
+      executor?: string;
+      harness?: string;
+      run?: string;
+      logRef?: string;
+      error?: string;
+      path?: string;
+    }) => {
+      const projectRoot = path.resolve(options.path ?? process.cwd());
+      if (!isInitialized(projectRoot)) {
+        error(`SpecShip not initialized in ${projectRoot}. Run \`specship init -i\` first.`);
+        process.exit(1);
+      }
+      const { SpecShip } = await loadSpecShip();
+      const { handleSpecshipJiraRegressionRecord } = await import('../mcp/jira-tools');
+      const cg = await SpecShip.open(projectRoot);
+      try {
+        // Accept the friendlier `pass`/`fail` short forms alongside the
+        // canonical `passed`/`failed` names.
+        const canonicalStatus =
+          options.result === 'pass'
+            ? 'passed'
+            : options.result === 'fail'
+              ? 'failed'
+              : options.result;
+        const args: Record<string, unknown> = {
+          case: options.case,
+          criterion: options.criterion,
+          result: canonicalStatus,
+        };
+        if (options.executor) args.executor = options.executor;
+        if (options.harness) args.harness = options.harness;
+        if (options.run) args.run = options.run;
+        if (options.logRef) args.log_ref = options.logRef;
+        if (options.error) args.error = options.error;
+        const result = await handleSpecshipJiraRegressionRecord(args, {
+          specQueries: cg.getSpecQueries(),
+          projectRoot,
+        });
+        const out = result.content.map((c) => c.text).join('\n');
+        // eslint-disable-next-line no-console
+        console.log(out);
+        if (result.isError) process.exit(1);
+      } finally {
+        cg.close();
+      }
+    },
+  );
+
 // Parse and run
 program.parse();
 

@@ -239,7 +239,7 @@ describe('postMilestoneComment (A3 soft-fail)', () => {
 });
 
 describe('MilestoneKind (A4 milestones only)', () => {
-  it('is a closed set of exactly the six lifecycle events', () => {
+  it('is a closed set of the seven lifecycle events (six spec lifecycle + pack_run_summary)', () => {
     const kinds: MilestoneKind[] = [
       'spec_published',
       'plan_approved',
@@ -247,9 +247,46 @@ describe('MilestoneKind (A4 milestones only)', () => {
       'criterion_verified',
       'drift_transition',
       'release_stamped',
+      'pack_run_summary',
     ];
     // A compile-time exhaustiveness check masquerading as a runtime test:
     // adding a new kind without listing it here fails typecheck at build time.
-    expect(kinds).toHaveLength(6);
+    expect(kinds).toHaveLength(7);
+  });
+});
+
+describe('pack_run_summary (REQ-JIRAREG-005.A4)', () => {
+  it('renders a counts table + triage list; re-invocation edits in place', async () => {
+    const { client, comments } = fakeClient();
+    const first = await postMilestoneComment(client, 'PROJ-EPIC', 'pack_run_summary', {
+      specId: 'PROJ-EPIC',
+      packRun: {
+        runId: 'r1',
+        executed: 3,
+        passed: 2,
+        failed: 1,
+        unexecuted: 0,
+        obsolete: 0,
+        triageCriterionIds: ['REQ-A.A1'],
+      },
+    });
+    expect(first.status).toBe('created');
+    expect(comments[0]!.body).toContain('| 3 | 2 | 1 | 0 | 0 |');
+    expect(comments[0]!.body).toContain('REQ-A.A1');
+
+    const second = await postMilestoneComment(client, 'PROJ-EPIC', 'pack_run_summary', {
+      specId: 'PROJ-EPIC',
+      packRun: {
+        runId: 'r2',
+        executed: 1,
+        passed: 1,
+        failed: 0,
+        unexecuted: 0,
+        obsolete: 0,
+      },
+    });
+    expect(second.status).toBe('updated');
+    expect(comments).toHaveLength(1);
+    expect(comments[0]!.body).toContain('r2');
   });
 });
