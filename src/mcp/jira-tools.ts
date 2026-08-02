@@ -37,6 +37,7 @@ import {
 import { writeSpecFromIssue, findSpecForIssueKey, readSpecJiraKey, writeRegressionCaseKeys } from '../jira/spec-writer';
 import {
   buildRegressionPack,
+  renderRephraseReport,
   upsertRegressionPack,
   renderDomainGapReport,
   type BuilderSpecQueries,
@@ -2022,6 +2023,12 @@ export interface JiraRegressionPackDeps {
   projectRoot: string;
   /** Client factory seam (default: resolve creds + new JiraClient). */
   makeJiraClient?: () => RegressionPackJiraClient;
+  /**
+   * Optional graph accessors — enable REQ-JIRAREG-004.A2 tier derivation.
+   * Absent (rare — CLI / MCP always pass them) → tier defaults to `'backend'`.
+   */
+  getLinkedNodesForReq?: (reqId: string) => import('../types').Node[];
+  getNeighbourNodes?: (nodeIds: readonly string[]) => import('../types').Node[];
 }
 
 /**
@@ -2037,7 +2044,15 @@ export async function handleSpecshipJiraRegressionPack(
   if (notConfigured) return notConfigured;
 
   const dryRun = args.dry_run === true;
-  const sq = deps.specQueries as BuilderSpecQueries;
+  const baseSq = deps.specQueries as BuilderSpecQueries;
+  const sq: BuilderSpecQueries = {
+    getAllSpecs: () => baseSq.getAllSpecs(),
+    getSpecsByParent: (pid) => baseSq.getSpecsByParent(pid),
+    getLinksBySpec: (sid) => baseSq.getLinksBySpec(sid),
+    getSpecById: (id) => baseSq.getSpecById(id),
+    ...(deps.getLinkedNodesForReq ? { getLinkedNodesForReq: deps.getLinkedNodesForReq } : {}),
+    ...(deps.getNeighbourNodes ? { getNeighbourNodes: deps.getNeighbourNodes } : {}),
+  };
   const model = buildRegressionPack(sq);
   if (model.cases.length === 0) {
     return textResult(
@@ -2119,6 +2134,11 @@ export async function handleSpecshipJiraRegressionPack(
     if (gapReport) {
       lines.push('');
       lines.push(gapReport);
+    }
+    const rephraseReport = renderRephraseReport(model.rephraseFlags);
+    if (rephraseReport) {
+      lines.push('');
+      lines.push(rephraseReport);
     }
     return textResult(lines.join('\n'));
   } catch (err) {

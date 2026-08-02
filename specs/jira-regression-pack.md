@@ -158,7 +158,13 @@ condition.
 
 implementations:
   - src/jira/regression-pack.ts:renderCaseSteps
+  - src/jira/regression-pack.ts:deriveCaseTier
+  - src/jira/regression-pack.ts:classifyCriterion
+  - src/jira/regression-pack.ts:renderRephraseReport
   - src/behaviour/behaviour-surface.ts:computeBehaviourSurface
+
+verifies:
+  - __tests__/jira/regression-pack.test.ts
 
 ## Acceptance
 <!-- id: REQ-JIRAREG-004.A1 -->

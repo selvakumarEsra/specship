@@ -4178,6 +4178,8 @@ jira
       const result = await handleSpecshipJiraRegressionPack(args, {
         specQueries: cg.getSpecQueries(),
         projectRoot,
+        getLinkedNodesForReq: (reqId) => cg.getLinkedNodesForReq(reqId),
+        getNeighbourNodes: (nodeIds) => cg.getNeighbourNodes(nodeIds),
       });
       const out = result.content.map((c) => c.text).join('\n');
       // eslint-disable-next-line no-console
