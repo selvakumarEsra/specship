@@ -9,6 +9,9 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+
+## [0.22.0] - 2026-08-04
+
 ### New Features
 
 - Regression pack runs now record results back into JIRA and the graph. A new `specship jira regression-record` command (and matching `specship_jira_regression_record` tool in Claude Code) attaches a watermarked comment on the case, transitions it (pass → Done, fail → In Review, unexecuted → no transition), and writes a `validates`-kind link back on the source acceptance criterion — pass turns the link `verified`, fail turns it `broken`, and unexecuted leaves any prior link state untouched. Failed cases surface a `/specship:spec triage <criterion>` hand-off inline. Re-recording the same case for the same run edits its comment in place instead of appending. The pack epic gets a single summary comment (executed / passed / failed / unexecuted / obsolete + the triage-needed criterion list), edited in place on the next run.
@@ -27,7 +30,6 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - JIRA issues tracked by SpecShip now carry a comment trail of what actually happened in your repo: one watermarked comment per lifecycle milestone — spec published, implementation plan approved, PR raised, acceptance criterion verified, drift detected, release shipped — each stating its concrete evidence (spec id, PR link, criterion ids, version). Re-running a step updates the existing comment in place rather than duplicating it, and a JIRA hiccup while commenting never fails the operation that triggered it.
 - New `specship jira reconcile` (and the matching Claude Code tool) closes the loop in the other direction: it detects issues edited in JIRA after publish — a changed summary or description, or Sub-tasks added on the board — and proposes the exact spec amendment, including a ready-to-accept new acceptance criterion for a JIRA-added Sub-task. Nothing is written until you've seen the diff and confirmed; accepting updates the spec, re-publishes, and clears the divergence.
 - On a bound repo, new specs are now created in JIRA under an epic at authoring time — no more unanchored Stories drifting off the board. The repo binding gains an optional default epic key; the spec's frontmatter can override with a different epic picked from the project's open epics. If neither is set and no epic is picked, authoring refuses with a directed message ("set `jira.epicKey` in `specship.config.json` or pick an epic") rather than creating an orphan. Auto-publish honours the same anchor on refresh and never silently re-parents a live Story — if the frontmatter epic changes on an already-published spec, SpecShip logs a `reparent_skipped` warning and leaves JIRA untouched so you can move the Story in the JIRA UI intentionally.
-
 
 ## [0.21.2] - 2026-07-28
 
@@ -754,3 +756,4 @@ Thanks @andreinknv for the substantive draft this release was based on.
 [0.21.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.21.0
 [0.21.1]: https://github.com/selvakumarEsra/specship/releases/tag/v0.21.1
 [0.21.2]: https://github.com/selvakumarEsra/specship/releases/tag/v0.21.2
+[0.22.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.22.0
