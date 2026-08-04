@@ -495,7 +495,7 @@ When running as an MCP server, SpecShip exposes these tools to Claude Code:
 | `specship_status` | Check index health and statistics |
 | `specship_version` | Identify the running MCP server — version, install method, where it was loaded from, node version |
 
-The JIRA integration adds seven more (`specship_jira_issues`, `_issue`, `_pick`, `_start`, `_track`, `_publish`, `_transition`) — see below.
+The JIRA integration adds fourteen more (`specship_jira_issues`, `_issue`, `_pick`, `_start`, `_track`, `_publish`, `_transition`, `_add_task`, `_anchor`, `_epics`, `_coverage`, `_reconcile`, `_regression_pack`, `_regression_record`) — see below.
 
 ---
 

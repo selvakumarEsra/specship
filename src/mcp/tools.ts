@@ -351,6 +351,7 @@ interface PropertySchema {
   description: string;
   enum?: string[];
   default?: unknown;
+  items?: { type: string };
 }
 
 /**
@@ -413,9 +414,15 @@ import {
   handleSpecshipJiraPick,
   handleSpecshipJiraStart,
   handleSpecshipJiraTrack,
+  handleSpecshipJiraCoverage,
   handleSpecshipJiraPublish,
+  handleSpecshipJiraReconcile,
   handleSpecshipJiraTransition,
   handleSpecshipJiraAddTask,
+  handleSpecshipJiraAnchor,
+  handleSpecshipJiraEpics,
+  handleSpecshipJiraRegressionPack,
+  handleSpecshipJiraRegressionRecord,
 } from './jira-tools';
 
 export const tools: ToolDefinition[] = [
@@ -1296,6 +1303,16 @@ export class ToolHandler {
             projectRoot: cg.getProjectRoot(),
           });
         }
+        case 'specship_jira_coverage': {
+          // coverage joins the bound project's active sprint to spec truth —
+          // read-only by default; posts only when the caller opts in
+          // (REQ-JIRATEAM-004).
+          const cg = this.getSpecShip(args.projectPath as string | undefined);
+          return await handleSpecshipJiraCoverage(args, {
+            specQueries: cg.getSpecQueries(),
+            projectRoot: cg.getProjectRoot(),
+          });
+        }
         case 'specship_jira_publish': {
           // publish writes a Story + Sub-tasks from an authored spec and
           // records the key in the spec file (REQ-JIRAPUB-001/-002).
@@ -1305,16 +1322,56 @@ export class ToolHandler {
             projectRoot: cg.getProjectRoot(),
           });
         }
+        case 'specship_jira_reconcile': {
+          // reconcile detects JIRA-side edits to published specs and (only
+          // after preview + explicit user confirmation) folds them back into
+          // the spec (REQ-JIRATEAM-005).
+          const cg = this.getSpecShip(args.projectPath as string | undefined);
+          return await handleSpecshipJiraReconcile(args, {
+            specQueries: cg.getSpecQueries(),
+            projectRoot: cg.getProjectRoot(),
+          });
+        }
         case 'specship_jira_transition':
           // transition moves a tracked issue to a target state (or lists the
           // available ones) — independent of the code graph (REQ-JIRATRANS-001).
           return await handleSpecshipJiraTransition(args);
+        case 'specship_jira_anchor':
+          // Board-first anchor gate (REQ-JIRATEAM-007). Independent of the
+          // code graph — reads the repo binding + optionally calls JIRA.
+          return await handleSpecshipJiraAnchor(args);
+        case 'specship_jira_epics':
+          // Epic picker for the `/specship:jira` menu (REQ-JIRATEAM-008).
+          // Independent of the code graph — reads the repo binding + JIRA.
+          return await handleSpecshipJiraEpics(args);
         case 'specship_jira_add_task': {
           // add_task creates a discovered task under its epic/story, routed by
           // taskship availability (TASKSHIP-BRIDGE-DOC, REQ-TASKSHIP-003). Needs
           // the project root to probe for taskship + spawn its CLI.
           const cg = this.getSpecShip(args.projectPath as string | undefined);
           return await handleSpecshipJiraAddTask(args, { projectRoot: cg.getProjectRoot() });
+        }
+        case 'specship_jira_regression_record': {
+          // Recorder for a single pack case result (REQ-JIRAREG-005). Needs
+          // the spec queries so it can upsert the validates-kind evidence
+          // link back onto the source criterion.
+          const cg = this.getSpecShip(args.projectPath as string | undefined);
+          return await handleSpecshipJiraRegressionRecord(args, {
+            specQueries: cg.getSpecQueries(),
+            projectRoot: cg.getProjectRoot(),
+          });
+        }
+        case 'specship_jira_regression_pack': {
+          // Regression-pack generator (REQ-JIRAREG-001). Reads the loaded spec
+          // set, plans an epic → domain-area → case hierarchy, and upserts it
+          // idempotently.
+          const cg = this.getSpecShip(args.projectPath as string | undefined);
+          return await handleSpecshipJiraRegressionPack(args, {
+            specQueries: cg.getSpecQueries(),
+            projectRoot: cg.getProjectRoot(),
+            getLinkedNodesForReq: (reqId) => cg.getLinkedNodesForReq(reqId),
+            getNeighbourNodes: (nodeIds) => cg.getNeighbourNodes(nodeIds),
+          });
         }
         default:
           return this.errorResult(`Unknown tool: ${toolName}`);

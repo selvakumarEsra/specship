@@ -46,6 +46,12 @@ Because every assertion lives in a spec file (or an `@implements` comment on
 a symbol), rebuilding the index from scratch reconstructs the full link set.
 Link identity is keyed on (spec id, target file, qualified name).
 
+implementations:
+  - src/extraction/specs/markdown-spec-extractor.ts:MarkdownSpecExtractor.extractLinkRefBlock
+
+verifies:
+  - __tests__/spec-extraction.test.ts
+
 ## Acceptance
 <!-- id: REQ-LINKWB-002.A1 -->
 - assert → full `specship index` → the link exists with the same identity
@@ -53,6 +59,11 @@ Link identity is keyed on (spec id, target file, qualified name).
 <!-- id: REQ-LINKWB-002.A2 -->
 - Deleting the `implementations:` bullet and reindexing removes the link —
   the file edit is the way to retract an assertion.
+<!-- id: REQ-LINKWB-002.A3 -->
+- A non-`path:Symbol` bullet in the block — e.g. a bare-path pointer to a
+  command markdown file — is skipped without terminating the block: every
+  `path:Symbol` bullet after it still produces its link, regardless of
+  bullet order.
 
 <!-- id: REQ-LINKWB-003 -->
 ## Link state MUST remain derived, never authored in the file

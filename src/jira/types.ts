@@ -67,6 +67,48 @@ export interface JiraCredentials {
    * process-global. Last resort when no CA bundle is available.
    */
   insecureTls?: boolean;
+  /**
+   * Provenance of the resolved `project` (REQ-JIRATEAM-001). `"repo"` when
+   * a `jira` block in `specship.config.json` supplied the binding, `"user"`
+   * otherwise. Credentials are ALWAYS user-level regardless.
+   */
+  bindingSource?: 'repo' | 'user';
+  /** Absolute path to the repo config that supplied the binding, when any. */
+  bindingPath?: string;
+}
+
+/**
+ * Shape of the `jira` section inside the repo-committed
+ * `specship.config.json` (REQ-JIRATEAM-001). Non-credential binding only —
+ * a credential-shaped field here is rejected on load.
+ */
+export interface JiraRepoBinding {
+  /** JIRA project key every teammate publishes into, e.g. `ACME`. */
+  projectKey: string;
+  /** Issue type used when publishing a spec as a Story. */
+  storyIssueType?: string;
+  /** Issue type used when publishing an acceptance criterion as a Sub-task. */
+  subtaskIssueType?: string;
+  /** Optional board id/name scoping coverage & pick. */
+  board?: string | number;
+  /** Optional sprint id/name scoping coverage & pick. */
+  sprint?: string | number;
+  /**
+   * Default epic anchor for spec authoring (REQ-JIRATEAM-006). When set,
+   * every new Story published from this repo is parented under this epic
+   * unless the spec's frontmatter names a different `epicKey`.
+   */
+  epicKey?: string;
+}
+
+/**
+ * One open epic returned from `listEpics` (REQ-JIRATEAM-006), used to
+ * populate the intake-gate picker. Never carries credential-adjacent data.
+ */
+export interface JiraEpic {
+  key: string;
+  summary: string;
+  status: string;
 }
 
 /**
@@ -94,6 +136,12 @@ export interface JiraConfig {
    * (REQ-JIRAPUB-001). A publish call may override it per invocation.
    */
   project?: string;
+  /**
+   * Team-lane repo binding (REQ-JIRATEAM-001) — usually authored inside
+   * the repo's `specship.config.json`, not here. Kept as an optional field
+   * so `JiraConfig` remains a superset for tools that ingest either shape.
+   */
+  jira?: JiraRepoBinding;
 }
 
 /**
@@ -128,6 +176,12 @@ export interface JiraIssue {
   description?: string;
   /** Detail path only (REQ-JIRA-003): child subtasks, if any. */
   subtasks?: Array<{ key: string; summary: string; status: string }>;
+  /**
+   * Detail path (REQ-JIRATEAM-006 A4): the issue's parent key when any —
+   * for a Story parented to an epic, this is the epic key. Absent when the
+   * issue has no parent.
+   */
+  parentKey?: string;
 }
 
 /**
@@ -194,6 +248,20 @@ export class JiraConfigError extends JiraError {
   constructor(message: string) {
     super(message, 'JIRA_CONFIG_ERROR');
     this.name = 'JiraConfigError';
+  }
+}
+
+/**
+ * Publish was requested on a bound repo with no resolvable epic anchor
+ * (REQ-JIRATEAM-006.A3). The message names both fixes — set `jira.epicKey`
+ * in `specship.config.json` (the committed binding) or pick an epic — so
+ * the caller can surface a directed refusal and never create an unanchored
+ * Story.
+ */
+export class JiraEpicRequiredError extends JiraError {
+  constructor(message: string) {
+    super(message, 'EPIC_REQUIRED');
+    this.name = 'JiraEpicRequiredError';
   }
 }
 

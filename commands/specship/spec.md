@@ -51,7 +51,9 @@ lost.
   plan mode, exit it first** (present the spec + the workflow's own gates as
   the plan) — the spec IS the plan, the workflow carries its own plan→approve
   gate, and plan mode blocks the `specship workflow run` launch
-  (REQ-DOORS-007).
+  (REQ-DOORS-007). **On a JIRA-bound repo, first pass the Board-first anchor
+  gate** (see below) — the resolved issue key is attached to the run as
+  `jira: <KEY>` in the spec frontmatter.
 - **`review <SPEC_ID>`** → a read-only rubric pass (see *Review* below); no edits.
 - **`triage <prompt>`** → the triage flow (route a bug / error / one-line
   enhancement to the existing spec it belongs to and append to it): see below.
@@ -238,6 +240,39 @@ configured** (the `specship_jira_*` tools are present and not returning the
 - **JIRA not configured** → skip this section entirely — no prompt, no
   mention (REQ-JIRAPUB-003.A1).
 
+## Board-first intake gate (bound repo, REQ-JIRATEAM-006)
+
+When the repo carries a `jira` binding in `specship.config.json`, the JIRA
+offer above is **not optional** — a new spec MUST be created in JIRA under
+an epic before the authoring flow reports done. Resolve the epic in this
+order:
+
+1. Spec frontmatter `epicKey:` — if the draft already carries one, use it.
+2. Binding default `jira.epicKey` in `specship.config.json` — use it and
+   record it into the spec frontmatter.
+3. Offer to pick from the project's open epics (007 supplies the menu). Once
+   picked, write the chosen `epicKey:` into the spec frontmatter.
+
+Then publish. The published Story is parented under that epic, and the
+result is stamped into the spec's frontmatter (`jira_issue`, `epicKey`,
+`jira_fingerprint`).
+
+**Refusal (A3).** On a bound repo with no resolvable epic and the user
+declines to pick, **do NOT create an unanchored Story**. Print exactly:
+
+> Refusing to create a JIRA Story without an epic anchor. Set `jira.epicKey`
+> in `specship.config.json` (the committed binding) or pick an epic — I
+> won't create an unanchored Story.
+
+**Unbound repo (A5).** No binding → the intake gate does not apply. The
+plain JIRA offer above still runs when JIRA is user-level configured.
+
+**Re-publish (A4).** A later re-publish (from `auto-publish` on `sync`, or a
+manual re-publish) NEVER re-parents a live Story. If the spec's frontmatter
+`epicKey` differs from JIRA's live parent, SpecShip logs a `reparent_skipped`
+warning and leaves JIRA untouched — moving a Story between epics is a JIRA
+UI action, not a SpecShip side effect.
+
 ## Fast-path (`fast <description>`)
 
 For a solo dev who wants to record intent and move, **without** the brainstorm /
@@ -350,6 +385,31 @@ targeted per-type questions, and **only on explicit confirmation** `Write` a
 `domain`-kind fact under `specs/domain/` (frontmatter `id: DOM-<AREA>-NNN`,
 `type:` one of term/rule/decision/constraint, linked via `depends_on`/`parent_id`).
 Then `specship sync`.
+
+## Board-first anchor gate (REQ-JIRATEAM-007)
+
+On a JIRA-bound repo, **every work-creating flow** — `implement`, `fast`,
+`triage`-that-writes, and any external `start` — first resolves a JIRA anchor
+before the workflow launches. Read-only routes (`list`, `ideas`, `review`,
+bare `SPEC_ID` detail, `domain`) are **never** gated.
+
+Steps for the gate:
+
+1. Call `mcp__specship__specship_jira_anchor` (or `resolveWorkAnchor` via the
+   library). Pass `issue_key` when the user typed one; otherwise pass
+   `picked_issue_key` when the caller has just picked one from
+   `specship_jira_issues`; otherwise omit both.
+2. **`unbound`** → the repo has no JIRA binding. Proceed unchanged.
+3. **`anchored`** → attach the returned key to the spec's frontmatter as
+   `jira: <KEY>` (if not already present) and pass it into the existing
+   pick→spec→implement pipeline.
+4. **`refused`** → print the tool's refusal verbatim (it already lists the
+   pickable epic-scoped work when applicable) and **exit** — do not run
+   `specship workflow run`. The fix is named (either `jira.epicKey` in
+   `specship.config.json` or a `specship_jira_pick <KEY>`).
+
+Note: `explore`, `search`, `callers`, `callees`, `impact`, `status`,
+`coverage`, and `track` are read-only retrieval and are NOT gated.
 
 ## After editing code for a spec
 

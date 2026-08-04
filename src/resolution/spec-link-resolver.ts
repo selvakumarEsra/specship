@@ -146,7 +146,7 @@ export interface InheritedLinksResult {
 }
 
 /** Default cap on how deep the parent / depends_on chain is followed. */
-const INHERITED_LINK_MAX_DEPTH = 5;
+export const INHERITED_LINK_MAX_DEPTH = 5;
 
 /**
  * The spec ids a spec links to at the spec tier: its `parentId` plus every
@@ -220,6 +220,15 @@ export class SpecLinkResolver {
 
   private resolveOneLink(link: SpecLink, stats: SpecLinkResolverStats): void {
     stats.scanned++;
+
+    // External evidence pointers (REQ-JIRAREG-005) carry a scheme-prefixed
+    // `targetFilePath` that never resolves to a code node — a JIRA case key,
+    // for example. Leave their state (verified / broken / …) untouched: the
+    // recorder owns those transitions, and a code-graph re-resolve pass must
+    // not flip them to orphaned.
+    if (link.targetFilePath.startsWith('jira://')) {
+      return;
+    }
 
     const node = this.findLogicalTarget(
       link.targetFilePath,

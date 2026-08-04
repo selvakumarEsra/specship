@@ -22,7 +22,9 @@ import { spawn } from 'child_process';
 import type { ToolDefinition, ToolResult } from './tools';
 import { detectTaskship, defaultTaskshipProbes, type TaskshipAvailability } from '../taskship/detect';
 import { loadJiraConfig, resolveJiraCredentials } from '../jira/config';
+import { loadRepoJiraBinding } from '../jira/repo-config';
 import { JiraClient, MAX_ISSUE_RESULTS } from '../jira/client';
+import { resolveWorkAnchor, formatRefusal } from '../jira/board-first';
 import {
   JiraError,
   type JiraIssue,
@@ -32,17 +34,35 @@ import {
   type JiraTransitionNames,
   type JiraTransitionResult,
 } from '../jira/types';
-import { writeSpecFromIssue, findSpecForIssueKey, readSpecJiraKey } from '../jira/spec-writer';
+import { writeSpecFromIssue, findSpecForIssueKey, readSpecJiraKey, writeRegressionCaseKeys } from '../jira/spec-writer';
+import {
+  buildRegressionPack,
+  renderRephraseReport,
+  upsertRegressionPack,
+  renderDomainGapReport,
+  recordRunResult,
+  type BuilderSpecQueries,
+  type RegressionPackJiraClient,
+  type RegressionRunResult,
+  type RegressionRunStatus,
+  type RunResultJiraClient,
+  type RunResultSpecQueries,
+  type UpsertContext,
+} from '../jira/regression-pack';
 import { reqIdForIssue } from '../jira/spec-generator';
 import {
   publishSpecToJira,
   writeBackJiraIdentity,
   publishedSpecFilename,
-  readFrontmatterValue,
   issueContentFingerprint,
   type PublishJiraClient,
   type SpecPublishSource,
 } from '../jira/publish';
+import { enumeratePublishedSpecs } from '../jira/published-specs';
+import {
+  postMilestoneComment,
+  type MilestoneJiraClient,
+} from '../jira/milestone-comment';
 import {
   raisePullRequest as defaultRaisePullRequest,
   buildPrTitle,
@@ -151,6 +171,7 @@ async function pushJiraReviewStatus(
   key: string,
   prUrl: string,
   make: () => JiraStatusContext,
+  specId?: string,
 ): Promise<string | null> {
   let ctx: JiraStatusContext;
   try {
@@ -174,9 +195,33 @@ async function pushJiraReviewStatus(
   }
 
   // The PR-link comment is posted regardless of the transition outcome (A3).
+  // Milestone: pr_raised (REQ-JIRATEAM-003.A1/A2). The dispatcher itself is
+  // idempotent (single comment per issue+specId), watermarked, and
+  // soft-fails to a local note — so a JIRA hiccup here never undoes the
+  // raised PR. Fall back to a plain addComment only for fake clients that
+  // don't implement the milestone shape.
+  const maybe = ctx.client as unknown as Partial<MilestoneJiraClient>;
+  const canMilestone =
+    typeof maybe.listCommentsDetailed === 'function' &&
+    typeof maybe.updateComment === 'function' &&
+    typeof maybe.addComment === 'function';
   try {
-    await ctx.client.addComment(key, `SpecShip raised a pull request: ${prUrl}`);
-    notes.push(`commented the PR link on ${key}`);
+    if (canMilestone) {
+      const r = await postMilestoneComment(
+        maybe as MilestoneJiraClient,
+        key,
+        'pr_raised',
+        { specId: specId ?? key, prUrl },
+      );
+      if (r.status === 'soft_failed') {
+        notes.push(`couldn't comment the PR link on ${key} (${r.reason ?? 'unknown'})`);
+      } else {
+        notes.push(`commented the PR link on ${key}`);
+      }
+    } else {
+      await ctx.client.addComment(key, `SpecShip raised a pull request: ${prUrl}`);
+      notes.push(`commented the PR link on ${key}`);
+    }
   } catch (err) {
     notes.push(`couldn't comment the PR link on ${key} (${errMsg(err)})`);
   }
@@ -290,6 +335,41 @@ export const jiraToolDefinitions: ToolDefinition[] = [
     },
   },
   {
+    name: 'specship_jira_coverage',
+    description:
+      'Show a sprint coverage report joining the bound JIRA project\'s active ' +
+      '(or named) sprint to spec truth — every issue in the sprint with its ' +
+      'repo-side state (unspecced / specced / implemented / verified / drifted / ' +
+      'broken) and rollup totals. Read-only over JIRA by default; pass ' +
+      '`post: true` with `issue_key` to upsert the report as a single ' +
+      'watermarked comment on that issue (edited in place on re-post).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project: {
+          type: 'string',
+          description:
+            'JIRA project key to scope the sprint read (e.g., "PROJ"). Optional when a default project is configured.',
+        },
+        sprint: {
+          type: 'string',
+          description:
+            'Optional named sprint. Omit to use the project\'s currently open sprint(s).',
+        },
+        post: {
+          type: 'boolean',
+          description:
+            'Post the report as a single watermarked JIRA comment (edit-in-place). Defaults to false — never posts unless explicitly requested.',
+        },
+        issue_key: {
+          type: 'string',
+          description:
+            'When `post` is true, the anchor issue (e.g., an epic key) the coverage comment lands on. Required with `post`.',
+        },
+      },
+    },
+  },
+  {
     name: 'specship_jira_publish',
     description:
       'Publish an authored spec to JIRA as a Story whose Sub-tasks mirror the ' +
@@ -315,6 +395,56 @@ export const jiraToolDefinitions: ToolDefinition[] = [
     },
   },
   {
+    name: 'specship_jira_reconcile',
+    description:
+      "Detect JIRA-side edits to published specs and (only with explicit user " +
+      'confirmation) fold them back into the spec (REQ-JIRATEAM-005). Two modes: ' +
+      '`mode: "preview"` (default) — read-only; enumerates every published spec ' +
+      "whose LIVE JIRA issue diverges from what publish wrote (edited summary/" +
+      'description, or a Sub-task added in JIRA with no matching acceptance ' +
+      'criterion) and returns a proposed spec amendment. `mode: "apply"` — ' +
+      'writes the previewed amendment to the spec file and re-publishes so the ' +
+      'fingerprint refreshes. **Preview first, then apply only after the user ' +
+      'has explicitly confirmed the exact diff in conversation.** Apply refuses ' +
+      "unless `expected_live_fingerprint` matches the issue's current live " +
+      'fingerprint — a value the caller MUST have just seen returned by a ' +
+      'preview call. No preview → no apply.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        mode: {
+          type: 'string',
+          enum: ['preview', 'apply'],
+          description:
+            'preview (default) returns divergences without touching any file; apply writes ' +
+            'the amendment after preview + explicit user confirmation.',
+        },
+        issue_key: {
+          type: 'string',
+          description:
+            'Optional: narrow preview to a single issue key (e.g., "PROJ-123"). Required for apply.',
+        },
+        accept_content: {
+          type: 'boolean',
+          description:
+            'apply only: fold the edited summary/description back into the spec.',
+        },
+        accept_subtasks: {
+          type: 'array',
+          items: { type: 'string' },
+          description:
+            'apply only: JIRA Sub-task keys whose proposed acceptance criteria the user has confirmed.',
+        },
+        expected_live_fingerprint: {
+          type: 'string',
+          description:
+            "apply only: the issue's live fingerprint from the preview the user just approved. " +
+            'apply refuses when this does not match the current live fingerprint (preview-first gate).',
+        },
+      },
+    },
+  },
+  {
     name: 'specship_jira_transition',
     description:
       'Transition a JIRA issue to a target workflow state (e.g., "In Progress", ' +
@@ -336,6 +466,47 @@ export const jiraToolDefinitions: ToolDefinition[] = [
         },
       },
       required: ['key'],
+    },
+  },
+  {
+    name: 'specship_jira_anchor',
+    description:
+      'Resolve the board-first work anchor for the current repo (REQ-JIRATEAM-007). ' +
+      'Returns "unbound" when the repo has no JIRA binding (callers proceed unchanged), ' +
+      'the anchored issue when one is explicit/picked, or refuses (with the epic-scoped ' +
+      'pickable list) when a bound repo has no anchor yet. Read-only: never writes.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        issue_key: {
+          type: 'string',
+          description:
+            'Optional: an explicit issue key to anchor on (e.g., "PROJ-123"). Skips the pick step.',
+        },
+        picked_issue_key: {
+          type: 'string',
+          description:
+            'Optional: the key just picked from a specship_jira_issues list — routed as the anchor.',
+        },
+      },
+    },
+  },
+  {
+    name: 'specship_jira_epics',
+    description:
+      'List the open epics for a JIRA project — powers the /specship:jira menu ' +
+      "epic-picker (REQ-JIRATEAM-008). With no `project`, uses the repo's bound " +
+      'project (specship.config.json → jira.projectKey); errors clearly if neither ' +
+      'is set. Read-only: never writes; ordered most-recently-updated first.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project: {
+          type: 'string',
+          description:
+            "Optional project key (e.g., \"PROJ\"). Omit to use the repo's bound project.",
+        },
+      },
     },
   },
   {
@@ -378,6 +549,74 @@ export const jiraToolDefinitions: ToolDefinition[] = [
         },
       },
       required: ['parent', 'title'],
+    },
+  },
+  {
+    name: 'specship_jira_regression_record',
+    description:
+      'Record a regression pack case result on its JIRA issue (REQ-JIRAREG-005): ' +
+      'watermarked comment upserted per (case, runId), pass → Done + validates-link ' +
+      'verified, fail → In Review + broken + a triage hint, unexecuted → comment only ' +
+      '(no transition, no link-state churn). Idempotent per (case, runId).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        case: { type: 'string', description: 'JIRA case issue key (e.g., "PROJ-42").' },
+        criterion: {
+          type: 'string',
+          description: 'Source acceptance criterion id (e.g., "REQ-FOO-001.A2").',
+        },
+        result: {
+          type: 'string',
+          enum: ['passed', 'failed', 'unexecuted'],
+          description: 'Outcome of the pack case.',
+        },
+        executor: {
+          type: 'string',
+          enum: ['human', 'agent'],
+          description: 'Who ran the case. Defaults to "human".',
+        },
+        harness: {
+          type: 'string',
+          description: 'Optional behaviour harness id (e.g., "behaviour-e2e").',
+        },
+        run: {
+          type: 'string',
+          description:
+            'Stable run identifier — one comment per (case, run) so re-records edit in place.',
+        },
+        log_ref: { type: 'string', description: 'Optional log pointer for evidence.' },
+        error: { type: 'string', description: 'Optional error text (fail path).' },
+      },
+      required: ['case', 'criterion', 'result'],
+    },
+  },
+  {
+    name: 'specship_jira_regression_pack',
+    description:
+      'Generate or refresh the SpecShip Regression Pack in the bound JIRA ' +
+      'project (REQ-JIRAREG-001): one watermarked epic → one domain-area ' +
+      'Story → one Sub-task per acceptance criterion of every implemented ' +
+      '(or verified) requirement. Idempotent — a re-run with nothing changed ' +
+      'performs zero JIRA writes; a criterion added, removed, or edited yields ' +
+      'exactly the matching create / update. Pass dry_run: true to preview the ' +
+      'plan without touching JIRA.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project: {
+          type: 'string',
+          description:
+            'Optional JIRA project key (e.g., "PROJ"). Defaults to the ' +
+            'configured publish project when omitted.',
+        },
+        dry_run: {
+          type: 'boolean',
+          description:
+            'When true, build the plan and report counts without creating or ' +
+            'updating any JIRA issue. Default: false.',
+        },
+      },
     },
   },
 ];
@@ -490,7 +729,7 @@ function cell(s: string): string {
  * result hit the fetch cap. The caller relays this verbatim, so the output is
  * self-sufficient. Empty → one explicit line plus a short actionable note.
  */
-function formatIssues(issues: JiraIssue[], opts?: { project?: string }): string {
+function formatIssues(issues: JiraIssue[], opts?: { project?: string; epicKey?: string }): string {
   if (issues.length === 0) {
     return (
       'No issues assigned to you.\n\n' +
@@ -508,6 +747,7 @@ function formatIssues(issues: JiraIssue[], opts?: { project?: string }): string 
 
   const notes: string[] = [];
   if (opts?.project) notes.push(`Filtered to project ${cell(opts.project)}.`);
+  if (opts?.epicKey) notes.push(`Scoped to epic ${cell(opts.epicKey)}.`);
   if (issues.length >= MAX_ISSUE_RESULTS) {
     notes.push(`Showing the ${MAX_ISSUE_RESULTS} most recently updated.`);
   }
@@ -575,7 +815,7 @@ export async function handleSpecshipJiraIssues(
   const notConfigured = notConfiguredResult();
   if (notConfigured) return notConfigured;
 
-  const project =
+  const explicitProject =
     typeof args.project === 'string' && args.project.trim()
       ? args.project.trim()
       : undefined;
@@ -583,11 +823,29 @@ export async function handleSpecshipJiraIssues(
   // recognized value; anything else is ignored (falls back to all issues).
   const sprint = args.sprint === 'active' ? 'active' as const : undefined;
 
+  // Board-first (REQ-JIRATEAM-007.A1): with a repo binding and no explicit
+  // overrides, scope to the bound project's epic so the same tool that
+  // powers the pick flow surfaces the anchor-eligible open work.
+  let epicKey: string | undefined;
+  let project = explicitProject;
+  if (!explicitProject) {
+    try {
+      const { binding } = loadRepoJiraBinding(process.cwd());
+      if (binding) {
+        project = binding.projectKey;
+        if (binding.epicKey) epicKey = binding.epicKey;
+      }
+    } catch {
+      // A malformed repo config already surfaces via other paths; here we
+      // just skip the scoping rather than blocking a listing call.
+    }
+  }
+
   try {
     const creds = resolveJiraCredentials();
     const client = new JiraClient(creds);
-    const result = await client.listMyIssues({ project, sprint });
-    return textResult(formatIssues(result.issues, { project }));
+    const result = await client.listMyIssues({ project, sprint, epicKey });
+    return textResult(formatIssues(result.issues, { project, epicKey }));
   } catch (err) {
     // JiraError messages are credential-free by construction (REQ-JIRA-009).
     if (err instanceof JiraError) {
@@ -596,6 +854,123 @@ export async function handleSpecshipJiraIssues(
     // Defensive: never let an unexpected error leak internals.
     return errorResult('Failed to list JIRA issues.');
   }
+}
+
+/**
+ * Handle `specship_jira_anchor` (REQ-JIRATEAM-007). Thin wrapper over
+ * `resolveWorkAnchor` so slash-commands and external agents can query the
+ * board-first gate without duplicating logic. Always returns a plain-text
+ * result — anchored → an `Anchor:` line naming the key; refused → the
+ * canonical human refusal (with the pickable list when available); unbound
+ * → a one-liner so callers no-op cleanly.
+ */
+export async function handleSpecshipJiraAnchor(
+  args: Record<string, unknown>,
+): Promise<ToolResult> {
+  const explicitIssueKey =
+    typeof args.issue_key === 'string' && args.issue_key.trim()
+      ? args.issue_key.trim()
+      : undefined;
+  const pickedIssueKey =
+    typeof args.picked_issue_key === 'string' && args.picked_issue_key.trim()
+      ? args.picked_issue_key.trim()
+      : undefined;
+
+  try {
+    // A resolve that needs to call JIRA (explicit/picked key, or the pickable
+    // list on refusal) will hit `resolveJiraCredentials` inside the default
+    // makeClient — gate up-front so an unconfigured caller still gets the
+    // canonical pointer, not a stack.
+    if (explicitIssueKey || pickedIssueKey) {
+      const notConfigured = notConfiguredResult();
+      if (notConfigured) return notConfigured;
+    }
+    const res = await resolveWorkAnchor({
+      cwd: process.cwd(),
+      explicitIssueKey,
+      pickedIssueKey,
+    });
+    if (res.status === 'unbound') {
+      return textResult(
+        'Anchor: unbound — repo has no JIRA binding; work-creating flows proceed unchanged.',
+      );
+    }
+    if (res.status === 'anchored') {
+      return textResult(
+        `Anchor: ${res.anchor.issueKey} — ${res.anchor.summary} (source: ${res.anchor.source})`,
+      );
+    }
+    return errorResult(formatRefusal(res));
+  } catch (err) {
+    if (err instanceof JiraError) return errorResult(err.message);
+    return errorResult('Failed to resolve JIRA anchor.');
+  }
+}
+
+/**
+ * Handle `specship_jira_epics` (REQ-JIRATEAM-008). Lists open epics for a
+ * project — the picker source for the `/specship:jira` menu's "choose epic"
+ * step. With no `project`, falls back to the repo binding's `projectKey` so
+ * on a bound repo the caller doesn't have to duplicate the lookup.
+ */
+export async function handleSpecshipJiraEpics(
+  args: Record<string, unknown>,
+): Promise<ToolResult> {
+  const notConfigured = notConfiguredResult();
+  if (notConfigured) return notConfigured;
+
+  let project =
+    typeof args.project === 'string' && args.project.trim()
+      ? args.project.trim()
+      : undefined;
+  if (!project) {
+    try {
+      const { binding } = loadRepoJiraBinding(process.cwd());
+      if (binding) project = binding.projectKey;
+    } catch (err) {
+      if (err instanceof JiraError) return errorResult(err.message);
+    }
+  }
+  if (!project) {
+    return errorResult(
+      'No JIRA project. Pass `project`, or bind one with ' +
+        '`specship jira bind --project <KEY>` (writes specship.config.json).',
+    );
+  }
+
+  try {
+    const creds = resolveJiraCredentials();
+    const client = new JiraClient(creds);
+    const epics = await client.listEpics(project);
+    return textResult(formatEpics(epics, project));
+  } catch (err) {
+    if (err instanceof JiraError) return errorResult(err.message);
+    return errorResult('Failed to list JIRA epics.');
+  }
+}
+
+function formatEpics(
+  epics: { key: string; summary: string; status: string }[],
+  project: string,
+): string {
+  if (epics.length === 0) {
+    return (
+      `No open epics in project ${cell(project)}.\n\n` +
+      '> Note: only epics whose status category is not "Done" are listed.'
+    );
+  }
+  const table = [
+    '| Key | Summary | Status |',
+    '| --- | --- | --- |',
+    ...epics.map(
+      (e) => `| ${cell(e.key)} | ${cell(e.summary)} | ${cell(e.status)} |`,
+    ),
+  ].join('\n');
+  const notes = [`Project ${cell(project)}, ordered most-recently-updated first.`];
+  if (epics.length >= MAX_ISSUE_RESULTS) {
+    notes.push(`Showing the ${MAX_ISSUE_RESULTS} most recently updated.`);
+  }
+  return `${table}\n\n> Note: ${notes.join(' ')}`;
 }
 
 /**
@@ -968,7 +1343,7 @@ export async function handleJiraRunCompletion(
     // Only on a raised PR — a failed raise never advances the issue (below),
     // matching REQ-JIRA-005.A2 (leave it in-progress). Never throws.
     const make = deps.makeJiraClient ?? defaultMakeJiraClient;
-    const note = await pushJiraReviewStatus(issueKey, outcome.url, make);
+    const note = await pushJiraReviewStatus(issueKey, outcome.url, make, jira.specId);
     if (note) log(note);
   } else {
     // A3 (of REQ-JIRA-006) / A2 (of REQ-JIRA-005): report the reason; the
@@ -1356,11 +1731,25 @@ export async function handleSpecshipJiraTrack(
         });
       }
       if (pub.fingerprint && live) {
-        const liveFp = issueContentFingerprint(live.summary, live.description ?? '');
-        if (liveFp !== pub.fingerprint) {
+        // Delegate the divergence judgement to the reconcile module so the
+        // track view + the reconcile tool never disagree about "what counts as
+        // an edit". Sub-task diffs need the spec's acceptance criteria, which
+        // this row doesn't have — track only reports the content flag; a full
+        // preview lives in `specship_jira_reconcile`.
+        const { diffIssueVsSpec } = await import('../jira/reconcile');
+        const specView = {
+          specRelPath: pub.specRelPath,
+          requirementId: pub.issueKey,
+          title: pub.title,
+          body: '',
+          acceptance: [] as Array<{ id: string; text: string }>,
+        };
+        const report = diffIssueVsSpec(live, specView, pub.fingerprint);
+        if (report.content) {
           divergences.push(
             `⚠ ${pub.issueKey} was edited in JIRA after publish (spec: ${pub.specRelPath}) — ` +
-              're-publish with specship_jira_publish to refresh, or fold the JIRA edit back into the spec.',
+              'run specship_jira_reconcile to preview the JIRA-side changes, or ' +
+              're-publish with specship_jira_publish to refresh the fingerprint.',
           );
         }
       }
@@ -1373,48 +1762,9 @@ export async function handleSpecshipJiraTrack(
   );
 }
 
-/** A spec under specs/ that carries a published JIRA identity. */
-interface PublishedSpecRef {
-  issueKey: string;
-  title: string;
-  specRelPath: string;
-  fingerprint: string | null;
-}
-
-/**
- * Enumerate the specs under `<projectRoot>/specs/` whose frontmatter carries a
- * `jira_issue:` key (REQ-JIRAPUB-008). Best-effort filesystem scan — unreadable
- * files are skipped, and an absent specs/ dir yields an empty list.
- */
-function enumeratePublishedSpecs(projectRoot: string): PublishedSpecRef[] {
-  const specsDir = path.join(projectRoot, 'specs');
-  let entries: string[] = [];
-  try {
-    entries = fs.readdirSync(specsDir);
-  } catch {
-    return [];
-  }
-  const out: PublishedSpecRef[] = [];
-  for (const name of entries) {
-    if (!name.toLowerCase().endsWith('.md')) continue;
-    const full = path.join(specsDir, name);
-    try {
-      if (!fs.statSync(full).isFile()) continue;
-      const content = fs.readFileSync(full, 'utf8');
-      const issueKey = readFrontmatterValue(content, 'jira_issue');
-      if (!issueKey) continue;
-      out.push({
-        issueKey,
-        title: readSpecTitle(full, issueKey),
-        specRelPath: path.join('specs', name),
-        fingerprint: readFrontmatterValue(content, 'jira_fingerprint'),
-      });
-    } catch {
-      continue;
-    }
-  }
-  return out;
-}
+// `enumeratePublishedSpecs` / `PublishedSpecRef` moved to
+// `../jira/published-specs` so REQ-JIRATEAM-004's coverage report can share
+// the same source. Imported at the top of this file.
 
 /**
  * Dependencies for `handleSpecshipJiraPublish` (REQ-JIRAPUB-001/-002). The DB
@@ -1707,3 +2057,690 @@ export async function handleSpecshipJiraAddTask(
     return errorResult('Failed to create the task in JIRA.');
   }
 }
+
+// ---------------------------------------------------------------------------
+// Regression pack (REQ-JIRAREG-001)
+// ---------------------------------------------------------------------------
+
+/** Dependencies for `handleSpecshipJiraRegressionPack` — threaded like publish. */
+export interface JiraRegressionPackDeps {
+  specQueries: unknown;
+  projectRoot: string;
+  /** Client factory seam (default: resolve creds + new JiraClient). */
+  makeJiraClient?: () => RegressionPackJiraClient;
+  /**
+   * Optional graph accessors — enable REQ-JIRAREG-004.A2 tier derivation.
+   * Absent (rare — CLI / MCP always pass them) → tier defaults to `'backend'`.
+   */
+  getLinkedNodesForReq?: (reqId: string) => import('../types').Node[];
+  getNeighbourNodes?: (nodeIds: readonly string[]) => import('../types').Node[];
+}
+
+/**
+ * Handle `specship_jira_regression_pack` (REQ-JIRAREG-001). Builds the model
+ * from the loaded spec set, then upserts it against JIRA idempotently. A
+ * dry-run planning path returns the counts without any JIRA write.
+ */
+export async function handleSpecshipJiraRegressionPack(
+  args: Record<string, unknown>,
+  deps: JiraRegressionPackDeps,
+): Promise<ToolResult> {
+  const notConfigured = notConfiguredResult();
+  if (notConfigured) return notConfigured;
+
+  const dryRun = args.dry_run === true;
+  const baseSq = deps.specQueries as BuilderSpecQueries;
+  const sq: BuilderSpecQueries = {
+    getAllSpecs: () => baseSq.getAllSpecs(),
+    getSpecsByParent: (pid) => baseSq.getSpecsByParent(pid),
+    getLinksBySpec: (sid) => baseSq.getLinksBySpec(sid),
+    getSpecById: (id) => baseSq.getSpecById(id),
+    ...(deps.getLinkedNodesForReq ? { getLinkedNodesForReq: deps.getLinkedNodesForReq } : {}),
+    ...(deps.getNeighbourNodes ? { getNeighbourNodes: deps.getNeighbourNodes } : {}),
+  };
+  const model = buildRegressionPack(sq);
+  if (model.cases.length === 0) {
+    return textResult(
+      'No implemented (or verified) requirements found — the regression pack ' +
+        'has zero cases. Implement a spec and link its code before generating.',
+    );
+  }
+
+  try {
+    const creds = resolveJiraCredentials();
+    const projectKey =
+      (typeof args.project === 'string' && args.project.trim()
+        ? args.project.trim()
+        : undefined) ?? creds.project;
+    if (!projectKey) {
+      return textResult(
+        'No JIRA project is configured. Pass `project: "PROJ"` or save a ' +
+          'default with `specship jira configure --project <Key>`.',
+      );
+    }
+
+    const client: RegressionPackJiraClient = deps.makeJiraClient
+      ? deps.makeJiraClient()
+      : (new JiraClient(creds) as unknown as RegressionPackJiraClient);
+    const ctx: UpsertContext = { projectKey, dryRun };
+    const result = await upsertRegressionPack(client, model, ctx);
+
+    // Back-link written cases into their spec files (REQ-JIRAREG-001.A3) —
+    // spec-side traceability. Best-effort per case; a failure notes and
+    // moves on so a partial back-link never blocks the pack write itself.
+    const backlinkNotes: string[] = [];
+    if (!dryRun) {
+      const specPathById: Record<string, string> = {};
+      for (const c of model.cases) specPathById[c.criterionId] = c.specPath;
+      for (const [criterionId, issueKey] of Object.entries(result.caseKeysByCriterion)) {
+        const rel = specPathById[criterionId];
+        if (!rel) continue;
+        const absPath = path.isAbsolute(rel) ? rel : path.join(deps.projectRoot, rel);
+        const out = writeRegressionCaseKeys(absPath, criterionId, issueKey);
+        if (!out.ok && out.detail) backlinkNotes.push(`  · ${criterionId}: ${out.detail}`);
+      }
+    }
+
+    const lines: string[] = [];
+    lines.push(
+      `${dryRun ? 'Dry-run plan for' : 'Regression Pack upserted in'} ${projectKey}:`,
+    );
+    lines.push(
+      `- Epic: ${result.epicKey ?? '(none)'}${result.epicCreated ? ' (created)' : ''}`,
+    );
+    lines.push(
+      `- Stories: ${result.storiesCreated} created, ${result.storiesUpdated} updated, ${result.storiesSkipped} skipped`,
+    );
+    lines.push(
+      `- Cases: ${result.casesCreated} created, ${result.casesUpdated} updated, ${result.casesSkipped} skipped (of ${model.cases.length})`,
+    );
+    const xrefTotal =
+      result.crossRefsCreated + result.crossRefsUpdated + result.crossRefsSkipped;
+    if (xrefTotal > 0) {
+      lines.push(
+        `- Cross-refs: ${result.crossRefsCreated} created, ${result.crossRefsUpdated} updated, ${result.crossRefsSkipped} skipped`,
+      );
+    }
+    if (result.casesObsoleted > 0) {
+      lines.push(
+        `- Obsoleted: ${result.casesObsoleted} case${result.casesObsoleted === 1 ? '' : 's'} (${result.obsoletedCaseKeys.join(', ')}) — kept for run history, labelled specship-reg-obsolete.`,
+      );
+    }
+    if (result.orphanedEpicKeys.length > 0) {
+      lines.push(
+        `- Extra pack-epics found (single-epic invariant): ${result.orphanedEpicKeys.join(', ')} — merge or delete them manually.`,
+      );
+    }
+    if (backlinkNotes.length > 0) {
+      lines.push('- Back-link notes:');
+      lines.push(...backlinkNotes);
+    }
+    const gapReport = renderDomainGapReport(model.domainGaps);
+    if (gapReport) {
+      lines.push('');
+      lines.push(gapReport);
+    }
+    const rephraseReport = renderRephraseReport(model.rephraseFlags);
+    if (rephraseReport) {
+      lines.push('');
+      lines.push(rephraseReport);
+    }
+    return textResult(lines.join('\n'));
+  } catch (err) {
+    if (err instanceof JiraError) return errorResult(err.message);
+    return errorResult(
+      `Regression pack failed: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Regression pack: run-result recorder (REQ-JIRAREG-005)
+// ---------------------------------------------------------------------------
+
+export interface JiraRegressionRecordDeps {
+  specQueries: unknown;
+  projectRoot: string;
+  makeJiraClient?: () => RunResultJiraClient;
+}
+
+/** Handle `specship_jira_regression_record` (REQ-JIRAREG-005). */
+export async function handleSpecshipJiraRegressionRecord(
+  args: Record<string, unknown>,
+  deps: JiraRegressionRecordDeps,
+): Promise<ToolResult> {
+  const notConfigured = notConfiguredResult();
+  if (notConfigured) return notConfigured;
+
+  const caseKey = typeof args.case === 'string' ? args.case.trim() : '';
+  const criterionId = typeof args.criterion === 'string' ? args.criterion.trim() : '';
+  const status = typeof args.result === 'string' ? args.result.trim() : '';
+  if (!caseKey || !criterionId || !status) {
+    return errorResult(
+      'specship_jira_regression_record requires `case`, `criterion`, and `result`.',
+    );
+  }
+  const validStatuses: RegressionRunStatus[] = ['passed', 'failed', 'unexecuted'];
+  if (!validStatuses.includes(status as RegressionRunStatus)) {
+    return errorResult(
+      `Unsupported result "${status}" — expected one of: ${validStatuses.join(', ')}.`,
+    );
+  }
+
+  const result: RegressionRunResult = {
+    caseKey,
+    criterionId,
+    status: status as RegressionRunStatus,
+    executor: args.executor === 'agent' ? 'agent' : 'human',
+    ...(typeof args.harness === 'string' && args.harness.trim()
+      ? { harness: args.harness.trim() as RegressionRunResult['harness'] }
+      : {}),
+    ...(typeof args.run === 'string' && args.run.trim() ? { runId: args.run.trim() } : {}),
+    ...(typeof args.log_ref === 'string' || typeof args.error === 'string'
+      ? {
+          evidence: {
+            ...(typeof args.log_ref === 'string' ? { logRef: args.log_ref } : {}),
+            ...(typeof args.error === 'string' ? { error: args.error } : {}),
+          },
+        }
+      : {}),
+  };
+
+  try {
+    const creds = resolveJiraCredentials();
+    const client: RunResultJiraClient = deps.makeJiraClient
+      ? deps.makeJiraClient()
+      : (new JiraClient(creds) as unknown as RunResultJiraClient);
+    const outcome = await recordRunResult(
+      { client, specQueries: deps.specQueries as RunResultSpecQueries },
+      result,
+    );
+    const lines: string[] = [];
+    lines.push(
+      `${caseKey} recorded ${outcome.status} — comment ${outcome.comment}, transition ${outcome.transition}, validates-link ${outcome.linked ? 'updated' : 'untouched'}.`,
+    );
+    if (outcome.triageHint) lines.push(outcome.triageHint);
+    return textResult(lines.join('\n'));
+  } catch (err) {
+    if (err instanceof JiraError) return errorResult(err.message);
+    return errorResult(
+      `Regression record failed: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Sprint coverage (REQ-JIRATEAM-004)
+// ---------------------------------------------------------------------------
+
+/**
+ * Dependencies for `handleSpecshipJiraCoverage`. Threaded from the tool
+ * dispatcher — the DB handle enumerates specs + link states, `projectRoot`
+ * anchors the published-specs scan, and `makeJiraClient` is the injectable
+ * live-read seam (default resolves creds + a real `JiraClient`).
+ */
+export interface JiraCoverageDeps {
+  specQueries: unknown;
+  projectRoot: string;
+  makeJiraClient?: () => import('../jira/coverage').CoverageJiraClient & {
+    listCommentsDetailed?: (key: string) => Promise<Array<{ id: string; body: string }>>;
+    addComment?: (key: string, body: string) => Promise<{ id: string } | void>;
+    updateComment?: (key: string, id: string, body: string) => Promise<void>;
+  };
+}
+
+/**
+ * Handle `specship_jira_coverage` (REQ-JIRATEAM-004). Builds the sprint
+ * coverage report, renders markdown, and optionally upserts a single
+ * watermarked JIRA comment (A3) — never transitions or edits any issue (A4).
+ *
+ * SECURITY: no credential is echoed (REQ-JIRA-009); only public issue keys,
+ * titles, and statuses appear in output.
+ */
+export async function handleSpecshipJiraCoverage(
+  args: Record<string, unknown>,
+  deps: JiraCoverageDeps,
+): Promise<ToolResult> {
+  const notConfigured = notConfiguredResult();
+  if (notConfigured) return notConfigured;
+
+  const { buildCoverageReport, formatCoverageMarkdown, COVERAGE_COMMENT_WATERMARK } =
+    await import('../jira/coverage');
+  const { upsertWatermarkedComment } = await import('../jira/publish');
+
+  const post = args.post === true;
+  const issueKeyArg =
+    typeof args.issue_key === 'string' && args.issue_key.trim()
+      ? args.issue_key.trim()
+      : undefined;
+  if (post && !issueKeyArg) {
+    return textResult(
+      'Posting the coverage report needs an anchor issue — pass "issue_key" (e.g., the epic key) alongside "post": true.',
+    );
+  }
+
+  const sprint =
+    typeof args.sprint === 'string' && args.sprint.trim()
+      ? args.sprint.trim()
+      : undefined;
+
+  let creds: ReturnType<typeof resolveJiraCredentials>;
+  try {
+    creds = resolveJiraCredentials();
+  } catch (err) {
+    return errorResult(err instanceof Error ? err.message : String(err));
+  }
+  const project =
+    (typeof args.project === 'string' && args.project.trim()
+      ? args.project.trim()
+      : undefined) ?? creds.project;
+  if (!project) {
+    return textResult(
+      'No JIRA project configured. Pass "project", or configure a default with `specship jira configure --project <KEY>`.',
+    );
+  }
+
+  const client = deps.makeJiraClient
+    ? deps.makeJiraClient()
+    : new JiraClient(creds);
+
+  try {
+    const report = await buildCoverageReport({
+      client,
+      projectRoot: deps.projectRoot,
+      specQueries: deps.specQueries as import('../jira/coverage').CoverageSpecQueries,
+      project,
+      sprint,
+    });
+    const markdown = formatCoverageMarkdown(report);
+
+    if (!post) return textResult(markdown);
+
+    // Post path (A3): the only write this handler makes — a single watermarked
+    // comment, upserted in place on re-post. Never a transition/edit (A4).
+    const commentClient = client as unknown as {
+      listCommentsDetailed: (key: string) => Promise<Array<{ id: string; body: string }>>;
+      addComment: (key: string, body: string) => Promise<{ id: string } | void>;
+      updateComment: (key: string, id: string, body: string) => Promise<void>;
+    };
+    const result = await upsertWatermarkedComment(
+      commentClient,
+      issueKeyArg!,
+      COVERAGE_COMMENT_WATERMARK,
+      markdown,
+    );
+    const verb = result.action === 'updated' ? 'Updated existing' : 'Posted new';
+    return textResult(
+      `${markdown}\n\n> ${verb} coverage comment on ${issueKeyArg}.`,
+    );
+  } catch (err) {
+    if (err instanceof JiraError) return errorResult(err.message);
+    return errorResult(
+      `Failed to build the coverage report: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Reconcile (REQ-JIRATEAM-005)
+// ---------------------------------------------------------------------------
+
+/** The read-only client slice `specship_jira_reconcile` needs. */
+export interface JiraReconcileClient {
+  getIssue(key: string): Promise<JiraIssueResult>;
+}
+
+/** Dependencies for `handleSpecshipJiraReconcile`. */
+export interface JiraReconcileDeps {
+  specQueries: unknown;
+  projectRoot: string;
+  /** Read-side factory (default: resolve creds + new JiraClient). */
+  makeJiraClient?: () => JiraReconcileClient;
+  /**
+   * Write-side factory used only in apply mode to re-publish and refresh the
+   * fingerprint. Defaults to the full `JiraClient` — tests stub this out so
+   * the suite never contacts a real host.
+   */
+  makePublishClient?: () => PublishJiraClient;
+}
+
+/** The subset of SpecQueries the reconcile handler reads. */
+interface ReconcileSpecQueries {
+  getSpecById?: (id: string) => {
+    id: string;
+    kind: string;
+    title: string;
+    body: string;
+    sourcePath: string;
+  } | null;
+  getSpecsByParent?: (id: string) => Array<{
+    id: string;
+    kind: string;
+    title: string;
+    body: string;
+  }>;
+}
+
+/**
+ * Load the requirement view a diff needs — id, title, body, acceptance — from
+ * the SpecQueries handle. `requirementId` is the frontmatter/heading id (which
+ * for a published spec is `reqIdForIssue(issueKey)`).
+ */
+function loadSpecView(
+  sq: ReconcileSpecQueries,
+  requirementId: string,
+  specRelPath: string,
+): import('../jira/reconcile').SpecViewForDiff | null {
+  const spec = sq.getSpecById?.(requirementId);
+  if (!spec || spec.kind !== 'requirement') return null;
+  const acceptance = (sq.getSpecsByParent?.(requirementId) ?? [])
+    .filter((c) => c.kind === 'acceptance')
+    .map((c) => ({ id: c.id, text: (c.title || c.body || '').trim() }))
+    .filter((c) => c.text.length > 0);
+  return {
+    specRelPath,
+    requirementId,
+    title: spec.title,
+    body: spec.body ?? '',
+    acceptance,
+  };
+}
+
+/** Format one report as a human-readable diff block. */
+function formatReconcileReport(report: import('../jira/reconcile').ReconcileReport): string {
+  const lines: string[] = [];
+  lines.push(`### ${report.issueKey} — ${report.specRelPath}`);
+  if (report.content) {
+    lines.push('');
+    lines.push('**Content divergence (edited in JIRA after publish)**');
+    lines.push('');
+    lines.push(`- Live summary: ${report.content.liveSummary}`);
+    lines.push(`- Live fingerprint: \`${report.content.liveFingerprint}\``);
+    lines.push(`- Stored fingerprint: \`${report.content.storedFingerprint}\``);
+    lines.push('');
+    lines.push('_Live description:_');
+    lines.push('');
+    lines.push(report.content.liveDescription || '_(empty)_');
+  }
+  if (report.subtasks.length > 0) {
+    lines.push('');
+    lines.push('**Sub-tasks added in JIRA (proposed new acceptance criteria)**');
+    lines.push('');
+    lines.push('| Sub-task | Proposed id | Proposed criterion |');
+    lines.push('| --- | --- | --- |');
+    for (const d of report.subtasks) {
+      lines.push(
+        `| ${cell(d.subtaskKey)} | ${cell(d.proposedCriterionId)} | ${cell(d.proposedCriterionText)} |`,
+      );
+    }
+  }
+  return lines.join('\n');
+}
+
+/**
+ * Handle `specship_jira_reconcile` (REQ-JIRATEAM-005).
+ *
+ * Two modes:
+ *   - preview (default, A3): enumerate every published spec, live-read the
+ *     issue, diff, and return the proposed spec amendment. NO writes.
+ *   - apply (A4): fold the previewed diff into the spec file and re-publish so
+ *     the fingerprint refreshes. Preview-gated: apply refuses unless
+ *     `expected_live_fingerprint` matches the issue's current live fingerprint,
+ *     which the caller MUST have just received from a preview call. This
+ *     encodes the "preview first, then explicit user confirmation" discipline.
+ */
+export async function handleSpecshipJiraReconcile(
+  args: Record<string, unknown>,
+  deps: JiraReconcileDeps,
+): Promise<ToolResult> {
+  const notConfigured = notConfiguredResult();
+  if (notConfigured) return notConfigured;
+
+  const { diffIssueVsSpec, reportHasDivergence } = await import('../jira/reconcile');
+  const {
+    appendAcceptanceCriterion,
+    applyContentAmendment,
+    amendSpecFile,
+  } = await import('../jira/spec-amend');
+
+  const mode = args.mode === 'apply' ? 'apply' : 'preview';
+  const issueKeyArg =
+    typeof args.issue_key === 'string' && args.issue_key.trim()
+      ? args.issue_key.trim()
+      : undefined;
+
+  const published = enumeratePublishedSpecs(deps.projectRoot);
+  const scope = issueKeyArg
+    ? published.filter((p) => p.issueKey === issueKeyArg)
+    : published;
+  if (scope.length === 0) {
+    return textResult(
+      issueKeyArg
+        ? `No published spec found for ${issueKeyArg} — reconcile only applies to specs with a jira_issue: key.`
+        : 'No published specs found — nothing to reconcile.',
+    );
+  }
+
+  let client: JiraReconcileClient;
+  try {
+    client = deps.makeJiraClient
+      ? deps.makeJiraClient()
+      : (new JiraClient(resolveJiraCredentials()) as unknown as JiraReconcileClient);
+  } catch (err) {
+    return errorResult(err instanceof Error ? err.message : String(err));
+  }
+
+  const sq = deps.specQueries as ReconcileSpecQueries;
+
+  if (mode === 'apply') {
+    if (!issueKeyArg) {
+      return errorResult(
+        'apply mode needs "issue_key". Run preview first, then apply the confirmed diff for one issue.',
+      );
+    }
+    const pub = scope[0]!;
+    let live: JiraIssue;
+    try {
+      live = (await client.getIssue(issueKeyArg)).issue;
+    } catch (err) {
+      return errorResult(err instanceof Error ? err.message : String(err));
+    }
+
+    // Preview-first gate (A3): apply refuses unless the caller-supplied
+    // `expected_live_fingerprint` matches the issue's current live
+    // fingerprint. That value only exists if the caller just saw it in a
+    // preview and the user confirmed it — no preview → no apply.
+    const expectedFp =
+      typeof args.expected_live_fingerprint === 'string'
+        ? args.expected_live_fingerprint.trim()
+        : '';
+    const liveFp = issueContentFingerprint(live.summary ?? '', live.description ?? '');
+    if (!expectedFp || expectedFp !== liveFp) {
+      return errorResult(
+        'apply refused: no matching preview. Run mode:"preview" for ' +
+          `${issueKeyArg}, show the user the diff, and re-call apply with the ` +
+          `expected_live_fingerprint from that preview (live fingerprint: ${liveFp}).`,
+      );
+    }
+
+    const requirementId = reqIdForIssue(issueKeyArg);
+    const specView = loadSpecView(sq, requirementId, pub.specRelPath);
+    if (!specView) {
+      return errorResult(
+        `Spec ${requirementId} not found in the index — run specship sync first.`,
+      );
+    }
+    const report = diffIssueVsSpec(live, specView, pub.fingerprint);
+
+    const acceptContent = args.accept_content === true;
+    const acceptSubtasks = Array.isArray(args.accept_subtasks)
+      ? (args.accept_subtasks as unknown[]).filter(
+          (k): k is string => typeof k === 'string',
+        )
+      : [];
+    if (!acceptContent && acceptSubtasks.length === 0) {
+      return errorResult(
+        'apply refused: nothing to accept. Pass accept_content: true and/or ' +
+          'accept_subtasks: [<Sub-task keys>] with the confirmed proposals.',
+      );
+    }
+
+    const notes: string[] = [];
+    if (acceptContent) {
+      if (!report.content) {
+        notes.push('accept_content: true but no content divergence — skipped.');
+      } else {
+        const out = amendSpecFile(deps.projectRoot, pub.absPath, (src) =>
+          applyContentAmendment(
+            src,
+            requirementId,
+            live.summary ?? '',
+            live.description ?? '',
+          ),
+        );
+        notes.push(out.detail);
+      }
+    }
+    for (const stKey of acceptSubtasks) {
+      const div = report.subtasks.find((d) => d.subtaskKey === stKey);
+      if (!div) {
+        notes.push(`${stKey}: no matching Sub-task divergence — skipped.`);
+        continue;
+      }
+      const out = amendSpecFile(deps.projectRoot, pub.absPath, (src) =>
+        appendAcceptanceCriterion(
+          src,
+          requirementId,
+          div.proposedCriterionId,
+          div.proposedCriterionText,
+        ),
+      );
+      notes.push(`${stKey} → ${div.proposedCriterionId}: ${out.detail}`);
+    }
+
+    // Re-publish so the fingerprint refreshes and the next preview reports
+    // no divergence. The publish source is built from what we JUST ACCEPTED
+    // — the live summary/description (when accepted) and the appended
+    // criteria — NOT from the SpecQueries index, which lags the file
+    // write until the caller runs `specship sync`.
+    try {
+      const publishClient = deps.makePublishClient
+        ? deps.makePublishClient()
+        : (client as unknown as PublishJiraClient);
+      const effectiveTitle = acceptContent ? live.summary ?? '' : specView.title;
+      const effectiveBody = acceptContent ? live.description ?? '' : specView.body;
+      const effectiveAcceptance = [
+        ...specView.acceptance,
+        ...report.subtasks
+          .filter((d) => acceptSubtasks.includes(d.subtaskKey))
+          .map((d) => ({ id: d.proposedCriterionId, text: d.proposedCriterionText })),
+      ];
+      const creds = resolveJiraCredentials();
+      const projectKey = creds.project;
+      if (projectKey) {
+        const result = await publishSpecToJira(
+          publishClient,
+          {
+            specId: requirementId,
+            title: effectiveTitle,
+            body: effectiveBody,
+            specRelPath: pub.specRelPath,
+            acceptance: effectiveAcceptance,
+          },
+          { projectKey },
+          issueKeyArg,
+        );
+        writeBackJiraIdentity(pub.absPath, issueKeyArg, {
+          fingerprint: result.fingerprint,
+          reId: null,
+          renameTo: null,
+        });
+        notes.push(`re-published ${issueKeyArg} and refreshed the fingerprint.`);
+      } else {
+        notes.push(
+          'skipped re-publish: no default JIRA project configured — pass project via specship_jira_publish to refresh the fingerprint.',
+        );
+      }
+    } catch (err) {
+      notes.push(
+        `re-publish failed (spec amended on disk): ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+
+    return textResult(
+      [
+        `Applied ${issueKeyArg} → ${pub.specRelPath}:`,
+        ...notes.map((n) => `- ${n}`),
+        '',
+        'Run `specship sync` so the index reflects the spec edits.',
+      ].join('\n'),
+    );
+  }
+
+  // preview mode (default): read + diff every published spec in scope.
+  const blocks: string[] = [];
+  const clean: string[] = [];
+  for (const pub of scope) {
+    let live: JiraIssue;
+    try {
+      live = (await client.getIssue(pub.issueKey)).issue;
+    } catch (err) {
+      blocks.push(
+        `### ${pub.issueKey} — ${pub.specRelPath}\n\n_JIRA read failed: ${
+          err instanceof Error ? err.message : String(err)
+        }_`,
+      );
+      continue;
+    }
+    const requirementId = reqIdForIssue(pub.issueKey);
+    const specView = loadSpecView(sq, requirementId, pub.specRelPath);
+    if (!specView) {
+      blocks.push(
+        `### ${pub.issueKey} — ${pub.specRelPath}\n\n_Spec ${requirementId} not in the index — run specship sync._`,
+      );
+      continue;
+    }
+    const report = diffIssueVsSpec(live, specView, pub.fingerprint);
+    if (!reportHasDivergence(report)) {
+      clean.push(pub.issueKey);
+      continue;
+    }
+    const liveFp = issueContentFingerprint(live.summary ?? '', live.description ?? '');
+    const machine =
+      '```json\n' +
+      JSON.stringify(
+        {
+          issue_key: pub.issueKey,
+          spec_rel_path: pub.specRelPath,
+          expected_live_fingerprint: liveFp,
+          content: report.content
+            ? { live_summary: report.content.liveSummary }
+            : null,
+          subtasks: report.subtasks.map((d) => ({
+            subtask_key: d.subtaskKey,
+            proposed_criterion_id: d.proposedCriterionId,
+            proposed_criterion_text: d.proposedCriterionText,
+          })),
+        },
+        null,
+        2,
+      ) +
+      '\n```';
+    blocks.push(`${formatReconcileReport(report)}\n\n${machine}`);
+  }
+
+  const header =
+    blocks.length === 0
+      ? 'No divergences — every published spec matches its JIRA issue.'
+      : `${blocks.length} issue${blocks.length === 1 ? '' : 's'} diverged.`;
+  const footer =
+    blocks.length > 0
+      ? '\n\n> Preview only — no file was modified. Show the diff to the user; only ' +
+        'after they explicitly confirm, call again with mode:"apply", issue_key, the ' +
+        'confirmed accept_content / accept_subtasks, and expected_live_fingerprint ' +
+        'from the JSON block above.'
+      : '';
+  const cleanNote = clean.length > 0 ? `\n\nIn sync: ${clean.join(', ')}.` : '';
+  return textResult(`${header}\n\n${blocks.join('\n\n')}${cleanNote}${footer}`);
+}
+

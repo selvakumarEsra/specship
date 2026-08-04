@@ -396,8 +396,7 @@ export class SpecShip {
    * neighbourhood.
    */
   getBehaviourSurface(specId: string): BehaviourSurface {
-    const sq = this.specQueries;
-    const req = sq.getSpecById(specId);
+    const req = this.specQueries.getSpecById(specId);
     if (!req) {
       return computeBehaviourSurface({
         requirementId: specId,
@@ -406,8 +405,24 @@ export class SpecShip {
         neighbourNodes: [],
       });
     }
+    const linkedNodes = this.getLinkedNodesForReq(req.id);
+    const neighbourNodes = this.getNeighbourNodes(linkedNodes.map((n) => n.id));
+    return computeBehaviourSurface({
+      requirementId: req.id,
+      requirementExists: true,
+      linkedNodes,
+      neighbourNodes,
+    });
+  }
 
-    // Resolved nodes the requirement + its acceptance children link to.
+  /**
+   * Resolved nodes a requirement (and its acceptance children) link to —
+   * shared seam between behaviour-surface and regression-pack tier derivation.
+   */
+  getLinkedNodesForReq(reqId: string): Node[] {
+    const sq = this.specQueries;
+    const req = sq.getSpecById(reqId);
+    if (!req) return [];
     const linkIds = new Set<string>();
     const collect = (id: string): void => {
       for (const l of sq.getLinksBySpec(id)) {
@@ -418,26 +433,22 @@ export class SpecShip {
     for (const child of sq.getSpecsByParent(req.id)) {
       if (child.kind === 'acceptance') collect(child.id);
     }
-
-    const linkedNodes: Node[] = [];
+    const nodes: Node[] = [];
     for (const id of linkIds) {
       const node = this.queries.getNodeById(id);
-      if (node) linkedNodes.push(node);
+      if (node) nodes.push(node);
     }
+    return nodes;
+  }
 
-    // 1-hop caller/callee neighbourhood of the linked nodes.
-    const neighbourById = new Map<string, Node>();
-    for (const node of linkedNodes) {
-      for (const { node: n } of this.traverser.getCallers(node.id, 1)) neighbourById.set(n.id, n);
-      for (const { node: n } of this.traverser.getCallees(node.id, 1)) neighbourById.set(n.id, n);
+  /** 1-hop caller/callee neighbourhood of the given node ids (deduped). */
+  getNeighbourNodes(nodeIds: readonly string[]): Node[] {
+    const byId = new Map<string, Node>();
+    for (const id of nodeIds) {
+      for (const { node: n } of this.traverser.getCallers(id, 1)) byId.set(n.id, n);
+      for (const { node: n } of this.traverser.getCallees(id, 1)) byId.set(n.id, n);
     }
-
-    return computeBehaviourSurface({
-      requirementId: req.id,
-      requirementExists: true,
-      linkedNodes,
-      neighbourNodes: [...neighbourById.values()],
-    });
+    return [...byId.values()];
   }
 
   // ===========================================================================
@@ -1205,6 +1216,19 @@ export class SpecShip {
           runClaudeMdAudit(this.projectRoot);
         } catch {
           /* a governance pass must never affect the sync */
+        }
+
+        // JIRA auto-publish (REQ-JIRATEAM-002). Gated on a repo-committed
+        // binding: on an unbound repo this is a no-op and constructs no
+        // client. Best-effort — a JIRA fault never fails the sync.
+        try {
+          const { autoPublishSpecsOnSync } = await import('./jira/auto-publish');
+          result.jiraAutoPublish = await autoPublishSpecsOnSync({
+            specQueries: this.specQueries,
+            projectRoot: this.projectRoot,
+          });
+        } catch {
+          /* a JIRA fault must never fail a sync */
         }
 
         this.refreshStatuslineCache();

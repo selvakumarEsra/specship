@@ -18,9 +18,11 @@
 import * as fs from 'fs';
 import * as https from 'https';
 import { buildAuthHeader } from './auth';
+import { wrapRepoBindingProjectError } from './repo-config';
 import {
   JiraCredentials,
   JiraConnectionResult,
+  JiraEpic,
   JiraIssue,
   JiraIssueListResult,
   JiraIssueResult,
@@ -57,6 +59,9 @@ export class JiraClient {
    * never process-global.
    */
   private readonly tls: { ca?: Buffer; rejectUnauthorized: boolean } | null;
+  /** Repo-binding provenance (REQ-JIRATEAM-001), used to enrich A4 errors. */
+  private readonly bindingSource?: 'repo' | 'user';
+  private readonly bindingPath?: string;
 
   constructor(creds: JiraCredentials) {
     // Normalize: strip trailing slashes so path joins are clean.
@@ -70,6 +75,8 @@ export class JiraClient {
     }
     this.authHeader = buildAuthHeader(creds);
     this.deployment = creds.deployment;
+    this.bindingSource = creds.bindingSource;
+    this.bindingPath = creds.bindingPath;
 
     if (creds.caCertPath || creds.insecureTls) {
       let ca: Buffer | undefined;
@@ -117,7 +124,15 @@ export class JiraClient {
    *  - 401 / 403 → `JiraAuthError`; redirect / network / non-200 →
    *    `JiraConfigError` (A4) — never a partial or fabricated list.
    */
-  async listMyIssues(opts?: { project?: string; sprint?: 'active' }): Promise<JiraIssueListResult> {
+  async listMyIssues(opts?: {
+    project?: string;
+    sprint?: 'active';
+    /**
+     * Board-first anchor scope (REQ-JIRATEAM-007.A1): narrow to open
+     * stories/tasks under this epic. Quote-escaped like `project`.
+     */
+    epicKey?: string;
+  }): Promise<JiraIssueListResult> {
     let jql = 'assignee = currentUser()';
     if (opts?.project && opts.project.trim()) {
       // Quote-escape the project so an embedded quote can't break out of the
@@ -131,6 +146,10 @@ export class JiraClient {
     // input), so there is nothing to escape.
     if (opts?.sprint === 'active') {
       jql = `${jql} AND sprint in openSprints()`;
+    }
+    if (opts?.epicKey && opts.epicKey.trim()) {
+      const escapedEpic = opts.epicKey.trim().replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+      jql = `${jql} AND parent = "${escapedEpic}"`;
     }
     jql += ' ORDER BY updated DESC';
 
@@ -146,6 +165,55 @@ export class JiraClient {
     // response shape we consume (`body.issues[].fields.*`) is identical on both,
     // and `/search/jql` requires `fields` to be listed explicitly — which we
     // already do above. (REQ-JIRA-002.A5)
+    const searchPath =
+      this.deployment === 'datacenter'
+        ? `/rest/api/2/search?${params.toString()}`
+        : `/rest/api/2/search/jql?${params.toString()}`;
+    const body = await this.request(searchPath);
+
+    const rawIssues: any[] = Array.isArray(body?.issues) ? body.issues : [];
+    const issues: JiraIssue[] = rawIssues.map(issue => ({
+      key: String(issue?.key ?? ''),
+      id: String(issue?.id ?? ''),
+      summary: String(issue?.fields?.summary ?? ''),
+      status: String(issue?.fields?.status?.name ?? ''),
+      issueType: String(issue?.fields?.issuetype?.name ?? ''),
+    }));
+
+    return { ok: true, issues };
+  }
+
+  /**
+   * List issues in a project's active (or named) sprint (REQ-JIRATEAM-004).
+   * Read-only — no transitions, no edits. `project` is required; `sprint` is
+   * optional (omitted → `sprint in openSprints()`, the currently-open sprints
+   * of the board bound to the project). Both values are quote-escaped to
+   * prevent JQL injection. Bounded by `MAX_ISSUE_RESULTS`.
+   *
+   *  - 200 → `{ ok: true, issues }`; an empty list is a valid success.
+   *  - 401 / 403 → `JiraAuthError`; redirect / network / non-200 →
+   *    `JiraConfigError`.
+   */
+  async listSprintIssues(opts: { project: string; sprint?: string }): Promise<JiraIssueListResult> {
+    const project = (opts.project ?? '').trim();
+    if (!project) {
+      throw new JiraConfigError('A JIRA project key is required to list sprint issues.');
+    }
+    const escProject = project.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    let jql = `project = "${escProject}"`;
+    if (opts.sprint && opts.sprint.trim()) {
+      const escSprint = opts.sprint.trim().replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+      jql += ` AND sprint = "${escSprint}"`;
+    } else {
+      jql += ' AND sprint in openSprints()';
+    }
+    jql += ' ORDER BY updated DESC';
+
+    const params = new URLSearchParams({
+      jql,
+      fields: 'summary,status,issuetype',
+      maxResults: String(MAX_ISSUE_RESULTS),
+    });
     const searchPath =
       this.deployment === 'datacenter'
         ? `/rest/api/2/search?${params.toString()}`
@@ -185,7 +253,7 @@ export class JiraClient {
     // URL-encode the key: a slash or space in the key must not traverse the
     // path or split the request — encode it into a single path segment.
     const params = new URLSearchParams({
-      fields: 'summary,description,status,issuetype,subtasks',
+      fields: 'summary,description,status,issuetype,subtasks,parent',
     });
     const body = await this.request(
       `/rest/api/2/issue/${encodeURIComponent(trimmed)}?${params.toString()}`,
@@ -206,6 +274,12 @@ export class JiraClient {
       status: String(st?.fields?.status?.name ?? ''),
     }));
 
+    const parentRaw = fields?.parent;
+    const parentKey =
+      parentRaw && typeof parentRaw === 'object' && typeof parentRaw.key === 'string'
+        ? String(parentRaw.key)
+        : undefined;
+
     const issue: JiraIssue = {
       key: String(body?.key ?? trimmed),
       id: String(body?.id ?? ''),
@@ -214,9 +288,83 @@ export class JiraClient {
       issueType: String(fields.issuetype?.name ?? ''),
       description,
       subtasks,
+      ...(parentKey ? { parentKey } : {}),
     };
 
     return { ok: true, issue };
+  }
+
+  /**
+   * List open epics for a project (REQ-JIRATEAM-006). Scoped to `Epic`s
+   * whose statusCategory is not `Done`, ordered most-actionable-first, and
+   * bounded by `MAX_ISSUE_RESULTS`. The project value is quote-escaped to
+   * prevent JQL injection.
+   *
+   *  - 200 → the epic list (empty is a valid success).
+   *  - 401 / 403 → `JiraAuthError`; redirect / network / non-200 →
+   *    `JiraConfigError`.
+   */
+  async listEpics(projectKey: string): Promise<JiraEpic[]> {
+    const project = (projectKey ?? '').trim();
+    if (!project) {
+      throw new JiraConfigError('A JIRA project key is required to list epics.');
+    }
+    const escProject = project.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    const jql =
+      `project = "${escProject}" AND issuetype = Epic ` +
+      `AND statusCategory != Done ORDER BY updated DESC`;
+    const params = new URLSearchParams({
+      jql,
+      fields: 'summary,status',
+      maxResults: String(MAX_ISSUE_RESULTS),
+    });
+    const searchPath =
+      this.deployment === 'datacenter'
+        ? `/rest/api/2/search?${params.toString()}`
+        : `/rest/api/2/search/jql?${params.toString()}`;
+    const body = await this.request(searchPath);
+    const raw: any[] = Array.isArray(body?.issues) ? body.issues : [];
+    return raw.map((issue) => ({
+      key: String(issue?.key ?? ''),
+      summary: String(issue?.fields?.summary ?? ''),
+      status: String(issue?.fields?.status?.name ?? ''),
+    })).filter((e) => e.key.length > 0);
+  }
+
+  /**
+   * List issues in `projectKey` that carry `label` (REQ-JIRAREG-001). Used
+   * by the regression-pack upsert to find its SpecShip-owned epic / stories /
+   * cases by watermark label — never for user-supplied JQL. The label is
+   * quote-escaped to defend against injection even though callers supply only
+   * the module's own hard-coded label prefixes.
+   */
+  async searchIssuesByLabel(
+    projectKey: string,
+    label: string,
+  ): Promise<Array<{ key: string; summary: string }>> {
+    const project = (projectKey ?? '').trim();
+    const lab = (label ?? '').trim();
+    if (!project || !lab) return [];
+    const escProject = project.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    const escLabel = lab.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    const jql = `project = "${escProject}" AND labels = "${escLabel}" ORDER BY created ASC`;
+    const params = new URLSearchParams({
+      jql,
+      fields: 'summary',
+      maxResults: String(MAX_ISSUE_RESULTS),
+    });
+    const searchPath =
+      this.deployment === 'datacenter'
+        ? `/rest/api/2/search?${params.toString()}`
+        : `/rest/api/2/search/jql?${params.toString()}`;
+    const body = await this.request(searchPath);
+    const raw: any[] = Array.isArray(body?.issues) ? body.issues : [];
+    return raw
+      .map((issue) => ({
+        key: String(issue?.key ?? ''),
+        summary: String(issue?.fields?.summary ?? ''),
+      }))
+      .filter((e) => e.key.length > 0);
   }
 
   /**
@@ -339,6 +487,33 @@ export class JiraClient {
   }
 
   /**
+   * Assert the authenticated user can see the given project
+   * (REQ-JIRATEAM-001.A4). `GET /rest/api/2/project/{key}` — a 401/403/404
+   * from the repo-bound project is re-thrown with the project, host, and
+   * the binding file's path, so the operator gets a directed message
+   * instead of a silent fallback to another project. Non-binding paths
+   * (user-level project) re-raise the original error unchanged.
+   */
+  async verifyProjectAccess(projectKey: string): Promise<void> {
+    const key = (projectKey ?? '').trim();
+    if (!key) {
+      throw new JiraConfigError('A JIRA project key is required.');
+    }
+    try {
+      await this.request(`/rest/api/2/project/${encodeURIComponent(key)}`);
+    } catch (err) {
+      if (this.bindingSource === 'repo' && this.bindingPath) {
+        throw wrapRepoBindingProjectError(err as Error, {
+          projectKey: key,
+          host: this.host,
+          bindingPath: this.bindingPath,
+        });
+      }
+      throw err;
+    }
+  }
+
+  /**
    * Create an issue (REQ-JIRAPUB-001) — a Story (or configured type) when
    * `parentKey` is absent, a Sub-task parented to `parentKey` when present.
    * `POST /rest/api/2/issue`; both Cloud and Data Center accept the
@@ -392,7 +567,7 @@ export class JiraClient {
    */
   async updateIssue(
     key: string,
-    fields: { summary?: string; description?: string },
+    fields: { summary?: string; description?: string; parentKey?: string },
   ): Promise<void> {
     const trimmed = (key ?? '').trim();
     if (!trimmed) {
@@ -401,6 +576,11 @@ export class JiraClient {
     const patch: Record<string, unknown> = {};
     if (fields.summary !== undefined) patch.summary = fields.summary;
     if (fields.description !== undefined) patch.description = fields.description;
+    // Parent reassignment (REQ-JIRAREG-002.A3) — a Sub-task or child issue can
+    // be moved to a new Story/Epic parent without touching its body. JIRA
+    // expects `fields.parent: { key: "PROJ-N" }`; caller is responsible for
+    // skipping the write when the parent hasn't changed.
+    if (fields.parentKey !== undefined) patch.parent = { key: fields.parentKey };
     if (Object.keys(patch).length === 0) return;
     await this.write(
       `/rest/api/2/issue/${encodeURIComponent(trimmed)}`,
@@ -427,6 +607,77 @@ export class JiraClient {
     return raw
       .map(c => (typeof c?.body === 'string' ? c.body : ''))
       .filter(b => b.length > 0);
+  }
+
+  /**
+   * List comments with their JIRA-side ids (REQ-JIRATEAM-004.A3) so a caller
+   * can edit a specific comment in place instead of always appending. Same
+   * `GET /issue/{key}/comment` as `listComments`, but preserving each id.
+   */
+  async listCommentsDetailed(key: string): Promise<Array<{ id: string; body: string }>> {
+    const trimmed = (key ?? '').trim();
+    if (!trimmed) {
+      throw new JiraConfigError('An issue key is required (e.g., "PROJ-123").');
+    }
+    const body = await this.request(
+      `/rest/api/2/issue/${encodeURIComponent(trimmed)}/comment`,
+    );
+    const raw: any[] = Array.isArray(body?.comments) ? body.comments : [];
+    return raw
+      .map(c => ({
+        id: String(c?.id ?? ''),
+        body: typeof c?.body === 'string' ? c.body : '',
+      }))
+      .filter(c => c.id.length > 0 && c.body.length > 0);
+  }
+
+  /**
+   * Edit an existing comment in place (REQ-JIRATEAM-004.A3).
+   * `PUT /issue/{key}/comment/{id}` with `{ body }`; used by the sprint
+   * coverage report so re-posting updates the single watermarked comment.
+   */
+  async updateComment(key: string, commentId: string, body: string): Promise<void> {
+    const trimmed = (key ?? '').trim();
+    const id = (commentId ?? '').trim();
+    if (!trimmed || !id) {
+      throw new JiraConfigError(
+        'An issue key and comment id are required to update a comment.',
+      );
+    }
+    await this.write(
+      `/rest/api/2/issue/${encodeURIComponent(trimmed)}/comment/${encodeURIComponent(id)}`,
+      { body },
+      'PUT',
+    );
+  }
+
+  /**
+   * Add a label to an issue idempotently (REQ-JIRAREG-003). Reads the current
+   * labels first and issues the PUT only when the label is missing — a re-run
+   * with the label already present is a zero-write. Uses the additive
+   * `update.labels add` shape so other labels are preserved.
+   */
+  async addLabel(key: string, label: string): Promise<{ added: boolean }> {
+    const trimmed = (key ?? '').trim();
+    const lab = (label ?? '').trim();
+    if (!trimmed || !lab) {
+      throw new JiraConfigError(
+        'An issue key and a label are required to add a label.',
+      );
+    }
+    const issue = await this.request(
+      `/rest/api/2/issue/${encodeURIComponent(trimmed)}?fields=labels`,
+    );
+    const current: string[] = Array.isArray(issue?.fields?.labels)
+      ? issue.fields.labels.map((v: unknown) => String(v))
+      : [];
+    if (current.includes(lab)) return { added: false };
+    await this.write(
+      `/rest/api/2/issue/${encodeURIComponent(trimmed)}`,
+      { update: { labels: [{ add: lab }] } },
+      'PUT',
+    );
+    return { added: true };
   }
 
   /**

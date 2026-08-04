@@ -912,10 +912,30 @@ program
       const { default: SpecShip } = await loadSpecShip();
       const cg = await SpecShip.open(projectPath);
 
+      // JIRA auto-publish (REQ-JIRATEAM-002): print the summary the sync's
+      // auto-publish pass produced. Silent when the repo has no binding
+      // (sync omits the field entirely). Never fails or blocks output.
+      const pushJiraAutoPublish = async (result: import('../extraction').SyncResult) => {
+        if (!result.jiraAutoPublish) return;
+        try {
+          const { summarizeAutoPublishReport } = await import('../jira/auto-publish');
+          const line = summarizeAutoPublishReport(result.jiraAutoPublish);
+          if (line) console.log(line);
+          for (const r of result.jiraAutoPublish.results) {
+            if (r.status === 'failed') {
+              console.log(`JIRA: ${r.specId} failed — ${r.note ?? 'unknown error'}`);
+            }
+          }
+        } catch {
+          /* summary is best-effort */
+        }
+      };
+
       if (options.quiet) {
         const result = await cg.sync();
         pushDriftNotices(result);
         await pushJiraDriftComments(cg, result);
+        await pushJiraAutoPublish(result);
         pushDriftSummary(cg);
         cg.destroy();
         return;
@@ -948,6 +968,7 @@ program
 
       pushDriftNotices(result);
       await pushJiraDriftComments(cg, result);
+      await pushJiraAutoPublish(result);
       pushDriftSummary(cg);
       clack.outro('Done');
       cg.destroy();
@@ -3502,6 +3523,28 @@ program
             process.exit(1);
           }
           executor.approve(arg, options.comment);
+          // Milestone: plan_approved (REQ-JIRATEAM-003.A1). Only fires for a
+          // JIRA-tracked run (metadata.jira present) — a non-JIRA run is a
+          // silent no-op. Soft-fails internally, so a JIRA hiccup never
+          // reverses the approval.
+          try {
+            const run = cg.getSpecQueries().getWorkflowRunById(arg);
+            const jira = (run?.metadata as { jira?: { issueKey?: string; specId?: string } } | undefined)?.jira;
+            if (jira?.issueKey) {
+              const { resolveJiraCredentials, JiraClient } = await import('../jira');
+              const { postMilestoneComment } = await import('../jira/milestone-comment');
+              const creds = resolveJiraCredentials();
+              await postMilestoneComment(
+                new JiraClient(creds),
+                jira.issueKey,
+                'plan_approved',
+                { specId: jira.specId ?? jira.issueKey },
+                { projectRoot },
+              );
+            }
+          } catch {
+            /* soft-fail — the approval already committed. */
+          }
           // eslint-disable-next-line no-console
           console.log(`Run ${arg} approved. Call \`specship workflow resume ${arg}\` to continue.`);
           break;
@@ -3823,6 +3866,49 @@ jira
   });
 
 /**
+ * specship jira bind — persist the repo's JIRA binding into
+ * specship.config.json (REQ-JIRATEAM-008.A2). The committed binding is what
+ * board-first flows read — the same file `updateRepoJiraBinding` writes.
+ * Credentials never live here; `assertNoCredentialsInRepoConfig` enforces it.
+ */
+jira
+  .command('bind')
+  .description('Write the repo JIRA binding into specship.config.json (project, epic).')
+  .option('--project <key>', 'JIRA project key to bind (e.g., "PROJ")')
+  .option('--epic <key>', 'Default epic key to anchor new work (e.g., "PROJ-42")')
+  .option('--path <projectRoot>', 'Project root (default: cwd)')
+  .action(async (options: { project?: string; epic?: string; path?: string }) => {
+    const projectRoot = path.resolve(options.path ?? process.cwd());
+    if (!options.project && !options.epic) {
+      error('Nothing to bind. Pass --project <KEY> and/or --epic <KEY>.');
+      process.exit(1);
+    }
+    try {
+      const { updateRepoJiraBinding, loadRepoJiraBinding } = await import('../jira/repo-config');
+      const patch: { projectKey?: string; epicKey?: string } = {};
+      if (options.project) patch.projectKey = options.project.trim().toUpperCase();
+      if (options.epic) patch.epicKey = options.epic.trim().toUpperCase();
+      // --epic alone requires an existing bound project (updateRepoJiraBinding
+      // insists on projectKey being present in the merged result).
+      if (!patch.projectKey) {
+        const { binding } = loadRepoJiraBinding(projectRoot);
+        if (!binding) {
+          error('No existing JIRA project binding. Pass --project <KEY> on the first bind.');
+          process.exit(1);
+        }
+      }
+      const { path: file, binding } = updateRepoJiraBinding(projectRoot, patch);
+      success(`Wrote JIRA binding to ${file}.`);
+      info(`  projectKey: ${binding.projectKey}`);
+      if (binding.epicKey) info(`  epicKey: ${binding.epicKey}`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      error(`Failed to write binding: ${msg}`);
+      process.exit(1);
+    }
+  });
+
+/**
  * specship jira transition — move a tracked issue to a target state, or list
  * the transitions it currently offers (REQ-JIRATRANS-001). Reuses the client's
  * skip-tolerant transition: a target the workflow doesn't offer is reported
@@ -3894,6 +3980,106 @@ jira
   });
 
 /**
+ * specship jira coverage — sprint coverage report (REQ-JIRATEAM-004). Joins
+ * the bound project's active (or named) sprint to spec truth. Read-only by
+ * default; `--post <issueKey>` upserts a single watermarked JIRA comment.
+ */
+jira
+  .command('coverage')
+  .description('Sprint coverage report joining JIRA sprint issues to spec truth (read-only unless --post).')
+  .option('--project <key>', 'JIRA project key (default: configured publish project)')
+  .option('--sprint <name>', 'named sprint (default: the project\'s open sprint)')
+  .option('--post <issueKey>', 'upsert the report as a watermarked comment on this issue (edit-in-place)')
+  .option('--path <projectRoot>', 'project root (default: cwd)')
+  .action(async (options: { project?: string; sprint?: string; post?: string; path?: string }) => {
+    const projectRoot = path.resolve(options.path ?? process.cwd());
+    if (!isInitialized(projectRoot)) {
+      error(`SpecShip not initialized in ${projectRoot}. Run \`specship init -i\` first.`);
+      process.exit(1);
+    }
+    const { SpecShip } = await loadSpecShip();
+    const { handleSpecshipJiraCoverage } = await import('../mcp/jira-tools');
+    const cg = await SpecShip.open(projectRoot);
+    try {
+      const args: Record<string, unknown> = {};
+      if (options.project) args.project = options.project;
+      if (options.sprint) args.sprint = options.sprint;
+      if (options.post) {
+        args.post = true;
+        args.issue_key = options.post;
+      }
+      const result = await handleSpecshipJiraCoverage(args, {
+        specQueries: cg.getSpecQueries(),
+        projectRoot,
+      });
+      const out = result.content.map((c) => c.text).join('\n');
+      // eslint-disable-next-line no-console
+      console.log(out);
+      if (result.isError) process.exit(1);
+    } finally {
+      cg.close();
+    }
+  });
+
+/**
+ * specship jira reconcile — detect JIRA-side edits and (with --apply) fold
+ * them back into the spec (REQ-JIRATEAM-005). Preview is read-only and the
+ * default; --apply must be paired with --issue plus the confirmed accept
+ * flags AND the fingerprint from the preview so an unreviewed apply is
+ * rejected by the handler's fingerprint gate.
+ */
+jira
+  .command('reconcile')
+  .description('Detect JIRA-side edits to published specs; --apply folds a confirmed diff back into the spec.')
+  .option('--issue <key>', 'narrow to one issue (required for --apply)')
+  .option('--apply', 'apply the confirmed diff — preview first and confirm the diff before using this')
+  .option('--accept-content', 'apply: accept the edited summary/description')
+  .option('--accept-subtask <key...>', 'apply: accept the proposed criterion for this JIRA Sub-task key (repeatable)')
+  .option('--expected-fingerprint <fp>', 'apply: the live fingerprint from the preview the user just approved')
+  .option('--path <projectRoot>', 'project root (default: cwd)')
+  .action(
+    async (options: {
+      issue?: string;
+      apply?: boolean;
+      acceptContent?: boolean;
+      acceptSubtask?: string[];
+      expectedFingerprint?: string;
+      path?: string;
+    }) => {
+      const projectRoot = path.resolve(options.path ?? process.cwd());
+      if (!isInitialized(projectRoot)) {
+        error(`SpecShip not initialized in ${projectRoot}. Run \`specship init -i\` first.`);
+        process.exit(1);
+      }
+      const { SpecShip } = await loadSpecShip();
+      const { handleSpecshipJiraReconcile } = await import('../mcp/jira-tools');
+      const cg = await SpecShip.open(projectRoot);
+      try {
+        const args: Record<string, unknown> = {};
+        args.mode = options.apply ? 'apply' : 'preview';
+        if (options.issue) args.issue_key = options.issue;
+        if (options.acceptContent) args.accept_content = true;
+        if (options.acceptSubtask && options.acceptSubtask.length > 0) {
+          args.accept_subtasks = options.acceptSubtask;
+        }
+        if (options.expectedFingerprint) {
+          args.expected_live_fingerprint = options.expectedFingerprint;
+        }
+        const result = await handleSpecshipJiraReconcile(args, {
+          specQueries: cg.getSpecQueries(),
+          projectRoot,
+        });
+        const out = result.content.map((c) => c.text).join('\n');
+        // eslint-disable-next-line no-console
+        console.log(out);
+        if (result.isError) process.exit(1);
+      } finally {
+        cg.close();
+      }
+    },
+  );
+
+/**
  * specship jira release — stamp a released version onto issues
  * (REQ-JIRAPUB-007): ensure the project version exists, add it as fixVersion
  * on each issue, and add one shipped-in comment. Idempotent — a re-run
@@ -3921,6 +4107,9 @@ jira
         .split(',')
         .map((k) => k.trim())
         .filter(Boolean);
+      // Map issue key → spec id for the release_stamped milestone (so the
+      // marker keys on both the spec and the version — REQ-JIRATEAM-003).
+      const issueKeyToSpecId = new Map<string, string>();
       if (keys.length === 0) {
         // Default: every spec under <root>/specs with a jira_issue key.
         const projectRoot = path.resolve(options.path ?? process.cwd());
@@ -3928,8 +4117,13 @@ jira
         try {
           for (const name of fs.readdirSync(specsDir)) {
             if (!name.toLowerCase().endsWith('.md')) continue;
-            const key = readSpecJiraKey(path.join(specsDir, name));
-            if (key) keys.push(key);
+            const abs = path.join(specsDir, name);
+            const key = readSpecJiraKey(abs);
+            if (!key) continue;
+            keys.push(key);
+            const idLine =
+              /^id:\s*([^\r\n]+)$/m.exec(fs.readFileSync(abs, 'utf8'))?.[1]?.trim();
+            if (idLine) issueKeyToSpecId.set(key, idLine);
           }
         } catch {
           /* no specs dir → empty keys, handled below */
@@ -3942,7 +4136,9 @@ jira
       }
 
       const client = new JiraClient(creds);
-      const result = await releaseIssues(client, projectKey, version, keys);
+      const result = await releaseIssues(client, projectKey, version, keys, {
+        specIdForIssue: (k) => issueKeyToSpecId.get(k),
+      });
       const stamped = result.issues.filter((i) => i.fixVersionAdded).length;
       const commented = result.issues.filter((i) => i.commented).length;
       success(
@@ -3954,6 +4150,115 @@ jira
       process.exit(1);
     }
   });
+
+/**
+ * specship jira regression-pack — generate or refresh the SpecShip Regression
+ * Pack in the bound JIRA project (REQ-JIRAREG-001). Idempotent; --dry-run
+ * prints the plan without any JIRA write.
+ */
+jira
+  .command('regression-pack')
+  .description('Generate / refresh the SpecShip Regression Pack in the bound JIRA project.')
+  .option('--project <key>', 'JIRA project key (default: configured publish project)')
+  .option('--dry-run', 'plan the pack and print counts without any JIRA write')
+  .option('--path <projectRoot>', 'project root (default: cwd)')
+  .action(async (options: { project?: string; dryRun?: boolean; path?: string }) => {
+    const projectRoot = path.resolve(options.path ?? process.cwd());
+    if (!isInitialized(projectRoot)) {
+      error(`SpecShip not initialized in ${projectRoot}. Run \`specship init -i\` first.`);
+      process.exit(1);
+    }
+    const { SpecShip } = await loadSpecShip();
+    const { handleSpecshipJiraRegressionPack } = await import('../mcp/jira-tools');
+    const cg = await SpecShip.open(projectRoot);
+    try {
+      const args: Record<string, unknown> = {};
+      if (options.project) args.project = options.project;
+      if (options.dryRun) args.dry_run = true;
+      const result = await handleSpecshipJiraRegressionPack(args, {
+        specQueries: cg.getSpecQueries(),
+        projectRoot,
+        getLinkedNodesForReq: (reqId) => cg.getLinkedNodesForReq(reqId),
+        getNeighbourNodes: (nodeIds) => cg.getNeighbourNodes(nodeIds),
+      });
+      const out = result.content.map((c) => c.text).join('\n');
+      // eslint-disable-next-line no-console
+      console.log(out);
+      if (result.isError) process.exit(1);
+    } finally {
+      cg.close();
+    }
+  });
+
+/**
+ * specship jira regression-record — record a single pack case result
+ * (REQ-JIRAREG-005). Comment + transition + validates-link feedback on the
+ * source criterion. `--run <id>` keys idempotency per (case, run).
+ */
+jira
+  .command('regression-record')
+  .description('Record a regression pack case result (REQ-JIRAREG-005).')
+  .requiredOption('--case <key>', 'JIRA case issue key (e.g., "PROJ-42")')
+  .requiredOption('--criterion <id>', 'source criterion id (e.g., "REQ-FOO-001.A2")')
+  .requiredOption('--result <status>', 'pass | fail | unexecuted', 'pass')
+  .option('--executor <who>', 'human | agent', 'human')
+  .option('--harness <id>', 'behaviour harness id (e.g., "behaviour-e2e")')
+  .option('--run <id>', 'stable run id — one comment per (case, run)')
+  .option('--log-ref <ref>', 'evidence log pointer')
+  .option('--error <text>', 'error text (fail path)')
+  .option('--path <projectRoot>', 'project root (default: cwd)')
+  .action(
+    async (options: {
+      case: string;
+      criterion: string;
+      result: string;
+      executor?: string;
+      harness?: string;
+      run?: string;
+      logRef?: string;
+      error?: string;
+      path?: string;
+    }) => {
+      const projectRoot = path.resolve(options.path ?? process.cwd());
+      if (!isInitialized(projectRoot)) {
+        error(`SpecShip not initialized in ${projectRoot}. Run \`specship init -i\` first.`);
+        process.exit(1);
+      }
+      const { SpecShip } = await loadSpecShip();
+      const { handleSpecshipJiraRegressionRecord } = await import('../mcp/jira-tools');
+      const cg = await SpecShip.open(projectRoot);
+      try {
+        // Accept the friendlier `pass`/`fail` short forms alongside the
+        // canonical `passed`/`failed` names.
+        const canonicalStatus =
+          options.result === 'pass'
+            ? 'passed'
+            : options.result === 'fail'
+              ? 'failed'
+              : options.result;
+        const args: Record<string, unknown> = {
+          case: options.case,
+          criterion: options.criterion,
+          result: canonicalStatus,
+        };
+        if (options.executor) args.executor = options.executor;
+        if (options.harness) args.harness = options.harness;
+        if (options.run) args.run = options.run;
+        if (options.logRef) args.log_ref = options.logRef;
+        if (options.error) args.error = options.error;
+        const result = await handleSpecshipJiraRegressionRecord(args, {
+          specQueries: cg.getSpecQueries(),
+          projectRoot,
+        });
+        const out = result.content.map((c) => c.text).join('\n');
+        // eslint-disable-next-line no-console
+        console.log(out);
+        if (result.isError) process.exit(1);
+      } finally {
+        cg.close();
+      }
+    },
+  );
 
 // Parse and run
 program.parse();

@@ -17,6 +17,7 @@ import {
   JiraConfigError,
   JiraDeployment,
 } from './types';
+import { loadRepoJiraBinding } from './repo-config';
 
 /**
  * Absolute path to the user-level JIRA config. Overridable via
@@ -88,8 +89,11 @@ export function inferDeployment(creds: {
  *
  * SECURITY: the thrown messages never include a token or PAT value.
  */
-export function resolveJiraCredentials(): JiraCredentials {
+export function resolveJiraCredentials(cwd: string = process.cwd()): JiraCredentials {
   const file = loadJiraConfig(); // may throw on malformed
+  // Repo-committed team-lane binding (REQ-JIRATEAM-001). Credentials NEVER
+  // come from here; the loader rejects credential-shaped fields.
+  const repo = loadRepoJiraBinding(cwd);
 
   const baseUrl = process.env.SPECSHIP_JIRA_BASE_URL ?? file?.baseUrl;
   const email = process.env.SPECSHIP_JIRA_EMAIL ?? file?.email;
@@ -127,8 +131,13 @@ export function resolveJiraCredentials(): JiraCredentials {
     process.env.SPECSHIP_JIRA_TRANSITION_DONE ??
     file?.transitions?.done ??
     'Done';
-  // Default publish project (REQ-JIRAPUB-001): env over file, per field.
-  const project = process.env.SPECSHIP_JIRA_PROJECT ?? file?.project;
+  // Publish project (REQ-JIRAPUB-001 / REQ-JIRATEAM-001). Precedence:
+  //   repo binding > env > user-level file.
+  // Repo binding wins for project identity even over env so every teammate
+  // and CI run targets the same project; credentials never come from repo.
+  const userProject = process.env.SPECSHIP_JIRA_PROJECT ?? file?.project;
+  const project = repo.binding?.projectKey ?? userProject;
+  const bindingSource: 'repo' | 'user' = repo.binding ? 'repo' : 'user';
 
   const deployment = inferDeployment({
     deployment: explicitDeployment,
@@ -160,6 +169,8 @@ export function resolveJiraCredentials(): JiraCredentials {
     caCertPath,
     insecureTls,
     project,
+    bindingSource,
+    bindingPath: repo.path ?? undefined,
   };
 }
 
