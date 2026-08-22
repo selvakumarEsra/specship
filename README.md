@@ -74,9 +74,21 @@ The full generated list lives in the [CLI reference](https://specship.cc/referen
 
 </details>
 
-### Gemini CLI (manual setup)
+### Gemini CLI
 
-SpecShip's MCP server is agent-neutral, so Gemini CLI can talk to it too — the wiring is manual for now (there is no `specship install` target for Gemini yet). Print the snippet:
+SpecShip's MCP server is agent-neutral, so Gemini CLI can talk to it too. Install it the same way, naming the target:
+
+```bash
+specship install --target gemini                  # Gemini CLI only
+specship install --target claude,gemini           # both agents
+```
+
+A plain `specship install` still wires Claude Code alone — Gemini is opt-in. The install writes the `specship` entry into your Gemini settings file (`~/.gemini/settings.json` globally, `<your-project>/.gemini/settings.json` with `--location local`), preserving any other MCP servers and settings already there, and `specship uninstall --target gemini --keep-data` removes exactly that entry.
+
+<details>
+<summary>Prefer to paste it in by hand?</summary>
+
+Print the snippet:
 
 ```bash
 specship install --print-config --target gemini            # global (~/.gemini/settings.json)
@@ -99,7 +111,11 @@ Then paste the `mcpServers` block into your Gemini CLI settings file and restart
 - **Every project (global):** `~/.gemini/settings.json`
 - **One project only:** `<your-project>/.gemini/settings.json`
 
-If the file already exists, merge the `specship` entry into your existing `mcpServers` object rather than replacing the file. You still need `specship init -i` in each project (step 3) so there's an index to query.
+If the file already exists, merge the `specship` entry into your existing `mcpServers` object rather than replacing the file.
+
+</details>
+
+You still need `specship init -i` in each project (step 3) so there's an index to query.
 
 <sub>Verified against Gemini CLI 0.56.0. This gives Gemini CLI the SpecShip **MCP tools** only — the Claude Code install additionally wires slash commands, auto-sync hooks, the retrieval-steering nudge, the `specship-explorer` subagent, and the status-line segment, none of which have a Gemini equivalent here. Retrieval benchmarks were measured on Claude Code.</sub>
 

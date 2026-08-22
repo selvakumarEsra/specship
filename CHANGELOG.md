@@ -11,7 +11,9 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### New Features
 
-- Gemini CLI users can now wire up the SpecShip MCP server by hand. `specship install --print-config --target gemini` prints the settings snippet to paste into Gemini CLI's settings file — global for every project, or per project — and the README documents both placements. Printing writes nothing to disk, and the server it launches is the same one Claude Code uses. Installing into Gemini automatically is not supported yet, and this wiring gives Gemini CLI the SpecShip tools only: slash commands, auto-sync hooks, the retrieval nudge and the status-line segment remain Claude Code features.
+- Gemini CLI users can now wire up the SpecShip MCP server by hand. `specship install --print-config --target gemini` prints the settings snippet to paste into Gemini CLI's settings file — global for every project, or per project — and the README documents both placements. Printing writes nothing to disk, and the server it launches is the same one Claude Code uses. This wiring gives Gemini CLI the SpecShip tools only: slash commands, auto-sync hooks, the retrieval nudge and the status-line segment remain Claude Code features.
+
+- SpecShip can now install itself into Gemini CLI for you. `specship install --target gemini` (or `--target claude,gemini` for both) writes the SpecShip entry into your Gemini settings file at the location you choose, leaving any other MCP servers and settings there untouched; re-running it changes nothing, and an optional integration you enabled earlier stays enabled. A plain `specship install` still sets up Claude Code alone — Gemini is opt-in. The install prints a note listing what a Claude Code install adds that Gemini has no equivalent for, so nothing is claimed that isn't wired. `specship uninstall --target gemini --keep-data` removes exactly the SpecShip entry, and removing the SpecShip program now cleans up the Gemini entry too.
 
 
 ## [0.22.0] - 2026-08-04

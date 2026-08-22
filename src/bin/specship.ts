@@ -2637,11 +2637,12 @@ program
   .option('--skip-statusline', 'Do not add the status-line segment (skips the prompt)')
   .option('--skip-index', 'Do not offer to index the current project (an explicit opt-out for automation)')
   .option('--print-config', 'Print the MCP config snippet and exit (no file writes). Claude Code by default; `--target gemini` prints the Gemini CLI settings snippet')
-  // -t/--target is vestigial for INSTALLING — kept so existing `--target claude`
-  // / `--target auto` invocations (including our own offline-install scripts)
-  // keep working. It IS honored by --print-config, which is the only way to get
-  // the Gemini CLI snippet today (GEMINI-TARGET-DOC, REQ-GEMINI-001).
-  .option('-t, --target <ids>', 'Selects which snippet `--print-config` prints ("claude" | "gemini"); vestigial for install ("claude" | "auto" | "all" | "none")')
+  // -t/--target SELECTS the agents to wire (GEMINI-TARGET-DOC, REQ-GEMINI-002)
+  // and also picks the snippet --print-config prints. The legacy spellings
+  // ("claude" / "auto" / "all" / "none") keep their Claude-only meanings, so
+  // existing invocations — including our own offline-install scripts — behave
+  // exactly as before.
+  .option('-t, --target <ids>', 'Agents to wire, comma-separated: "claude" (default) | "gemini" | "claude,gemini". Also selects the snippet `--print-config` prints. Legacy: "auto"/"all" = claude, "none" = skip')
   .action(async (opts: {
     target?: string;
     location?: string;
@@ -2771,9 +2772,13 @@ program
       }
 
       // Restart reminder (REQ-HANDSHAKE-001): an MCP server added to the config
-      // is NOT visible to a Claude Code session that was already open.
+      // is NOT visible to an agent session that was already open. Names the
+      // agents actually wired, so a `--target gemini` install doesn't tell the
+      // user to restart Claude Code.
+      const { resolveInstallTargets } = await import('../installer');
+      const agents = resolveInstallTargets(opts.target).map((t) => t.displayName).join(' / ');
       console.log();
-      info('Restart Claude Code (or run `/mcp`) to load the SpecShip server — it is not visible in a session that is already open.');
+      info(`Restart ${agents} (or run \`/mcp\`) to load the SpecShip server — it is not visible in a session that is already open.`);
     } catch (err) {
       error(err instanceof Error ? err.message : String(err));
       process.exit(1);

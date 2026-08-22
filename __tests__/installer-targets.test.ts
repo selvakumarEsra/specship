@@ -23,7 +23,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { ALL_TARGETS, getTarget } from '../src/installer/targets/registry';
-import { uninstallTargets } from '../src/installer';
+import { resolveInstallTargets, uninstallTargets } from '../src/installer';
 import {
   claudeTarget,
   cleanupLegacyHooks,
@@ -924,9 +924,23 @@ describe('Installer targets — registry', () => {
     expect(getTarget('not-a-real-target')).toBeUndefined();
   });
 
-  it('ALL_TARGETS contains exactly the Claude target', () => {
-    expect(ALL_TARGETS.length).toBe(1);
-    expect(ALL_TARGETS[0]?.id).toBe('claude');
+  it('ALL_TARGETS contains the Claude target first, then Gemini', () => {
+    expect(ALL_TARGETS.map((t) => t.id)).toEqual(['claude', 'gemini']);
+  });
+
+  it('resolveInstallTargets keeps a plain install Claude-only (REQ-GEMINI-002.A4)', () => {
+    for (const value of [undefined, 'claude', 'auto', 'all']) {
+      expect(resolveInstallTargets(value).map((t) => t.id)).toEqual(['claude']);
+    }
+    expect(resolveInstallTargets('none')).toEqual([]);
+  });
+
+  it('resolveInstallTargets selects Gemini only when named', () => {
+    expect(resolveInstallTargets('gemini').map((t) => t.id)).toEqual(['gemini']);
+    expect(resolveInstallTargets('claude,gemini').map((t) => t.id)).toEqual(['claude', 'gemini']);
+    expect(resolveInstallTargets(' gemini , claude ').map((t) => t.id)).toEqual(['gemini', 'claude']);
+    expect(resolveInstallTargets('claude,claude').map((t) => t.id)).toEqual(['claude']);
+    expect(() => resolveInstallTargets('cursor')).toThrow(/Unknown --target value "cursor"/);
   });
 
   it('uninstallTargets reports not-configured when nothing was installed', () => {
@@ -939,11 +953,10 @@ describe('Installer targets — registry', () => {
 /**
  * Gemini CLI target — Phase 0 (GEMINI-TARGET-DOC, REQ-GEMINI-001).
  *
- * Only `printConfig` is contracted in this phase: a Gemini CLI user must be
- * able to print the `mcpServers` snippet and paste it into their settings
- * file by hand. install/detect/uninstall land in REQ-GEMINI-002, so the
- * target is deliberately NOT in `ALL_TARGETS` yet and does not participate
- * in the contract suite above.
+ * `printConfig` stays contracted on its own even now that the target is
+ * registered (REQ-GEMINI-002): a Gemini CLI user must be able to print the
+ * `mcpServers` snippet and paste it into their settings file by hand, and it
+ * must keep touching nothing on disk.
  */
 describe('GeminiCliTarget.printConfig', () => {
   let tmpHome: string;
@@ -1026,16 +1039,159 @@ describe('GeminiCliTarget.printConfig', () => {
     expect(geminiTarget.supportsLocation('local')).toBe(true);
   });
 
-  it('is not registered yet — a plain install stays Claude-only (REQ-GEMINI-002.A4)', () => {
-    expect(ALL_TARGETS.some((t) => t.id === 'gemini')).toBe(false);
-    expect(getTarget('gemini')).toBeUndefined();
+  it('is registered under its stable id (REQ-GEMINI-002)', () => {
+    expect(ALL_TARGETS.some((t) => t.id === 'gemini')).toBe(true);
+    expect(getTarget('gemini')?.id).toBe('gemini');
+  });
+});
+
+/**
+ * Gemini CLI target — Phase 1 specifics (GEMINI-TARGET-DOC, REQ-GEMINI-002/
+ * 003/006). The generic install/idempotence/uninstall contract is already
+ * covered by the `ALL_TARGETS` loop at the top of this file now that the
+ * target is registered; what follows is the Gemini-only behaviour.
+ */
+describe('Gemini target — specifics', () => {
+  let tmpHome: string;
+  let tmpCwd: string;
+  let origCwd: string;
+  let homeRestore: { restore: () => void };
+
+  // os.homedir()/process.cwd() rather than tmpHome/tmpCwd: on macOS the tmp
+  // dir is reached through the /private symlink, so the target's paths and
+  // the raw mkdtemp paths differ as strings while naming the same file.
+  const settingsFile = (loc: 'global' | 'local') =>
+    path.join(loc === 'global' ? os.homedir() : process.cwd(), '.gemini', 'settings.json');
+  const readSettings = (loc: 'global' | 'local') =>
+    JSON.parse(fs.readFileSync(settingsFile(loc), 'utf-8'));
+
+  beforeEach(() => {
+    tmpHome = mkTmpDir('gemini-home');
+    tmpCwd = mkTmpDir('gemini-cwd');
+    origCwd = process.cwd();
+    process.chdir(tmpCwd);
+    homeRestore = setHome(tmpHome);
   });
 
-  it('defers install/detect/uninstall to REQ-GEMINI-002', () => {
-    expect(() => geminiTarget.detect('global')).toThrow(/REQ-GEMINI-002/);
-    expect(() => geminiTarget.install('global', { autoAllow: true })).toThrow(/REQ-GEMINI-002/);
-    expect(() => geminiTarget.uninstall('global')).toThrow(/REQ-GEMINI-002/);
+  afterEach(() => {
+    homeRestore.restore();
+    process.chdir(origCwd);
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+    fs.rmSync(tmpCwd, { recursive: true, force: true });
   });
+
+  // Named functions rather than inline arrows so each acceptance criterion has
+  // a symbol a spec `verifies:` bullet can point at (a describe/it string is
+  // not a linkable symbol).
+
+  /** The entry Gemini accepts: stdio implied by `command`, never `type`. */
+  function geminiInstallWritesTypelessStdioEntry(): void {
+    geminiTarget.install('global', { autoAllow: true });
+    const entry = readSettings('global').mcpServers.specship;
+    expect(entry.command).toBe('specship');
+    expect(entry.args).toEqual(['serve', '--mcp']);
+    expect('type' in entry).toBe(false);
+  }
+
+  /** REQ-GEMINI-002.A1 — installed follows the config dir, alreadyConfigured the entry. */
+  function geminiDetectReportsInstalledAndConfigured(): void {
+    expect(geminiTarget.detect('global')).toEqual({
+      installed: false,
+      alreadyConfigured: false,
+      configPath: settingsFile('global'),
+    });
+
+    fs.mkdirSync(path.join(tmpHome, '.gemini'), { recursive: true });
+    expect(geminiTarget.detect('global').installed).toBe(true);
+    expect(geminiTarget.detect('global').alreadyConfigured).toBe(false);
+
+    geminiTarget.install('global', { autoAllow: true });
+    expect(geminiTarget.detect('global').alreadyConfigured).toBe(true);
+  }
+
+  /** REQ-GEMINI-002.A2 / REQ-GEMINI-003.A1 — surgical writes and removals. */
+  function geminiPreservesSiblingServersAndKeys(): void {
+    const file = settingsFile('local');
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    const original = {
+      theme: 'GitHub',
+      mcpServers: { other: { command: 'x', args: ['--y'] } },
+    };
+    fs.writeFileSync(file, JSON.stringify(original, null, 2) + '\n');
+
+    expect(geminiTarget.install('local', { autoAllow: true }).files[0].action).toBe('updated');
+    expect(readSettings('local').theme).toBe('GitHub');
+    expect(readSettings('local').mcpServers.other).toEqual(original.mcpServers.other);
+
+    expect(geminiTarget.uninstall('local').files[0].action).toBe('removed');
+    const after = readSettings('local');
+    expect(after.mcpServers.specship).toBeUndefined();
+    expect(after.mcpServers.other).toEqual(original.mcpServers.other);
+    expect(after.theme).toBe('GitHub');
+  }
+
+  /** REQ-GEMINI-002.A2 — uninstalling what was never installed is a no-op. */
+  function geminiUninstallOnVirginHomeIsNotFound(): void {
+    const result = geminiTarget.uninstall('global');
+    expect(result.files).toEqual([{ path: settingsFile('global'), action: 'not-found' }]);
+    expect(fs.existsSync(settingsFile('global'))).toBe(false);
+  }
+
+  /** REQ-GEMINI-003.A2 — a prior install's integrations survive an upgrade. */
+  function geminiReinstallPreservesIntegrations(): void {
+    geminiTarget.install('global', { autoAllow: true, withJira: true });
+    expect(readSettings('global').mcpServers.specship.env)
+      .toEqual({ SPECSHIP_INTEGRATIONS: 'jira' });
+
+    // A later install that omits --with-jira must not disable it, and adding
+    // designer must union rather than replace.
+    expect(geminiTarget.install('global', { autoAllow: true }).files[0].action).toBe('unchanged');
+    geminiTarget.install('global', { autoAllow: true, withDesigner: true });
+    expect(readSettings('global').mcpServers.specship.env)
+      .toEqual({ SPECSHIP_INTEGRATIONS: 'designer,jira' });
+  }
+
+  /** REQ-GEMINI-006.A1/A2 — the capability gap is stated, and nothing Claude-shaped is written. */
+  function geminiInstallNotesUnsupportedSurfaces(): void {
+    const result = geminiTarget.install('local', {
+      autoAllow: true,
+      sdd: true,
+      installStatusLine: true,
+    });
+
+    expect(result.files.map((f) => f.path)).toEqual([settingsFile('local')]);
+    const note = (result.notes ?? []).join('\n');
+    for (const surface of ['hook', 'command', 'specship-explorer', 'status line']) {
+      expect(note).toContain(surface);
+    }
+    // Nothing under .claude/ — not even with sdd + statusline requested.
+    expect(fs.existsSync(path.join(tmpCwd, '.claude'))).toBe(false);
+    expect(fs.existsSync(path.join(tmpHome, '.claude'))).toBe(false);
+    expect(fs.existsSync(path.join(tmpCwd, 'CLAUDE.md'))).toBe(false);
+  }
+
+  /**
+   * `src/bin/uninstall.ts` (the npm preuninstall sweep) loops `ALL_TARGETS`,
+   * so registering Gemini changes what `npm rm -g` cleans up. Asserted
+   * explicitly because it's a behaviour change, not just new coverage.
+   */
+  function geminiEntrySweptByRegistryUninstall(): void {
+    geminiTarget.install('global', { autoAllow: true });
+
+    const reports = uninstallTargets(ALL_TARGETS, 'global');
+    const gemini = reports.find((r) => r.id === 'gemini');
+    expect(gemini?.status).toBe('removed');
+    expect(gemini?.removedPaths).toEqual([settingsFile('global')]);
+    expect(geminiTarget.detect('global').alreadyConfigured).toBe(false);
+  }
+
+  it('writes a stdio entry with no `type` key (Gemini allows only sse|http)', geminiInstallWritesTypelessStdioEntry);
+  it('detect reports installed once the .gemini dir exists (REQ-GEMINI-002.A1)', geminiDetectReportsInstalledAndConfigured);
+  it('preserves sibling servers and unrelated keys across install + uninstall (REQ-GEMINI-002.A2 / 003.A1)', geminiPreservesSiblingServersAndKeys);
+  it('uninstall on a virgin home returns not-found without throwing (REQ-GEMINI-002.A2)', geminiUninstallOnVirginHomeIsNotFound);
+  it('re-install preserves an integration a previous install enabled (REQ-GEMINI-003.A2)', geminiReinstallPreservesIntegrations);
+  it('names every unsupported surface in one note and writes nothing else (REQ-GEMINI-006.A1/A2)', geminiInstallNotesUnsupportedSurfaces);
+  it('npm-uninstall sweeps the Gemini entry too (REQ-GEMINI-008)', geminiEntrySweptByRegistryUninstall);
 });
 
 /**
