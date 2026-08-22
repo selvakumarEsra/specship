@@ -3,9 +3,10 @@
  * SpecShip preuninstall cleanup script
  *
  * Runs automatically when `npm uninstall -g @specship/specship`
- * is called. Sweeps Claude Code's global config (the only location
- * we own at npm-uninstall time — local-location entries live inside
- * project working trees and aren't ours to nuke).
+ * is called. Sweeps every registered target's global config — Claude Code
+ * and Gemini CLI — since global is the only location we own at
+ * npm-uninstall time (local-location entries live inside project working
+ * trees and aren't ours to nuke).
  *
  * This script must never throw — a failed cleanup must not block
  * uninstall.

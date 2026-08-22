@@ -74,12 +74,24 @@ A new `GeminiCliTarget` MUST implement the existing `AgentTarget` interface
 `gemini`, widening `TargetId` to `'claude' | 'gemini'`. The default
 `specship install` with no target flag MUST continue to install the Claude
 target only — Gemini is opt-in via an explicit target selection.
-[needs review: flag spelling — `--target gemini` vs `--gemini`]
+
+Flag spelling (resolved 2026-08-22): `--target <ids>`, the flag that already
+exists on `specship install` and already routes `--print-config`. It widens
+from "vestigial for install" to actually SELECTING targets — `--target gemini`,
+`--target claude,gemini` — with the absent/`claude`/`auto`/`all` values still
+meaning Claude-only so no existing invocation changes behaviour. A second
+spelling (`--gemini`) would fork the surface for no gain.
 
 implementations:
   - src/installer/targets/gemini.ts:GeminiCliTarget
   - src/installer/targets/types.ts:AgentTarget
   - src/installer/targets/registry.ts:listTargetIds
+  - src/installer/index.ts:resolveInstallTargets
+
+verifies:
+  - __tests__/installer-targets.test.ts:geminiDetectReportsInstalledAndConfigured
+  - __tests__/installer-targets.test.ts:geminiUninstallOnVirginHomeIsNotFound
+  - __tests__/installer-targets.test.ts:geminiInstallWritesTypelessStdioEntry
 
 ## Acceptance
 <!-- id: REQ-GEMINI-002.A1 -->
@@ -112,6 +124,10 @@ upgrade.
 
 implementations:
   - src/installer/targets/gemini.ts:writeGeminiMcpEntry
+
+verifies:
+  - __tests__/installer-targets.test.ts:geminiPreservesSiblingServersAndKeys
+  - __tests__/installer-targets.test.ts:geminiReinstallPreservesIntegrations
 
 ## Acceptance
 <!-- id: REQ-GEMINI-003.A1 -->
@@ -181,6 +197,9 @@ writes.
 implementations:
   - src/installer/targets/gemini.ts:GeminiCliTarget.install
 
+verifies:
+  - __tests__/installer-targets.test.ts:geminiInstallNotesUnsupportedSurfaces
+
 ## Acceptance
 <!-- id: REQ-GEMINI-006.A1 -->
 - A Gemini install's `WriteResult.notes` names each unsupported surface
@@ -236,14 +255,21 @@ an installer test suite mirroring the Claude target's coverage
 run against a Gemini CLI session before any retrieval-parity claim is
 published (the 1-call / zero-Read bar was measured on Claude Code only).
 
+Landed as a `Gemini target — specifics` block inside the existing
+`__tests__/installer-targets.test.ts` rather than a separate file: the
+registered target now also runs the parameterized `ALL_TARGETS` contract loop
+(install / idempotence / sibling preservation / uninstall) in that same file,
+so splitting the Gemini-only cases out would separate them from the contract
+they extend.
+
 implementations:
-  - __tests__/installer-gemini-target.test.ts
+  - __tests__/installer-targets.test.ts:geminiEntrySweptByRegistryUninstall
 
 ## Acceptance
 <!-- id: REQ-GEMINI-008.A1 -->
-- `npx vitest run __tests__/installer-gemini-target.test.ts` passes and
-  exercises install, re-install (unchanged), uninstall, and
-  sibling-preservation cases against temp directories.
+- `npx vitest run __tests__/installer-targets.test.ts` passes and exercises
+  install, re-install (unchanged), uninstall, and sibling-preservation cases
+  against temp directories.
 <!-- id: REQ-GEMINI-008.A2 -->
 - CHANGELOG `[Unreleased]` gains a plain-sentence New Features entry with no
   internal paths or symbols.

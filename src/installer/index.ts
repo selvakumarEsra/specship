@@ -1,12 +1,13 @@
 /**
- * SpecShip Installer (Claude Code only).
+ * SpecShip Installer.
  *
  * Writes the specship MCP server config + auto-allow permissions into
  * Claude Code at the chosen location (global / local). Uses
  * @clack/prompts for the interactive UI; `runInstallerWithOptions` is
  * the non-interactive entry called from the `--target` / `--yes` CLI
- * flags. (The `--target` flag is preserved for backwards compatibility
- * but only accepts `claude` / `auto` / `all` / `none`.)
+ * flags. `--target` SELECTS the agents to wire (`claude` — the default —
+ * and/or `gemini`, GEMINI-TARGET-DOC); the legacy `auto` / `all` / `none`
+ * spellings keep their old Claude-only meanings.
  */
 
 import { execSync, execFileSync, spawn } from 'child_process';
@@ -14,6 +15,7 @@ import * as os from 'os';
 import * as path from 'path';
 import * as fs from 'fs';
 import { claudeTarget, statusLineState, getStatusLineSnippet } from './targets/claude';
+import { ALL_TARGETS, getTarget, listTargetIds } from './targets/registry';
 import type { AgentTarget, Location, TargetId } from './targets/types';
 import { detectInstallMethod } from '../update/updater';
 import { planPurge, executePurge, assertSafeToRemove, type PurgeEnv, type PurgeExecDeps } from './purge';
@@ -59,9 +61,12 @@ function getVersion(): string {
 
 export interface RunInstallerOptions {
   /**
-   * Vestigial — preserved for backwards compatibility with the
-   * multi-agent CLI. Accepted values: `claude` (the only real target),
-   * `auto` / `all` (synonymous), `none` (skip). Anything else throws.
+   * Which agent target(s) to wire (GEMINI-TARGET-DOC, REQ-GEMINI-002).
+   * Comma-separated registry ids — `claude`, `gemini`, or `claude,gemini`.
+   * The legacy values still mean exactly what they meant when this build was
+   * Claude-only: absent / `claude` / `auto` / `all` ⇒ Claude alone (so no
+   * existing invocation starts writing a Gemini config), `none` ⇒ skip.
+   * Anything else throws.
    */
   target?: string;
   /** Skip the location prompt; use this value directly. */
@@ -96,6 +101,45 @@ export interface RunInstallerOptions {
 }
 
 /**
+ * Resolve the `--target` value into the targets to install
+ * (REQ-GEMINI-002.A4). An empty result means "install nothing" (`none`).
+ *
+ * The legacy spellings are pinned to Claude on purpose: `all` reads like
+ * "every registered target" but has always meant the single Claude install,
+ * and quietly widening it would start writing a Gemini config for people who
+ * never asked. Gemini is reachable only by naming it.
+ */
+export function resolveInstallTargets(target?: string): AgentTarget[] {
+  if (target === 'none') return [];
+  if (target === undefined || ['claude', 'auto', 'all'].includes(target)) {
+    return [claudeTarget];
+  }
+  const ids = target.split(',').map((s) => s.trim()).filter(Boolean);
+  const resolved = ids.map((id) => {
+    const found = getTarget(id);
+    if (!found) {
+      throw new Error(
+        `Unknown --target value "${id}". Accepted values are ` +
+        `${listTargetIds().map((t) => `'${t}'`).join(', ')}, ` +
+        `'auto'/'all' (= claude), or 'none'.`,
+      );
+    }
+    return found;
+  });
+  // De-dupe so `--target claude,claude` doesn't install twice.
+  return [...new Map(resolved.map((t) => [t.id, t])).values()];
+}
+
+/** Primary config path per target, for the location prompt's hint line. */
+function describeFirstPaths(targets: readonly AgentTarget[], loc: Location): string {
+  return targets
+    .map((t) => t.describePaths(loc)[0])
+    .filter((p): p is string => typeof p === 'string')
+    .map(tildify)
+    .join(' + ');
+}
+
+/**
  * Interactive entry — `specship install` with no args runs this.
  */
 export async function runInstaller(): Promise<void> {
@@ -109,20 +153,16 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
 
   const useDefaults = opts.yes === true;
 
-  // `--target=none` — explicit skip, matches the historical contract.
-  if (opts.target === 'none') {
+  // Which agents to wire. `--target=none` is an explicit skip (historical
+  // contract); an unknown id throws.
+  const selectedTargets = resolveInstallTargets(opts.target);
+  if (selectedTargets.length === 0) {
     clack.outro('Skipped — no agent configured.');
     return;
   }
-  // Any other value is accepted (claude / auto / all / undefined); we
-  // only have one target to write.
-  if (opts.target !== undefined
-      && !['claude', 'auto', 'all'].includes(opts.target)) {
-    throw new Error(
-      `Unknown --target value "${opts.target}". This build is Claude-only; ` +
-      `accepted values are 'claude' (default), 'auto', 'all', or 'none'.`,
-    );
-  }
+  // Everything Claude-shaped below (permissions, status line) is skipped when
+  // Claude isn't selected — those prompts have no meaning for another agent.
+  const installClaude = selectedTargets.some((t) => t.id === 'claude');
 
   // Step 1 (INSTALL-SCOPE-DOC, REQ-SCOPE-001): `specship install` is
   // WIRING-ONLY — binary acquisition (npm i -g, or the offline bundle's
@@ -155,12 +195,18 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
   } else if (useDefaults) {
     location = 'local';
   } else {
+    const agents = selectedTargets.map((t) => t.displayName).join(' / ');
     const sel = await clack.select({
-      message: 'Apply Claude Code config to just this project, or all of them?',
-      options: [
-        { value: 'local'  as const, label: 'Just this project (recommended)', hint: './.mcp.json + ./.claude/settings.json' },
-        { value: 'global' as const, label: 'All projects', hint: '~/.claude.json + ~/.claude/settings.json' },
-      ],
+      message: `Apply ${agents} config to just this project, or all of them?`,
+      options: installClaude
+        ? [
+          { value: 'local'  as const, label: 'Just this project (recommended)', hint: './.mcp.json + ./.claude/settings.json' },
+          { value: 'global' as const, label: 'All projects', hint: '~/.claude.json + ~/.claude/settings.json' },
+        ]
+        : [
+          { value: 'local'  as const, label: 'Just this project (recommended)', hint: describeFirstPaths(selectedTargets, 'local') },
+          { value: 'global' as const, label: 'All projects', hint: describeFirstPaths(selectedTargets, 'global') },
+        ],
       initialValue: 'local' as const,
     });
     if (clack.isCancel(sel)) {
@@ -174,6 +220,10 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
   let autoAllow: boolean;
   if (opts.autoAllow !== undefined) {
     autoAllow = opts.autoAllow;
+  } else if (!installClaude) {
+    // Permissions are a Claude surface — don't ask about them when the user
+    // only selected another agent.
+    autoAllow = false;
   } else if (useDefaults) {
     autoAllow = true;
   } else {
@@ -195,7 +245,7 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
   let installStatusLine = false;
   if (opts.statusLine !== undefined) {
     installStatusLine = opts.statusLine;
-  } else if (!useDefaults) {
+  } else if (!useDefaults && installClaude) {
     const state = statusLineState(location);
     if (state === 'foreign') {
       clack.note(getStatusLineSnippet(), 'You already have a status line — add SpecShip to it');
@@ -215,23 +265,27 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
   // Step 4: write Claude config. The governance tier is opt-in
   // (INSTALL-WEDGE-DOC): only an explicit `sdd: true` (from `--sdd`) installs it;
   // a default install provisions the retrieval tier alone.
-  const result = claudeTarget.install(location, {
-    autoAllow,
-    sdd: opts.sdd,
-    withJira: opts.withJira,
-    withDesigner: opts.withDesigner,
-    installStatusLine,
-  });
-  for (const file of result.files) {
-    const verb = file.action === 'unchanged'
-      ? 'Unchanged'
-      : file.action === 'created' ? 'Created'
-        : file.action === 'removed' ? 'Removed'
-          : 'Updated';
-    clack.log.success(`Claude Code: ${verb} ${tildify(file.path)}`);
-  }
-  for (const note of result.notes ?? []) {
-    clack.log.info(`Claude Code: ${note}`);
+  for (const target of selectedTargets) {
+    const result = target.install(location, {
+      autoAllow,
+      sdd: opts.sdd,
+      withJira: opts.withJira,
+      withDesigner: opts.withDesigner,
+      installStatusLine,
+    });
+    for (const file of result.files) {
+      const verb = file.action === 'unchanged'
+        ? 'Unchanged'
+        : file.action === 'created' ? 'Created'
+          : file.action === 'removed' ? 'Removed'
+            : 'Updated';
+      clack.log.success(`${target.displayName}: ${verb} ${tildify(file.path)}`);
+    }
+    // A target with unsupported surfaces says so here (REQ-GEMINI-006.A1) —
+    // the note is the only place the capability gap is stated at install time.
+    for (const note of result.notes ?? []) {
+      clack.log.info(`${target.displayName}: ${note}`);
+    }
   }
 
   // Step 4b: the gate graduation ramp's install ask (REQ-ENFORCE-004.A3).
@@ -282,7 +336,9 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
     useDefaults,
   });
 
-  clack.outro('Done! Restart Claude Code to use SpecShip.');
+  clack.outro(
+    `Done! Restart ${selectedTargets.map((t) => t.displayName).join(' / ')} to use SpecShip.`,
+  );
 }
 
 /**
@@ -416,28 +472,27 @@ export async function runUninstaller(opts: RunUninstallerOptions): Promise<void>
     clack.outro('Skipped — nothing to uninstall.');
     return;
   }
-  if (opts.target !== undefined
-      && !['claude', 'auto', 'all'].includes(opts.target)) {
-    throw new Error(
-      `Unknown --target value "${opts.target}". This build is Claude-only; ` +
-      `accepted values are 'claude' (default), 'auto', 'all', or 'none'.`,
-    );
-  }
+  // Same resolution as install, so `--target gemini` sweeps the Gemini wiring
+  // instead of being rejected. A full purge ignores this and removes every
+  // registered target's wiring — "complete removal" means complete.
+  const selectedTargets = resolveInstallTargets(opts.target);
 
   if (opts.keepData) {
-    await wiringOnlyUninstall(clack, opts);
+    await wiringOnlyUninstall(clack, opts, selectedTargets);
     return;
   }
   await purgeUninstall(clack, opts);
 }
 
 /**
- * REQ-UNINSTALL-003 — the original behavior: strip only the Claude Code wiring
- * at the chosen location, leaving the index, `~/.specship`, and the binary.
+ * REQ-UNINSTALL-003 — the original behavior: strip only the agent wiring
+ * (Claude Code unless `--target` says otherwise) at the chosen location,
+ * leaving the index, `~/.specship`, and the binary.
  */
 async function wiringOnlyUninstall(
   clack: typeof import('@clack/prompts'),
   opts: RunUninstallerOptions,
+  targets: readonly AgentTarget[],
 ): Promise<void> {
   let location: Location;
   if (opts.location) {
@@ -460,24 +515,29 @@ async function wiringOnlyUninstall(
     location = sel;
   }
 
-  const report = uninstallTargets([claudeTarget], location)[0]!;
-  if (report.status === 'removed') {
-    for (const p of report.removedPaths) clack.log.success(`Claude Code: removed ${tildify(p)}`);
-  } else if (report.status === 'not-configured') {
-    clack.log.info(`Claude Code: not configured — nothing to remove`);
-  } else {
-    clack.log.info(`Claude Code: skipped — ${report.notes[0] ?? 'unsupported location'}`);
+  const reports = uninstallTargets(targets, location);
+  for (const report of reports) {
+    const name = report.displayName;
+    if (report.status === 'removed') {
+      for (const p of report.removedPaths) clack.log.success(`${name}: removed ${tildify(p)}`);
+    } else if (report.status === 'not-configured') {
+      clack.log.info(`${name}: not configured — nothing to remove`);
+    } else {
+      clack.log.info(`${name}: skipped — ${report.notes[0] ?? 'unsupported location'}`);
+    }
   }
+  const removedAny = reports.some((r) => r.status === 'removed');
+  const agents = targets.map((t) => t.displayName).join(' / ');
 
   if (location === 'local' && fs.existsSync(path.join(process.cwd(), '.specship'))) {
     clack.log.info('The .specship/ index for this project is still here. Run `specship uninit` to delete it.');
   }
   clack.log.info('Kept your data and the specship binary (--keep-data). Run `specship uninstall` (no flag) for a complete removal.');
 
-  if (report.status === 'removed') {
-    clack.outro('Removed SpecShip from Claude Code. Restart it to apply.');
+  if (removedAny) {
+    clack.outro(`Removed SpecShip from ${agents}. Restart it to apply.`);
   } else {
-    clack.outro(`SpecShip was not configured in Claude Code at the ${location} location — nothing to remove.`);
+    clack.outro(`SpecShip was not configured in ${agents} at the ${location} location — nothing to remove.`);
   }
 }
 
@@ -517,11 +577,15 @@ async function purgeUninstall(
     }
   }
 
-  // 1. Claude Code wiring at BOTH locations.
+  // 1. Every registered target's wiring at BOTH locations — a purge that left
+  //    a Gemini MCP entry behind wouldn't be a complete removal.
   for (const location of ['global', 'local'] as Location[]) {
-    const report = uninstallTargets([claudeTarget], location)[0]!;
-    if (report.status === 'removed') {
-      for (const p of report.removedPaths) clack.log.success(`Claude Code (${location}): removed ${tildify(p)}`);
+    for (const report of uninstallTargets(ALL_TARGETS, location)) {
+      if (report.status === 'removed') {
+        for (const p of report.removedPaths) {
+          clack.log.success(`${report.displayName} (${location}): removed ${tildify(p)}`);
+        }
+      }
     }
   }
 
