@@ -12,8 +12,15 @@ is one new file + one registry entry.
 
 ## Non-negotiable invariants
 
-- **Claude Code only.** Don't add other agent targets without an explicit
-  ask — this fork's selling point is the smaller surface.
+- **Claude Code only, plus the ratified Gemini CLI exception** (explicit ask,
+  2026-08-22 — `specs/agent-target-gemini.md`, `GEMINI-TARGET-DOC`).
+  `targets/gemini.ts` currently implements **only** `printConfig` (Phase 0,
+  REQ-GEMINI-001) and is deliberately absent from `ALL_TARGETS` so a plain
+  `specship install` stays byte-identically Claude-only and the contract
+  suite (which loops `ALL_TARGETS`) doesn't run against a target whose
+  install/detect/uninstall still throw. Register it in the change that
+  lands REQ-GEMINI-002. Don't add any OTHER agent target without an equally
+  explicit ask — this fork's selling point is the smaller surface.
 - Any installer change needs matching coverage in
   `__tests__/installer-targets.test.ts` and a CHANGELOG entry — installer
   regressions break every new install silently.

@@ -2636,10 +2636,12 @@ program
   .option('--statusline', 'Wire the SpecShip status-line segment into Claude (skips the prompt; never overwrites an existing status line)')
   .option('--skip-statusline', 'Do not add the status-line segment (skips the prompt)')
   .option('--skip-index', 'Do not offer to index the current project (an explicit opt-out for automation)')
-  .option('--print-config', 'Print MCP config snippet for Claude Code and exit (no file writes)')
-  // -t/--target is vestigial — kept so existing `--target claude` / `--target auto`
-  // invocations (including our own offline-install scripts) keep working.
-  .option('-t, --target <ids>', '(vestigial) accepted: "claude" | "auto" | "all" | "none"')
+  .option('--print-config', 'Print the MCP config snippet and exit (no file writes). Claude Code by default; `--target gemini` prints the Gemini CLI settings snippet')
+  // -t/--target is vestigial for INSTALLING — kept so existing `--target claude`
+  // / `--target auto` invocations (including our own offline-install scripts)
+  // keep working. It IS honored by --print-config, which is the only way to get
+  // the Gemini CLI snippet today (GEMINI-TARGET-DOC, REQ-GEMINI-001).
+  .option('-t, --target <ids>', 'Selects which snippet `--print-config` prints ("claude" | "gemini"); vestigial for install ("claude" | "auto" | "all" | "none")')
   .action(async (opts: {
     target?: string;
     location?: string;
@@ -2655,8 +2657,16 @@ program
     path?: string;
   }) => {
     if (opts.printConfig) {
-      const { claudeTarget } = await import('../installer/targets/claude');
       const loc = (opts.location === 'local' ? 'local' : 'global') as 'global' | 'local';
+      // Only `gemini` selects the non-default snippet; every other value
+      // (including the vestigial "auto" / "all" / "none") stays Claude, so
+      // existing invocations print exactly what they printed before.
+      if (opts.target === 'gemini') {
+        const { geminiTarget } = await import('../installer/targets/gemini');
+        process.stdout.write(geminiTarget.printConfig(loc));
+        return;
+      }
+      const { claudeTarget } = await import('../installer/targets/claude');
       process.stdout.write(claudeTarget.printConfig(loc));
       return;
     }

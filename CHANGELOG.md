@@ -9,6 +9,10 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### New Features
+
+- Gemini CLI users can now wire up the SpecShip MCP server by hand. `specship install --print-config --target gemini` prints the settings snippet to paste into Gemini CLI's settings file — global for every project, or per project — and the README documents both placements. Printing writes nothing to disk, and the server it launches is the same one Claude Code uses. Installing into Gemini automatically is not supported yet, and this wiring gives Gemini CLI the SpecShip tools only: slash commands, auto-sync hooks, the retrieval nudge and the status-line segment remain Claude Code features.
+
 
 ## [0.22.0] - 2026-08-04
 

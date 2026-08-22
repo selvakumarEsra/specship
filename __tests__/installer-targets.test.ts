@@ -32,6 +32,7 @@ import {
   removeStatusLineEntry,
   statusLineState,
 } from '../src/installer/targets/claude';
+import { geminiTarget } from '../src/installer/targets/gemini';
 
 function mkTmpDir(label: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), `cg-targets-${label}-`));
@@ -932,6 +933,108 @@ describe('Installer targets — registry', () => {
     const reports = uninstallTargets([claudeTarget], 'global');
     expect(reports.length).toBe(1);
     expect(reports[0]?.status).toBe('not-configured');
+  });
+});
+
+/**
+ * Gemini CLI target — Phase 0 (GEMINI-TARGET-DOC, REQ-GEMINI-001).
+ *
+ * Only `printConfig` is contracted in this phase: a Gemini CLI user must be
+ * able to print the `mcpServers` snippet and paste it into their settings
+ * file by hand. install/detect/uninstall land in REQ-GEMINI-002, so the
+ * target is deliberately NOT in `ALL_TARGETS` yet and does not participate
+ * in the contract suite above.
+ */
+describe('GeminiCliTarget.printConfig', () => {
+  let tmpHome: string;
+  let tmpCwd: string;
+  let origCwd: string;
+  let homeRestore: { restore: () => void };
+
+  beforeEach(() => {
+    tmpHome = mkTmpDir('gemini-home');
+    tmpCwd = mkTmpDir('gemini-cwd');
+    origCwd = process.cwd();
+    process.chdir(tmpCwd);
+    homeRestore = setHome(tmpHome);
+  });
+
+  afterEach(() => {
+    homeRestore.restore();
+    process.chdir(origCwd);
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+    fs.rmSync(tmpCwd, { recursive: true, force: true });
+  });
+
+  /**
+   * REQ-GEMINI-001.A1 — printing touches nothing on disk. Asserted against
+   * the real (redirected) filesystem rather than fs spies: the node `fs`
+   * namespace isn't redefinable under vitest's ESM interop, and a
+   * before/after file listing catches a write by ANY route.
+   */
+  function geminiPrintConfigWritesNothing(): void {
+    const snapshot = () => [...listAllFiles(tmpHome), ...listAllFiles(tmpCwd)].sort();
+    const before = snapshot();
+
+    expect(geminiTarget.printConfig('global')).toContain('mcpServers');
+    expect(geminiTarget.printConfig('local')).toContain('mcpServers');
+
+    expect(snapshot()).toEqual(before);
+    expect(fs.existsSync(path.join(tmpHome, '.gemini'))).toBe(false);
+    expect(fs.existsSync(path.join(tmpCwd, '.gemini'))).toBe(false);
+  }
+
+  /**
+   * REQ-GEMINI-001.A2 — the snippet launches the same process the Claude
+   * target's MCP entry launches (command + args identical).
+   */
+  function geminiPrintConfigMatchesClaudeCommand(): void {
+    const parse = (out: string) => JSON.parse(out.substring(out.indexOf('{')));
+    const gemini = parse(geminiTarget.printConfig('global')).mcpServers.specship;
+    const claude = parse(claudeTarget.printConfig('global')).mcpServers.specship;
+
+    expect(gemini.command).toEqual(claude.command);
+    expect(gemini.args).toEqual(claude.args);
+    // Gemini's MCPServerConfig `type` is only 'sse' | 'http' — stdio is
+    // implied by `command`, so the Claude entry's `type: 'stdio'` must NOT
+    // be copied across (verified against @google/gemini-cli 0.56.0).
+    expect(gemini.type).toBeUndefined();
+  }
+
+  /** REQ-GEMINI-001.A3 — the header names the settings file to paste into. */
+  function geminiPrintConfigNamesSettingsPath(): void {
+    const global = geminiTarget.printConfig('global');
+    const local = geminiTarget.printConfig('local');
+
+    expect(global).toContain(path.join('.gemini', 'settings.json'));
+    expect(global).toContain(path.join(os.homedir(), '.gemini', 'settings.json'));
+    expect(local).toContain(path.join(process.cwd(), '.gemini', 'settings.json'));
+    expect(geminiTarget.describePaths('global')).toEqual([
+      path.join(os.homedir(), '.gemini', 'settings.json'),
+    ]);
+    expect(geminiTarget.describePaths('local')).toEqual([
+      path.join(process.cwd(), '.gemini', 'settings.json'),
+    ]);
+  }
+
+  it('touches no files on disk (REQ-GEMINI-001.A1)', geminiPrintConfigWritesNothing);
+  it('launches the same server as the Claude entry (REQ-GEMINI-001.A2)', geminiPrintConfigMatchesClaudeCommand);
+  it('names the Gemini settings file for each location (REQ-GEMINI-001.A3)', geminiPrintConfigNamesSettingsPath);
+
+  it('supports both install locations', () => {
+    expect(geminiTarget.supportsLocation('global')).toBe(true);
+    expect(geminiTarget.supportsLocation('local')).toBe(true);
+  });
+
+  it('is not registered yet — a plain install stays Claude-only (REQ-GEMINI-002.A4)', () => {
+    expect(ALL_TARGETS.some((t) => t.id === 'gemini')).toBe(false);
+    expect(getTarget('gemini')).toBeUndefined();
+  });
+
+  it('defers install/detect/uninstall to REQ-GEMINI-002', () => {
+    expect(() => geminiTarget.detect('global')).toThrow(/REQ-GEMINI-002/);
+    expect(() => geminiTarget.install('global', { autoAllow: true })).toThrow(/REQ-GEMINI-002/);
+    expect(() => geminiTarget.uninstall('global')).toThrow(/REQ-GEMINI-002/);
   });
 });
 
