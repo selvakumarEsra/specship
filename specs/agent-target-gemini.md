@@ -36,11 +36,23 @@ equivalent flag targeting gemini) MUST emit the JSON snippet for Gemini CLI's
 with the settings-file location. The snippet MUST NOT be invented from memory
 at implementation time — verify the current Gemini CLI settings schema
 (`~/.gemini/settings.json`, `mcpServers` key) against Gemini CLI's released
-docs. [needs review: pin the Gemini CLI version the snippet was verified
-against]
+docs.
+
+Verified against **Gemini CLI 0.56.0** (npm `@google/gemini-cli`, latest on
+2026-08-22; cross-checked against 0.28.0) by reading the released package's
+`config/settingsSchema.js` and `MCPServerConfig`: settings key `mcpServers`,
+stdio fields `command` / `args` / `env` / `cwd`, and `type` restricted to
+`'sse' | 'http'` — so the Claude entry's `type: 'stdio'` is NOT carried over;
+a stdio server is identified by having `command`. Settings locations are
+`~/.gemini/settings.json` (global) and `<project>/.gemini/settings.json`.
 
 implementations:
   - src/installer/targets/gemini.ts:GeminiCliTarget.printConfig
+
+verifies:
+  - __tests__/installer-targets.test.ts:geminiPrintConfigWritesNothing
+  - __tests__/installer-targets.test.ts:geminiPrintConfigMatchesClaudeCommand
+  - __tests__/installer-targets.test.ts:geminiPrintConfigNamesSettingsPath
 
 ## Acceptance
 <!-- id: REQ-GEMINI-001.A1 -->

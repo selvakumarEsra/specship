@@ -87,7 +87,7 @@ Tests live in `__tests__/` and mirror the module they cover — conventions, not
 
 ## House rules
 
-- This fork is **Claude Code only**. Don't re-add Cursor / Codex / opencode / Hermes / Gemini / Antigravity / Kiro / any other agent target without an explicit ask. The simpler installer surface is the fork's point.
+- This fork is **Claude Code only, with one ratified exception: Gemini CLI** (explicit user ask, 2026-08-22 — see `specs/agent-target-gemini.md`, `GEMINI-TARGET-DOC`). Phase 0 shipped a printable Gemini `mcpServers` snippet; the `gemini` installer target itself is REQ-GEMINI-002 and is not registered yet. Don't re-add Cursor / Codex / opencode / Hermes / Antigravity / Kiro / any other agent target without an equally explicit ask. The simpler installer surface is still the fork's point.
 - When changing what the MCP tools do or how Claude Code should use them, edit `src/mcp/server-instructions.ts` — it is the **single source of truth** for agent-facing tool guidance (issue #529).
 - SpecShip provides **code context**, not product requirements. For new features, ask the user about UX, edge cases, and acceptance criteria — the graph won't tell you.
 - **When the user references issues, PR comments, or external reports, anchor them to a date and version before drawing conclusions.** Check the comment's `createdAt` against:

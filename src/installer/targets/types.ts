@@ -10,8 +10,12 @@
 
 export type Location = 'global' | 'local';
 
-/** Stable string id for the lone supported target. */
-export type TargetId = 'claude';
+/**
+ * Stable string ids for supported targets. `gemini` (GEMINI-TARGET-DOC) is
+ * declared here from Phase 0 on, but only its `printConfig` is implemented
+ * and it is not in `ALL_TARGETS` yet — see `targets/gemini.ts`.
+ */
+export type TargetId = 'claude' | 'gemini';
 
 /**
  * Result of `target.detect(location)`.
