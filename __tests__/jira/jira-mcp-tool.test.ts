@@ -35,6 +35,7 @@ const JIRA_ENV_KEYS = [
 
 let saved: Record<string, string | undefined>;
 let tmpDir: string;
+let savedCwd: string;
 let fetchMock: ReturnType<typeof vi.fn>;
 const realFetch = globalThis.fetch;
 
@@ -48,6 +49,11 @@ beforeEach(() => {
   // Point the config at a definitely-absent file so nothing bleeds in from
   // the real home; individual tests opt into config/env as needed.
   process.env.SPECSHIP_JIRA_CONFIG = path.join(tmpDir, 'absent.json');
+  // Handlers resolve the repo binding from process.cwd() — chdir into the
+  // temp dir so a `jira` binding in the DEVELOPMENT repo's own
+  // specship.config.json can't bleed into these assertions.
+  savedCwd = process.cwd();
+  process.chdir(tmpDir);
   fetchMock = vi.fn();
   globalThis.fetch = fetchMock as unknown as typeof fetch;
 });
@@ -58,6 +64,7 @@ afterEach(() => {
     else process.env[k] = saved[k];
   }
   globalThis.fetch = realFetch;
+  process.chdir(savedCwd);
   fs.rmSync(tmpDir, { recursive: true, force: true });
   vi.restoreAllMocks();
 });

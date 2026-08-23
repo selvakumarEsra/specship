@@ -120,6 +120,15 @@ function requirementIdForPublished(
   pub: PublishedSpecRef,
 ): string | null {
   const all = sq.getAllSpecs?.() ?? [];
+  // Per-requirement identity (REQ-JIRATEAM-010.A5): the ref names its own
+  // requirement — attribute directly instead of falling back to "first
+  // requirement in the file", which misattributes multi-requirement files.
+  if (pub.specId) {
+    for (const s of all) {
+      if (s.kind === 'requirement' && s.id === pub.specId) return s.id;
+    }
+    return null;
+  }
   for (const s of all) {
     if (s.kind !== 'requirement') continue;
     if (s.sourcePath === pub.specRelPath || s.sourcePath === pub.absPath) {

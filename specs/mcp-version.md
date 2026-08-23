@@ -71,7 +71,7 @@ install produced it without a second call, and a stale-install diagnosis needs
 no extra round trip.
 
 implementations:
-  - src/mcp/tools.ts:MCPTools.handleStatus
+  - src/mcp/tools.ts:ToolHandler.handleStatus
 
 ## Acceptance
 <!-- id: REQ-MCPVER-002.A1 -->

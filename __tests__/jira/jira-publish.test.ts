@@ -117,10 +117,17 @@ const SPEC_MD = [
 ].join('\n');
 
 let tmp: string;
+let savedCwd: string;
 beforeEach(() => {
   tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'jira-publish-'));
+  // Credential/binding resolution reaches for process.cwd() — chdir into the
+  // temp dir so a `jira` binding in the development repo's own
+  // specship.config.json can't satisfy "no project configured" tests.
+  savedCwd = process.cwd();
+  process.chdir(tmp);
 });
 afterEach(() => {
+  process.chdir(savedCwd);
   fs.rmSync(tmp, { recursive: true, force: true });
 });
 

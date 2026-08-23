@@ -48,6 +48,28 @@ interface JiraHttpResponse {
   json(): Promise<any>;
 }
 
+/**
+ * Compress a JIRA error body (`errorMessages` + per-field `errors`) into one
+ * bounded, credential-free line (REQ-JIRATEAM-009.A4). These are JIRA's own
+ * validation strings — "issuetype: The issue type selected is invalid" is
+ * the difference between a diagnosable report and a bare "HTTP 400".
+ */
+export function formatJiraErrorBody(body: unknown): string {
+  if (!body || typeof body !== 'object') return '';
+  const b = body as { errorMessages?: unknown; errors?: unknown };
+  const parts: string[] = [];
+  if (Array.isArray(b.errorMessages)) {
+    for (const m of b.errorMessages) if (typeof m === 'string' && m.trim()) parts.push(m.trim());
+  }
+  if (b.errors && typeof b.errors === 'object' && !Array.isArray(b.errors)) {
+    for (const [field, msg] of Object.entries(b.errors as Record<string, unknown>)) {
+      if (typeof msg === 'string' && msg.trim()) parts.push(`${field}: ${msg.trim()}`);
+    }
+  }
+  const joined = parts.join(' | ');
+  return joined.length > 300 ? `${joined.slice(0, 299)}…` : joined;
+}
+
 export class JiraClient {
   private readonly baseUrl: string;
   private readonly host: string;
@@ -866,8 +888,16 @@ export class JiraClient {
     }
 
     if (!res.ok) {
+      // Surface JIRA's own validation detail (REQ-JIRATEAM-009.A4): a bare
+      // "HTTP 400" is undiagnosable, and the body's errorMessages/errors are
+      // field-validation strings (e.g. an invalid issue type), never
+      // credentials. Best-effort — a non-JSON body keeps the bare status.
+      let detail = '';
+      try {
+        detail = formatJiraErrorBody(await res.json());
+      } catch { /* unreadable/non-JSON body */ }
       throw new JiraConfigError(
-        `JIRA at ${this.host} returned HTTP ${res.status}.`,
+        `JIRA at ${this.host} returned HTTP ${res.status}.${detail ? ` ${detail}` : ''}`,
       );
     }
 

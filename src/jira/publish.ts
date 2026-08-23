@@ -335,6 +335,23 @@ export function readFrontmatterValue(content: string, key: string): string | nul
   return null;
 }
 
+/**
+ * Frontmatter key names carrying requirement `specId`'s JIRA identity in a
+ * MULTI-requirement file (REQ-JIRATEAM-010). File-level `jira_issue:` is
+ * ambiguous the moment a file holds two requirements — resolving it for the
+ * second requirement updated the first one's issue, last writer wins. A
+ * single-requirement file keeps the plain names for back-compat.
+ */
+export function perSpecFrontmatterKeys(specId: string): {
+  issueKey: string;
+  fingerprintKey: string;
+} {
+  return {
+    issueKey: `jira_issue_${specId}`,
+    fingerprintKey: `jira_fingerprint_${specId}`,
+  };
+}
+
 /** Upsert scalar keys into the leading frontmatter, creating a block if absent. */
 function upsertFrontmatter(
   content: string,
@@ -385,6 +402,12 @@ export interface WriteBackOptions {
   reId: { from: string } | null;
   /** New basename (`<key>-<slug>.md`) to rename to, or null to keep the name. */
   renameTo: string | null;
+  /**
+   * When set (multi-requirement file, REQ-JIRATEAM-010), the identity is
+   * written under the per-requirement keys (`jira_issue_<id>` /
+   * `jira_fingerprint_<id>`) instead of the ambiguous plain file-level pair.
+   */
+  forSpecId?: string;
 }
 
 /**
@@ -411,9 +434,12 @@ export function writeBackJiraIdentity(
     }
   }
 
+  const names = opts.forSpecId
+    ? perSpecFrontmatterKeys(opts.forSpecId)
+    : { issueKey: 'jira_issue', fingerprintKey: 'jira_fingerprint' };
   content = upsertFrontmatter(content, {
-    jira_issue: issueKey,
-    jira_fingerprint: opts.fingerprint,
+    [names.issueKey]: issueKey,
+    [names.fingerprintKey]: opts.fingerprint,
     ...(opts.epicKey ? { epicKey: opts.epicKey } : {}),
   });
 

@@ -4,6 +4,12 @@ title: Default install protects the retrieval wedge
 owner: core
 priority: high
 version: 2
+jira_issue_REQ-WEDGE-001: SSHIP-34
+jira_fingerprint_REQ-WEDGE-001: e57e80969846a911
+jira_issue_REQ-WEDGE-002: SSHIP-38
+jira_fingerprint_REQ-WEDGE-002: e763ff2e0740d7dc
+jira_issue_REQ-WEDGE-003: SSHIP-43
+jira_fingerprint_REQ-WEDGE-003: 79764c77370ddd84
 ---
 
 <!-- id: INSTALL-WEDGE-DOC -->

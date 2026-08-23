@@ -5,6 +5,12 @@ owner: core
 priority: high
 version: 1
 brief: acceptance-criteria-indexing/brief.md
+jira_issue_REQ-ACCEPTANCE-001: SSHIP-3
+jira_fingerprint_REQ-ACCEPTANCE-001: c798df493de687fd
+jira_issue_REQ-ACCEPTANCE-002: SSHIP-8
+jira_fingerprint_REQ-ACCEPTANCE-002: 1a2446f59f35de48
+jira_issue_REQ-ACCEPTANCE-003: SSHIP-12
+jira_fingerprint_REQ-ACCEPTANCE-003: 350fcc813ac0a869
 ---
 
 <!-- id: ACCEPTANCE-INDEX-DOC -->

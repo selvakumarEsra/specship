@@ -22,7 +22,7 @@ import { spawn } from 'child_process';
 import type { ToolDefinition, ToolResult } from './tools';
 import { detectTaskship, defaultTaskshipProbes, type TaskshipAvailability } from '../taskship/detect';
 import { loadJiraConfig, resolveJiraCredentials } from '../jira/config';
-import { loadRepoJiraBinding } from '../jira/repo-config';
+import { bindingIssueTypes, loadRepoJiraBinding } from '../jira/repo-config';
 import { JiraClient, MAX_ISSUE_RESULTS } from '../jira/client';
 import { resolveWorkAnchor, formatRefusal } from '../jira/board-first';
 import {
@@ -55,6 +55,8 @@ import {
   writeBackJiraIdentity,
   publishedSpecFilename,
   issueContentFingerprint,
+  perSpecFrontmatterKeys,
+  readFrontmatterValue,
   type PublishJiraClient,
   type SpecPublishSource,
 } from '../jira/publish';
@@ -1885,27 +1887,37 @@ export async function handleSpecshipJiraPublish(
     const absPath = path.isAbsolute(spec.sourcePath)
       ? spec.sourcePath
       : path.join(deps.projectRoot, spec.sourcePath);
-    const existingKey = readSpecJiraKey(absPath);
+    // REQ-JIRATEAM-010.A4: never resolve another requirement's issue — the
+    // plain file-level key applies only when this file holds exactly one
+    // requirement; otherwise the per-requirement key is the identity.
+    const sameFileReqs = (sq.getAllSpecs?.() ?? []).filter(
+      (s) => s.kind === 'requirement' && s.sourcePath === spec.sourcePath,
+    );
+    const soleRequirement = sameFileReqs.length <= 1;
+    const specContent = fs.readFileSync(absPath, 'utf8');
+    const existingKey =
+      readFrontmatterValue(specContent, perSpecFrontmatterKeys(specId).issueKey) ??
+      (soleRequirement ? readSpecJiraKey(absPath) : null);
 
     const result = await publishSpecToJira(
       client,
       source,
-      { projectKey },
+      // REQ-JIRATEAM-009: honor the binding's issue-type overrides.
+      { projectKey, ...bindingIssueTypes(deps.projectRoot) },
       existingKey,
     );
 
     // Write-back (REQ-JIRAPUB-002). Re-id + rename ONLY on first publish of a
     // link-less file whose only requirement is this one.
     const links = sq.getLinksBySpec?.(specId) ?? [];
-    const sameFileReqs = (sq.getAllSpecs?.() ?? []).filter(
-      (s) => s.kind === 'requirement' && s.sourcePath === spec.sourcePath,
-    );
     const reIdSafe =
       !existingKey && links.length === 0 && sameFileReqs.length === 1;
     const written = writeBackJiraIdentity(absPath, result.key, {
       fingerprint: result.fingerprint,
       reId: reIdSafe ? { from: specId } : null,
       renameTo: reIdSafe ? publishedSpecFilename(result.key, spec.title) : null,
+      // REQ-JIRATEAM-010.A2: per-requirement keys in multi-REQ files.
+      ...(soleRequirement ? {} : { forSpecId: specId }),
     });
 
     const verb = result.created ? 'Created' : 'Updated';
@@ -2647,13 +2659,18 @@ export async function handleSpecshipJiraReconcile(
             specRelPath: pub.specRelPath,
             acceptance: effectiveAcceptance,
           },
-          { projectKey },
+          // REQ-JIRATEAM-009: honor the binding's issue-type overrides.
+          { projectKey, ...bindingIssueTypes(deps.projectRoot) },
           issueKeyArg,
         );
         writeBackJiraIdentity(pub.absPath, issueKeyArg, {
           fingerprint: result.fingerprint,
           reId: null,
           renameTo: null,
+          // REQ-JIRATEAM-010.A2: a ref that came from a per-requirement key
+          // writes back under the same key — never a plain `jira_issue:`
+          // into a multi-requirement file.
+          ...(pub.specId ? { forSpecId: pub.specId } : {}),
         });
         notes.push(`re-published ${issueKeyArg} and refreshed the fingerprint.`);
       } else {
