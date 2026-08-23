@@ -4,6 +4,12 @@ title: Architecture-fitness functions (graph-evaluated rules)
 owner: core
 priority: medium
 version: 1
+jira_issue_REQ-FITNESS-001: SSHIP-76
+jira_fingerprint_REQ-FITNESS-001: 14e292f5ce610f0e
+jira_issue_REQ-FITNESS-002: SSHIP-81
+jira_fingerprint_REQ-FITNESS-002: 3c20d4ef2278d9e9
+jira_issue_REQ-FITNESS-003: SSHIP-86
+jira_fingerprint_REQ-FITNESS-003: 5bc5b65699cd2987
 ---
 
 <!-- id: FITNESS-DOC -->

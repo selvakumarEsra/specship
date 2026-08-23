@@ -31,7 +31,7 @@ unchanged: `--path`, else an initialized cwd, else the most-recently-touched
 initialized project, else projectless (the picker prompts).
 
 implementations:
-  - src/bin/specship.ts:runDesktop
+  - src/bin/specship.ts:main.runDesktop
 
 ## Acceptance
 <!-- id: REQ-DESKTOP-CMD-001.A1 -->

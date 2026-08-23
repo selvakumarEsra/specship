@@ -4,6 +4,22 @@ title: Agent-agnostic SpecShip — Google Gemini CLI target
 owner: selvakumar [needs user confirmation]
 priority: high
 version: 1
+jira_issue_REQ-GEMINI-001: SSHIP-46
+jira_fingerprint_REQ-GEMINI-001: 3e87e343e387ddbe
+jira_issue_REQ-GEMINI-002: SSHIP-50
+jira_fingerprint_REQ-GEMINI-002: 80f873d64381857c
+jira_issue_REQ-GEMINI-003: SSHIP-55
+jira_fingerprint_REQ-GEMINI-003: 7512a4f8dbe0f3fe
+jira_issue_REQ-GEMINI-004: SSHIP-58
+jira_fingerprint_REQ-GEMINI-004: 5d711f66f181d2fe
+jira_issue_REQ-GEMINI-005: SSHIP-61
+jira_fingerprint_REQ-GEMINI-005: 6337f5225ca067bf
+jira_issue_REQ-GEMINI-006: SSHIP-64
+jira_fingerprint_REQ-GEMINI-006: 3f684dd984a9a430
+jira_issue_REQ-GEMINI-007: SSHIP-68
+jira_fingerprint_REQ-GEMINI-007: ae839b9275f8d254
+jira_issue_REQ-GEMINI-008: SSHIP-73
+jira_fingerprint_REQ-GEMINI-008: 4d4e35f023392939
 ---
 
 <!-- id: GEMINI-TARGET-DOC -->
@@ -48,6 +64,8 @@ a stdio server is identified by having `command`. Settings locations are
 
 implementations:
   - src/installer/targets/gemini.ts:GeminiCliTarget.printConfig
+  - src/installer/targets/gemini.ts:settingsPath
+  - src/installer/targets/gemini.ts:GeminiCliTarget
 
 verifies:
   - __tests__/installer-targets.test.ts:geminiPrintConfigWritesNothing

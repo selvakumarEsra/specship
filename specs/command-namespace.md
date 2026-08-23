@@ -120,7 +120,13 @@ implementations:
 - An install on a machine with no flat `ss-*.md` files present prints no rename notice.
 
 <!-- id: REQ-CMD-NS-005 -->
-## The dashboard chat MUST route both the `/specship:*` and legacy `/ss-*` slash forms
+## RETIRED — The dashboard chat MUST route both the `/specship:*` and legacy `/ss-*` slash forms
+
+**Retired.** The dashboard chat this requirement governed was removed by the
+chat-removal decision (see `specs/chat-removal.md`), so there is no intent
+classifier left to route the slash forms. The historical requirement text and
+acceptance criteria are kept below for the record; they are no longer binding
+and have no implementation.
 
 The dashboard chat's intent classifier MUST route the canonical namespaced
 command forms — `/specship:spec`, `/specship:explore`, `/specship:check` — to the
@@ -128,9 +134,6 @@ same intents their flat predecessors routed to. It MUST also continue routing th
 legacy `/ss-spec`, `/ss-explore`, `/ss-check` forms to those intents as a
 deprecation alias, and MUST mark a message that used a legacy form so the chat can
 tell the user it was renamed to the `/specship:*` equivalent.
-
-implementations:
-  - packages/server/src/chat/classify.ts:classifyIntent
 
 ## Acceptance
 <!-- id: REQ-CMD-NS-005.A1 -->

@@ -5,6 +5,10 @@ owner: core
 priority: high
 version: 1
 brief: behaviour-harness/brief.md
+jira_issue_REQ-BEHAVIOUR-001: SSHIP-90
+jira_fingerprint_REQ-BEHAVIOUR-001: 515c52993ab99603
+jira_issue_REQ-BEHAVIOUR-002: SSHIP-95
+jira_fingerprint_REQ-BEHAVIOUR-002: 9faa4e3482f56269
 ---
 
 <!-- id: BEHAVIOUR-DOC -->

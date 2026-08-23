@@ -4,6 +4,14 @@ title: First-run activation — the manufactured retrieval moment
 owner: core
 priority: high
 version: 1
+jira_issue_REQ-ACTIVATION-001: SSHIP-17
+jira_fingerprint_REQ-ACTIVATION-001: 09090f54cecc8b2f
+jira_issue_REQ-ACTIVATION-002: SSHIP-23
+jira_fingerprint_REQ-ACTIVATION-002: eb7b505f34fcd4aa
+jira_issue_REQ-ACTIVATION-003: SSHIP-27
+jira_fingerprint_REQ-ACTIVATION-003: 3d0593db21374789
+jira_issue_REQ-ACTIVATION-004: SSHIP-31
+jira_fingerprint_REQ-ACTIVATION-004: c3dfb33866b54af2
 ---
 
 <!-- id: ACTIVATION-DOC -->

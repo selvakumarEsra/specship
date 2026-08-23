@@ -15,6 +15,12 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - SpecShip can now install itself into Gemini CLI for you. `specship install --target gemini` (or `--target claude,gemini` for both) writes the SpecShip entry into your Gemini settings file at the location you choose, leaving any other MCP servers and settings there untouched; re-running it changes nothing, and an optional integration you enabled earlier stays enabled. A plain `specship install` still sets up Claude Code alone — Gemini is opt-in. The install prints a note listing what a Claude Code install adds that Gemini has no equivalent for, so nothing is claimed that isn't wired. `specship uninstall --target gemini --keep-data` removes exactly the SpecShip entry, and removing the SpecShip program now cleans up the Gemini entry too.
 
+### Fixes
+
+- Spec files containing several requirements now publish correctly: each requirement gets its own JIRA issue, tracked separately in the file. Previously every requirement after the first silently overwrote the first one's issue — the issue ended up describing whichever requirement published last, with everyone's acceptance criteria piled underneath, and every sync rewrote it again. Files with a single requirement are unaffected, and already-published specs remain recognized. Coverage and tracking reports now attribute each issue to its own requirement as well.
+
+- Publishing specs to JIRA now works with team-managed projects. Projects whose issue types are `Task` and `Sub-task` (with no `Story` type) rejected every published spec with an unexplained HTTP 400. The `jira.storyIssueType` and `jira.subtaskIssueType` settings in the repo binding are now honored by every publish path — manual, automatic on sync, and reconcile — so you can publish as whatever types your project actually has. When JIRA does reject a publish, the error now includes JIRA's own explanation (for example, which field was invalid) instead of a bare status code.
+
 
 ## [0.22.0] - 2026-08-04
 

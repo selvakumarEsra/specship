@@ -370,3 +370,89 @@ verifies:
 - With JIRA unconfigured, the menu still opens and leads with the configure
   path instead of erroring.
 
+
+<!-- id: REQ-JIRATEAM-009 -->
+## Binding issue-type overrides MUST be honored by every publish path
+
+Not every JIRA project has a `Story` type: team-managed projects commonly
+expose only `Task` + `Sub-task`, and a publish hardcoded to `Story` fails
+every create with an opaque HTTP 400 (observed live 2026-08-23: 356/356
+auto-publish failures against a team-managed project). The repo binding
+already declares `jira.storyIssueType` and `jira.subtaskIssueType`
+(REQ-JIRATEAM-001's committed shape) — but the fields were parsed and never
+consumed. Every path that creates issues from specs MUST resolve its issue
+types from the binding: the manual MCP publish, the auto-publish on sync,
+and the reconcile re-publish. Absent overrides keep today's defaults
+(`Story` / `Sub-task`), so classic-project repos are unchanged.
+
+implementations:
+  - src/jira/repo-config.ts:bindingIssueTypes
+  - src/jira/auto-publish.ts:autoPublishSpecsOnSync
+  - src/mcp/jira-tools.ts:handleSpecshipJiraPublish
+
+verifies:
+  - __tests__/jira/jira-issue-types.test.ts
+
+## Acceptance
+<!-- id: REQ-JIRATEAM-009.A1 -->
+- With `jira.storyIssueType: "Task"` in the binding, publishing a spec
+  creates the main issue with type `Task`; with the field absent it creates
+  a `Story`.
+<!-- id: REQ-JIRATEAM-009.A2 -->
+- With `jira.subtaskIssueType` set, acceptance-criterion children are
+  created with that type; absent, `Sub-task`.
+<!-- id: REQ-JIRATEAM-009.A3 -->
+- All three publish paths (specship_jira_publish, auto-publish on sync, the
+  reconcile re-publish) resolve types through one shared binding helper —
+  no per-path hardcoding remains.
+<!-- id: REQ-JIRATEAM-009.A4 -->
+- A publish rejected by JIRA surfaces the instance's error detail (e.g.
+  which field/type was invalid), not a bare "HTTP 400" — a failing
+  auto-publish must be diagnosable from its report line.
+
+<!-- id: REQ-JIRATEAM-010 -->
+## Multi-requirement spec files MUST publish one issue per requirement
+
+Publish keying was file-level (`jira_issue:` in the leading frontmatter), so
+in a file holding several requirements every requirement after the first
+resolved the FIRST one's key and UPDATED that issue — last writer wins, all
+acceptance criteria pile under one issue, and every later sync churns the
+same issue forever. 73 of this repo's 74 spec files are multi-requirement,
+so the backfill would have corrupted essentially every published issue.
+
+Keying is per-requirement: a requirement `R` in a multi-requirement file
+stores its identity as `jira_issue_<R>:` / `jira_fingerprint_<R>:`
+frontmatter. A single-requirement file keeps the plain `jira_issue:` /
+`jira_fingerprint:` form, so every already-published file stays valid. The
+published-specs enumeration understands both forms and carries the
+requirement id, so coverage joins per-requirement rows instead of
+misattributing the whole file to its first requirement.
+
+implementations:
+  - src/jira/publish.ts:perSpecFrontmatterKeys
+  - src/jira/publish.ts:writeBackJiraIdentity
+  - src/jira/auto-publish.ts:autoPublishSpecsOnSync
+  - src/jira/published-specs.ts:enumeratePublishedSpecs
+
+verifies:
+  - __tests__/jira/jira-multireq-publish.test.ts
+
+## Acceptance
+<!-- id: REQ-JIRATEAM-010.A1 -->
+- Auto-publishing a file with two requirements creates two distinct issues,
+  each carrying only its own requirement's body and acceptance Sub-tasks.
+<!-- id: REQ-JIRATEAM-010.A2 -->
+- The file's frontmatter afterwards carries one `jira_issue_<id>` +
+  `jira_fingerprint_<id>` pair per requirement; no plain `jira_issue:` is
+  written for a multi-requirement file.
+<!-- id: REQ-JIRATEAM-010.A3 -->
+- A second sync with no spec changes performs zero JIRA writes for both
+  requirements (per-requirement fingerprint short-circuit).
+<!-- id: REQ-JIRATEAM-010.A4 -->
+- A requirement NEVER updates an issue whose key was recorded for a
+  different requirement — the file-level key is used only when the file
+  holds exactly one requirement.
+<!-- id: REQ-JIRATEAM-010.A5 -->
+- `enumeratePublishedSpecs` returns one ref per published requirement for
+  both frontmatter forms, carrying the requirement id when known; the
+  coverage report attributes each issue to its own requirement.

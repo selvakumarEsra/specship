@@ -184,6 +184,34 @@ export function updateRepoJiraBinding(
 }
 
 /**
+ * Resolve the binding's issue-type overrides as `PublishOptions` fields
+ * (REQ-JIRATEAM-009). Every path that creates issues from specs — manual
+ * publish, auto-publish, reconcile re-publish — MUST spread this in, so a
+ * team-managed project without a `Story` type can publish as `Task` instead
+ * of failing every create with an opaque 400. Absent overrides yield `{}`
+ * and the publish defaults (`Story` / `Sub-task`) apply unchanged.
+ * Best-effort: an unreadable/invalid binding yields `{}` — the caller's own
+ * binding handling surfaces that problem.
+ */
+export function bindingIssueTypes(
+  projectRoot: string,
+): { issueType?: string; subtaskType?: string } {
+  try {
+    const { binding } = loadRepoJiraBinding(projectRoot);
+    return {
+      ...(binding?.storyIssueType?.trim()
+        ? { issueType: binding.storyIssueType.trim() }
+        : {}),
+      ...(binding?.subtaskIssueType?.trim()
+        ? { subtaskType: binding.subtaskIssueType.trim() }
+        : {}),
+    };
+  } catch {
+    return {};
+  }
+}
+
+/**
  * Wrap an auth/access failure that occurred against a repo-bound project
  * (REQ-JIRATEAM-001.A4) so the message names the project, host, and the
  * file that bound them — never a silent fallback to another project.

@@ -17,12 +17,13 @@
 
 import * as path from 'path';
 import { resolveJiraCredentials } from './config';
-import { loadRepoJiraBinding } from './repo-config';
+import { bindingIssueTypes, loadRepoJiraBinding } from './repo-config';
 import { JiraClient } from './client';
 import {
   buildIssueFields,
   issueContentFingerprint,
   publishSpecToJira,
+  perSpecFrontmatterKeys,
   readFrontmatterValue,
   writeBackJiraIdentity,
   type PublishJiraClient,
@@ -123,6 +124,14 @@ export async function autoPublishSpecsOnSync(
     (s) => s.kind === 'requirement',
   );
 
+  // Requirements per file (REQ-JIRATEAM-010): a file holding >1 requirement
+  // keys each one's JIRA identity per-requirement — the plain file-level
+  // `jira_issue:` is only trusted when the file has exactly one.
+  const reqsPerFile = new Map<string, number>();
+  for (const s of requirements) {
+    reqsPerFile.set(s.sourcePath, (reqsPerFile.get(s.sourcePath) ?? 0) + 1);
+  }
+
   for (const spec of requirements) {
     const absPath = path.isAbsolute(spec.sourcePath)
       ? spec.sourcePath
@@ -159,7 +168,14 @@ export async function autoPublishSpecsOnSync(
       acceptance,
     };
 
-    const existingKey = readSpecJiraKey(absPath);
+    // REQ-JIRATEAM-010.A4: never resolve another requirement's issue. The
+    // per-requirement key wins; the plain file-level key applies only when
+    // this requirement is the file's sole one.
+    const soleRequirement = (reqsPerFile.get(spec.sourcePath) ?? 1) === 1;
+    const perKeys = perSpecFrontmatterKeys(spec.id);
+    const existingKey =
+      readFrontmatterValue(fileContent, perKeys.issueKey) ??
+      (soleRequirement ? readSpecJiraKey(absPath) : null);
     // REQ-JIRATEAM-006: resolve the epic anchor — frontmatter first, then
     // the binding default. `requireEpic` is off here so a bound repo whose
     // spec pre-dates board-first intake doesn't hard-fail on every sync;
@@ -174,7 +190,11 @@ export async function autoPublishSpecsOnSync(
     // rendered Story fields match the last-published fingerprint performs
     // ZERO JIRA writes — no updateIssue, no getIssue, no Sub-task probe.
     if (existingKey) {
-      const priorFp = readFrontmatterValue(fileContent, 'jira_fingerprint');
+      const priorFp =
+        readFrontmatterValue(fileContent, perKeys.fingerprintKey) ??
+        (soleRequirement
+          ? readFrontmatterValue(fileContent, 'jira_fingerprint')
+          : null);
       if (priorFp) {
         const fields = buildIssueFields(source);
         const nextFp = issueContentFingerprint(fields.summary, fields.description);
@@ -194,7 +214,13 @@ export async function autoPublishSpecsOnSync(
       const result = await publishSpecToJira(
         client,
         source,
-        { projectKey, ...(specEpicKey ? { epicKey: specEpicKey } : {}) },
+        {
+          projectKey,
+          // REQ-JIRATEAM-009: honor the binding's issue-type overrides — a
+          // team-managed project without a `Story` type publishes as `Task`.
+          ...bindingIssueTypes(deps.projectRoot),
+          ...(specEpicKey ? { epicKey: specEpicKey } : {}),
+        },
         existingKey,
       );
       // Frontmatter write-back stamps jira_issue: and the fingerprint. Never
@@ -205,6 +231,8 @@ export async function autoPublishSpecsOnSync(
         reId: null,
         renameTo: null,
         ...(result.epicKey ? { epicKey: result.epicKey } : {}),
+        // REQ-JIRATEAM-010.A2: per-requirement keys in multi-REQ files.
+        ...(soleRequirement ? {} : { forSpecId: spec.id }),
       });
       const status: AutoPublishStatus =
         result.created || result.subtasksCreated > 0 ? 'published' : 'unchanged';
