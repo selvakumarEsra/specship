@@ -9,6 +9,9 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+
+## [0.23.0] - 2026-08-23
+
 ### New Features
 
 - Gemini CLI users can now wire up the SpecShip MCP server by hand. `specship install --print-config --target gemini` prints the settings snippet to paste into Gemini CLI's settings file — global for every project, or per project — and the README documents both placements. Printing writes nothing to disk, and the server it launches is the same one Claude Code uses. This wiring gives Gemini CLI the SpecShip tools only: slash commands, auto-sync hooks, the retrieval nudge and the status-line segment remain Claude Code features.
@@ -26,7 +29,6 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Fixed exploration missing files and symbols you named explicitly. Asking about a file whose name contains a hyphen — the common style for filenames in most projects — silently found nothing, because hyphenated names were discarded before the lookup ran. Naming a constant, interface, type alias, class, or enum was likewise ignored, since only functions and methods were considered. Both now resolve, so a question that names its target by name returns that target instead of sending the assistant off to search the files by hand.
 
 - Naming a file in an exploration now guarantees that file comes back. Previously a named file still had to win on relevance, so one that happened to sit off to the side of the code being explored could be left out of the answer entirely even though it was asked for by name. Up to four named files are now returned ahead of everything else, with the rest of the response filling the space that remains — so the overall size of an answer is unchanged. When a named file can't be included — because more were named than fit, or the name doesn't match anything indexed — the answer now says so instead of leaving it out silently.
-
 
 ## [0.22.0] - 2026-08-04
 
@@ -775,3 +777,4 @@ Thanks @andreinknv for the substantive draft this release was based on.
 [0.21.1]: https://github.com/selvakumarEsra/specship/releases/tag/v0.21.1
 [0.21.2]: https://github.com/selvakumarEsra/specship/releases/tag/v0.21.2
 [0.22.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.22.0
+[0.23.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.23.0
