@@ -3002,6 +3002,53 @@ program
   });
 
 /**
+ * specship search-intercept (STEER-HOOK-DOC, REQ-STEER-004/005)
+ *
+ * Internal PreToolUse hook command on search-shaped tools (Grep/Glob): emit
+ * the point-of-use redirect to specship_explore, at most once per session and
+ * only when the session hasn't used specship yet. STRICTLY ADVISORY — the
+ * output is additionalContext, never a permission decision, and the command
+ * exits 0 on every path (including internal errors) so the matched call
+ * always proceeds (REQ-STEER-004.A2).
+ */
+program
+  .command('search-intercept')
+  .description('Internal hook: point-of-use redirect from search tools to specship_explore (PreToolUse)')
+  .action(async () => {
+    try {
+      let cwd = process.cwd();
+      let sessionId: string | null = null;
+      let transcriptPath: string | null = null;
+      const chunks: Buffer[] = [];
+      try {
+        for await (const c of process.stdin) chunks.push(c as Buffer);
+      } catch { /* no stdin — fall back to process.cwd(), untracked session */ }
+      const raw = Buffer.concat(chunks).toString('utf-8').trim();
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw);
+          if (typeof parsed?.cwd === 'string' && parsed.cwd.length > 0) cwd = parsed.cwd;
+          if (typeof parsed?.session_id === 'string' && parsed.session_id.length > 0) {
+            sessionId = parsed.session_id;
+          }
+          if (typeof parsed?.transcript_path === 'string' && parsed.transcript_path.length > 0) {
+            transcriptPath = parsed.transcript_path;
+          }
+        } catch { /* not JSON — keep defaults */ }
+      }
+
+      const { buildSearchIntercept } = await import('../activation/search-intercept');
+      const additionalContext = buildSearchIntercept({ cwd, sessionId, transcriptPath });
+      if (additionalContext) {
+        process.stdout.write(
+          JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext } }) + '\n',
+        );
+      }
+    } catch { /* advisory only — never block the matched call (REQ-STEER-004.A2) */ }
+    process.exit(0);
+  });
+
+/**
  * specship uninstall
  *
  * Inverse of `install`. Removes the specship MCP server entry and
