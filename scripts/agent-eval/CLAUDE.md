@@ -29,6 +29,12 @@ real repos with **≥3 different flow prompts** each:
    repo's explore-call budget**, runs faster than without-specship, and
    shows no regression on a control repo. Record the numbers in
    `docs/design/dynamic-dispatch-coverage-playbook.md`.
+5. **Exact-name recall** (REQ-EXPLORE-PIN-004.A2): `probe-recall.mjs <repo>`
+   samples named targets from the repo's own index (kebab-case paths,
+   basenames, non-callable symbols) and explores each by name. It prints a
+   per-run recall figure and **exits non-zero below `RECALL_MIN` (default
+   1.0) — that failure fails the A/B pass bar**, so a ranking change cannot
+   silently regress named-target retrieval.
 
 Questions must be **repo-anchored** ("in THIS repository's source…") — a
 generic question lets the without-arm answer from training data and voids

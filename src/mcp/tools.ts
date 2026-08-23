@@ -143,6 +143,141 @@ export interface ExploreOutputBudget {
   excludeLowValueFiles: boolean;
 }
 
+/**
+ * File extensions stripped from a named token to recover its basename
+ * (`server-instructions.ts` → `server-instructions`). Symbols are indexed by
+ * basename, so both forms are tried — see `extractNamedTokens`.
+ */
+const FILE_EXT_RE = /\.(?:java|kt|kts|ts|tsx|js|jsx|mjs|cjs|cs|py|go|rb|php|swift|rs|cpp|cc|cxx|c|h|hpp|scala|lua|dart|vue|svelte)$/i;
+
+/**
+ * A query token that could name a symbol or a file.
+ *
+ * `-` is admitted deliberately (REQ-EXPLORE-PIN-002): kebab-case is the
+ * dominant filename convention here and in most TS projects, and the previous
+ * `[\w$]`-only pattern silently discarded every hyphenated token — so naming
+ * `server-instructions.ts`, the most natural way to ask for that file, seeded
+ * nothing at all. Admitting `-` cannot pull in unrelated files on its own: a
+ * token only seeds when it RESOLVES against an indexed path or symbol name, so
+ * prose like "point-of-use" matches nothing and falls away.
+ */
+const NAMED_TOKEN_RE = /^[A-Za-z_$][\w$-]*(?:(?:::|[./])[\w$-]+)*$/;
+
+/**
+ * NodeKinds a named token may seed the subgraph with (REQ-EXPLORE-PIN-003).
+ *
+ * Callables plus the type-ish kinds an agent routinely asks about by name — a
+ * configuration constant or an interface is as likely to be the subject of a
+ * question as a function is, and restricting to callables meant naming one had
+ * no effect on ranking whatsoever. Deliberately EXCLUDES `variable`,
+ * `property`, `field`, `parameter`, `import`, and `export`: they outnumber real
+ * answers by orders of magnitude and carry no standalone meaning, so seeding
+ * them would spend the output budget on noise. Overload floods stay bounded by
+ * the existing `cands.length <= 3` cap, which is kind-independent.
+ */
+export const SEEDABLE_KINDS: ReadonlySet<string> = new Set([
+  'method', 'function', 'component', 'constructor',
+  'class', 'interface', 'type_alias', 'constant', 'enum', 'struct',
+  'trait', 'protocol',
+]);
+
+/**
+ * Pull the tokens from a query that could name a symbol or file, in order of
+ * appearance, deduplicated and capped.
+ *
+ * A token carrying a file extension yields BOTH forms — the extension-bearing
+ * one (the strongest signal that the agent means a file, so it must survive to
+ * be matched against paths) and the stripped basename (how symbols are
+ * indexed). Stripping is therefore additive, never a precondition.
+ */
+export function extractNamedTokens(query: string, limit = 16): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const push = (t: string) => {
+    if (t.length >= 3 && !seen.has(t)) {
+      seen.add(t);
+      out.push(t);
+    }
+  };
+  for (const raw of query.split(/[\s,()[\]]+/)) {
+    const t = raw.trim();
+    if (!t || !NAMED_TOKEN_RE.test(t)) continue;
+    push(t);
+    const stripped = t.replace(FILE_EXT_RE, '');
+    if (stripped !== t) push(stripped);
+  }
+  return out.slice(0, limit);
+}
+
+/**
+ * Cap on files pinned by name in a single explore call (REQ-EXPLORE-PIN-001).
+ * Pinned files take first claim on the output budget, so an unbounded count
+ * would let a name-heavy query consume the whole response and crowd out the
+ * ranked context that answers the rest of the question.
+ */
+export const MAX_PINNED_FILES = 4;
+
+/**
+ * Resolve query tokens that name an indexed FILE to their project-relative
+ * paths (REQ-EXPLORE-PIN-001).
+ *
+ * Symbol lookup alone cannot do this: `getNodesByName` / `findAllSymbols` match
+ * symbols, so naming a file by path found nothing and the file was left to the
+ * ranker — which drops it whenever it has low graph connectivity. Naming a file
+ * is the strongest possible relevance signal, so it gets resolved explicitly.
+ *
+ * Match order per token, first hit wins:
+ *   1. exact project-relative path
+ *   2. trailing path fragment (`mcp/server-instructions.ts`)
+ *   3. unique basename, with or without extension
+ *
+ * A bare basename matching MORE than one file resolves to nothing: guessing one
+ * of several `claude.ts` files would be worse than letting the ranker decide,
+ * and the agent can disambiguate by adding a path segment. Results preserve
+ * query order (earliest-named pins first) and are capped.
+ */
+export function resolveNamedFilePaths(
+  tokens: readonly string[],
+  filePaths: readonly string[],
+  cap = MAX_PINNED_FILES,
+): string[] {
+  if (tokens.length === 0 || filePaths.length === 0) return [];
+
+  const basename = (p: string) => p.slice(p.lastIndexOf('/') + 1);
+  const stripExt = (s: string) => s.replace(/\.[^./]+$/, '');
+
+  const out: string[] = [];
+  const seen = new Set<string>();
+
+  for (const raw of tokens) {
+    if (out.length >= cap) break;
+    const t = raw.toLowerCase();
+    if (!t) continue;
+
+    let hit: string | undefined;
+
+    // 1. exact path, then 2. trailing fragment — both unambiguous by shape.
+    hit = filePaths.find((p) => p.toLowerCase() === t)
+      ?? filePaths.find((p) => p.toLowerCase().endsWith(`/${t}`));
+
+    // 3. basename, with or without extension — only when it names ONE file.
+    if (!hit) {
+      const matches = filePaths.filter((p) => {
+        const b = basename(p).toLowerCase();
+        return b === t || stripExt(b) === stripExt(t);
+      });
+      if (matches.length === 1) hit = matches[0];
+    }
+
+    if (hit && !seen.has(hit)) {
+      seen.add(hit);
+      out.push(hit);
+    }
+  }
+
+  return out;
+}
+
 export function getExploreOutputBudget(fileCount: number): ExploreOutputBudget {
   // Tiered budget, scaled to project size. The budget is a CEILING (relevance
   // still gates WHAT is included), and it MUST stay under the agent's INLINE
@@ -2159,16 +2294,22 @@ export class ToolHandler {
     // trace endpoint picker uses) and inject it as an entry, so every symbol the
     // agent explicitly named is in the subgraph and its file is scored.
     const namedSeedIds = new Set<string>();
+    // Named-file pinning accounting (REQ-EXPLORE-PIN-001): which files the
+    // agent named that we committed to render, which were dropped by the pin
+    // cap, and which file-shaped tokens matched nothing — the render stage
+    // reports the last two so a miss is never silent.
+    const pinnedFilePaths: string[] = [];
+    const pinnedOverCap: string[] = [];
+    const namedPathMisses: string[] = [];
     {
-      const FILE_EXT = /\.(?:java|kt|kts|ts|tsx|js|jsx|mjs|cjs|cs|py|go|rb|php|swift|rs|cpp|cc|cxx|c|h|hpp|scala|lua|dart|vue|svelte)$/i;
-      const CALLABLE = new Set(['method', 'function', 'component', 'constructor']);
       const isTestPath = (p: string) => /(^|\/)(tests?|specs?|__tests__|testdata|mocks?|fixtures?)\//i.test(p) || /\.(test|spec)\.[a-z]+$/i.test(p);
       const bodyLines = (n: Node) => Math.max(0, (n.endLine ?? n.startLine) - n.startLine);
-      const tokens = [...new Set(
-        query.split(/[\s,()[\]]+/)
-          .map((t) => t.replace(FILE_EXT, '').trim())
-          .filter((t) => t.length >= 3 && /^[A-Za-z_$][\w$]*(?:(?:::|\.)[\w$]+)*$/.test(t))
-      )].slice(0, 16);
+      // Token shapes + seedable kinds are module-level and unit-tested
+      // (REQ-EXPLORE-PIN-002 / -003): both filters used to silently discard
+      // the most natural ways to name a target — kebab-case filenames and
+      // non-callable kinds — so explore returned nothing for a symbol the
+      // agent had named verbatim and it fell back to Grep.
+      const tokens = extractNamedTokens(query);
       // PascalCase tokens in the query are type/file disambiguators — when the
       // agent writes "DataRequest task validate", the `task`/`validate` it wants
       // are DataRequest's, NOT the same-named overloads in Validation.swift /
@@ -2189,7 +2330,7 @@ export class ToolHandler {
         const isQual = /[.\/]|::/.test(t);
         const raw = isQual ? this.findAllSymbols(cg, t).nodes : cg.getNodesByName(t);
         const cands = raw
-          .filter((n) => CALLABLE.has(n.kind) && !isTestPath(n.filePath))
+          .filter((n) => SEEDABLE_KINDS.has(n.kind) && !isTestPath(n.filePath))
           .sort((a, b) => (bodyLines(b) > 1 ? 1 : 0) - (bodyLines(a) > 1 ? 1 : 0) || bodyLines(b) - bodyLines(a));
         // A specific name (<=3 defs) injects all its defs. An overloaded name
         // (`validate` = 10, `request` = 44) would flood the subgraph, so inject
@@ -2213,6 +2354,40 @@ export class ToolHandler {
           // so a named symbol FTS already gathered never sorted to the top.)
           namedSeedIds.add(n.id);
         }
+      }
+
+      // Named FILES (REQ-EXPLORE-PIN-001). The symbol loop above resolves
+      // tokens against symbol names, so a token naming a file by path matched
+      // nothing and the file was left to the ranker — which drops it whenever
+      // its graph connectivity is low, even though naming it is the strongest
+      // relevance signal there is. Resolve those tokens against the file index
+      // and seed the file's own symbols, so it inherits the same +50 score,
+      // gate exemption, and first-place sort as a named symbol. Bounded by
+      // MAX_PINNED_FILES so a name-heavy query can't consume the response.
+      try {
+        const allPaths = cg.getFiles().map((f) => f.path);
+        const resolved = resolveNamedFilePaths(tokens, allPaths, Number.POSITIVE_INFINITY);
+        pinnedFilePaths.push(...resolved.slice(0, MAX_PINNED_FILES));
+        pinnedOverCap.push(...resolved.slice(MAX_PINNED_FILES));
+        // A FILE-shaped token (path separator or extension — the agent named a
+        // file, not a symbol) that resolves to nothing is reported, not
+        // swallowed (REQ-EXPLORE-PIN-001.A5): a silent miss teaches the agent
+        // that naming files does nothing, and the next lookup goes to Grep.
+        for (const t of tokens) {
+          if (!t.includes('/') && !FILE_EXT_RE.test(t)) continue;
+          if (resolveNamedFilePaths([t], allPaths, 1).length === 0) namedPathMisses.push(t);
+        }
+        for (const filePath of pinnedFilePaths) {
+          for (const n of cg.getNodesInFile(filePath)) {
+            // Same noise filter the file-grouping step applies below.
+            if (n.kind === 'import' || n.kind === 'export') continue;
+            if (!subgraph.nodes.has(n.id)) subgraph.nodes.set(n.id, n);
+            namedSeedIds.add(n.id);
+          }
+        }
+      } catch {
+        // A file-index hiccup must never fail the exploration — the ranked
+        // path below still answers, just without the pin.
       }
     }
 
@@ -2289,7 +2464,11 @@ export class ToolHandler {
     {
       const queryMentionsTests = /\b(test|tests|testing|spec|verify|verifies)\b/i.test(query);
       if (!queryMentionsTests) {
-        const nonLow = relevantFiles.filter(([p]) => !isLowValue(p));
+        // A file the agent PINNED by name is exempt (REQ-EXPLORE-PIN-001.A2):
+        // asking for a file by name outranks the low-value heuristic — the
+        // agent asking for an icons/i18n/test file means it wants that file.
+        const pinnedSet = new Set(pinnedFilePaths);
+        const nonLow = relevantFiles.filter(([p]) => pinnedSet.has(p) || !isLowValue(p));
         if (nonLow.length >= 2) {
           relevantFiles = nonLow;
         }
@@ -2555,6 +2734,7 @@ export class ToolHandler {
     let totalChars = lines.join('\n').length;
     let filesIncluded = 0;
     let anyFileTrimmed = false;
+    const renderedFilePaths = new Set<string>();
 
     for (const [filePath, group] of sortedFiles) {
       if (filesIncluded >= maxFiles) break;
@@ -2694,6 +2874,7 @@ export class ToolHandler {
           lines.push(`#### ${filePath} — ${names} · ${tag}`, '', '```' + lang, skel.join('\n'), '```', '');
           totalChars += skel.join('\n').length + 120;
           filesIncluded++;
+          renderedFilePaths.add(filePath);
           continue;
         }
       }
@@ -2744,6 +2925,7 @@ export class ToolHandler {
         lines.push(wholeHeader, '', '```' + lang, wholeSection, '```', '');
         totalChars += wholeSection.length + 200;
         filesIncluded++;
+        renderedFilePaths.add(filePath);
         continue;
       }
 
@@ -2978,6 +3160,26 @@ export class ToolHandler {
 
       totalChars += fileSection.length + 200;
       filesIncluded++;
+      renderedFilePaths.add(filePath);
+    }
+
+    // Named-file accounting (REQ-EXPLORE-PIN-001.A3 / .A5). Emitted in EVERY
+    // tier (not gated on includeCompletenessSignal): a named file that silently
+    // fails to appear reads as "explore can't do targeted lookups" and sends
+    // the agent to Grep — the exact decay this spec exists to stop.
+    {
+      const omittedNamed = [
+        ...pinnedFilePaths.filter((p) => !renderedFilePaths.has(p)),
+        ...pinnedOverCap,
+      ];
+      if (omittedNamed.length > 0) {
+        lines.push(`> Named files omitted for budget: ${omittedNamed.join(', ')} — specship_explore them by name in a follow-up call for their source.`);
+        lines.push('');
+      }
+      if (namedPathMisses.length > 0) {
+        lines.push(`> Named paths not found in the index (or ambiguous): ${[...new Set(namedPathMisses)].join(', ')}. Check the spelling, or add a directory segment to disambiguate.`);
+        lines.push('');
+      }
     }
 
     // Add remaining files as references (from both relevant and peripheral files).
