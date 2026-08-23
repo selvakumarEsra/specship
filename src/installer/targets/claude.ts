@@ -277,6 +277,23 @@ const SPECSHIP_STEER_HOOKS = [
 ] as const;
 
 /**
+ * Point-of-use search interceptor (STEER-HOOK-DOC, REQ-STEER-004) — the
+ * PreToolUse companion to the prompt-level steer hook above, also part of
+ * the DEFAULT retrieval tier. Matches the search-shaped tools whose use is
+ * the observed failure mode (Grep/Glob many tool-calls after the prompt
+ * nudge). The command is strictly advisory (additionalContext, never a
+ * permission decision), self-silences after one line per session
+ * (REQ-STEER-005), and honors the same silence gates as steer-nudge.
+ */
+const SPECSHIP_INTERCEPT_HOOKS = [
+  {
+    event: 'PreToolUse',
+    matcher: 'Grep|Glob',
+    hook: { type: 'command', command: 'specship search-intercept' },
+  },
+] as const;
+
+/**
  * The status-line entry the installer writes into `settings.json`
  * (SHIP-STATUSLINE-DOC). `command` mirrors the MCP launcher (`specship` on
  * PATH); Claude Code pipes the status-line JSON to it on stdin and renders its
@@ -420,6 +437,12 @@ class ClaudeCodeTarget implements AgentTarget {
     // can't help.
     files.push(writeSteerHookEntry(loc));
 
+    // 5c. Point-of-use search interceptor (STEER-HOOK-DOC, REQ-STEER-004) —
+    // DEFAULT tier, same posture as 5b: a PreToolUse hook on Grep/Glob whose
+    // command emits one advisory redirect line per session and never blocks
+    // the matched call.
+    files.push(writeSearchInterceptHookEntry(loc));
+
     // 6. Status-line segment (SHIP-STATUSLINE-DOC, REQ-STATUSLINE-006).
     // Strictly opt-in — only when the caller set installStatusLine (the
     // interactive prompt, or `--statusline`). Never clobbers a user's existing
@@ -546,6 +569,10 @@ class ClaudeCodeTarget implements AgentTarget {
     // 5b. Retrieval-steering hook — reverse of install step 5b.
     const steerHookCleanup = cleanupSteerHooks(loc);
     if (steerHookCleanup.action === 'removed') files.push(steerHookCleanup);
+
+    // 5c. Search-interceptor hook — reverse of install step 5c.
+    const interceptHookCleanup = cleanupSearchInterceptHooks(loc);
+    if (interceptHookCleanup.action === 'removed') files.push(interceptHookCleanup);
 
     // 6. Status-line segment — remove only the marked entry we wrote
     // (REQ-STATUSLINE-007). A user-authored status line has no marker and is
@@ -891,6 +918,16 @@ export function writeSteerHookEntry(loc: Location): WriteResult['files'][number]
   return writeHooksFor(loc, SPECSHIP_STEER_HOOKS);
 }
 
+/**
+ * Write the point-of-use search-interceptor PreToolUse hook into
+ * `settings.json` (STEER-HOOK-DOC, REQ-STEER-004). Same idempotent merge and
+ * same default-tier posture as the steer hook — the command only prints
+ * advisory context and is silent without an index.
+ */
+export function writeSearchInterceptHookEntry(loc: Location): WriteResult['files'][number] {
+  return writeHooksFor(loc, SPECSHIP_INTERCEPT_HOOKS);
+}
+
 type HookSpec = ReadonlyArray<{
   event: string;
   matcher: string;
@@ -956,6 +993,17 @@ function isSteerHookCommand(command: unknown): boolean {
 /** Remove the steering hook written by `writeSteerHookEntry`. Uninstall-only. */
 export function cleanupSteerHooks(loc: Location): WriteResult['files'][number] {
   return stripHooksMatching(loc, isSteerHookCommand);
+}
+
+/** True when a hook command is the search interceptor. Uninstall-only. */
+function isSearchInterceptHookCommand(command: unknown): boolean {
+  if (typeof command !== 'string') return false;
+  return SPECSHIP_INTERCEPT_HOOKS.some(({ hook }) => command === hook.command);
+}
+
+/** Remove the hook written by `writeSearchInterceptHookEntry`. Uninstall-only. */
+export function cleanupSearchInterceptHooks(loc: Location): WriteResult['files'][number] {
+  return stripHooksMatching(loc, isSearchInterceptHookCommand);
 }
 
 /**

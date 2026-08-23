@@ -28,6 +28,7 @@ import {
   claudeTarget,
   cleanupLegacyHooks,
   cleanupCurrentHooks,
+  cleanupSearchInterceptHooks,
   writeStatusLineEntry,
   removeStatusLineEntry,
   statusLineState,
@@ -320,6 +321,55 @@ describe('Claude target — specifics', () => {
       .flatMap((g: any) => (g.hooks ?? []).map((h: any) => h.command))
       .filter((c: string) => c === 'specship steer-nudge');
     expect(after).toHaveLength(1);
+  });
+
+  it('default install writes the PreToolUse search interceptor; re-run is idempotent (REQ-STEER-004.A1)', () => {
+    claudeTarget.install('local', { autoAllow: false });
+    const settingsPath = path.join(tmpCwd, '.claude', 'settings.json');
+    const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
+    const group = (settings.hooks?.PreToolUse ?? []).find((g: any) => g.matcher === 'Grep|Glob');
+    expect(group).toBeDefined();
+    expect(group.hooks.map((h: any) => h.command)).toContain('specship search-intercept');
+
+    // Byte-idempotent on re-run.
+    const second = claudeTarget.install('local', { autoAllow: false });
+    expect(second.files.filter((f) => f.path === settingsPath)
+      .every((f) => f.action === 'unchanged')).toBe(true);
+    const after = (JSON.parse(fs.readFileSync(settingsPath, 'utf-8')).hooks?.PreToolUse ?? [])
+      .flatMap((g: any) => (g.hooks ?? []).map((h: any) => h.command))
+      .filter((c: string) => c === 'specship search-intercept');
+    expect(after).toHaveLength(1);
+  });
+
+  it('uninstall removes the interceptor without touching sibling PreToolUse groups or the prompt hooks (REQ-STEER-004.A4)', () => {
+    claudeTarget.install('local', { autoAllow: false, sdd: true });
+    const settingsPath = path.join(tmpCwd, '.claude', 'settings.json');
+    const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
+    // Plant a user-authored sibling PreToolUse matcher group.
+    settings.hooks.PreToolUse.push({ matcher: 'Bash', hooks: [{ type: 'command', command: 'my-bash-guard' }] });
+    fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
+
+    // The cleanup predicate is NARROW: it strips only the interceptor,
+    // leaving the sibling PreToolUse group AND the specship UserPromptSubmit
+    // hooks (steer-nudge, spec-nudge) untouched.
+    cleanupSearchInterceptHooks('local');
+    const mid = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
+    const midPre = (mid.hooks?.PreToolUse ?? [])
+      .flatMap((g: any) => (g.hooks ?? []).map((h: any) => h.command));
+    const midPrompt = (mid.hooks?.UserPromptSubmit ?? [])
+      .flatMap((g: any) => (g.hooks ?? []).map((h: any) => h.command));
+    expect(midPre).not.toContain('specship search-intercept');
+    expect(midPre).toContain('my-bash-guard');
+    expect(midPrompt).toContain('specship steer-nudge');
+    expect(midPrompt).toContain('specship spec-nudge');
+
+    // A full uninstall also leaves the user's PreToolUse group intact.
+    claudeTarget.uninstall('local');
+    const after = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
+    const preToolUse = (after.hooks?.PreToolUse ?? [])
+      .flatMap((g: any) => (g.hooks ?? []).map((h: any) => h.command));
+    expect(preToolUse).not.toContain('specship search-intercept');
+    expect(preToolUse).toContain('my-bash-guard');
   });
 
   it('specship install never invokes a package manager (INSTALL-SCOPE-DOC, REQ-SCOPE-001.A1)', () => {
