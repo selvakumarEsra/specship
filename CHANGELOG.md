@@ -21,6 +21,10 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Publishing specs to JIRA now works with team-managed projects. Projects whose issue types are `Task` and `Sub-task` (with no `Story` type) rejected every published spec with an unexplained HTTP 400. The `jira.storyIssueType` and `jira.subtaskIssueType` settings in the repo binding are now honored by every publish path — manual, automatic on sync, and reconcile — so you can publish as whatever types your project actually has. When JIRA does reject a publish, the error now includes JIRA's own explanation (for example, which field was invalid) instead of a bare status code.
 
+- Fixed exploration missing files and symbols you named explicitly. Asking about a file whose name contains a hyphen — the common style for filenames in most projects — silently found nothing, because hyphenated names were discarded before the lookup ran. Naming a constant, interface, type alias, class, or enum was likewise ignored, since only functions and methods were considered. Both now resolve, so a question that names its target by name returns that target instead of sending the assistant off to search the files by hand.
+
+- Naming a file in an exploration now guarantees that file comes back. Previously a named file still had to win on relevance, so one that happened to sit off to the side of the code being explored could be left out of the answer entirely even though it was asked for by name. Up to four named files are now returned ahead of everything else, with the rest of the response filling the space that remains — so the overall size of an answer is unchanged. When a named file can't be included — because more were named than fit, or the name doesn't match anything indexed — the answer now says so instead of leaving it out silently.
+
 
 ## [0.22.0] - 2026-08-04
 
