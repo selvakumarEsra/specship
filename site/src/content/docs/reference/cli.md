@@ -33,6 +33,7 @@ description: Every SpecShip command and the flags it accepts.
 | `specship starter-prompt [path]` | Print a suggested first flow/impact prompt for this project (used by the /specship:explore door). |
 | `specship cheatsheet` | Print the SpecShip session cheat-sheet (used by the SessionStart hook). |
 | `specship uninstall` | Completely remove SpecShip (wiring, indexes, ~/.specship data, and the binary) |
+| `specship diagram [path]` | Generate a Mermaid flow diagram of the indexed application into docs/ (kept fresh by sync). |
 | `specship drifted [path]` | List spec links in concerning states (drifted, broken, orphaned). |
 | `specship domain-gaps [path]` | List code entities and specs not yet covered by a domain fact (the domain gap-seed). Feeds the /specship:spec domain … |
 | `specship spec [id]` | Spec lifecycle funnel (idea → spec → implemented). With an id, show that spec/brief detail. |
