@@ -11,6 +11,13 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### New Features
 
+- SpecShip can now draw your application's flow for you — and keep the drawing honest. `specship diagram` renders the indexed project's entry points and the call chains they reach as a Mermaid flowchart in `docs/flow-diagram.md`, grouped by top-level module, viewable on GitHub with no extra tooling. Once the file exists (or you set `diagram.enabled` in `specship.config.json`), every `specship sync` and `specship index` refreshes it: a new flow appears, a removed flow disappears, and an unchanged diagram isn't rewritten at all. Output is deterministic and sorted, so a flow change shows up as a small reviewable diff, and very large projects collapse whole modules into summary nodes instead of producing an unreadable chart. Tune with `--output`, `--max-nodes`, and `--depth`, or matching `diagram.*` config keys.
+
+
+## [0.23.0] - 2026-08-23
+
+### New Features
+
 - Gemini CLI users can now wire up the SpecShip MCP server by hand. `specship install --print-config --target gemini` prints the settings snippet to paste into Gemini CLI's settings file — global for every project, or per project — and the README documents both placements. Printing writes nothing to disk, and the server it launches is the same one Claude Code uses. This wiring gives Gemini CLI the SpecShip tools only: slash commands, auto-sync hooks, the retrieval nudge and the status-line segment remain Claude Code features.
 
 - SpecShip now offers a gentle course-correction at the moment it helps most. When the assistant reaches for a raw file search in an indexed project without having consulted the index, a small reminder points it at SpecShip's one-call code lookup instead. The reminder is advisory only — the search always proceeds — appears at most once per session, stays quiet in sessions already using SpecShip, and honors the same opt-out as the existing steering (`SPECSHIP_NO_STEERING=1`). Installed and removed together with everything else by `specship install` / `specship uninstall`.
@@ -775,3 +782,4 @@ Thanks @andreinknv for the substantive draft this release was based on.
 [0.21.1]: https://github.com/selvakumarEsra/specship/releases/tag/v0.21.1
 [0.21.2]: https://github.com/selvakumarEsra/specship/releases/tag/v0.21.2
 [0.22.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.22.0
+[0.23.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.23.0
