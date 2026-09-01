@@ -3106,6 +3106,51 @@ program
 // Spec layer / Workflow engine commands (v5)
 // =============================================================================
 
+// @implements REQ-FLOWDIAG-001
+// Thin surface over SpecShip.generateFlowDiagram: render the indexed app's
+// entry points + call chains as a Mermaid flowchart under docs/. Once the
+// file exists, sync/index keep it fresh (REQ-FLOWDIAG-002).
+program
+  .command('diagram [path]')
+  .description('Generate a Mermaid flow diagram of the indexed application into docs/ (kept fresh by sync).')
+  .option('-o, --output <path>', 'project-relative output path (default: docs/flow-diagram.md)')
+  .option('--max-nodes <n>', 'node budget before modules collapse into summary nodes (default: 150)')
+  .option('--depth <n>', 'max call-chain depth from each entry point (default: 6)')
+  .option('--json', 'emit JSON')
+  .action(async (
+    pathArg: string | undefined,
+    options: { output?: string; maxNodes?: string; depth?: string; json?: boolean }
+  ) => {
+    const projectRoot = path.resolve(pathArg ?? process.cwd());
+    if (!isInitialized(projectRoot)) {
+      error(`SpecShip not initialized in ${projectRoot}. Run \`specship init -i\` first.`);
+      process.exit(1);
+    }
+    const { SpecShip } = await loadSpecShip();
+    const cg = await SpecShip.open(projectRoot);
+    try {
+      const override: { output?: string; maxNodes?: number; depth?: number } = {};
+      if (options.output) override.output = options.output;
+      if (options.maxNodes) override.maxNodes = Math.max(1, parseInt(options.maxNodes, 10) || 150);
+      if (options.depth) override.depth = Math.max(1, parseInt(options.depth, 10) || 6);
+      const result = cg.generateFlowDiagram(override);
+
+      if (options.json) {
+        // eslint-disable-next-line no-console
+        console.log(JSON.stringify(result, null, 2));
+      } else {
+        const verb = result.status === 'unchanged' ? 'is up to date' : result.status;
+        success(`Flow diagram ${verb}: ${result.output}`);
+        info(`${result.entryPoints} entry points · ${result.nodeCount} flow symbols · ${result.edgeCount} calls`);
+        if (result.status === 'created') {
+          info('Future `specship sync` / `specship index` runs will keep it fresh.');
+        }
+      }
+    } finally {
+      cg.close();
+    }
+  });
+
 program
   .command('drifted [path]')
   .description('List spec links in concerning states (drifted, broken, orphaned).')

@@ -94,6 +94,11 @@ import {
   RequirementVerification,
 } from './enforce/enforce';
 import { computeBehaviourSurface, BehaviourSurface } from './behaviour/behaviour-surface';
+import {
+  generateFlowDiagram,
+  FlowDiagramOptions,
+  FlowDiagramResult,
+} from './diagram/flow-diagram';
 import { ContextBuilder, createContextBuilder } from './context';
 import { Mutex, FileLock } from './utils';
 import { FileWatcher, WatchOptions, PendingFile, LockUnavailableError } from './sync';
@@ -163,6 +168,8 @@ export type {
 } from './reflect';
 // Maintainability harness (MAINT-DOC / REQ-MAINT-001).
 export { computeMaintainability, resolveThresholds, resolveExclude, DEFAULT_THRESHOLDS, DEFAULT_EXCLUDE, CONFIG_FILE_NAME, HIGH_PRECISION_CLASSES, LOW_CONFIDENCE_CLASSES, highPrecisionClean } from './graph/maintainability';
+export { collectFlows, renderMermaidFlowchart, writeFlowDiagramIfChanged, shouldAutoRefreshDiagram, resolveDiagramConfig, DEFAULT_DIAGRAM_OPTIONS } from './diagram/flow-diagram';
+export type { FlowDiagramOptions, FlowDiagramConfig, FlowDiagramResult, FlowGraph } from './diagram/flow-diagram';
 // Architecture-fitness harness (FITNESS-DOC / REQ-FITNESS-001…003).
 export { evaluateFitness, loadFitnessRules, FITNESS_CONFIG_FILE } from './fitness/fitness';
 // Enforcement mode (ENFORCE-DOC / REQ-ENFORCE-001…003).
@@ -357,6 +364,18 @@ export class SpecShip {
    */
   getFitness(rules?: FitnessRule[]): FitnessReport {
     return evaluateFitness(this.queries, rules ?? loadFitnessRules(this.projectRoot));
+  }
+
+  /**
+   * The application flow diagram (FLOWDIAG-DOC, REQ-FLOWDIAG-001): render the
+   * graph's entry points and call chains as a Mermaid flowchart and write it
+   * to the project's docs/ folder (`diagram.output`, default
+   * docs/flow-diagram.md). Deterministic, derived from the graph, and only
+   * touches the file when its bytes changed. Exposed on the instance so the
+   * CLI and the sync/index tails drive the same pass.
+   */
+  generateFlowDiagram(options?: Partial<FlowDiagramOptions>): FlowDiagramResult {
+    return generateFlowDiagram(this.queries, this.projectRoot, options);
   }
 
   /**
@@ -795,6 +814,17 @@ export class SpecShip {
           result.edgesCreated = after.edges - before.edges;
         }
 
+        // Flow-diagram refresh (FLOWDIAG-DOC, REQ-FLOWDIAG-002): same gate as
+        // the sync tail. Best-effort — a diagram fault never fails an index.
+        try {
+          if (result.success) {
+            const { shouldAutoRefreshDiagram } = await import('./diagram/flow-diagram');
+            if (shouldAutoRefreshDiagram(this.projectRoot)) this.generateFlowDiagram();
+          }
+        } catch {
+          /* a diagram fault must never fail an index */
+        }
+
         this.refreshStatuslineCache();
         return result;
       } finally {
@@ -1229,6 +1259,20 @@ export class SpecShip {
           });
         } catch {
           /* a JIRA fault must never fail a sync */
+        }
+
+        // Flow-diagram refresh (FLOWDIAG-DOC, REQ-FLOWDIAG-002): gated on the
+        // diagram already existing (or diagram.enabled) and on code having
+        // changed. Best-effort — a diagram fault never fails a sync.
+        try {
+          const codeChanged =
+            result.filesAdded > 0 || result.filesModified > 0 || result.filesRemoved > 0;
+          if (codeChanged) {
+            const { shouldAutoRefreshDiagram } = await import('./diagram/flow-diagram');
+            if (shouldAutoRefreshDiagram(this.projectRoot)) this.generateFlowDiagram();
+          }
+        } catch {
+          /* a diagram fault must never fail a sync */
         }
 
         this.refreshStatuslineCache();
