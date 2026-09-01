@@ -10,7 +10,7 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 
-## [0.23.0] - 2026-08-23
+## [0.24.0] - 2026-09-01
 
 ### New Features
 
@@ -785,3 +785,4 @@ Thanks @andreinknv for the substantive draft this release was based on.
 [0.21.2]: https://github.com/selvakumarEsra/specship/releases/tag/v0.21.2
 [0.22.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.22.0
 [0.23.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.23.0
+[0.24.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.24.0
