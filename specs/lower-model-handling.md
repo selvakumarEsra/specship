@@ -3,6 +3,18 @@ id: LOWMODEL-DOC
 title: Lower-model handling — opinionated, not terse
 owner: specship
 priority: medium
+jira_issue_REQ-LOWMODEL-001: SSHIP-749
+jira_fingerprint_REQ-LOWMODEL-001: dcf410a389041467
+jira_issue_REQ-LOWMODEL-002: SSHIP-752
+jira_fingerprint_REQ-LOWMODEL-002: 7d3efe5a2e860b9b
+jira_issue_REQ-LOWMODEL-003: SSHIP-755
+jira_fingerprint_REQ-LOWMODEL-003: d06b278fbba7d381
+jira_issue_REQ-LOWMODEL-004: SSHIP-758
+jira_fingerprint_REQ-LOWMODEL-004: 95e20c29d523a08c
+jira_issue_REQ-LOWMODEL-005: SSHIP-762
+jira_fingerprint_REQ-LOWMODEL-005: 713e03b1b5c9bb7b
+jira_issue_REQ-LOWMODEL-006: SSHIP-765
+jira_fingerprint_REQ-LOWMODEL-006: f8a48395be2f244b
 ---
 
 <!-- id: LOWMODEL-DOC -->
@@ -117,6 +129,12 @@ intersection.]
 implementations:
   - src/mcp/tools.ts:ToolHandler.getTools
   - src/mcp/tools.ts:ToolHandler.addTierChangeListener
+  - src/mcp/tools.ts:getStaticTools
+  - src/mcp/tools.ts:applyLiteTierTrim
+
+verifies:
+  - __tests__/lowmodel.test.ts:staticListTrimsOnLiteMarker
+  - __tests__/lowmodel.test.ts:staticListUnchangedWithoutLiteMarker
 
 ## Acceptance
 <!-- id: REQ-LOWMODEL-004.A1 -->
@@ -127,6 +145,13 @@ implementations:
   and answers (no "unknown tool" for a cached client).
 <!-- id: REQ-LOWMODEL-004.A3 -->
 - A mid-session tier change triggers a tools `listChanged` notification.
+<!-- id: REQ-LOWMODEL-004.A4 -->
+- The trim engages on the connect-time list too: the static surface the
+  local-handshake proxy answers the first `tools/list` with applies the same
+  lite-tier trim when the project root carries a lite marker (marker file
+  only — no DB open required). Without a root or marker the static list is
+  unchanged. (Regression: the 2026-07-12 haiku baseline recorded "tools
+  exposed: 14" in every arm because the proxy's static list never trimmed.)
 
 <!-- id: REQ-LOWMODEL-005 -->
 ## The eval harness MUST grow a model arm, with per-tier pass bars

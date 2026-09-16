@@ -792,17 +792,49 @@ export function filterIntegrationTools(
 }
 
 /**
+ * Lite-tier menu trim (LOWMODEL-DOC, REQ-LOWMODEL-004): small-model tool
+ * choice degrades with menu size, so the code-graph group trims to the core
+ * three; spec/link tools and enabled integrations are untouched. Composes
+ * with the tiny-repo gate and SPECSHIP_MCP_TOOLS as an intersection.
+ * Schemas never vary — only the list; `execute()` still answers a
+ * trimmed-away tool for clients that cached the full list (A2).
+ *
+ * Needs only a project-root hint, NOT an open DB — tier detection reads the
+ * session model marker file. That is what lets the proxy's connect-time
+ * static list trim too (A4); `hint` may be any path at or under the project
+ * (the nearest `.specship/` root wins).
+ */
+const LITE_CORE_TOOLS = new Set(['specship_explore', 'specship_search', 'specship_node']);
+const CODE_GRAPH_GROUP = new Set([
+  'specship_explore', 'specship_search', 'specship_node',
+  'specship_callers', 'specship_callees', 'specship_impact',
+  'specship_files', 'specship_status',
+  'specship_maintainability', 'specship_fitness',
+]);
+export function applyLiteTierTrim(list: ToolDefinition[], hint: string | null): ToolDefinition[] {
+  if (!hint) return list;
+  const root = findNearestSpecShipRoot(hint);
+  if (!root || detectModelTier(root) !== 'lite') return list;
+  return list.filter(t => !CODE_GRAPH_GROUP.has(t.name) || LITE_CORE_TOOLS.has(t.name));
+}
+
+/**
  * Allowlist-filtered tool definitions WITHOUT an engine — the static surface the
  * proxy answers `tools/list` with before any project is open. Mirrors
  * `ToolHandler.getTools()` in the no-SpecShip case (the dynamic per-repo budget
  * note in a description only adds once `cg` is loaded; the schemas are static).
+ * When a project-root hint is given, the lite-tier trim applies here too
+ * (REQ-LOWMODEL-004.A4) — the marker file needs no DB open.
  */
-export function getStaticTools(): ToolDefinition[] {
+export function getStaticTools(projectRootHint?: string | null): ToolDefinition[] {
   const base = filterIntegrationTools(tools);
   const raw = process.env.SPECSHIP_MCP_TOOLS;
-  if (!raw || !raw.trim()) return base;
-  const allow = new Set(raw.split(',').map(s => s.trim().replace(/^specship_/, '')).filter(Boolean));
-  return allow.size ? base.filter(t => allow.has(t.name.replace(/^specship_/, ''))) : base;
+  let visible = base;
+  if (raw && raw.trim()) {
+    const allow = new Set(raw.split(',').map(s => s.trim().replace(/^specship_/, '')).filter(Boolean));
+    if (allow.size) visible = base.filter(t => allow.has(t.name.replace(/^specship_/, '')));
+  }
+  return applyLiteTierTrim(visible, projectRootHint ?? null);
 }
 
 /**
@@ -949,24 +981,9 @@ export class ToolHandler {
         );
       }
 
-      // Lite-tier menu trim (LOWMODEL-DOC, REQ-LOWMODEL-004): small-model
-      // tool choice degrades with menu size, so the code-graph group trims
-      // to the core three; spec/link tools and enabled integrations are
-      // untouched. Composes with the tiny-repo gate as an intersection.
-      // Schemas never vary — only the list; `execute()` still answers a
-      // trimmed-away tool for clients that cached the full list (A2).
-      if (detectModelTier(this.cg.getProjectRoot()) === 'lite') {
-        const LITE_CORE = new Set(['specship_explore', 'specship_search', 'specship_node']);
-        const CODE_GRAPH_GROUP = new Set([
-          'specship_explore', 'specship_search', 'specship_node',
-          'specship_callers', 'specship_callees', 'specship_impact',
-          'specship_files', 'specship_status',
-          'specship_maintainability', 'specship_fitness',
-        ]);
-        visible = visible.filter(
-          t => !CODE_GRAPH_GROUP.has(t.name) || LITE_CORE.has(t.name)
-        );
-      }
+      // Lite-tier menu trim — shared with the proxy's static list (A4);
+      // see applyLiteTierTrim above for the full contract.
+      visible = applyLiteTierTrim(visible, this.cg.getProjectRoot());
 
       return visible.map(tool => {
         if (tool.name === 'specship_explore') {

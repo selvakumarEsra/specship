@@ -4,6 +4,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { buildSteeringNudge, STEERING_TEXT, STEERING_TEXT_LITE } from '../src/activation/steering';
 import { recordSessionModel } from '../src/mcp/model-context';
+import { getStaticTools } from '../src/mcp/tools';
 
 /**
  * LOWMODEL-DOC (specs/lower-model-handling.md) — opinionated, not terse:
@@ -55,6 +56,47 @@ describe('REQ-LOWMODEL-002 — tier-aware steering', () => {
     expect(STEERING_TEXT_LITE).toContain('Do not spawn subagents');
     expect(STEERING_TEXT_LITE).toContain('specship_explore');
   });
+});
+
+describe('REQ-LOWMODEL-004.A4 — static (proxy) tools/list trims on the lite tier', () => {
+  // @verifies REQ-LOWMODEL-004
+  function staticListTrimsOnLiteMarker(): void {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lowmodel-static-'));
+    fs.mkdirSync(path.join(dir, '.specship'));
+    fs.writeFileSync(path.join(dir, '.specship', 'specship.db'), '');
+    try {
+      recordSessionModel(dir, 'claude-haiku-4-5');
+      const names = getStaticTools(dir).map((t) => t.name);
+      for (const core of ['specship_explore', 'specship_search', 'specship_node']) {
+        expect(names).toContain(core);
+      }
+      for (const trimmed of ['specship_callers', 'specship_callees', 'specship_impact', 'specship_files', 'specship_status']) {
+        expect(names).not.toContain(trimmed);
+      }
+      // Spec/link tools are not in the code-graph group — untouched.
+      expect(names).toContain('specship_spec');
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  }
+  it('lite marker → static list trims the code-graph group to the core three (REQ-LOWMODEL-004.A4)', staticListTrimsOnLiteMarker);
+
+  function staticListUnchangedWithoutLiteMarker(): void {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lowmodel-static-'));
+    fs.mkdirSync(path.join(dir, '.specship'));
+    fs.writeFileSync(path.join(dir, '.specship', 'specship.db'), '');
+    try {
+      recordSessionModel(dir, 'claude-fable-5');
+      const withFrontier = getStaticTools(dir).map((t) => t.name);
+      expect(withFrontier).toContain('specship_callers');
+      const noRoot = getStaticTools().map((t) => t.name);
+      expect(noRoot).toContain('specship_callers');
+      expect(noRoot).toEqual(withFrontier);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  }
+  it('frontier marker or no root → static list unchanged (REQ-LOWMODEL-004.A4)', staticListUnchangedWithoutLiteMarker);
 });
 
 describe('REQ-LOWMODEL-005 — harness model arm (source guard)', () => {

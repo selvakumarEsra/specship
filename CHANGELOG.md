@@ -13,6 +13,10 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - SpecShip's output tuning for smaller models now recognizes Gemini models as well as Claude ones. Sessions running a lightweight model — Haiku or Gemini Flash — get the condensed tool output that was previously reserved for Haiku, and Gemini Pro gets the full output. Models SpecShip doesn't recognize are never condensed, so an unfamiliar model always receives complete responses. `SPECSHIP_MODEL` now accepts Gemini model names, and `SPECSHIP_COMPACT=0` still turns the whole thing off. Because the tiers are no longer named after one model family, the status line now reads "optimizing for Lite" / "optimizing for Standard" instead of naming Haiku or Sonnet.
 
+### Fixes
+
+- The smaller tool menu for lightweight models now takes effect from the very first moment a session connects. Previously the trimmed menu only applied after the project database had opened, so sessions on Haiku or Gemini Flash saw the full tool list for their whole session — the trim never actually engaged in practice.
+
 
 ## [0.24.0] - 2026-09-01
 
