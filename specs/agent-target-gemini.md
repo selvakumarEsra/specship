@@ -248,6 +248,12 @@ implementations:
   - src/mcp/model-context.ts:detectModelTier
   - src/mcp/model-context.ts:compactToolResult
 
+verifies:
+  - __tests__/model-context.test.ts:geminiIdsMapToCapabilityTiers
+  - __tests__/model-context.test.ts:unknownModelIdResolvesFull
+  - __tests__/model-context.test.ts:specshipModelAcceptsGeminiIdWithoutMarker
+  - __tests__/model-context.test.ts:geminiSessionWithoutClaudeChannelResolvesFull
+
 ## Acceptance
 <!-- id: REQ-GEMINI-007.A1 -->
 - `modelTier('gemini-2.5-flash')` (and flash-lite variants) resolves to the

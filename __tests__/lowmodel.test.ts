@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { buildSteeringNudge, STEERING_TEXT, STEERING_TEXT_HAIKU } from '../src/activation/steering';
+import { buildSteeringNudge, STEERING_TEXT, STEERING_TEXT_LITE } from '../src/activation/steering';
 import { recordSessionModel } from '../src/mcp/model-context';
 
 /**
@@ -44,16 +44,16 @@ describe('REQ-LOWMODEL-002 — tier-aware steering', () => {
       recordSessionModel(dir, 'claude-fable-5');
       expect(buildSteeringNudge(dir, {})).toBe(STEERING_TEXT);
       recordSessionModel(dir, 'claude-haiku-4-5');
-      expect(buildSteeringNudge(dir, {})).toBe(STEERING_TEXT_HAIKU);
+      expect(buildSteeringNudge(dir, {})).toBe(STEERING_TEXT_LITE);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
   });
 
   it('A2: the haiku template stays under ~80 tokens and steers against subagents', () => {
-    expect(STEERING_TEXT_HAIKU.length / 4).toBeLessThan(85); // ~4 chars/token
-    expect(STEERING_TEXT_HAIKU).toContain('Do not spawn subagents');
-    expect(STEERING_TEXT_HAIKU).toContain('specship_explore');
+    expect(STEERING_TEXT_LITE.length / 4).toBeLessThan(85); // ~4 chars/token
+    expect(STEERING_TEXT_LITE).toContain('Do not spawn subagents');
+    expect(STEERING_TEXT_LITE).toContain('specship_explore');
   });
 });
 

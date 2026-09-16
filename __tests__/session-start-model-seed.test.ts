@@ -36,7 +36,7 @@ describe('recordModelFromSessionStart (REQ-MODCTX-001.A6)', () => {
     recordModelFromSessionStart(JSON.stringify({ model: 'claude-haiku-4-5', cwd: dir }));
     expect(marker()?.model).toBe('claude-haiku-4-5');
     // and the MCP server resolves the tier from it — first prompt is covered
-    expect(detectModelTier(dir)).toBe('haiku');
+    expect(detectModelTier(dir)).toBe('lite');
   });
 
   it('resolves cwd from a subdirectory of the project', () => {
