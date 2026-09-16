@@ -50,9 +50,12 @@ The MCP server Claude Code talks to: tool definitions + handlers
   (the PRIMARY tool) and sufficiency in `specship_node` (full bodies, every
   overload in one call). Precise output needs precise input — fuzzy-input
   tools (`specship_context`, `specship_trace`) were removed for this reason.
-- Model-tier behavior (compaction, haiku menu trim, numbered hops) lives in
-  `model-context.ts` + `tools.ts` under MODCTX-DOC / LOWMODEL-DOC; every
-  tier lever is gated on the eval harness's model arm.
+- Model-tier behavior (compaction, lite-tier menu trim, numbered hops) lives
+  in `model-context.ts` + `tools.ts` under MODCTX-DOC / LOWMODEL-DOC; every
+  tier lever is gated on the eval harness's model arm. Tiers are **capability
+  names** (`lite` / `standard` / `full`), not model families — a model id
+  binds to a tier only through `TIER_RULES` in `model-context.ts`
+  (REQ-GEMINI-007). Add providers there; never re-scatter substring checks.
 
 ## How to verify work is done
 

@@ -1,6 +1,6 @@
 /**
  * REQ-MODCTX-005 — the user-visible model-compaction indicator on the status
- * line: shown with the tier name on haiku/sonnet (A1), absent and
+ * line: shown with the tier name on the lite/standard tiers (A1), absent and
  * byte-identical on the full tier (A2), hidden by SPECSHIP_COMPACT=0 (A3),
  * plain text under NO_COLOR (A4), and resolution failure drops the element
  * but never the line (A5).
@@ -54,9 +54,9 @@ const OPUS = { display_name: 'Opus 4.8', id: 'claude-opus-4-8' };
 // --- renderSegment: element wording + omission (A1/A2) ------------------------
 
 describe('compact indicator rendering (REQ-MODCTX-005.A1/A2)', () => {
-  it('names Haiku on the haiku tier and Sonnet on the sonnet tier', () => {
-    expect(renderSegment(base({ compact: 'haiku' }))).toContain('⛁ optimizing for Haiku');
-    expect(renderSegment(base({ compact: 'sonnet' }))).toContain('⛁ optimizing for Sonnet');
+  it('names Lite on the lite tier and Standard on the standard tier', () => {
+    expect(renderSegment(base({ compact: 'lite' }))).toContain('⛁ optimizing for Lite');
+    expect(renderSegment(base({ compact: 'standard' }))).toContain('⛁ optimizing for Standard');
   });
 
   it('omits the element when compact is null/absent, byte-identical to today', () => {
@@ -67,7 +67,7 @@ describe('compact indicator rendering (REQ-MODCTX-005.A1/A2)', () => {
   });
 
   it('asserts optimization, never reduction, in the wording', () => {
-    const out = renderSegment(base({ compact: 'haiku' }));
+    const out = renderSegment(base({ compact: 'lite' }));
     for (const bad of ['trim', 'truncat', 'reduc', 'compact']) {
       expect(out.toLowerCase()).not.toContain(bad);
     }
@@ -78,12 +78,12 @@ describe('compact indicator rendering (REQ-MODCTX-005.A1/A2)', () => {
 
 describe('compact indicator NO_COLOR handling (REQ-MODCTX-005.A4)', () => {
   it('emits no ANSI under NO_COLOR but colorizes when color is on', () => {
-    const plain = renderSegment(base({ compact: 'haiku', noColor: true }));
+    const plain = renderSegment(base({ compact: 'lite', noColor: true }));
     expect(ANSI.test(plain)).toBe(false);
-    expect(plain).toContain('⛁ optimizing for Haiku');
+    expect(plain).toContain('⛁ optimizing for Lite');
 
-    const colored = renderSegment(base({ compact: 'haiku', noColor: false }));
-    expect(colored).toContain('⛁ optimizing for Haiku');
+    const colored = renderSegment(base({ compact: 'lite', noColor: false }));
+    expect(colored).toContain('⛁ optimizing for Lite');
     expect(ANSI.test(colored)).toBe(true);
   });
 });
@@ -106,7 +106,7 @@ describe('buildSegment compact indicator (REQ-MODCTX-005.A1/A2/A3/A5)', () => {
 
   it('shows the indicator when the session model maps to haiku (A1)', () => {
     const out = buildSegment(stdin(dir, HAIKU), true);
-    expect(out).toContain('⛁ optimizing for Haiku');
+    expect(out).toContain('⛁ optimizing for Lite');
   });
 
   it('shows nothing on a frontier model (A2)', () => {
@@ -129,7 +129,7 @@ describe('buildSegment compact indicator (REQ-MODCTX-005.A1/A2/A3/A5)', () => {
   it('honors a SPECSHIP_MODEL override without a marker', () => {
     process.env.SPECSHIP_MODEL = 'claude-haiku-4-5';
     const out = buildSegment(stdin(dir, OPUS), true);
-    expect(out).toContain('⛁ optimizing for Haiku');
+    expect(out).toContain('⛁ optimizing for Lite');
   });
 
   it('a corrupt model marker drops the element, never the line (A5)', () => {

@@ -73,7 +73,7 @@ export interface RenderInput {
    * so this module stays pure and the element is only ever shown when
    * compaction is actually active. Never `'full'` — the caller maps full → null.
    */
-  compact?: 'haiku' | 'sonnet' | null;
+  compact?: 'lite' | 'standard' | null;
   /** When true, emit no ANSI escapes. */
   noColor: boolean;
 }
@@ -212,7 +212,9 @@ export function renderSegment(input: RenderInput): string {
   // Wording asserts optimization, never reduction, and the caller only sets
   // `compact` when compaction is actually active (honesty rule).
   if (compact) {
-    parts.push(c(COLOR.dim, `⛁ optimizing for ${compact === 'haiku' ? 'Haiku' : 'Sonnet'}`));
+    // Capability-tier name, not a model-family name (REQ-GEMINI-007): the same
+    // tier now covers Haiku and Gemini Flash, so naming one would mislead.
+    parts.push(c(COLOR.dim, `⛁ optimizing for ${compact === 'lite' ? 'Lite' : 'Standard'}`));
   }
 
   // Telemetry elements render on their own SECOND line (REQ-STATUSLINE-010):

@@ -949,14 +949,14 @@ export class ToolHandler {
         );
       }
 
-      // Haiku-tier menu trim (LOWMODEL-DOC, REQ-LOWMODEL-004): small-model
+      // Lite-tier menu trim (LOWMODEL-DOC, REQ-LOWMODEL-004): small-model
       // tool choice degrades with menu size, so the code-graph group trims
       // to the core three; spec/link tools and enabled integrations are
       // untouched. Composes with the tiny-repo gate as an intersection.
       // Schemas never vary — only the list; `execute()` still answers a
       // trimmed-away tool for clients that cached the full list (A2).
-      if (detectModelTier(this.cg.getProjectRoot()) === 'haiku') {
-        const HAIKU_CORE = new Set(['specship_explore', 'specship_search', 'specship_node']);
+      if (detectModelTier(this.cg.getProjectRoot()) === 'lite') {
+        const LITE_CORE = new Set(['specship_explore', 'specship_search', 'specship_node']);
         const CODE_GRAPH_GROUP = new Set([
           'specship_explore', 'specship_search', 'specship_node',
           'specship_callers', 'specship_callees', 'specship_impact',
@@ -964,7 +964,7 @@ export class ToolHandler {
           'specship_maintainability', 'specship_fitness',
         ]);
         visible = visible.filter(
-          t => !CODE_GRAPH_GROUP.has(t.name) || HAIKU_CORE.has(t.name)
+          t => !CODE_GRAPH_GROUP.has(t.name) || LITE_CORE.has(t.name)
         );
       }
 
@@ -1178,11 +1178,11 @@ export class ToolHandler {
   /**
    * Model-aware compaction (MODCTX-DOC, REQ-MODCTX-002/003). Resolves the
    * session's model tier (status-line marker / SPECSHIP_MODEL; SPECSHIP_COMPACT=0
-   * disables) and, on haiku/sonnet, compresses the response's prose
+   * disables) and, on the lite/standard tiers, compresses the response's prose
    * scaffolding — fenced code stays byte-verbatim. Full tier is identity.
    */
   /**
-   * Tier-change listeners (LOWMODEL-DOC, REQ-LOWMODEL-004.A3): the haiku
+   * Tier-change listeners (LOWMODEL-DOC, REQ-LOWMODEL-004.A3): the lite-tier
    * menu trim changes `tools/list`, so a mid-session /model switch must ride
    * an MCP `notifications/tools/list_changed`. Sessions subscribe here; the
    * change is detected on the next code-graph call (the same funnel that
@@ -1513,7 +1513,7 @@ export class ToolHandler {
       }
       const withWorktree = this.withWorktreeNotice(result, args.projectPath as string | undefined);
       const withStaleness = this.withStalenessNotice(withWorktree, args.projectPath as string | undefined);
-      // Model-aware compaction (MODCTX-DOC): on haiku/sonnet sessions the
+      // Model-aware compaction (MODCTX-DOC): on lite/standard sessions the
       // prose scaffolding compresses; code stays byte-verbatim. Only the
       // code-graph tools reach this funnel — designer/jira returned above
       // (REQ-MODCTX-004).
@@ -1944,7 +1944,7 @@ export class ToolHandler {
         out.push('## Flow (call path among the symbols you queried)', '');
         for (let i = 0; i < best!.length; i++) {
           const step = best![i]!;
-          if (tier === 'haiku') {
+          if (tier === 'lite') {
             // LOWMODEL-DOC REQ-LOWMODEL-003: small models don't synthesize
             // the flow from evidence — render each hop as ONE explicit line
             // with its mechanism inline. Additive formatting only; the code

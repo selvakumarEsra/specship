@@ -29,12 +29,12 @@ export const STEERING_TEXT =
   'it did not return.';
 
 /**
- * The haiku-tier template (LOWMODEL-DOC, REQ-LOWMODEL-002): small models
+ * The lite-tier template (LOWMODEL-DOC, REQ-LOWMODEL-002): small models
  * follow prescriptive templates far better than principles, and fan-out
  * (subagents) multiplies their cost and confusion. Kept under ~80 tokens
  * (REQ-LOWMODEL-002.A2).
  */
-export const STEERING_TEXT_HAIKU =
+export const STEERING_TEXT_LITE =
   'This project has a SpecShip index. For any code question, call exactly: ' +
   'mcp__specship__specship_explore with the symbol/file names from the question. ' +
   'ONE call, then answer from its output — the source it returns is already read. ' +
@@ -45,8 +45,8 @@ export const STEERING_TEXT_HAIKU =
  * project is initialized (`.specship/` exists at cwd), and silent when the
  * user opted out via `SPECSHIP_NO_STEERING=1`. Uninitialized projects and
  * opted-out users get zero prompt noise. Tier-aware (REQ-LOWMODEL-002):
- * haiku sessions get the prescriptive template; sonnet and frontier keep the
- * standard line.
+ * lite-tier sessions get the prescriptive template; standard and frontier keep
+ * the standard line.
  */
 export function buildSteeringNudge(
   cwd: string,
@@ -61,5 +61,5 @@ export function buildSteeringNudge(
   } catch {
     return null;
   }
-  return detectModelTier(cwd, env, homedir) === 'haiku' ? STEERING_TEXT_HAIKU : STEERING_TEXT;
+  return detectModelTier(cwd, env, homedir) === 'lite' ? STEERING_TEXT_LITE : STEERING_TEXT;
 }

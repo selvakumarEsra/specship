@@ -16,6 +16,11 @@ import { buildSegment } from '../src/statusline';
  * MODCTX-DOC (specs/model-aware-context.md) — model-aware compaction:
  * detection via the status-line marker (001), fence-preserving prose
  * compression (002), visible + opt-outable (003).
+ *
+ * @verifies REQ-GEMINI-007
+ * Tiers are provider-neutral capability names (`lite` / `standard` / `full`)
+ * resolved through an explicit mapping table: Claude ids behave exactly as
+ * before (haiku→lite, sonnet→standard) and Gemini ids map alongside them.
  */
 
 const SAMPLE = `## Exploration: foo bar
@@ -55,11 +60,31 @@ describe('model tier resolution (REQ-MODCTX-001)', () => {
   afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
 
   it('maps ids and display names to tiers', () => {
-    expect(modelTier('claude-haiku-4-5-20251001')).toBe('haiku');
-    expect(modelTier('Sonnet 4.6')).toBe('sonnet');
+    expect(modelTier('claude-haiku-4-5-20251001')).toBe('lite');
+    expect(modelTier('Sonnet 4.6')).toBe('standard');
     expect(modelTier('claude-fable-5')).toBe('full');
     expect(modelTier(null)).toBe('full');
   });
+
+  /** @verifies REQ-GEMINI-007.A1 */
+  function geminiIdsMapToCapabilityTiers(): void {
+    expect(modelTier('gemini-2.5-flash')).toBe('lite');
+    expect(modelTier('gemini-2.5-flash-lite')).toBe('lite');
+    expect(modelTier('gemini-flash-latest')).toBe('lite');
+    expect(modelTier('Gemini 2.5 Flash')).toBe('lite');
+    expect(modelTier('gemini-2.5-pro')).toBe('full');
+  }
+  it('Gemini ids resolve through the same table (REQ-GEMINI-007.A1)', geminiIdsMapToCapabilityTiers);
+
+  /** @verifies REQ-GEMINI-007.A1 */
+  function unknownModelIdResolvesFull(): void {
+    expect(modelTier('claude-opus-5')).toBe('full');
+    expect(modelTier('claude-fable-5')).toBe('full');
+    expect(modelTier('some-unknown-model')).toBe('full');
+    expect(modelTier('')).toBe('full');
+    expect(modelTier(undefined)).toBe('full');
+  }
+  it('frontier and unknown ids never compact blind (REQ-GEMINI-007.A1)', unknownModelIdResolvesFull);
 
   it('A1: a status-line render with a model records the marker', () => {
     const stdin = JSON.stringify({
@@ -67,7 +92,7 @@ describe('model tier resolution (REQ-MODCTX-001)', () => {
       workspace: { current_dir: dir },
     });
     buildSegment(stdin, true);
-    expect(detectModelTier(dir, {})).toBe('haiku');
+    expect(detectModelTier(dir, {})).toBe('lite');
   });
 
   it('A2: no marker + no override → full tier', () => {
@@ -76,8 +101,30 @@ describe('model tier resolution (REQ-MODCTX-001)', () => {
 
   it('A3: SPECSHIP_MODEL overrides the marker', () => {
     recordSessionModel(dir, 'Sonnet 4.6');
-    expect(detectModelTier(dir, { SPECSHIP_MODEL: 'claude-haiku-4-5' })).toBe('haiku');
+    expect(detectModelTier(dir, { SPECSHIP_MODEL: 'claude-haiku-4-5' })).toBe('lite');
   });
+
+  /** @verifies REQ-GEMINI-007.A3 */
+  function specshipModelAcceptsGeminiIdWithoutMarker(): void {
+    expect(fs.existsSync(modelMarkerPath(dir))).toBe(false);
+    expect(detectModelTier(dir, { SPECSHIP_MODEL: 'gemini-2.5-flash' })).toBe('lite');
+    expect(detectModelTier(dir, { SPECSHIP_MODEL: 'gemini-2.5-pro' })).toBe('full');
+    // The override must not manufacture a marker — it's a read-only channel.
+    expect(fs.existsSync(modelMarkerPath(dir))).toBe(false);
+  }
+  it('SPECSHIP_MODEL accepts a Gemini id with no marker present (REQ-GEMINI-007.A3)', specshipModelAcceptsGeminiIdWithoutMarker);
+
+  /** @verifies REQ-GEMINI-007.A4 */
+  function geminiSessionWithoutClaudeChannelResolvesFull(): void {
+    // No status-line render, no SessionStart hook, no transcript — the marker
+    // channel is Claude-only, so nothing is misread and the tier stays full.
+    expect(fs.existsSync(modelMarkerPath(dir))).toBe(false);
+    expect(detectModelTier(dir, {})).toBe('full');
+    recordSessionModel(dir, 'gemini-2.5-flash');
+    expect(detectModelTier(dir, {})).toBe('lite');
+    expect(detectModelTier(dir, { SPECSHIP_COMPACT: '0' })).toBe('full');
+  }
+  it('a Gemini session (no Claude marker) resolves full; the kill-switch still wins (REQ-GEMINI-007.A4)', geminiSessionWithoutClaudeChannelResolvesFull);
 
   it('marker write is change-gated (same model → same mtime)', () => {
     recordSessionModel(dir, 'Haiku 4.5');
@@ -126,7 +173,7 @@ describe('readModelFromTranscript (REQ-MODCTX-001.A4/A5)', () => {
     const model = readModelFromTranscript(p);
     expect(model).toBe('claude-haiku-4-5');
     recordSessionModel(dir, model!);
-    expect(detectModelTier(dir, {})).toBe('haiku');
+    expect(detectModelTier(dir, {})).toBe('lite');
   });
 });
 
@@ -137,13 +184,13 @@ describe('compactToolResult (REQ-MODCTX-002/003)', () => {
 
   it('A1: fenced code blocks are byte-identical at every tier', () => {
     const fence = SAMPLE.match(/```[\s\S]*?```/)![0];
-    for (const tier of ['sonnet', 'haiku'] as const) {
+    for (const tier of ['standard', 'lite'] as const) {
       expect(compactToolResult(SAMPLE, tier)).toContain(fence);
     }
   });
 
   it('A2: the stop-reading signal survives compression', () => {
-    const c = compactToolResult(SAMPLE, 'haiku');
+    const c = compactToolResult(SAMPLE, 'lite');
     expect(c.toLowerCase()).toContain('already read');
     expect(c).toContain('do NOT Read');
     // The long boilerplate itself is gone.
@@ -151,19 +198,19 @@ describe('compactToolResult (REQ-MODCTX-002/003)', () => {
     expect(c.length).toBeLessThan(SAMPLE.length + 80); // net smaller despite the marker line
   });
 
-  it('A3: haiku caps the blast radius loudly, sonnet keeps it', () => {
-    const h = compactToolResult(SAMPLE, 'haiku');
+  it('A3: the lite tier caps the blast radius loudly, standard keeps it', () => {
+    const h = compactToolResult(SAMPLE, 'lite');
     expect(h).toContain('+2 more dependents');
     expect(h).not.toContain('`d` (src/d.ts:4)');
-    const s = compactToolResult(SAMPLE, 'sonnet');
+    const s = compactToolResult(SAMPLE, 'standard');
     expect(s).toContain('`e` (src/e.ts:5)');
   });
 
   it('003.A1: a compacted response names the tier once and ASSERTS completeness', () => {
-    const c = compactToolResult(SAMPLE, 'sonnet');
-    expect(c.startsWith('⛁ compact mode (sonnet):')).toBe(true);
+    const c = compactToolResult(SAMPLE, 'standard');
+    expect(c.startsWith('⛁ compact mode (standard):')).toBe(true);
     expect(c.match(/compact mode/g)).toHaveLength(1);
-    // Measured (haiku baseline, express 2/2): advertising the opt-out in the
+    // Measured (lite baseline, express 2/2): advertising the opt-out in the
     // banner read as "output incomplete" and triggered re-Reads. The banner
     // must assert completeness and never mention the opt-out.
     expect(c).toContain('ALL code complete');
@@ -171,7 +218,7 @@ describe('compactToolResult (REQ-MODCTX-002/003)', () => {
   });
 
   it('collapses blank-line runs in prose but not inside fences', () => {
-    const c = compactToolResult(SAMPLE, 'sonnet');
+    const c = compactToolResult(SAMPLE, 'standard');
     // Prose triple-blank collapsed…
     expect(/```\n{3,}/.test(c)).toBe(false);
     // …but the blank line INSIDE the fence survives.
@@ -199,7 +246,7 @@ const fts5Available = (() => {
 })();
 
 describe.skipIf(!fts5Available)('handler integration (REQ-MODCTX-002/003 end-to-end)', () => {
-  it('a real code-graph call compacts on a forced haiku tier and not on full', async () => {
+  it('a real code-graph call compacts on a forced lite tier and not on full', async () => {
     const { default: SpecShip } = await import('../src');
     const { ToolHandler } = await import('../src/mcp/tools');
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'modctx-e2e-'));
@@ -215,10 +262,10 @@ describe.skipIf(!fts5Available)('handler integration (REQ-MODCTX-002/003 end-to-
       delete process.env.SPECSHIP_COMPACT;
       const compacted = await handler.execute('specship_search', { query: 'alpha' });
       const text = (compacted.content?.[0] as { text?: string })?.text ?? '';
-      expect(text).toContain('compact mode (haiku)');
+      expect(text).toContain('compact mode (lite)');
       expect(text).toContain('alpha'); // payload intact
 
-      // 003.A2: SPECSHIP_COMPACT=0 restores full output even on haiku.
+      // 003.A2: SPECSHIP_COMPACT=0 restores full output even on the lite tier.
       process.env.SPECSHIP_COMPACT = '0';
       const full = await handler.execute('specship_search', { query: 'alpha' });
       const fullText = (full.content?.[0] as { text?: string })?.text ?? '';
