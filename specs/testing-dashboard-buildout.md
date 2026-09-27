@@ -87,7 +87,7 @@ implementations:
 
 ## Acceptance
 <!-- id: REQ-TVIZ-005.A1 -->
-- PRs touching `src/resolution/`, `src/search/`, or `src/mcp/` run `npm run test:eval`; results land in the job log/artifacts.
+- DEFERRED (2026-09-27): PRs touching retrieval code run the eval suite in CI. The eval runner requires an externally indexed corpus (`EVAL_CODEBASE`, test cases target Elasticsearch symbols) that no CI runner has; the first wiring attempt gated PRs on `npm run test:eval`, which matches zero vitest files and fails unconditionally. CI wiring needs its own spec'd fixture design (small pinned repo + matching test cases) before this can be a gate. Local runs (`npm run eval`) remain the bar per `scripts/agent-eval/CLAUDE.md`.
 <!-- id: REQ-TVIZ-005.A2 -->
 - The main test workflow collects v8 coverage and publishes the summary; a floor is set that can only be raised.
 
