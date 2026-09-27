@@ -208,9 +208,11 @@ jobs:
           for dir in release/npm/specship-* release/npm/main; do
             name=$(node -p "require('./$dir/package.json').name")
             ok=
+            # v0.25.0 propagation took >60s and painted a successful release
+            # red — 6×20s rides out registry lag without masking a real miss.
             for i in 1 2 3 4 5 6; do
               if npm view "$name@$V" version >/dev/null 2>&1; then ok=1; break; fi
-              echo "waiting for $name@$V to appear ($i)…"; sleep 10
+              echo "waiting for $name@$V to appear ($i)…"; sleep 20
             done
             [ -n "$ok" ] || { echo "::error::$name@$V never appeared on the registry"; exit 1; }
             echo "verified $name@$V"
