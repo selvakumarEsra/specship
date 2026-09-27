@@ -9,6 +9,9 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+
+## [0.25.0] - 2026-09-27
+
 ### New Features
 
 - The npm package is 60% smaller — 5.8 MB on disk instead of 14.1 MB, and roughly half the files. Development artifacts (source maps, internal tooling) no longer ship, large parser grammars ship compressed and decompress transparently on first use (everything still works fully offline), and a size guard in the test suite keeps the package from quietly growing back. A packaging bug that accumulated every past build's dashboard assets into the shipped package is also fixed.
@@ -39,7 +42,6 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Fixes
 
 - The smaller tool menu for lightweight models now takes effect from the very first moment a session connects. Previously the trimmed menu only applied after the project database had opened, so sessions on Haiku or Gemini Flash saw the full tool list for their whole session — the trim never actually engaged in practice.
-
 
 ## [0.24.0] - 2026-09-01
 
@@ -817,3 +819,4 @@ Thanks @andreinknv for the substantive draft this release was based on.
 [0.22.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.22.0
 [0.23.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.23.0
 [0.24.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.24.0
+[0.25.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.25.0
