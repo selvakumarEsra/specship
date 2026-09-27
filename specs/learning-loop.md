@@ -3,6 +3,14 @@ id: LEARN-DOC
 title: Learning loop — crystallize success, recall experience
 owner: specship
 priority: medium
+jira_issue_REQ-LEARN-001: SSHIP-719
+jira_fingerprint_REQ-LEARN-001: 5f6af6dedf7f470c
+jira_issue_REQ-LEARN-002: SSHIP-723
+jira_fingerprint_REQ-LEARN-002: 6f2da86c9a77cdb0
+jira_issue_REQ-LEARN-003: SSHIP-727
+jira_fingerprint_REQ-LEARN-003: a9a7082e90ae4b4d
+jira_issue_REQ-LEARN-004: SSHIP-731
+jira_fingerprint_REQ-LEARN-004: d94b9105355dde24
 ---
 
 <!-- id: LEARN-DOC -->
@@ -72,12 +80,13 @@ implementations:
 
 `/specship:learn` (installed with the governance tier) instructs the agent
 to distill the CURRENT session's workflow — the goal, the tool sequence that
-worked, the pitfalls hit — and submit it as a `skill` proposal via a
-`specship reflect capture` CLI entry (title + content on stdin/flags). The
-proposal enters the same lifecycle as mined ones: nothing is written to
-`commands/` or memory until the user applies it. The command's output tells
-the user where to review (`/specship:check` or the dashboard's Improvements
-surface).
+worked, the pitfalls hit — and submit it as a `skill` proposal via the
+`specship reflect --capture --title "<title>"` CLI entry (title as a flag,
+content on stdin). The proposal enters the same lifecycle as mined ones:
+nothing is written to `commands/` or memory until the user applies it. The
+command's output tells the user where to review — `specship reflect`, which
+lists the open proposals (REQ-SURF-009.A3; a dashboard Improvements page is
+contracted separately by DASHLM-DOC and has not shipped).
 
 implementations:
   - src/reflect/sweep.ts:capture
@@ -85,7 +94,7 @@ implementations:
 
 ## Acceptance
 <!-- id: REQ-LEARN-002.A1 -->
-- `specship reflect capture --title T` with content on stdin creates an open
+- `specship reflect --capture --title T` with content on stdin creates an open
   `skill` proposal with provenance distinguishing it from mined ones.
 <!-- id: REQ-LEARN-002.A2 -->
 - The proposal previews and applies through the existing reflect surfaces,

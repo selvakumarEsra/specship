@@ -966,6 +966,17 @@ program
         clack.log.info(`${details.join(', ')} ${getGlyphs().dash} ${formatNumber(result.nodesUpdated)} nodes in ${formatDuration(result.durationMs)}`);
       }
 
+      // Spec parse problems from the sync's spec pass (REQ-REVINT-002.A2) —
+      // silent before, so a bare-path link bullet produced no edge and no word.
+      const specErrors = result.specErrors ?? 0;
+      const specWarnings = result.specWarnings ?? 0;
+      if (specErrors > 0 || specWarnings > 0) {
+        const parts: string[] = [];
+        if (specErrors > 0) parts.push(`${specErrors} error${specErrors === 1 ? '' : 's'}`);
+        if (specWarnings > 0) parts.push(`${specWarnings} warning${specWarnings === 1 ? '' : 's'}`);
+        clack.log.warn(`Spec parse: ${parts.join(', ')}`);
+      }
+
       pushDriftNotices(result);
       await pushJiraDriftComments(cg, result);
       await pushJiraAutoPublish(result);
@@ -1478,7 +1489,7 @@ program
           console.log(JSON.stringify(p, null, 2));
         } else {
           info(`Captured as proposal ${p.contentHash.slice(0, 12)} (${p.state}): ${p.title}`);
-          info('Review and apply it from the dashboard Improvements page (preview-diff → confirm).');
+          info('Review the open proposals with `specship reflect` — nothing lands until you apply it.');
         }
         cg.destroy();
         return;
@@ -1518,7 +1529,7 @@ program
         console.log(chalk.dim(`      ${p.body}`));
         console.log();
       }
-      info('Review and apply proposals from the dashboard Improvements page (preview-diff → confirm).');
+      info('These are proposals only — nothing is written until you apply one.');
       cg.destroy();
     } catch (err) {
       error(`reflect failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -1577,7 +1588,7 @@ memory
         info(
           `Target: ${p.targetKind === 'claude_md' ? 'project CLAUDE.md' : 'portable ~/.claude memory note'} — nothing written yet.`,
         );
-        info('Review + apply from the dashboard Improvements page (preview-diff → confirm), or `specship reflect`.');
+        info('Review with `specship reflect`; manage applied memory rules with `specship memory list`.');
       }
       cg.destroy();
     } catch (err) {
@@ -1824,6 +1835,173 @@ program
   });
 
 /**
+ * specship coverage [spec_id]
+ *
+ * The spec coverage rollup (REQ-VSTATE-006): per requirement and per acceptance
+ * criterion, how much of the spec has TEST evidence — `implements` links never
+ * count. Deterministic and cheap, which is what lets the implement workflow's
+ * human gate quote a real number instead of an LLM's count (REQ-VSTATE-005.A2).
+ */
+program
+  .command('coverage [spec]')
+  .description('Show spec test-coverage: per requirement and criterion, tests-link state and verdict')
+  .option('-p, --path <path>', 'Project path')
+  .option('-j, --json', 'Output as JSON')
+  .option('--line', 'Print only the one-line "N of M acceptance criteria …" summary')
+  .action(async (specArg: string | undefined, options: { path?: string; json?: boolean; line?: boolean }) => {
+    const projectPath = resolveProjectPath(options.path);
+    try {
+      if (!isInitialized(projectPath)) {
+        error(`SpecShip not initialized in ${projectPath}`);
+        process.exit(1);
+      }
+      const { default: SpecShip, formatCoverageLine } = await loadSpecShip();
+      const cg = await SpecShip.open(projectPath);
+      const report = cg.getSpecCoverage(specArg);
+
+      if (options.json) {
+        console.log(JSON.stringify(report, null, 2));
+        cg.destroy();
+        return;
+      }
+      if (options.line) {
+        console.log(formatCoverageLine(report));
+        cg.destroy();
+        return;
+      }
+
+      if (report.requirements.length === 0) {
+        info(
+          specArg
+            ? `No requirements under "${specArg}" — nothing to report.`
+            : 'No requirements indexed yet.'
+        );
+        cg.destroy();
+        return;
+      }
+      const mark: Record<string, string> = {
+        verified: chalk.green('✔'),
+        tested: chalk.yellow('~'),
+        untested: chalk.dim('·'),
+        broken: chalk.red('✗'),
+      };
+      for (const req of report.requirements) {
+        console.log(
+          `${mark[req.verdict]} ${chalk.bold(req.specId)} ${chalk.dim(req.verdict)} — ${req.title}`
+        );
+        for (const c of req.criteria) {
+          console.log(
+            `    ${mark[c.verdict]} ${c.specId} ${chalk.dim(
+              `${c.verdict} · implements:${c.implementsLinks.count} tests:${c.testsLinks.count}`
+            )}`
+          );
+        }
+      }
+      console.log();
+      console.log(formatCoverageLine(report));
+      cg.destroy();
+    } catch (err) {
+      error(`coverage failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(1);
+    }
+  });
+
+/**
+ * specship lint [paths...]
+ *
+ * Spec-authoring lint (AUTHG-DOC). A thin registration: all rules, rendering
+ * and the exit code live in `src/spec-lint/lint.ts` (`runLintCli` returns the
+ * text and the code rather than printing or exiting, which is what makes it
+ * testable). Needs no index — it reads the files directly, so it runs in a
+ * fresh checkout and in CI before anything has been indexed.
+ */
+program
+  .command('lint [paths...]')
+  .description('Lint spec files for authoring problems (exits non-zero on an error finding)')
+  .option('-p, --path <path>', 'Project path (paths are resolved against it; defaults to specs/)')
+  .option('-j, --json', 'Output as JSON')
+  .action(async (paths: string[], options: { path?: string; json?: boolean }) => {
+    const projectRoot = resolveProjectPath(options.path);
+    try {
+      const { runLintCli } = await import('../spec-lint/lint');
+      const { output, exitCode } = runLintCli(
+        [...(paths ?? []), ...(options.json ? ['--json'] : [])],
+        { projectRoot }
+      );
+      console.log(output);
+      if (exitCode !== 0) process.exit(exitCode);
+    } catch (err) {
+      error(`lint failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(1);
+    }
+  });
+
+/**
+ * specship verify --report <file>
+ *
+ * Derive verification from a REAL test run (REQ-VSTATE-004): read a vitest JSON
+ * report, match reported cases to `tests` links by file + test title, and
+ * promote/demote those links. Replaces "an agent read the log and said it
+ * passed" with something auditable back to a specific run.
+ *
+ * A malformed report exits non-zero having changed nothing (A4).
+ */
+program
+  .command('verify')
+  .description('Ingest a test report (vitest JSON) and promote/demote spec test links from it')
+  .requiredOption('--report <file>', 'Path to the test report (vitest `--reporter=json` output)')
+  .option('-p, --path <path>', 'Project path')
+  .option('-j, --json', 'Output as JSON')
+  .option('--run-id <id>', 'Identifier recorded as the run behind the verdict')
+  .action(async (options: { report: string; path?: string; json?: boolean; runId?: string }) => {
+    const projectPath = resolveProjectPath(options.path);
+    try {
+      if (!isInitialized(projectPath)) {
+        error(`SpecShip not initialized in ${projectPath}`);
+        process.exit(1);
+      }
+      const { default: SpecShip } = await loadSpecShip();
+      const cg = await SpecShip.open(projectPath);
+      let result;
+      try {
+        result = cg.verifyFromReport(options.report, { runId: options.runId });
+      } catch (err) {
+        cg.destroy();
+        error(`verify failed: ${err instanceof Error ? err.message : String(err)}`);
+        process.exit(1);
+        return;
+      }
+
+      if (options.json) {
+        console.log(JSON.stringify(result, null, 2));
+      } else {
+        success(
+          `Read ${result.cases} test case(s) from ${result.reportPath} (run ${result.runId}).`
+        );
+        for (const p of result.promoted) {
+          console.log(`  ${chalk.green('✔')} ${p.specId} ${chalk.dim(`${p.from} → verified`)} — ${p.titles[0] ?? ''}`);
+        }
+        for (const d of result.demoted) {
+          console.log(`  ${chalk.red('✗')} ${d.specId} ${chalk.dim(`${d.from} → broken`)} — ${d.titles[0] ?? ''}`);
+        }
+        console.log();
+        info(
+          `${result.promoted.length} verified, ${result.demoted.length} broken, ${result.unchanged} unchanged, ${result.unmatched} unmatched.`
+        );
+        // Unmatched cases are reported, never silently dropped (A3).
+        for (const u of result.unmatchedSample) console.log(chalk.dim(`    unmatched: ${u}`));
+        if (result.unmatched > result.unmatchedSample.length) {
+          console.log(chalk.dim(`    …and ${result.unmatched - result.unmatchedSample.length} more`));
+        }
+      }
+      cg.destroy();
+    } catch (err) {
+      error(`verify failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(1);
+    }
+  });
+
+/**
  * specship fitness
  *
  * Evaluate the project's architecture-fitness rules (specship.config.json
@@ -1903,7 +2081,8 @@ program
   .option('-j, --json', 'Output as JSON')
   .option('--strict', 'Treat every check as gating for this run only (nothing read from or written to config)')
   .option('--enable-gate <checks...>', 'Persist gating for the named checks into specship.config.json, then run the gate')
-  .action(async (pathArg: string | undefined, options: { json?: boolean; strict?: boolean; enableGate?: string[] }) => {
+  .option('--since <ref>', 'Evaluate only requirements whose links or spec files touch files changed since <ref> (drift + behaviour; fitness and maintainability stay repo-global)')
+  .action(async (pathArg: string | undefined, options: { json?: boolean; strict?: boolean; enableGate?: string[]; since?: string }) => {
     const projectPath = resolveProjectPath(pathArg);
     try {
       if (!isInitialized(projectPath)) {
@@ -1911,6 +2090,21 @@ program
         process.exit(1);
       }
       const enforce = await import('../enforce/enforce');
+
+      // --since narrows the link-scoped checks (REQ-AUTHG-006.A1). An
+      // unresolvable ref exits non-zero here: falling back to a full-repo run
+      // would answer a question the caller did not ask and hide the typo
+      // (A3).
+      let scope: import('../enforce/enforce').EnforceScope | undefined;
+      if (options.since) {
+        const { changedFilesSince } = await import('../enforce/changed-files');
+        try {
+          scope = { changedFiles: changedFilesSince(projectPath, options.since), since: options.since };
+        } catch (err) {
+          error(err instanceof Error ? err.message : String(err));
+          process.exit(1);
+        }
+      }
 
       // --enable-gate writes the opt-in config, then falls through to a
       // normal run so the user immediately sees the gate with teeth
@@ -1935,7 +2129,9 @@ program
       const { default: SpecShip } = await loadSpecShip();
       const cg = await SpecShip.open(projectPath);
       // --strict gates everything for this run only (REQ-ENFORCE-004.A2).
-      const r = options.strict ? cg.getEnforce(enforce.strictEnforceConfig()) : cg.getEnforce();
+      const r = options.strict
+        ? cg.getEnforce(enforce.strictEnforceConfig(), scope)
+        : cg.getEnforce(undefined, scope);
 
       if (options.json) {
         console.log(JSON.stringify(r, null, 2));
@@ -1944,10 +2140,17 @@ program
       }
 
       console.log(chalk.bold('\nEnforcement gate\n'));
+      if (scope) {
+        console.log(chalk.dim(
+          `  scoped to ${scope.changedFiles.length} file(s) changed since ${scope.since}` +
+          ' — drift and behaviour are link-scoped; fitness and maintainability are repo-global analyses and ran unscoped.\n',
+        ));
+      }
       for (const c of r.checks) {
         const tag = c.gating ? chalk.dim('[gating]') : chalk.dim('[advisory]');
         const mark = c.passed ? chalk.green('✓') : (c.gating ? chalk.red('✗') : chalk.yellow('•'));
-        console.log(`  ${mark} ${c.check.padEnd(16)} ${tag} ${c.passed ? 'pass' : `${c.findings.length} finding(s)`}`);
+        const reach = scope ? chalk.dim(c.scoped ? ' [since]' : ' [repo-wide]') : '';
+        console.log(`  ${mark} ${c.check.padEnd(16)} ${tag}${reach} ${c.passed ? 'pass' : `${c.findings.length} finding(s)`}`);
         if (!c.passed) for (const f of c.findings.slice(0, 8)) console.log(chalk.dim(`        ${f}`));
         if (!c.passed && c.findings.length > 8) console.log(chalk.dim(`        …and ${c.findings.length - 8} more`));
       }
@@ -2626,16 +2829,16 @@ program
   .command('install')
   .description('Install specship MCP server into Claude Code')
   .option('-l, --location <where>', 'Install location: "global" or "local". Default: prompt (local)')
-  .option('-y, --yes', 'Non-interactive: defaults to --location=local, auto-allow on')
-  .option('--no-permissions', 'Skip writing the auto-allow permissions list')
+  .option('-y, --yes', 'Non-interactive: defaults to --location=local (the only question an interactive install asks)')
+  .option('--no-permissions', 'Skip writing the auto-allow permissions list (written by default)')
   .option('--sdd', '(default) Install the spec-driven-development governance tier (spec/authoring/review/design commands + the spec-author nudge hook)')
   .option('--no-sdd', 'Skip the governance tier — retrieval-only install (the pre-0.18 default)')
   .option('--path <repo>', 'Target repo to wire and initialize (default: current directory). Project-local files and the .specship index land there')
   .option('--with-jira', 'Enable the optional JIRA integration (talks to your Atlassian instance; off by default — the core install is 100% local)')
   .option('--with-designer', 'Enable the optional Designer integration (EXPERIMENTAL — drives claude.ai/design via a debug Chrome session and may break without notice; off by default)')
-  .option('--statusline', 'Wire the SpecShip status-line segment into Claude (skips the prompt; never overwrites an existing status line)')
-  .option('--skip-statusline', 'Do not add the status-line segment (skips the prompt)')
-  .option('--skip-index', 'Do not offer to index the current project (an explicit opt-out for automation)')
+  .option('--statusline', '(default) Wire the SpecShip status-line segment into Claude; never overwrites an existing status line')
+  .option('--skip-statusline', 'Do not add the status-line segment (it is added by default)')
+  .option('--skip-index', 'Do not index the current project (it is indexed by default)')
   .option('--print-config', 'Print the MCP config snippet and exit (no file writes). Claude Code by default; `--target gemini` prints the Gemini CLI settings snippet')
   // -t/--target SELECTS the agents to wire (GEMINI-TARGET-DOC, REQ-GEMINI-002)
   // and also picks the snippet --print-config prints. The legacy spellings
@@ -2692,32 +2895,25 @@ program
     }
     try {
       // Commander's `--no-permissions` makes `opts.permissions === false`;
-      // omitting the flag leaves it `true` (the positive-form default).
-      // We MUST treat the default-true as "user did not override — let
-      // the orchestrator prompt" and only forward an explicit `false`
-      // (or `true` when --yes implies it). Otherwise the auto-allow
-      // prompt is silently skipped on every interactive run.
+      // omitting the flag leaves it `true` (the positive-form default), which
+      // we must forward as `undefined` — "user did not override" — so the
+      // installer can tell a default from an explicit choice and name the
+      // defaults in its summary (REQ-SLIM-003.A2).
       const explicitNoPermissions = opts.permissions === false;
-      const autoAllow: boolean | undefined = explicitNoPermissions
+      const autoAllow: boolean | undefined = explicitNoPermissions ? false : undefined;
+
+      // Status line: default ON, never prompted (REQ-SLIM-003.A1).
+      // `--skip-statusline` is the opt-out; `--statusline` is now a no-op
+      // affirmation kept for compatibility (REQ-SLIM-003.A3). Distinct flag
+      // names (rather than `--no-statusline`) dodge commander's `--no-*`
+      // default-true coupling.
+      const statusLine: boolean | undefined = opts.skipStatusline
         ? false
-        : opts.yes
+        : opts.statusline
           ? true
           : undefined;
 
-      // Status-line opt-in: `--statusline` forces on, `--skip-statusline`
-      // forces off (both skip the prompt); neither ⇒ undefined ⇒ ask
-      // interactively (default no). Distinct flag names dodge commander's
-      // `--no-*` default-true coupling that would auto-install.
-      const statusLine: boolean | undefined = opts.statusline
-        ? true
-        : opts.skipStatusline
-          ? false
-          : undefined;
-
-      // The governance tier is opt-in (INSTALL-WEDGE-DOC): `--sdd` makes
-      // `opts.sdd === true`; omitting it leaves it undefined → retrieval-only.
-      // Forward `true` only when the user explicitly opted in.
-      await runInstallerWithOptions({
+      const outcome = await runInstallerWithOptions({
         target: opts.target,
         location: opts.location as 'global' | 'local' | undefined,
         autoAllow,
@@ -2730,8 +2926,10 @@ program
         yes: opts.yes,
       });
 
-      // Offer to index the current project (REQ-HANDSHAKE-004) before the smoke
-      // check, so an accepted index is reflected by the index-queryable item.
+      // Index the current project (REQ-HANDSHAKE-004) before the smoke check,
+      // so the new index is reflected by the index-queryable item. Not a
+      // question any more (REQ-SLIM-003.A1) — `--skip-index` opts out, and the
+      // summary below names the default.
       const cwd = process.cwd();
       const { decideInstallInit } = await import('../installer/init-offer');
       const { isGitRepo } = await import('../sync/git-hooks');
@@ -2741,14 +2939,7 @@ program
         yes: opts.yes === true,
         skipIndex: opts.skipIndex === true,
       });
-      let doIndex = initDecision === 'auto-index';
-      if (initDecision === 'offer') {
-        const clack = await importESM('@clack/prompts');
-        const ans = await clack.confirm({
-          message: `Index this project (${cwd}) now, so Claude can explore it?`,
-        });
-        doIndex = ans === true; // a cancel (symbol) or "no" both decline (REQ-HANDSHAKE-004.A2)
-      }
+      const doIndex = initDecision === 'auto-index';
       if (doIndex) {
         console.log();
         info(`Indexing ${cwd} …`);
@@ -2757,6 +2948,23 @@ program
           success('Project indexed.');
         } catch (e) {
           warn(`Indexing failed (run \`specship init -i\` later): ${e instanceof Error ? e.message : String(e)}`);
+        }
+      }
+
+      // Name the defaulted indexing decision the same way the installer names
+      // its own (REQ-SLIM-003.A2). The installer already printed this line when
+      // a local install built the index itself, so it is never doubled.
+      if (doIndex && !outcome?.indexed) {
+        const { describeInstallDefaults } = await import('../installer/install-defaults');
+        for (const line of describeInstallDefaults({
+          statusLine: 'skipped',
+          statusLineDefaulted: false,
+          autoAllow: false,
+          autoAllowDefaulted: false,
+          index: 'indexed',
+          indexDefaulted: true,
+        })) {
+          info(line);
         }
       }
 

@@ -132,6 +132,54 @@ Body text ends the block.
     ]);
   });
 
+  // REQ-REVINT-002 — the skip stays, but it is no longer silent: a no-edge
+  // bullet names itself in a warning so the author can see what didn't link.
+  it('bare-path bullet emits spec_bare_path_ref warning (REQ-REVINT-002.A1)', () => {
+    const source = `---
+id: DOC
+---
+<!-- id: REQ-1 -->
+# A requirement
+
+implementations:
+  - commands/specship/jira.md
+  - src/auth/login.ts:authenticate
+
+verifies:
+  - __tests__/auth.test.ts
+`;
+    const result = new MarkdownSpecExtractor('specs/x.md', source).extract();
+    const warnings = result.errors.filter((e) => e.code === 'spec_bare_path_ref');
+    expect(warnings).toHaveLength(2);
+    expect(warnings.every((w) => w.severity === 'warning')).toBe(true);
+    expect(warnings[0]!.filePath).toBe('specs/x.md');
+    expect(warnings[0]!.message).toContain('commands/specship/jira.md');
+    expect(warnings[0]!.message).toContain('REQ-1');
+    expect(warnings[1]!.message).toContain('__tests__/auth.test.ts');
+    // The bullet's own line, not the block header's.
+    expect(source.split('\n')[warnings[0]!.line! - 1]).toContain('commands/specship/jira.md');
+    // Warning-only: the well-formed bullet still links (REQ-LINKWB-002.A3).
+    expect(result.linkCandidates.map((c) => c.targetQualifiedName)).toEqual(['authenticate']);
+  });
+
+  it('well-formed path:Symbol bullets produce no warnings (REQ-REVINT-002.A3)', () => {
+    const source = `---
+id: DOC
+---
+<!-- id: REQ-1 -->
+# A requirement
+
+implementations:
+  - src/auth/login.ts:authenticate
+  - src/auth/rate-limit.ts:RateLimiter.enforce
+
+verifies:
+  - __tests__/auth.test.ts:authenticatesValidUser
+`;
+    const result = new MarkdownSpecExtractor('specs/x.md', source).extract();
+    expect(result.errors).toEqual([]);
+  });
+
   it('builds 3-level hierarchy: document → requirement → acceptance', () => {
     const source = `---
 id: DOC
@@ -713,5 +761,127 @@ id: DOC
     expect(a1!.body).toContain('marker above a bullet produces a node');
     // The embedded REQ-X.A1 must NOT have become its own spec.
     expect(result.specs.find((s) => s.id === 'REQ-X.A1')).toBeUndefined();
+  });
+});
+
+/**
+ * Link blocks under an acceptance bullet, and in the document body
+ * (REQ-VSTATE-003).
+ *
+ * Link extraction only ran for heading-derived sections, so the 1,176 criteria
+ * authored as id-marked bullets had no way to declare their own code or tests —
+ * an indented `verifies:` block was absorbed as prose — and a block written in
+ * the document's own H1 body was scanned nowhere at all.
+ */
+describe('MarkdownSpecExtractor — criterion-owned link blocks (REQ-VSTATE-003)', () => {
+  const withBulletBlocks = `---
+id: LINKS-DOC
+---
+<!-- id: LINKS-DOC -->
+# Document
+
+implementations:
+  - src/doc.ts:bootstrap
+
+<!-- id: REQ-L-001 -->
+## A requirement
+
+Prose about the requirement.
+
+implementations:
+  - src/req.ts:handler
+
+## Acceptance
+<!-- id: REQ-L-001.A1 -->
+- The criterion holds.
+  verifies:
+    - __tests__/req.test.ts:holdsTest
+<!-- id: REQ-L-001.A2 -->
+- The other criterion holds.
+  implementations:
+    - src/req.ts:other
+<!-- id: REQ-L-001.A3 -->
+- A plain criterion with no block at all.
+`;
+
+  it('an indented verifies: block under a bullet creates tests links owned by that criterion (REQ-VSTATE-003.A1)', () => {
+    const result = new MarkdownSpecExtractor('specs/l.md', withBulletBlocks).extract();
+    const tests = result.linkCandidates.filter((c) => c.kind === 'tests');
+    expect(tests).toEqual([
+      {
+        specId: 'REQ-L-001.A1',
+        targetFilePath: '__tests__/req.test.ts',
+        targetQualifiedName: 'holdsTest',
+        targetNodeKind: 'function',
+        kind: 'tests',
+      },
+    ]);
+    // The block is not absorbed into the criterion's prose.
+    const a1 = result.specs.find((s) => s.id === 'REQ-L-001.A1')!;
+    expect(a1.body).toBe('The criterion holds.');
+  });
+
+  it('an indented implementations: block under a bullet creates implements links for it (REQ-VSTATE-003.A2)', () => {
+    const result = new MarkdownSpecExtractor('specs/l.md', withBulletBlocks).extract();
+    const own = result.linkCandidates.filter((c) => c.specId === 'REQ-L-001.A2');
+    expect(own).toEqual([
+      {
+        specId: 'REQ-L-001.A2',
+        targetFilePath: 'src/req.ts',
+        targetQualifiedName: 'other',
+        targetNodeKind: 'function',
+        kind: 'implements',
+      },
+    ]);
+    // Ownership is exclusive: the enclosing requirement keeps only its own
+    // column-0 block, so a criterion's link is never double-counted upward.
+    const reqOwn = result.linkCandidates.filter((c) => c.specId === 'REQ-L-001');
+    expect(reqOwn.map((c) => c.targetQualifiedName)).toEqual(['handler']);
+  });
+
+  it('a bullet with no following link block parses exactly as before (REQ-VSTATE-003.A3)', () => {
+    const result = new MarkdownSpecExtractor('specs/l.md', withBulletBlocks).extract();
+    expect(result.errors.filter((e) => e.severity === 'error')).toEqual([]);
+    const a3 = result.specs.find((s) => s.id === 'REQ-L-001.A3')!;
+    expect(a3.body).toBe('A plain criterion with no block at all.');
+    expect(result.linkCandidates.some((c) => c.specId === 'REQ-L-001.A3')).toBe(false);
+    // All three criteria still exist, parented to the requirement.
+    for (const id of ['REQ-L-001.A1', 'REQ-L-001.A2', 'REQ-L-001.A3']) {
+      expect(result.specs.find((s) => s.id === id)?.parentId).toBe('REQ-L-001');
+    }
+  });
+
+  it('a link block in the document H1 body is scanned and owned by the document (REQ-VSTATE-003.A1)', () => {
+    const result = new MarkdownSpecExtractor('specs/l.md', withBulletBlocks).extract();
+    const docLinks = result.linkCandidates.filter((c) => c.specId === 'LINKS-DOC');
+    expect(docLinks).toEqual([
+      {
+        specId: 'LINKS-DOC',
+        targetFilePath: 'src/doc.ts',
+        targetQualifiedName: 'bootstrap',
+        targetNodeKind: 'function',
+        kind: 'implements',
+      },
+    ]);
+  });
+
+  it('continuation prose under a bullet is still absorbed as body text (REQ-VSTATE-003.A3)', () => {
+    const source = `---
+id: LINKS2-DOC
+---
+<!-- id: LINKS2-DOC -->
+# Document
+
+<!-- id: REQ-L2-001 -->
+## A requirement
+
+## Acceptance
+<!-- id: REQ-L2-001.A1 -->
+- The criterion holds
+  across two lines.
+`;
+    const result = new MarkdownSpecExtractor('specs/l2.md', source).extract();
+    const a1 = result.specs.find((s) => s.id === 'REQ-L2-001.A1')!;
+    expect(a1.body).toBe('The criterion holds across two lines.');
   });
 });

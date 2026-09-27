@@ -3,6 +3,10 @@ id: RUNSET-DOC
 title: Runtime settings files with repo-over-install precedence
 owner: specship
 priority: medium
+jira_issue_REQ-RUNSET-001: SSHIP-964
+jira_fingerprint_REQ-RUNSET-001: 90590e1e0f2a75c2
+jira_issue_REQ-RUNSET-002: SSHIP-969
+jira_fingerprint_REQ-RUNSET-002: cb57d599c2e2f3fe
 ---
 
 <!-- id: RUNSET-DOC -->

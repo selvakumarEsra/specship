@@ -302,5 +302,39 @@ describe('Sync Module', () => {
       expect(result.filesRemoved).toBe(0);
       expect(result.changedFilePaths).toBeUndefined();
     });
+
+    // REQ-REVINT-002.A2 — the sync spec pass used to drop extraction problems
+    // on the floor; it now counts them the way indexSpecs does.
+    it('sync returns spec extraction error/warning counts (REQ-REVINT-002.A2)', async () => {
+      const specsDir = path.join(testDir, 'specs');
+      fs.mkdirSync(specsDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(specsDir, 'thing.md'),
+        [
+          '---',
+          'id: THING-DOC',
+          '---',
+          '<!-- id: REQ-THING-001 -->',
+          '# A thing',
+          '',
+          'implementations:',
+          '  - commands/specship/thing.md',
+          '  - src/index.ts:hello',
+          '',
+          '## A heading with no embedded id',
+          '',
+        ].join('\n')
+      );
+
+      const result = await cg.sync();
+
+      expect(result.specWarnings).toBe(1); // the bare-path bullet
+      expect(result.specErrors).toBe(1); // the id-less heading
+
+      // Unchanged specs are hash-skipped, so a second sync reparses nothing.
+      const second = await cg.sync();
+      expect(second.specWarnings).toBe(0);
+      expect(second.specErrors).toBe(0);
+    });
   });
 });

@@ -8,7 +8,7 @@ Distill the CURRENT session's successful workflow into a reusable routine and
 submit it as a SpecShip skill proposal (LEARN-DOC, REQ-LEARN-002). The
 proposal is **human-gated**: it enters the same review queue as mined
 proposals, and nothing is written to commands/ or memory until the user
-applies it from the dashboard's Improvements page.
+applies it.
 
 ## What to do
 
@@ -33,8 +33,10 @@ applies it from the dashboard's Improvements page.
    ```
 
 4. **Tell the user** the proposal id from the output and that they can review
-   and apply it on the dashboard's Improvements page (preview-diff →
-   confirm), or dismiss it.
+   the open proposals with `specship reflect` (add `--json` for the full
+   bodies). Nothing lands until they apply it. The CLI is the only review
+   surface today — there is no dashboard page for proposals yet, so don't send
+   them looking for one (REQ-SURF-002.A2).
 
 ## Rules
 

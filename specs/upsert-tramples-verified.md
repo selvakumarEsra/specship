@@ -5,6 +5,10 @@ owner: core
 priority: high
 version: 1
 brief: upsert-tramples-verified/brief.md
+jira_issue_REQ-STICKYLINK-001: SSHIP-1613
+jira_fingerprint_REQ-STICKYLINK-001: f8506c93c63e9728
+jira_issue_REQ-STICKYLINK-002: SSHIP-1624
+jira_fingerprint_REQ-STICKYLINK-002: 819112dc7bc6b35b
 ---
 
 <!-- id: STICKYLINK-DOC -->

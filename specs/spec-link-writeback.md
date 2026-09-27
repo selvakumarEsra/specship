@@ -3,6 +3,12 @@ id: LINK-TRUTH-DOC
 title: Spec-link write-back — the spec file is the source of truth
 owner: specship
 priority: high
+jira_issue_REQ-LINKWB-001: SSHIP-1120
+jira_fingerprint_REQ-LINKWB-001: b4f7ec6a9e6944f0
+jira_issue_REQ-LINKWB-002: SSHIP-1124
+jira_fingerprint_REQ-LINKWB-002: 12a4f5791bc435f1
+jira_issue_REQ-LINKWB-003: SSHIP-1128
+jira_fingerprint_REQ-LINKWB-003: a14148005c16853a
 ---
 
 <!-- id: LINK-TRUTH-DOC -->

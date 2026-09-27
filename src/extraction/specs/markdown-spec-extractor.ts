@@ -145,8 +145,16 @@ export class MarkdownSpecExtractor {
       id: string;
       text: string;               // bullet text incl. continuation lines
       startLine: number;          // 1-indexed
-      endLine: number;            // 1-indexed (last continuation line)
+      endLine: number;            // 1-indexed (last continuation / link-block line)
       enclosingRequirementId: string | null; // nearest preceding heading section
+      /**
+       * The bullet's own INDENTED `verifies:` / `implementations:` block, if it
+       * has one (REQ-VSTATE-003). Kept out of `text` so the criterion's body
+       * stays prose, and scanned for link candidates owned by the BULLET's id.
+       */
+      linkBlockLines: string[];
+      /** 1-indexed line of `linkBlockLines[0]` (for error reporting). */
+      linkBlockStartLine: number;
     }
 
     const pendingSections: PendingSection[] = [];
@@ -221,11 +229,37 @@ export class MarkdownSpecExtractor {
         const bulletMatch = line.match(BULLET);
         if (bulletMatch && bulletMatch[1]) {
           const parts = [bulletMatch[1].trim()];
+          const linkBlockLines: string[] = [];
+          let linkBlockStartIdx = -1;
+          let inLinkBlock = false;
           let endIdx = i;
           for (let j = i + 1; j < lines.length; j++) {
             const cont = lines[j];
             if (cont === undefined || cont.trim() === '') break;
-            if (ID_COMMENT.test(cont) || HEADING.test(cont) || BULLET.test(cont)) break;
+            if (ID_COMMENT.test(cont) || HEADING.test(cont)) break;
+
+            // An INDENTED `verifies:` / `implementations:` keyword opens the
+            // bullet's own link block (REQ-VSTATE-003). Indentation is what
+            // distinguishes it from a section-level block, which is written at
+            // column 0 and belongs to the enclosing requirement.
+            if (isIndentedLinkBlockKeyword(cont)) {
+              inLinkBlock = true;
+              if (linkBlockStartIdx < 0) linkBlockStartIdx = j;
+              linkBlockLines.push(cont);
+              endIdx = j;
+              continue;
+            }
+            if (BULLET.test(cont)) {
+              // Inside the block, bullets are its `path:Symbol` entries; outside
+              // it, a bullet is the next criterion and ends this one.
+              if (!inLinkBlock) break;
+              linkBlockLines.push(cont);
+              endIdx = j;
+              continue;
+            }
+            // Any other line ends the link block; before one starts it is a
+            // prose continuation of the bullet.
+            if (inLinkBlock) break;
             parts.push(cont.trim());
             endIdx = j;
           }
@@ -235,6 +269,8 @@ export class MarkdownSpecExtractor {
             startLine: i + 1,
             endLine: endIdx + 1,
             enclosingRequirementId: lastSectionId,
+            linkBlockLines,
+            linkBlockStartLine: linkBlockStartIdx + 1,
           });
           pendingId = null;
           pendingIdLine = -1;
@@ -320,6 +356,19 @@ export class MarkdownSpecExtractor {
         createdAt: now,
         updatedAt: now,
       });
+
+      // Scan the DOCUMENT body for link blocks too. The section loop below
+      // skips the H1-that-is-the-document, so a `verifies:` /
+      // `implementations:` block written in the document's intro prose used to
+      // be silently link-less — it was never scanned anywhere (REQ-VSTATE-003).
+      linkCandidates.push(
+        ...this.extractImplementationRefs(
+          docId,
+          lines.slice(docBodyStart, docBodyEnd),
+          docBodyStart + 1,
+          errors
+        )
+      );
     }
 
     // For each section: determine its body range + parent.
@@ -380,7 +429,12 @@ export class MarkdownSpecExtractor {
       });
 
       // Scan the body for `implementations:` blocks — bullet-list refs.
-      const candidates = this.extractImplementationRefs(section.id, bodyLines);
+      const candidates = this.extractImplementationRefs(
+        section.id,
+        bodyLines,
+        section.headingLineIdx + 2, // 1-indexed line number of bodyLines[0]
+        errors
+      );
       linkCandidates.push(...candidates);
     }
 
@@ -423,6 +477,21 @@ export class MarkdownSpecExtractor {
         createdAt: now,
         updatedAt: now,
       });
+
+      // The bullet's own indented `verifies:` / `implementations:` block links
+      // to the CRITERION, not the requirement (REQ-VSTATE-003.A1 / .A2) — which
+      // is what makes per-criterion coverage computable at all.
+      if (ab.linkBlockLines.length > 0) {
+        linkCandidates.push(
+          ...this.extractImplementationRefs(
+            ab.id,
+            ab.linkBlockLines,
+            ab.linkBlockStartLine,
+            errors,
+            'indented'
+          )
+        );
+      }
     }
 
     return {
@@ -723,25 +792,40 @@ export class MarkdownSpecExtractor {
    */
   private extractImplementationRefs(
     specId: string,
-    bodyLines: string[]
+    bodyLines: string[],
+    bodyStartLine: number,
+    errors: ExtractionError[],
+    indent: 'flush' | 'indented' = 'flush'
   ): SpecLinkCandidate[] {
     return [
-      ...this.extractLinkRefBlock(specId, bodyLines, 'implementations:', 'implements'),
-      ...this.extractLinkRefBlock(specId, bodyLines, 'verifies:', 'tests'),
+      ...this.extractLinkRefBlock(specId, bodyLines, 'implementations:', 'implements', bodyStartLine, errors, indent),
+      ...this.extractLinkRefBlock(specId, bodyLines, 'verifies:', 'tests', bodyStartLine, errors, indent),
     ];
   }
 
+  /**
+   * `indent` decides WHO owns a block (REQ-VSTATE-003): a column-0 (`flush`)
+   * keyword belongs to the enclosing heading section, an indented one belongs to
+   * the acceptance bullet above it. Without the split, a section body — which
+   * contains its bullets' indented blocks — would claim those links too and every
+   * criterion-level link would be duplicated onto its requirement.
+   */
   private extractLinkRefBlock(
     specId: string,
     bodyLines: string[],
     keyword: string,
-    kind: SpecLinkKind
+    kind: SpecLinkKind,
+    bodyStartLine: number,
+    errors: ExtractionError[],
+    indent: 'flush' | 'indented' = 'flush'
   ): SpecLinkCandidate[] {
     const out: SpecLinkCandidate[] = [];
 
     for (let i = 0; i < bodyLines.length; i++) {
-      const line = (bodyLines[i] ?? '').trim();
+      const raw = bodyLines[i] ?? '';
+      const line = raw.trim();
       if (line !== keyword && !line.startsWith(keyword)) continue;
+      if ((indent === 'indented') !== /^\s+\S/.test(raw)) continue;
 
       // Walk subsequent lines collecting `- path:symbol` entries.
       for (let j = i + 1; j < bodyLines.length; j++) {
@@ -753,7 +837,18 @@ export class MarkdownSpecExtractor {
           // command markdown file) is a documented no-edge entry — skip it
           // WITHOUT ending the block, so bullets after it still link
           // (REQ-LINKWB-002.A3). Only a non-bullet line ends the block.
-          if (/^[-*]\s/.test(subline)) continue;
+          // The skip is intentional but no longer silent: it produces no edge,
+          // so the author gets a warning naming the bullet (REQ-REVINT-002.A1).
+          if (/^[-*]\s/.test(subline)) {
+            errors.push({
+              message: `${specId}: ${keyword} bullet "${subline}" is not \`path:Symbol\` — no link edge created`,
+              filePath: this.filePath,
+              line: bodyStartLine + j,
+              severity: 'warning',
+              code: 'spec_bare_path_ref',
+            });
+            continue;
+          }
           break;
         }
         const refPath = m[1];
@@ -772,6 +867,17 @@ export class MarkdownSpecExtractor {
     }
     return out;
   }
+}
+
+/**
+ * True for an INDENTED `verifies:` / `implementations:` keyword line — the form
+ * that binds a link block to the acceptance bullet above it (REQ-VSTATE-003).
+ * A column-0 keyword belongs to the enclosing heading section instead.
+ */
+function isIndentedLinkBlockKeyword(line: string): boolean {
+  if (!/^\s+\S/.test(line)) return false;
+  const t = line.trim();
+  return t.startsWith('implementations:') || t.startsWith('verifies:');
 }
 
 function hash(s: string): string {

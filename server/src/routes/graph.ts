@@ -175,7 +175,8 @@ export async function registerGraphRoutes(app: FastifyInstance): Promise<void> {
   /**
    * GET /api/graph/health — feeds the Graph overview panel:
    *   - linkHealth: spec-link counts per state (verified/drifted/broken/orphaned/…)
-   *   - edgeKinds:  edge counts grouped into calls / implements-documents / tests
+   *   - edgeKinds:  calls / implements-documents edge counts, plus `tests` —
+   *                 resolved test-evidence spec_links, not an edge bucket
    *   - hubs:       the most-connected nodes (by total degree), for the "Most connected" list
    *   - anchored:   nodes that are spec_links targets (by degree), for the "Anchored" list
    */
@@ -191,13 +192,12 @@ export async function registerGraphRoutes(app: FastifyInstance): Promise<void> {
     const db = getDb(cg);
 
     // Edge kinds — bucket by the node kinds the edge connects, mirroring the
-    // design's "calls / implements / tests" legend. spec endpoints → implements,
-    // test endpoints → tests, everything else → calls.
+    // design's "calls / implements" legend. spec endpoints → implements,
+    // everything else → calls.
     const edgeKinds = db.prepare(`
       SELECT
         CASE
           WHEN ns.kind = 'spec' OR nt.kind = 'spec' THEN 'implements'
-          WHEN ns.kind = 'test' OR nt.kind = 'test' THEN 'tests'
           ELSE 'calls'
         END as bucket,
         COUNT(*) as count
@@ -208,6 +208,17 @@ export async function registerGraphRoutes(app: FastifyInstance): Promise<void> {
     `).all() as Array<{ bucket: string; count: number }>;
     const edgeKindMap: Record<string, number> = { calls: 0, implements: 0, tests: 0 };
     for (const r of edgeKinds) edgeKindMap[r.bucket] = r.count;
+
+    // Test evidence is a spec_links relationship, not an edge between node
+    // kinds — there is no `test` NodeKind, so the old `ns.kind = 'test'`
+    // bucket was permanently 0 (REQ-REVINT-008.A1). Count the resolved
+    // tests/validates links instead: a spec whose `verifies:` block points at
+    // a real symbol is exactly one test-evidence relationship.
+    const testEvidence = db.prepare(`
+      SELECT COUNT(*) as c FROM spec_links
+      WHERE kind IN ('tests', 'validates') AND resolved_node_id IS NOT NULL
+    `).get() as { c: number };
+    edgeKindMap['tests'] = testEvidence.c ?? 0;
 
     // Synthesized (heuristic) edge count — dashed in the legend.
     const synth = db.prepare(
@@ -260,6 +271,13 @@ export async function registerGraphRoutes(app: FastifyInstance): Promise<void> {
    * among them. Isolated (degree-0) nodes are omitted — an overview shows the
    * connected core. `total` reports the full node count so the UI can say
    * "showing N of M".
+   *
+   * Traceability is unioned in on top of that cut (REQ-TVIZ-010.A1). A spec
+   * node's degree is 1–2, so the top-N pass pruned every spec↔code edge out of
+   * the whole-repo view: the one relationship the product exists to show was
+   * the first thing dropped. Spec nodes that participate in an edge — and the
+   * code nodes on the other end — are therefore kept regardless of degree. A
+   * spec node with no edges is still omitted; it would draw as an island.
    */
   app.get('/api/graph/full', async (req: FastifyRequest<{ Querystring: ProjectQuery & { limit?: string } }>, reply) => {
     const cg = await resolveCg(app, req, reply); if (!cg) return;
@@ -280,7 +298,37 @@ export async function registerGraphRoutes(app: FastifyInstance): Promise<void> {
       ORDER BY deg.degree DESC
     `).all(limit) as Array<{ id: string; name: string; kind: string; filePath: string; degree: number }>;
 
+    // Spec nodes with at least one edge, plus whatever sits at the other end
+    // of those edges — the traceability union (REQ-TVIZ-010.A1).
+    const traceRows = db.prepare(`
+      SELECT n.id, n.name, n.kind, n.file_path as filePath, COALESCE(deg.degree, 0) as degree
+      FROM nodes n
+      LEFT JOIN (
+        SELECT node, COUNT(*) as degree FROM (
+          SELECT source as node FROM edges
+          UNION ALL
+          SELECT target as node FROM edges
+        ) GROUP BY node
+      ) deg ON deg.node = n.id
+      WHERE n.id IN (
+        SELECT e.source FROM edges e JOIN nodes s ON s.id = e.source WHERE s.kind = 'spec'
+        UNION
+        SELECT e.target FROM edges e JOIN nodes t ON t.id = e.target WHERE t.kind = 'spec'
+        UNION
+        SELECT e.target FROM edges e JOIN nodes s ON s.id = e.source WHERE s.kind = 'spec'
+        UNION
+        SELECT e.source FROM edges e JOIN nodes t ON t.id = e.target WHERE t.kind = 'spec'
+      )
+    `).all() as Array<{ id: string; name: string; kind: string; filePath: string; degree: number }>;
+
     const keep = new Set(nodeRows.map((n) => n.id));
+    const nodes = nodeRows.map((n) => ({ id: n.id, name: n.name, kind: n.kind, filePath: n.filePath, degree: n.degree }));
+    for (const n of traceRows) {
+      if (keep.has(n.id)) continue;
+      keep.add(n.id);
+      nodes.push({ id: n.id, name: n.name, kind: n.kind, filePath: n.filePath, degree: n.degree });
+    }
+
     const allEdges = db.prepare(
       `SELECT source as "from", target as "to", kind, provenance FROM edges`,
     ).all() as Array<{ from: string; to: string; kind: string; provenance: string }>;
@@ -289,10 +337,10 @@ export async function registerGraphRoutes(app: FastifyInstance): Promise<void> {
     const totalRow = db.prepare(`SELECT COUNT(*) as c FROM nodes`).get() as { c: number };
 
     return {
-      nodes: nodeRows.map((n) => ({ id: n.id, name: n.name, kind: n.kind, filePath: n.filePath, degree: n.degree })),
+      nodes,
       edges,
-      total: totalRow.c ?? nodeRows.length,
-      shown: nodeRows.length,
+      total: totalRow.c ?? nodes.length,
+      shown: nodes.length,
     };
   });
 }

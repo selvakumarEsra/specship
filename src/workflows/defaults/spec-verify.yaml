@@ -13,23 +13,58 @@ nodes:
     output_type: test_results
     timeout: 600000
     bash: |
+      # Same VERIFY_RESULT contract as spec-implement / spec-fix
+      # (REQ-REVINT-006, REQ-VSTATE-005): the marker is what the routing node
+      # reads. This node used to emit no marker at all and `exit 0` when it
+      # found no runner — a no-runner repo read as a clean verification pass.
       if [ -f package.json ]; then
         # Run against a built tree so a missing dist/ can't false-fail the
         # verify leg (WF-REJECT-DOC, REQ-WFREJ-005).
-        npm run build --if-present
-        npm test
+        if ! npm run build --if-present; then echo "VERIFY_RESULT=build-failed"; exit 1; fi
+        if npm test; then echo "VERIFY_RESULT=ran-and-passed"; else echo "VERIFY_RESULT=ran-and-failed"; exit 1; fi
       elif [ -f Cargo.toml ]; then
-        cargo test
+        if ! cargo build; then echo "VERIFY_RESULT=build-failed"; exit 1; fi
+        if cargo test; then echo "VERIFY_RESULT=ran-and-passed"; else echo "VERIFY_RESULT=ran-and-failed"; exit 1; fi
       elif [ -f pyproject.toml ] || [ -f requirements.txt ]; then
-        python -m pytest
+        if ! python -c 'import pytest' 2>/dev/null; then echo "VERIFY_RESULT=env-failed"; exit 1; fi
+        if python -m pytest; then echo "VERIFY_RESULT=ran-and-passed"; else echo "VERIFY_RESULT=ran-and-failed"; exit 1; fi
       else
-        echo "no recognised test framework; skipping" >&2
-        exit 0
+        echo "no recognised test framework; tests did NOT run" >&2
+        echo "VERIFY_RESULT=skipped"
       fi
+
+  - id: route_verify
+    kind: bash
+    depends_on: [run_tests]
+    output_type: verify_route
+    bash: |
+      # Deterministic routing (REQ-VSTATE-005.A1): code decides what the
+      # summarize node may do with link state.
+      VERIFY_OUT=$run_tests.output
+      MARKER=$(printf '%s' "$VERIFY_OUT" | grep -oE 'VERIFY_RESULT=[a-z-]+' | tail -n 1 | cut -d= -f2)
+      [ -n "$MARKER" ] || MARKER=missing
+      echo "VERIFY_RESULT=$MARKER"
+      case "$MARKER" in
+        ran-and-passed)
+          echo "LINK_ACTION=verify-evidenced" ;;
+        ran-and-failed)
+          echo "LINK_ACTION=verify-fail" ;;
+        skipped)
+          echo "LINK_ACTION=no-verify" ;;
+        env-failed)
+          echo "HALT_CAUSE=environment setup failed — nothing is known about the tests"
+          exit 1 ;;
+        build-failed)
+          echo "HALT_CAUSE=build failed — nothing is known about the tests"
+          exit 1 ;;
+        *)
+          echo "HALT_CAUSE=no VERIFY_RESULT marker found in the test output — an unknown result is never a pass"
+          exit 1 ;;
+      esac
 
   - id: summarize
     kind: prompt
-    depends_on: [run_tests]
+    depends_on: [route_verify]
     output_type: link_summary
     trigger_rule: all_done
     allowed_tools:
@@ -41,11 +76,22 @@ nodes:
 
       $run_tests.output
 
+      Routing decision (computed in code — act on it, do not re-derive it
+      from the log above):
+
+      $route_verify.output
+
       Promotion is EVIDENCE-BASED (VERIFY-EVID-DOC): a spec may only become
       "verified" when a test linked to it as evidence passed. Evidence links
-      have kind='tests' and come from a `verifies:` block in the spec or an
-      `@verifies REQ-X` comment on the test. A green suite alone proves
+      have kind='tests' and come from a `verifies:` block in the spec, an
+      `@verifies REQ-X` comment on the test, or a spec id inside an `it()`
+      title in a test file (REQ-VSTATE-002). A green suite alone proves
       nothing about a spec with no linked tests — never blanket-promote.
+
+      - LINK_ACTION=verify-evidenced → proceed with steps 1–4 below.
+      - LINK_ACTION=verify-fail → only demote (step 3). Promote nothing.
+      - LINK_ACTION=no-verify → no test ran. Mutate no link state at all;
+        report that verification was skipped and stop.
 
       1. Call specship_drifted to see any drifted/broken/orphaned links.
       2. For each 'implemented' link whose spec HAS test-evidence links:
@@ -60,6 +106,11 @@ nodes:
       4. Specs with no evidence links stay 'implemented'. List them as
          "unevidenced" in your summary so the author can add `verifies:`
          blocks (REQ-VEVID-003).
+
+      For a fully deterministic alternative to steps 2–3, run
+      `specship verify --report <vitest-json>` (REQ-VSTATE-004): it maps
+      reported test cases to `tests` links by file + title and moves the
+      state itself, with the run recorded as evidence.
 
       Output: a short summary — how many links moved to verified, how many
       to broken, which specs are unevidenced, and which are still drifted.

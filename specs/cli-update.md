@@ -4,6 +4,16 @@ title: specship update — self-update to the latest release
 owner: core
 priority: medium
 version: 1
+jira_issue_REQ-CLI-UPDATE-001: SSHIP-177
+jira_fingerprint_REQ-CLI-UPDATE-001: ea08a02f92b62b7f
+jira_issue_REQ-CLI-UPDATE-002: SSHIP-181
+jira_fingerprint_REQ-CLI-UPDATE-002: 3759a16a85c2f19e
+jira_issue_REQ-CLI-UPDATE-003: SSHIP-185
+jira_fingerprint_REQ-CLI-UPDATE-003: 9b39d87563d73f3e
+jira_issue_REQ-CLI-UPDATE-004: SSHIP-189
+jira_fingerprint_REQ-CLI-UPDATE-004: a03c83618e202e90
+jira_issue_REQ-CLI-UPDATE-005: SSHIP-192
+jira_fingerprint_REQ-CLI-UPDATE-005: 11df301ba2d376ad
 ---
 
 <!-- id: CLI-UPDATE-DOC -->

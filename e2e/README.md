@@ -40,6 +40,37 @@ on):
   sessions).
 - **`dashboard-data.spec.ts`** — a live cost value renders from same-origin
   `/api` data.
+- **`api-failure.spec.ts`** — with a data route forced to 500, the dashboard
+  shows a named error state with a working Retry instead of a blank screen, and
+  the failure stays contained to that one module (REQ-TVIZ-004.A1/.A2).
+- **`empty-project.spec.ts`** — an initialized-but-unindexed project renders
+  explicit empty states on Dashboard / Specs / Graph, with zero console errors
+  (REQ-TVIZ-004.A1).
+
+### The three fixture servers
+
+Playwright boots one `webServer` per row below (ports and modes in
+[`lib/ports.ts`](./lib/ports.ts); `E2E_MODE` scopes each one's work dir in
+`lib/paths.mjs`, so they build and serve concurrently without trampling each
+other). Move all three at once with `E2E_PORT`.
+
+| Mode | Port | Fixture | Drives |
+|---|---|---|---|
+| `default` | 4319 | indexed + seeded transcripts | every happy-path spec (`baseURL`) |
+| `fault` | 4320 | same, plus `E2E_FAULT=/api/claude/stats` | `api-failure.spec.ts` |
+| `empty` | 4321 | `specship init` and nothing else | `empty-project.spec.ts` |
+
+`E2E_FAULT` (REQ-TVIZ-004.A2) is read in `server/src/server.ts`: it takes a
+comma-separated list of `/api` path substrings and registers an `onRequest` hook
+that answers a matching request with 500. With the variable unset — every
+production boot — the hook is never registered, so a new failure case is an env
+change, not a code change.
+
+**Console-error policy on failure paths.** The allowlist in `lib/console.ts`
+stays empty. A spec that deliberately induces a 500 passes its own narrow
+allowlist to `captureConsoleErrors` (the browser's unavoidable "Failed to load
+resource" line) and separately asserts that the injected route was the only
+failing request — so the exemption can't hide an unrelated error.
 
 ## Running locally
 

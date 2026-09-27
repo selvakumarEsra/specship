@@ -3,6 +3,18 @@ id: STEER-HOOK-DOC
 title: Retrieval steering hook at install
 owner: installer
 priority: high
+jira_issue_REQ-STEER-001: SSHIP-943
+jira_fingerprint_REQ-STEER-001: 5735104dc44eedf7
+jira_issue_REQ-STEER-002: SSHIP-946
+jira_fingerprint_REQ-STEER-002: cfd7b178b6176a73
+jira_issue_REQ-STEER-003: SSHIP-949
+jira_fingerprint_REQ-STEER-003: 7a5be759c75e5771
+jira_issue_REQ-STEER-004: SSHIP-951
+jira_fingerprint_REQ-STEER-004: 4d87d9e30fe753bb
+jira_issue_REQ-STEER-005: SSHIP-957
+jira_fingerprint_REQ-STEER-005: 4cf37f61f1955404
+jira_issue_REQ-STEER-006: SSHIP-962
+jira_fingerprint_REQ-STEER-006: 7914bf5e0c933b54
 ---
 
 <!-- id: STEER-HOOK-DOC -->

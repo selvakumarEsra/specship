@@ -4,6 +4,16 @@ title: Ideas lane — capture, review, promote, and tracker import/sync
 owner: core
 priority: high
 version: 1
+jira_issue_REQ-IDEAS-001: SSHIP-436
+jira_fingerprint_REQ-IDEAS-001: e307f563676a360c
+jira_issue_REQ-IDEAS-002: SSHIP-443
+jira_fingerprint_REQ-IDEAS-002: 1eb5e57ea49df36a
+jira_issue_REQ-IDEAS-003: SSHIP-449
+jira_fingerprint_REQ-IDEAS-003: f3e861e347fef86c
+jira_issue_REQ-IDEAS-004: SSHIP-454
+jira_fingerprint_REQ-IDEAS-004: 576768662dfdcaf6
+jira_issue_REQ-IDEAS-005: SSHIP-459
+jira_fingerprint_REQ-IDEAS-005: 2b076d3bdf20556a
 ---
 
 <!-- id: IDEAS-LANE-DOC -->
@@ -122,6 +132,12 @@ implementations:
 <!-- id: REQ-IDEAS-004 -->
 ## Tracker items MUST be importable as ideas through the agent's tracker MCP
 
+> **SUPERSEDED (2026-09-25) by SURF-DOC** (`specs/surface-cleanup.md`,
+> REQ-SURF-008.A1): no tracker import exists — there is no
+> `/specship:spec ideas import` route, and the shipped tracker path is the
+> first-party JIRA integration (JIRA-DOC), not a generic MCP import. Retired
+> and kept for history.
+
 The lane is also the intake from Jira/Linear. Import runs through the agent's
 own tracker MCP connection — SpecShip ships no tracker client, stores no
 credentials, and never falls back to blind HTTP; when no tracker MCP is
@@ -151,6 +167,11 @@ handle.
 <!-- id: REQ-IDEAS-005 -->
 ## Lifecycle moments MUST push back to the tracker, one way
 
+> **SUPERSEDED (2026-09-25) by SURF-DOC** (`specs/surface-cleanup.md`,
+> REQ-SURF-008.A1): the generic tracker push it depends on was never built
+> (REQ-IDEAS-004 is retired with it). JIRA publish/transition is the shipped
+> outward path (JIRA-DOC). Retired and kept for history.
+
 After import the repo owns the truth. SpecShip pushes outward at lifecycle
 moments — promotion updates the tracker item's description from the interview
 outcome; verification transitions its status — and never merges tracker-side
@@ -176,4 +197,4 @@ regardless of tracker availability.
 <!-- id: REQ-IDEAS-005.A4 -->
 - No continuous pull: description or status edits made tracker-side after
   import are not merged back automatically; a re-import of that key is the
-  explicit way to refresh the brief. [needs review]
+  explicit way to refresh the brief.

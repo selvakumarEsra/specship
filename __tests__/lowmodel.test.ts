@@ -70,9 +70,11 @@ describe('REQ-LOWMODEL-004.A4 — static (proxy) tools/list trims on the lite ti
       for (const core of ['specship_explore', 'specship_search', 'specship_node']) {
         expect(names).toContain(core);
       }
-      for (const trimmed of ['specship_callers', 'specship_callees', 'specship_impact', 'specship_files', 'specship_status']) {
+      for (const trimmed of ['specship_callers', 'specship_callees', 'specship_impact', 'specship_files', 'specship_health']) {
         expect(names).not.toContain(trimmed);
       }
+      // REQ-SURF-006.A2: status is the identity probe now — the lite trim keeps it.
+      expect(names).toContain('specship_status');
       // Spec/link tools are not in the code-graph group — untouched.
       expect(names).toContain('specship_spec');
     } finally {
@@ -197,14 +199,16 @@ describe.skipIf(!fts5Available)('handler-level (REQ-LOWMODEL-001/003/004)', () =
     for (const t of ['specship_explore', 'specship_search', 'specship_node']) {
       expect(haikuList).toContain(t);
     }
-    for (const t of ['specship_callers', 'specship_impact', 'specship_status', 'specship_maintainability']) {
+    for (const t of ['specship_callers', 'specship_impact', 'specship_health']) {
       expect(fullList).toContain(t);
       expect(haikuList).not.toContain(t);
     }
-    // REQ-MCPVER-001.A4: specship_version survives both the tiny-repo and
-    // haiku menu trims — it's the identity probe, always available.
-    expect(fullList).toContain('specship_version');
-    expect(haikuList).toContain('specship_version');
+    // REQ-SURF-006.A2: specship_status carries the identity answer since
+    // specship_version folded into it, so it survives both the tiny-repo and
+    // haiku menu trims — and the retired tool name is off the menu entirely.
+    expect(fullList).toContain('specship_status');
+    expect(haikuList).toContain('specship_status');
+    expect(fullList).not.toContain('specship_version');
     expect(names()).toEqual(fullList); // back to full after env cleared
   });
 

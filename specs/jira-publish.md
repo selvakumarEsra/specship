@@ -4,6 +4,24 @@ title: Spec→JIRA publishing and tracking
 owner: core
 priority: high
 version: 1
+jira_issue_REQ-JIRAPUB-001: SSHIP-570
+jira_fingerprint_REQ-JIRAPUB-001: 8d6d384bd2856ec3
+jira_issue_REQ-JIRAPUB-002: SSHIP-575
+jira_fingerprint_REQ-JIRAPUB-002: d871d09c19d14568
+jira_issue_REQ-JIRAPUB-003: SSHIP-579
+jira_fingerprint_REQ-JIRAPUB-003: 0375dd185a111b12
+jira_issue_REQ-JIRAPUB-004: SSHIP-582
+jira_fingerprint_REQ-JIRAPUB-004: 57a1366aab3249be
+jira_issue_REQ-JIRAPUB-005: SSHIP-585
+jira_fingerprint_REQ-JIRAPUB-005: e78b1efb8802f923
+jira_issue_REQ-JIRAPUB-006: SSHIP-589
+jira_fingerprint_REQ-JIRAPUB-006: 47df4ec09bbfe751
+jira_issue_REQ-JIRAPUB-007: SSHIP-593
+jira_fingerprint_REQ-JIRAPUB-007: fdd1aa091ea644bd
+jira_issue_REQ-JIRAPUB-009: SSHIP-596
+jira_fingerprint_REQ-JIRAPUB-009: 75872e208451b00c
+jira_issue_REQ-JIRAPUB-008: SSHIP-601
+jira_fingerprint_REQ-JIRAPUB-008: be920d7aa5cf0d9c
 ---
 
 <!-- id: JIRAPUB-DOC -->

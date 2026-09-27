@@ -6,10 +6,12 @@
  * adoption, the behaviour chain (broken / unverified / verified / excluded),
  * and the graduation ramp (--strict override + --enable-gate config writing).
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { execFileSync } from 'child_process';
+import { changedFilesSince, InvalidRefError } from '../src/enforce/changed-files';
 import {
   evaluateEnforcement,
   strictEnforceConfig,
@@ -155,5 +157,215 @@ describe('enforce — graduation ramp (REQ-ENFORCE-004)', () => {
     const r = evaluateEnforcement(deps({ drift: [link('REQ-X', 'drifted')] }), {});
     expect(r.passed).toBe(true);
     expect(find(r, 'drift').gating).toBe(false);
+  });
+});
+
+describe('enforce — maintainability gates on the high-precision verdict (REQ-REVINT-009)', () => {
+  const deadCodeOnly: MaintainabilityReport = {
+    ...cleanMaint,
+    clean: false,
+    deadCode: [{ nodeId: 'n1', name: 'unused', qualifiedName: 'a.ts:unused', filePath: 'a.ts', kind: 'function', startLine: 3, reason: 'no use edges' }],
+    coupling: [{ nodeId: 'n2', name: 'hub', qualifiedName: 'b.ts:hub', filePath: 'b.ts', kind: 'function', fanIn: 40, fanOut: 2, reason: 'fan-in 40 > 20' }],
+  };
+  const cyclePresent: MaintainabilityReport = {
+    ...cleanMaint,
+    clean: false,
+    cycles: [{ files: ['a.ts', 'b.ts'], reason: 'import cycle' }],
+  };
+
+  it('below-gateway findings alone do not fail the gate (REQ-REVINT-009.A1)', () => {
+    const r = evaluateEnforcement(deps({ maintainability: deadCodeOnly }), { gate: { maintainability: true } });
+    expect(find(r, 'maintainability').passed).toBe(true);
+    expect(r.passed).toBe(true);
+    expect(r.gatedFailures).toEqual([]);
+  });
+
+  it('a high-precision finding still fails the gate (REQ-REVINT-009.A1)', () => {
+    const r = evaluateEnforcement(deps({ maintainability: cyclePresent }), { gate: { maintainability: true } });
+    expect(find(r, 'maintainability').passed).toBe(false);
+    expect(r.gatedFailures).toContain('maintainability');
+  });
+
+  it('below-gateway findings remain advisory findings (REQ-REVINT-009.A2)', () => {
+    const r = evaluateEnforcement(deps({ maintainability: deadCodeOnly }), { gate: { maintainability: true } });
+    const c = find(r, 'maintainability');
+    expect(c.findings).toContain('1 dead-code candidate(s)');
+    expect(c.findings).toContain('1 coupling hotspot(s)');
+  });
+});
+
+/**
+ * Change-scoped evaluation (REQ-AUTHG-006): `specship check --since <ref>`
+ * narrows the link-scoped checks to what a change actually reaches, so the
+ * gate is usable as a pre-commit check on a repo with 60+ requirement docs.
+ */
+describe('enforce — change-scoped gating (REQ-AUTHG-006)', () => {
+  const at = (specId: string, file: string, state: SpecLink['state'] = 'drifted'): SpecLink =>
+    ({ specId, state, kind: 'implements', targetQualifiedName: `${specId}.sym`, targetFilePath: file } as SpecLink);
+
+  it('drift findings are limited to links whose target file changed (A1)', () => {
+    const d = deps({ drift: [at('REQ-A', 'src/a.ts'), at('REQ-B', 'src/b.ts')] });
+    const r = evaluateEnforcement(d, { gate: { drift: true } }, { changedFiles: ['src/a.ts'], since: 'HEAD~1' });
+    expect(find(r, 'drift').findings).toEqual(['REQ-A drifted → REQ-A.sym']);
+    expect(find(r, 'drift').scoped).toBe(true);
+  });
+
+  it('a requirement is in scope when a file it links to changed (A1)', () => {
+    const d = deps({
+      requirements: [{
+        id: 'REQ-A', title: 'A', testsLinks: [], sourcePath: 'specs/a.md', linkedFiles: ['src/a.ts'],
+      }],
+    });
+    const r = evaluateEnforcement(d, { gate: { behaviour: true } }, { changedFiles: ['src/a.ts'] });
+    expect(find(r, 'behaviour').findings[0]).toMatch(/REQ-A: unverified/);
+    expect(r.passed).toBe(false);
+  });
+
+  it('a requirement is in scope when its own spec file changed (A1)', () => {
+    const d = deps({
+      requirements: [{ id: 'REQ-A', title: 'A', testsLinks: [], sourcePath: 'specs/a.md', linkedFiles: [] }],
+    });
+    const r = evaluateEnforcement(d, { gate: { behaviour: true } }, { changedFiles: ['specs/a.md'] });
+    expect(find(r, 'behaviour').findings[0]).toMatch(/REQ-A/);
+  });
+
+  it('untouched requirements produce no findings at all (A2)', () => {
+    const d = deps({
+      drift: [at('REQ-B', 'src/b.ts')],
+      requirements: [
+        { id: 'REQ-A', title: 'A', testsLinks: [], sourcePath: 'specs/a.md', linkedFiles: ['src/a.ts'] },
+        { id: 'REQ-B', title: 'B', testsLinks: [], sourcePath: 'specs/b.md', linkedFiles: ['src/b.ts'] },
+      ],
+    });
+    const r = evaluateEnforcement(d, strictEnforceConfig(), { changedFiles: ['src/a.ts'] });
+    expect(find(r, 'behaviour').findings.map((f) => f.split(':')[0])).toEqual(['REQ-A']);
+    expect(find(r, 'drift').findings).toEqual([]);
+  });
+
+  it('without a scope, behaviour is unchanged — every requirement is evaluated (A2)', () => {
+    const d = deps({
+      drift: [at('REQ-B', 'src/b.ts')],
+      requirements: [
+        { id: 'REQ-A', title: 'A', testsLinks: [], sourcePath: 'specs/a.md', linkedFiles: ['src/a.ts'] },
+        { id: 'REQ-B', title: 'B', testsLinks: [], sourcePath: 'specs/b.md', linkedFiles: ['src/b.ts'] },
+      ],
+    });
+    const r = evaluateEnforcement(d, strictEnforceConfig());
+    expect(find(r, 'behaviour').findings).toHaveLength(2);
+    expect(find(r, 'drift').findings).toHaveLength(1);
+    expect(find(r, 'behaviour').scoped).toBeUndefined();
+  });
+
+  it('fitness and maintainability stay repo-global under a scope', () => {
+    const r = evaluateEnforcement(
+      deps({ fitness: dirtyFitness }), { gate: { fitness: true } }, { changedFiles: ['src/unrelated.ts'] },
+    );
+    expect(find(r, 'fitness').findings).toHaveLength(1);
+    expect(find(r, 'fitness').scoped).toBeUndefined();
+  });
+
+  it('path shapes normalize before matching (windows separators, ./ prefix)', () => {
+    const r = evaluateEnforcement(
+      deps({ drift: [at('REQ-A', 'src\\a.ts')] }), { gate: { drift: true } }, { changedFiles: ['./src/a.ts'] },
+    );
+    expect(find(r, 'drift').findings).toHaveLength(1);
+  });
+});
+
+describe('changedFilesSince — git scoping (REQ-AUTHG-006.A1/A3)', () => {
+  let repo: string;
+  const git = (args: string[], cwd = repo) =>
+    execFileSync('git', args, { cwd, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'] });
+
+  beforeEach(() => {
+    repo = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-since-'));
+    git(['init', '-q', '-b', 'main']);
+    git(['config', 'user.email', 't@example.com']);
+    git(['config', 'user.name', 'T']);
+    fs.writeFileSync(path.join(repo, 'base.ts'), 'export const a = 1;\n');
+    git(['add', '-A']);
+    git(['commit', '-q', '-m', 'base']);
+  });
+  afterEach(() => { fs.rmSync(repo, { recursive: true, force: true }); });
+
+  it('reports committed, modified and untracked files since the ref (A1)', () => {
+    const baseRef = git(['rev-parse', 'HEAD']).trim();
+    fs.writeFileSync(path.join(repo, 'committed.ts'), 'export const b = 2;\n');
+    git(['add', '-A']);
+    git(['commit', '-q', '-m', 'second']);
+    fs.writeFileSync(path.join(repo, 'base.ts'), 'export const a = 99;\n');
+    fs.writeFileSync(path.join(repo, 'untracked.md'), '# new spec\n');
+
+    const files = changedFilesSince(repo, baseRef);
+    expect(files).toEqual(['base.ts', 'committed.ts', 'untracked.md']);
+  });
+
+  it('an unknown ref throws InvalidRefError rather than falling back to the whole repo (A3)', () => {
+    expect(() => changedFilesSince(repo, 'no-such-ref')).toThrow(InvalidRefError);
+    expect(() => changedFilesSince(repo, 'no-such-ref')).toThrow(/not a git ref/);
+  });
+
+  it('a non-git directory is reported as such, not as an empty change set (A3)', () => {
+    const plain = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-nogit-'));
+    try {
+      expect(() => changedFilesSince(plain, 'HEAD')).toThrow(/not a git repository|not a git ref/);
+    } finally {
+      fs.rmSync(plain, { recursive: true, force: true });
+    }
+  });
+});
+
+/**
+ * End-to-end scoping over a real indexed project: `specship check --since` is
+ * exactly `changedFilesSince` feeding `getEnforce`'s scope argument, so this
+ * covers everything the CLI flag does except commander's option parsing.
+ */
+describe('getEnforce — scoped run over a real project (REQ-AUTHG-006.A1/A2)', () => {
+  let repo: string;
+  const git = (args: string[]) =>
+    execFileSync('git', args, { cwd: repo, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'] });
+
+  beforeEach(() => { repo = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-scoped-')); });
+  afterEach(() => { fs.rmSync(repo, { recursive: true, force: true }); });
+
+  it('a scoped gate reports only the requirement whose code changed', async () => {
+    const { SpecShip } = await import('../src');
+    fs.writeFileSync(path.join(repo, 'alpha.ts'), 'export function alpha(): number { return 1; }\n');
+    fs.writeFileSync(path.join(repo, 'beta.ts'), 'export function beta(): number { return 2; }\n');
+    fs.mkdirSync(path.join(repo, 'specs'), { recursive: true });
+    fs.writeFileSync(path.join(repo, 'specs', 'demo.md'), [
+      '<!-- id: DEMO-DOC -->', '# Demo', '',
+      '<!-- id: REQ-ALPHA-001 -->', '## Alpha MUST work', '',
+      'implementations:', '- alpha.ts:alpha', '',
+      '<!-- id: REQ-BETA-001 -->', '## Beta MUST work', '',
+      'implementations:', '- beta.ts:beta', '',
+    ].join('\n'));
+
+    git(['init', '-q', '-b', 'main']);
+    git(['config', 'user.email', 't@example.com']);
+    git(['config', 'user.name', 'T']);
+    git(['add', '-A']);
+    git(['commit', '-q', '-m', 'base']);
+    const base = git(['rev-parse', 'HEAD']).trim();
+
+    const cg = SpecShip.initSync(repo);
+    await cg.indexAll();
+
+    // Neither requirement has a passing test link, so an unscoped behaviour
+    // run flags both.
+    const all = cg.getEnforce({ gate: { behaviour: true } });
+    const allIds = all.checks.find((c) => c.check === 'behaviour')!.findings.map((f) => f.split(':')[0]);
+    expect(allIds).toEqual(expect.arrayContaining(['REQ-ALPHA-001', 'REQ-BETA-001']));
+
+    // Touch only alpha.ts — the scoped run must name alpha and nothing else.
+    fs.writeFileSync(path.join(repo, 'alpha.ts'), 'export function alpha(): number { return 42; }\n');
+    const changedFiles = changedFilesSince(repo, base);
+    expect(changedFiles).toContain('alpha.ts');
+
+    const scoped = cg.getEnforce({ gate: { behaviour: true } }, { changedFiles, since: base });
+    const behaviour = scoped.checks.find((c) => c.check === 'behaviour')!;
+    expect(behaviour.scoped).toBe(true);
+    expect(behaviour.findings.map((f) => f.split(':')[0])).toEqual(['REQ-ALPHA-001']);
+    cg.close();
   });
 });

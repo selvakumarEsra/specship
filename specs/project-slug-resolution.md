@@ -4,6 +4,14 @@ title: Claude project slug resolution
 owner: specship
 priority: high
 version: 1
+jira_issue_REQ-SLUGRES-001: SSHIP-899
+jira_fingerprint_REQ-SLUGRES-001: 5e73091bee9a52cc
+jira_issue_REQ-SLUGRES-002: SSHIP-904
+jira_fingerprint_REQ-SLUGRES-002: 256600559b248418
+jira_issue_REQ-SLUGRES-003: SSHIP-906
+jira_fingerprint_REQ-SLUGRES-003: 95397a188159e5a4
+jira_issue_REQ-SLUGRES-004: SSHIP-908
+jira_fingerprint_REQ-SLUGRES-004: 317db5cb4c57ee20
 ---
 
 <!-- id: SLUGRES-DOC -->

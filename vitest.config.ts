@@ -54,9 +54,41 @@ export default defineConfig({
      */
     pool: 'forks',
     poolOptions: { forks: { execArgv: ['--liftoff-only'] } },
+    /**
+     * v8 coverage (REQ-TVIZ-005.A2). `text-summary` is what the CI job prints
+     * into the log; `json-summary` is the machine-readable artifact.
+     *
+     * The thresholds are a RATCHET, not a target: they sit just below the
+     * measured level, so the suite can never quietly cover less than it does
+     * today. Raise them when coverage rises; never lower them to make a red
+     * build green — that is the one edit this block exists to prevent.
+     * Re-measure with `npx vitest run --coverage`.
+     */
     coverage: {
       provider: 'v8',
-      reporter: ['text', 'json', 'html'],
+      reporter: ['text', 'text-summary', 'json', 'json-summary', 'html'],
+      reportsDirectory: './coverage',
+      // Only first-party shipping code. The `ui/` SPA has its own vitest
+      // project, and fixtures/scripts/generated output aren't product code.
+      include: ['src/**/*.ts', 'server/src/**/*.ts'],
+      exclude: [
+        '**/*.d.ts',
+        'src/extraction/wasm/**',
+        'src/**/__fixtures__/**',
+      ],
+      /**
+       * Measured 2026-09-25 on the full suite (194 files / 2436 tests):
+       * lines 65.92, statements 65.92, functions 79.09, branches 79.19.
+       * Floors sit ~2 points under that — enough slack for the Node-version
+       * and native-vs-wasm-SQLite differences between a dev machine and the CI
+       * runner, tight enough that a real coverage drop fails the build.
+       */
+      thresholds: {
+        lines: 63,
+        statements: 63,
+        functions: 77,
+        branches: 77,
+      },
     },
   },
 });

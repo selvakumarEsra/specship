@@ -20,7 +20,9 @@ const COMPARE = {
     },
     {
       path: '/Users/dev/other', name: 'other', sessions: 6, cost: 30, avgCost: 5, prompts: 60,
-      cacheHit: 0.44, drift: 0, byModel: [{ model: OPUS, cost: 30 }],
+      // drift null: no indexed spec graph for a non-primary project, so its
+      // drift is unmeasured — never 0 (REQ-REVINT-007.A3).
+      cacheHit: 0.44, drift: null, byModel: [{ model: OPUS, cost: 30 }],
       topTools: ['Read'],
     },
   ],
@@ -81,6 +83,31 @@ describe('ComparePage (REQ-DESKTOP-024)', () => {
     // Toggling back restores it.
     fireEvent.click(screen.getByRole('button', { name: 'other' }));
     expect(screen.getByText('44%')).toBeTruthy();
+  });
+
+  it('REQ-REVINT-007.A3: an unmeasured project shows — for drift, not 0', async () => {
+    mockFetch(STATS_LIVE);
+    render(<ComparePage project={null} query={{}} />);
+
+    await screen.findByText('44%');
+    // The 'other' row's drift cell.
+    expect(screen.getByTitle(/Not measured/)).toBeTruthy();
+    expect(screen.getByText('—')).toBeTruthy();
+  });
+
+  it('REQ-REVINT-007.A3: the callout says "not measured", never "no drifted links"', async () => {
+    // Make the unmeasured project the most efficient one so it drives the prose.
+    mockFetch(STATS_LIVE, {
+      projects: [
+        { ...COMPARE.projects[0]!, cacheHit: 0.1, avgCost: 9 },
+        { ...COMPARE.projects[1]!, cacheHit: 0.95, avgCost: 1 },
+      ],
+    });
+    render(<ComparePage project={null} query={{}} />);
+
+    await screen.findByText(/Most efficient/);
+    expect(screen.getByText(/drift not measured for this project/)).toBeTruthy();
+    expect(screen.queryByText(/no drifted links/)).toBeNull();
   });
 
   it('A3: zero ingested sessions renders Settings-ingest guidance', async () => {

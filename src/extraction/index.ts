@@ -90,6 +90,13 @@ export interface SyncResult {
    */
   driftedTransitions?: import('../resolution/spec-link-resolver').DriftTransition[];
   /**
+   * Spec-extraction error/warning counts from this sync's spec pass
+   * (REQ-REVINT-002.A2). Absent when the spec pass didn't run; zeroed when it
+   * ran and every changed spec parsed cleanly.
+   */
+  specErrors?: number;
+  specWarnings?: number;
+  /**
    * Report of the JIRA auto-publish pass (REQ-JIRATEAM-002). Absent when no
    * binding is present (the pass returns `{ skipped: 'unbound' }` in that
    * case and SpecShip.sync omits the field).

@@ -3,6 +3,16 @@ id: WORKFLOW-ETA-DOC
 title: Workflow run time-to-completion estimates
 owner: workflows
 priority: medium
+jira_issue_REQ-ETA-001: SSHIP-1753
+jira_fingerprint_REQ-ETA-001: d9ebfaade54fc283
+jira_issue_REQ-ETA-002: SSHIP-1759
+jira_fingerprint_REQ-ETA-002: 97d75b3c9b1b96ec
+jira_issue_REQ-ETA-003: SSHIP-1764
+jira_fingerprint_REQ-ETA-003: 691d7dd9127b49af
+jira_issue_REQ-ETA-004: SSHIP-1770
+jira_fingerprint_REQ-ETA-004: 58e450981ed71189
+jira_issue_REQ-ETA-005: SSHIP-1774
+jira_fingerprint_REQ-ETA-005: 8c7f9842b8d45758
 ---
 
 <!-- id: WORKFLOW-ETA-DOC -->

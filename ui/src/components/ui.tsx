@@ -103,8 +103,23 @@ export function CopyBtn({ text, label, ariaLabel }: { text: string; label?: stri
   );
 }
 
-/** Big delta indicator. `invert` when down is good (cost, drift). */
-export function Delta({ value, suffix, invert }: { value: number; suffix?: string; invert?: boolean }) {
+/**
+ * Big delta indicator. `invert` when down is good (cost, drift).
+ *
+ * An absent value (no prior window to compare against) renders NOTHING, and a
+ * measured zero renders a neutral "no change" — never a coloured arrow, which
+ * would read as a trend the data doesn't support (REQ-REVINT-007.A2).
+ */
+export function Delta({ value, suffix, invert }: { value: number | null | undefined; suffix?: string; invert?: boolean }) {
+  if (value == null) return null;
+  if (value === 0) {
+    return (
+      <span className="row gap-2 tabular muted" style={{ fontSize: 'var(--fs-xs)', fontWeight: 600 }}>
+        <Icon name="minus" size={12} />
+        no change
+      </span>
+    );
+  }
   const up = value >= 0;
   const good = invert ? !up : up;
   return (

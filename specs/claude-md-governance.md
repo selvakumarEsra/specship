@@ -3,6 +3,14 @@ id: CLAUDEMD-DOC
 title: CLAUDE.md governance — audited automatically, fixed with a human
 owner: specship
 priority: medium
+jira_issue_REQ-CLAUDEMD-001: SSHIP-162
+jira_fingerprint_REQ-CLAUDEMD-001: 8226224a24837060
+jira_issue_REQ-CLAUDEMD-002: SSHIP-166
+jira_fingerprint_REQ-CLAUDEMD-002: a9d0dfbdb23364f9
+jira_issue_REQ-CLAUDEMD-003: SSHIP-171
+jira_fingerprint_REQ-CLAUDEMD-003: 3a4d01a5da91aafb
+jira_issue_REQ-CLAUDEMD-004: SSHIP-174
+jira_fingerprint_REQ-CLAUDEMD-004: 85074963f73fba9b
 ---
 
 <!-- id: CLAUDEMD-DOC -->

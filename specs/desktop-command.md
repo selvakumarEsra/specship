@@ -3,6 +3,12 @@ id: DESKTOP-CMD-DOC
 title: specship desktop — the dashboard gets its own command
 owner: specship
 priority: medium
+jira_issue_REQ-DESKTOP-CMD-001: SSHIP-322
+jira_fingerprint_REQ-DESKTOP-CMD-001: 456cb031aa3a2c39
+jira_issue_REQ-DESKTOP-CMD-002: SSHIP-327
+jira_fingerprint_REQ-DESKTOP-CMD-002: 79c6fc43b902627e
+jira_issue_REQ-DESKTOP-CMD-003: SSHIP-330
+jira_fingerprint_REQ-DESKTOP-CMD-003: 2500aed27cab12d1
 ---
 
 <!-- id: DESKTOP-CMD-DOC -->

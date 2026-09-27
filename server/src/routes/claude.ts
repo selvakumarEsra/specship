@@ -15,7 +15,6 @@
  *   GET /api/claude/compare                  — per-project cost comparison
  *   GET /api/claude/tips                     — rule-based tips engine output (minus dismissed)
  *   POST /api/claude/tips/state              — persist a tip's Apply/Dismiss state
- *   GET /api/claude/specship-impact?range=&project= — SpecShip token-impact aggregation
  *   POST /api/claude/ingest                  — force a one-shot ingest pass
  */
 
@@ -23,7 +22,6 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { writeSseHead } from './sse.js';
 import type { SpecShipInstance } from '../project-registry.js';
 import { decodeProjectSlug, getLastIngestStats } from '../ingest/index.js';
-import { computeSpecshipImpact } from '../ingest/impact-query.js';
 
 /**
  * Normalize a `?project=` filter value to the form stored in
@@ -427,14 +425,6 @@ export async function registerClaudeRoutes(app: FastifyInstance): Promise<void> 
       ? Math.max(0, session.ended_at - session.started_at)
       : 0;
 
-    // SpecShip token-impact rollup for this session.
-    const impact = computeSpecshipImpact(db, { since: 0, sessionId });
-    const specship = {
-      spendTokens: impact.spendTokens,
-      savedTokens: impact.savedTokens,
-      netTokens: impact.netTokens,
-    };
-
     return {
       sessionId,
       byTool,
@@ -443,7 +433,6 @@ export async function registerClaudeRoutes(app: FastifyInstance): Promise<void> 
       skills,
       filesTouched,
       durationMs,
-      specship,
     };
   });
 
@@ -861,9 +850,13 @@ export async function registerClaudeRoutes(app: FastifyInstance): Promise<void> 
       unpricedTokens: lastCost === 0 ? (recent[0]?.toks ?? 0) : 0,
     };
 
-    // --- Drift (live graph count, no time series) ---
+    // --- Drift (live graph count) ---
+    // No prior-window snapshot exists for link state, so there is no delta and
+    // no series to report. Both are OMITTED rather than sent as 0 — a 0 delta
+    // renders as a confident "no change" the data can't support
+    // (REQ-REVINT-007.A2).
     const driftCount = cg.getSpecQueries().getLinksByState(['drifted', 'broken', 'orphaned']).length;
-    const drift = { value: driftCount, delta: 0, series: [] as number[] };
+    const drift = { value: driftCount };
 
     // Total ingested sessions (all time, unfiltered). Zero means "nothing
     // ingested yet" — the dashboard renders enable-ingest guidance instead of
@@ -927,13 +920,14 @@ export async function registerClaudeRoutes(app: FastifyInstance): Promise<void> 
     // Drifted-link count is only knowable for the PRIMARY project's indexed
     // graph (compare rows are Claude-cost projects keyed by cwd; only one has a
     // spec graph loaded here). Attach the real count to the matching project
-    // row and 0 to the rest, rather than fabricating per-project drift.
+    // row and `null` — "not measured" — to the rest. A 0 there reads as
+    // "measured, clean", which is a claim we can't make (REQ-REVINT-007.A3).
     const driftCount = cg.getSpecQueries().getLinksByState(['drifted', 'broken', 'orphaned']).length;
     const primaryRoot = (cg.getProjectRoot ? cg.getProjectRoot() : '').replace(/\/+$/, '');
 
     const projects = rows.map((p) => ({
       ...p,
-      drift: p.path.replace(/\/+$/, '') === primaryRoot ? driftCount : 0,
+      drift: p.path.replace(/\/+$/, '') === primaryRoot ? driftCount : null,
       byModel: (byModelByPath.get(p.path) ?? []).sort((a, b) => b.cost - a.cost),
       topTools: (toolsByPath.get(p.path) ?? [])
         .sort((a, b) => b.calls - a.calls)
@@ -1095,27 +1089,6 @@ export async function registerClaudeRoutes(app: FastifyInstance): Promise<void> 
       ON CONFLICT(tip_id) DO UPDATE SET state = excluded.state, ts = excluded.ts
     `).run(id, state, Date.now());
     return { ok: true, id, state };
-  });
-
-  /**
-   * GET /api/claude/specship-impact?range=&project=
-   *
-   * Aggregate SpecShip token-impact metrics: how many tokens specship calls
-   * spent vs. how many tokens' worth of Read calls they displaced (saved),
-   * with per-prompt dedup so a file referenced by two specship calls in the
-   * same prompt counts only once. See server/src/ingest/impact-query.ts
-   * for the full algorithm.
-   *
-   * Query params:
-   *   range   — 'today' | 'week' (default) | 'month' | 'all'
-   *   project — project slug (decoded to path) or raw path; omit for all projects
-   */
-  app.get('/api/claude/specship-impact', async (req: FastifyRequest<{ Querystring: { range?: string; project?: string } }>, reply) => {
-    const cg = requirePrimary(reply); if (!cg) return;
-    const db = getDb(cg);
-    const since = rangeStart(rangeKey(req.query.range));
-    const project = req.query.project ? normalizeProjectFilter(req.query.project) : undefined;
-    return computeSpecshipImpact(db, { since, project });
   });
 
   /**

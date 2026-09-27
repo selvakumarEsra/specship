@@ -15,6 +15,12 @@ import * as os from 'os';
 import * as path from 'path';
 import * as fs from 'fs';
 import { claudeTarget, statusLineState, getStatusLineSnippet } from './targets/claude';
+import {
+  resolveStatusLine,
+  resolveAutoAllow,
+  describeInstallDefaults,
+  type StatusLineOutcome,
+} from './install-defaults';
 import { ALL_TARGETS, getTarget, listTargetIds } from './targets/registry';
 import type { AgentTarget, Location, TargetId } from './targets/types';
 import { detectInstallMethod } from '../update/updater';
@@ -71,12 +77,18 @@ export interface RunInstallerOptions {
   target?: string;
   /** Skip the location prompt; use this value directly. */
   location?: Location;
-  /** Skip the auto-allow prompt; use this value directly. */
+  /**
+   * Auto-allow permission list. Undefined ⇒ the default (on for Claude) —
+   * `--no-permissions` is the opt-out (REQ-SLIM-003.A1); never prompted.
+   */
   autoAllow?: boolean;
   /**
    * Governance tier — spec/authoring/review/design commands + the SDD steering
-   * (CLAUDE.md rule + nudge hook). Opt-in (INSTALL-WEDGE-DOC): pass `true` (the
-   * `--sdd` flag) to install it. Undefined/false ⇒ retrieval-only.
+   * (CLAUDE.md rule + nudge hook). Default-ON (INSTALL-WEDGE-DOC v2): the CLI
+   * passes `true` unless `--no-sdd` was given, so only an explicit `false`
+   * yields a retrieval-only install. Undefined is treated as off here — the
+   * caller decides the default (see the `install` command in
+   * `src/bin/specship.ts`).
    */
   sdd?: boolean;
   /**
@@ -88,9 +100,9 @@ export interface RunInstallerOptions {
   withDesigner?: boolean;
   /**
    * Wire SpecShip's status-line segment into Claude's status line
-   * (SHIP-STATUSLINE-DOC). Opt-in: undefined ⇒ ask interactively (default no);
-   * `true` (the `--statusline` flag) installs without asking; `false` skips.
-   * Never overwrites a status line the user already configured.
+   * (SHIP-STATUSLINE-DOC). Default-ON and never prompted (REQ-SLIM-003.A1):
+   * undefined ⇒ install it, `false` (`--skip-statusline`) ⇒ skip. Never
+   * overwrites a status line the user already configured (REQ-SLIM-003.A4).
    */
   statusLine?: boolean;
   /**
@@ -140,13 +152,34 @@ function describeFirstPaths(targets: readonly AgentTarget[], loc: Location): str
 }
 
 /**
+ * What the run decided about the questions it no longer asks, so the caller
+ * can fold them into one closing summary (REQ-SLIM-003.A2). The CLI owns the
+ * indexing step, which happens after this function returns.
+ */
+export interface InstallRunOutcome {
+  statusLine: StatusLineOutcome;
+  /** False when a flag decided it — the summary only echoes defaults. */
+  statusLineDefaulted: boolean;
+  autoAllow: boolean;
+  autoAllowDefaulted: boolean;
+  /**
+   * True when a local install already built this project's index (and already
+   * named it in the summary), so the CLI's indexing step neither repeats the
+   * work nor repeats the line.
+   */
+  indexed: boolean;
+}
+
+/**
  * Interactive entry — `specship install` with no args runs this.
  */
-export async function runInstaller(): Promise<void> {
+export async function runInstaller(): Promise<InstallRunOutcome | undefined> {
   return runInstallerWithOptions({});
 }
 
-export async function runInstallerWithOptions(opts: RunInstallerOptions): Promise<void> {
+export async function runInstallerWithOptions(
+  opts: RunInstallerOptions,
+): Promise<InstallRunOutcome | undefined> {
   const clack = await importESM('@clack/prompts');
 
   clack.intro(`SpecShip v${getVersion()}`);
@@ -216,55 +249,34 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
     location = sel;
   }
 
-  // Step 3: auto-allow permissions.
-  let autoAllow: boolean;
-  if (opts.autoAllow !== undefined) {
-    autoAllow = opts.autoAllow;
-  } else if (!installClaude) {
-    // Permissions are a Claude surface — don't ask about them when the user
-    // only selected another agent.
-    autoAllow = false;
-  } else if (useDefaults) {
-    autoAllow = true;
-  } else {
-    const ans = await clack.confirm({
-      message: 'Auto-allow SpecShip commands? (Skips permission prompts in Claude Code)',
-      initialValue: true,
-    });
-    if (clack.isCancel(ans)) {
-      clack.cancel('Installation cancelled.');
-      process.exit(0);
-    }
-    autoAllow = ans;
-  }
+  // Step 3: auto-allow permissions — defaulted, never asked (REQ-SLIM-003.A1).
+  // `--no-permissions` is the opt-out; the summary names it.
+  const autoAllow = resolveAutoAllow(opts.autoAllow, installClaude);
+  const autoAllowDefaulted = opts.autoAllow === undefined && installClaude;
 
-  // Step 3b: status-line segment (SHIP-STATUSLINE-DOC). Strictly opt-in. Only
-  // offered when no status line is configured; if one already exists we never
-  // touch it and instead show the composable snippet. `--statusline` /
-  // `--no-statusline` skip the prompt; `--yes` leaves it off (opt-in default).
-  let installStatusLine = false;
-  if (opts.statusLine !== undefined) {
-    installStatusLine = opts.statusLine;
-  } else if (!useDefaults && installClaude) {
+  // Step 3b: status-line segment (SHIP-STATUSLINE-DOC) — default-ON and no
+  // longer prompted (REQ-SLIM-003.A1). `--skip-statusline` opts out. A status
+  // line the user already configured is NEVER overwritten
+  // (REQ-SLIM-003.A4): the authoritative guard is `writeStatusLineEntry`,
+  // which returns `kept` for a foreign entry; we read `statusLineState` here
+  // only to report the outcome and show the composable snippet.
+  const installStatusLine = resolveStatusLine(opts.statusLine, installClaude);
+  const statusLineDefaulted = opts.statusLine === undefined && installClaude;
+  let statusLineOutcome: StatusLineOutcome = 'skipped';
+  if (installStatusLine) {
     const state = statusLineState(location);
     if (state === 'foreign') {
+      statusLineOutcome = 'kept-existing';
       clack.note(getStatusLineSnippet(), 'You already have a status line — add SpecShip to it');
     } else {
-      const ans = await clack.confirm({
-        message: 'Add a SpecShip status-line segment? (shows index sync state, drift, and calls this session)',
-        initialValue: false,
-      });
-      if (clack.isCancel(ans)) {
-        clack.cancel('Installation cancelled.');
-        process.exit(0);
-      }
-      installStatusLine = ans;
+      statusLineOutcome = 'added';
     }
   }
 
-  // Step 4: write Claude config. The governance tier is opt-in
-  // (INSTALL-WEDGE-DOC): only an explicit `sdd: true` (from `--sdd`) installs it;
-  // a default install provisions the retrieval tier alone.
+  // Step 4: write Claude config. The governance tier is default-ON
+  // (INSTALL-WEDGE-DOC v2): a plain `specship install` arrives here with
+  // `sdd: true`, so the full surface is provisioned; `--no-sdd` is the opt-out
+  // that leaves the retrieval tier alone (see `src/bin/specship.ts`).
   for (const target of selectedTargets) {
     const result = target.install(location, {
       autoAllow,
@@ -278,7 +290,10 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
         ? 'Unchanged'
         : file.action === 'created' ? 'Created'
           : file.action === 'removed' ? 'Removed'
-            : 'Updated';
+            // `kept` = we deliberately left something the user owns alone
+            // (a foreign status line, REQ-SLIM-003.A4) — never "Updated".
+            : file.action === 'kept' ? 'Kept'
+              : 'Updated';
       clack.log.success(`${target.displayName}: ${verb} ${tildify(file.path)}`);
     }
     // A target with unsupported surfaces says so here (REQ-GEMINI-006.A1) —
@@ -320,8 +335,9 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
   }
 
   // Step 5: for local install, initialize the project.
+  let indexed = false;
   if (location === 'local') {
-    await initializeLocalProject(clack, useDefaults);
+    indexed = (await initializeLocalProject(clack, useDefaults)) === 'indexed';
   }
 
   if (location === 'global') {
@@ -336,9 +352,28 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
     useDefaults,
   });
 
+  // Step 7: name everything that was decided FOR the user, with its opt-out
+  // flag (REQ-SLIM-003.A2) — the price of not asking is saying so.
+  const outcome: InstallRunOutcome = {
+    statusLine: statusLineOutcome,
+    statusLineDefaulted,
+    autoAllow,
+    autoAllowDefaulted,
+    indexed,
+  };
+  const summary = describeInstallDefaults({
+    ...outcome,
+    index: indexed ? 'indexed' : 'skipped',
+    indexDefaulted: indexed,
+  });
+  if (summary.length > 0) {
+    clack.note(summary.join('\n'), 'Applied by default');
+  }
+
   clack.outro(
     `Done! Restart ${selectedTargets.map((t) => t.displayName).join(' / ')} to use SpecShip.`,
   );
+  return outcome;
 }
 
 /**
@@ -657,12 +692,13 @@ function tildify(p: string): string {
 /**
  * Initialize SpecShip in the current project (for local installs), then
  * offer the watch fallback when the live watcher won't run here (see
- * offerWatchFallback).
+ * offerWatchFallback). Returns whether an index was actually built, so the
+ * caller can name it among the defaulted decisions (REQ-SLIM-003.A2).
  */
 async function initializeLocalProject(
   clack: typeof import('@clack/prompts'),
   useDefaults = false,
-): Promise<void> {
+): Promise<'indexed' | 'skipped'> {
   const projectPath = process.cwd();
 
   let SpecShip: typeof import('../index').default;
@@ -672,14 +708,14 @@ async function initializeLocalProject(
     const msg = err instanceof Error ? err.message : String(err);
     clack.log.error(`Could not load native modules: ${msg}`);
     clack.log.info('Skipping project initialization. Run "specship init -i" later.');
-    return;
+    return 'skipped';
   }
 
   // Check if already initialized
   if (SpecShip.isInitialized(projectPath)) {
     clack.log.info('SpecShip already initialized in this project');
     await offerWatchFallback(clack, projectPath, { yes: useDefaults });
-    return;
+    return 'skipped';
   }
 
   // Initialize
@@ -706,6 +742,7 @@ async function initializeLocalProject(
   cg.close();
 
   await offerWatchFallback(clack, projectPath, { yes: useDefaults });
+  return 'indexed';
 }
 
 /**

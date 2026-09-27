@@ -3,6 +3,14 @@ id: DOCS-DRIFT-DOC
 title: Docs are generated or gated — never silently stale
 owner: specship
 priority: medium
+jira_issue_REQ-DOCSD-001: SSHIP-333
+jira_fingerprint_REQ-DOCSD-001: 983263f77a20aae8
+jira_issue_REQ-DOCSD-002: SSHIP-336
+jira_fingerprint_REQ-DOCSD-002: a74d4f944786cce6
+jira_issue_REQ-DOCSD-003: SSHIP-338
+jira_fingerprint_REQ-DOCSD-003: 937cc35c865c01dc
+jira_issue_REQ-DOCSD-004: SSHIP-340
+jira_fingerprint_REQ-DOCSD-004: 064e30ccd69612f3
 ---
 
 <!-- id: DOCS-DRIFT-DOC -->

@@ -5,6 +5,16 @@ owner: core
 priority: high
 version: 2
 brief: spec-triage/brief.md
+jira_issue_REQ-TRIAGE-001: SSHIP-1130
+jira_fingerprint_REQ-TRIAGE-001: a9415b0bb685f615
+jira_issue_REQ-TRIAGE-002: SSHIP-1134
+jira_fingerprint_REQ-TRIAGE-002: 1f9a21c4776371a7
+jira_issue_REQ-TRIAGE-003: SSHIP-1139
+jira_fingerprint_REQ-TRIAGE-003: 5559a0db6b8e38b1
+jira_issue_REQ-TRIAGE-004: SSHIP-1144
+jira_fingerprint_REQ-TRIAGE-004: 3dfd970272c937aa
+jira_issue_REQ-TRIAGE-005: SSHIP-1148
+jira_fingerprint_REQ-TRIAGE-005: 271d98c9d0dbfa84
 ---
 
 <!-- id: TRIAGE-DOC -->

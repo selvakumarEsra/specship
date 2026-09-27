@@ -3,6 +3,10 @@ id: INSTALL-INTEG-SETUP-DOC
 title: Installer offers integration setup after enabling it
 owner: specship
 priority: medium
+jira_issue_REQ-INSTALL-INTEG-001: SSHIP-494
+jira_fingerprint_REQ-INSTALL-INTEG-001: d3eaae2ebfeb54bf
+jira_issue_REQ-INSTALL-INTEG-002: SSHIP-500
+jira_fingerprint_REQ-INSTALL-INTEG-002: 3262d68ac96c58cd
 ---
 
 <!-- id: INSTALL-INTEG-SETUP-DOC -->

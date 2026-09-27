@@ -4,6 +4,10 @@ title: Drift is pushed to the user, not pulled
 owner: core
 priority: medium
 version: 1
+jira_issue_REQ-DRIFT-PUSH-001: SSHIP-379
+jira_fingerprint_REQ-DRIFT-PUSH-001: 625604e032f0f190
+jira_issue_REQ-DRIFT-PUSH-002: SSHIP-383
+jira_fingerprint_REQ-DRIFT-PUSH-002: 0cd3e063e87c2e09
 ---
 
 <!-- id: DRIFT-PUSH-DOC -->

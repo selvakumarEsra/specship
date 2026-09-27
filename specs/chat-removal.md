@@ -3,6 +3,12 @@ id: CHAT-REMOVE-DOC
 title: Remove the dashboard chat surface
 owner: specship
 priority: medium
+jira_issue_REQ-CHATRM-001: SSHIP-131
+jira_fingerprint_REQ-CHATRM-001: c678192bd17dc0d5
+jira_issue_REQ-CHATRM-002: SSHIP-133
+jira_fingerprint_REQ-CHATRM-002: 04251532fd8dc813
+jira_issue_REQ-CHATRM-003: SSHIP-136
+jira_fingerprint_REQ-CHATRM-003: caf2941a4a112ebb
 ---
 
 <!-- id: CHAT-REMOVE-DOC -->

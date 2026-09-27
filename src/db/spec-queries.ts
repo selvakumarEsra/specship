@@ -278,6 +278,7 @@ export class SpecQueries {
     deleteSpecLink?: SqliteStatement;
     deleteSpecLinksByFile?: SqliteStatement;
     updateSpecLinkState?: SqliteStatement;
+    updateSpecLinkMetadata?: SqliteStatement;
     updateSpecLinkResolution?: SqliteStatement;
     getLinkById?: SqliteStatement;
     getLinksBySpec?: SqliteStatement;
@@ -313,18 +314,28 @@ export class SpecQueries {
   // ===========================================================================
 
   /**
-   * Insert or replace a spec row. Also inserts a virtual node projection
-   * into `nodes` with kind='spec' so graph traversal sees the spec.
+   * Insert or UPDATE a spec row (never delete-and-reinsert). Also projects a
+   * virtual node into `nodes` with kind='spec' so graph traversal sees the spec.
    *
    * The virtual node's `id` is `spec:${spec.id}` (kind:hash convention from
    * tree-sitter-helpers, but hand-built — specs don't go through tree-sitter).
    * `qualified_name = spec.id` so SpecLinkResolver and specship_explore can
    * find specs by their stable ID.
+   *
+   * UPSERT, NOT `INSERT OR REPLACE` (REQ-VSTATE-001). `REPLACE` resolves a
+   * conflict by DELETING the existing row, which fires both `ON DELETE CASCADE`
+   * foreign keys on this table: re-inserting a spec destroyed all of its
+   * `spec_links`, and re-inserting a document destroyed every requirement
+   * beneath it. `ON CONFLICT DO UPDATE` mutates the row in place instead, so a
+   * spec's links are never collateral damage of re-indexing it.
+   *
+   * `created_at` is deliberately NOT updated — the row keeps its original
+   * birth timestamp across every re-extraction.
    */
   insertSpec(spec: Spec): void {
     if (!this.stmts.insertSpec) {
       this.stmts.insertSpec = this.db.prepare(`
-        INSERT OR REPLACE INTO specs (
+        INSERT INTO specs (
           id, kind, title, body, format, source_path, start_line, end_line,
           parent_id, content_hash, version, superseded_by, owner, priority,
           metadata, created_at, updated_at
@@ -333,6 +344,22 @@ export class SpecQueries {
           @parentId, @contentHash, @version, @supersededBy, @owner, @priority,
           @metadata, @createdAt, @updatedAt
         )
+        ON CONFLICT(id) DO UPDATE SET
+          kind          = excluded.kind,
+          title         = excluded.title,
+          body          = excluded.body,
+          format        = excluded.format,
+          source_path   = excluded.source_path,
+          start_line    = excluded.start_line,
+          end_line      = excluded.end_line,
+          parent_id     = excluded.parent_id,
+          content_hash  = excluded.content_hash,
+          version       = excluded.version,
+          superseded_by = excluded.superseded_by,
+          owner         = excluded.owner,
+          priority      = excluded.priority,
+          metadata      = excluded.metadata,
+          updated_at    = excluded.updated_at
       `);
     }
     this.stmts.insertSpec.run({
@@ -398,8 +425,121 @@ export class SpecQueries {
   }
 
   /**
-   * Delete all specs for a given source file. CASCADE removes children
+   * Delete the specs of `sourcePath` that the file NO LONGER declares — the
+   * mark-and-sweep half of non-destructive re-extraction (REQ-VSTATE-001.A3).
+   *
+   * `keepIds` is the id set the extractor just produced. Everything else from
+   * that file is gone from the source, so its rows go (CASCADE takes their
+   * links and any children with them, which is exactly right — a deleted
+   * requirement's links are not worth keeping). Specs the file still declares
+   * are never touched, so their links never enter a deleted state at all.
+   *
+   * Returns the number of spec rows swept.
+   */
+  sweepRemovedSpecs(sourcePath: string, keepIds: string[]): number {
+    const placeholders = keepIds.map(() => '?').join(',');
+    const notKept = keepIds.length > 0 ? ` AND id NOT IN (${placeholders})` : '';
+    const notKeptProjection =
+      keepIds.length > 0 ? ` AND qualified_name NOT IN (${placeholders})` : '';
+    let swept = 0;
+    this.db.transaction(() => {
+      const doomed = this.db
+        .prepare(`SELECT id FROM specs WHERE source_path = ?${notKept}`)
+        .all(sourcePath, ...keepIds) as Array<{ id: string }>;
+      swept = doomed.length;
+      if (swept === 0) return;
+      // Drop the virtual node projections for the swept specs only.
+      this.db
+        .prepare(
+          `DELETE FROM nodes WHERE kind = 'spec' AND file_path = ?${notKeptProjection}`
+        )
+        .run(sourcePath, ...keepIds);
+      this.db
+        .prepare(`DELETE FROM specs WHERE source_path = ?${notKept}`)
+        .run(sourcePath, ...keepIds);
+    })();
+    return swept;
+  }
+
+  /**
+   * Reconcile the `spec-declaration` links of one spec file against what its
+   * current text actually declares (REQ-VSTATE-001).
+   *
+   * Upsert-based re-extraction fixed link destruction but created its mirror
+   * image: because the spec row survives, so does every link it ever declared,
+   * and deleting a `verifies:` / `implementations:` bullet stopped meaning
+   * anything. The file is the source of truth for the links IT declares, so a
+   * declaration that is no longer written is a declaration that no longer
+   * exists.
+   *
+   * Strictly provenance-scoped: only `spec-declaration` rows are candidates for
+   * removal. Agent-asserted, code-comment and resolver links are not declared by
+   * the file, cannot be re-created from it, and MUST survive — that is the whole
+   * point of the upsert path.
+   *
+   * A declaration link that was later promoted to `verified` still carries
+   * `spec-declaration` provenance (the confidence guard in
+   * {@link upsertSpecLink} never rewrites it), and it is dropped too when its
+   * bullet goes: the verdict was about a promise the spec has withdrawn.
+   * Nothing here is silent — the count comes back for the sync stats.
+   *
+   * `declared` must already be canonicalized the way the resolver canonicalizes
+   * a candidate before upserting it, or a `Class::method` row would never match
+   * its own `Class.method` declaration and would be dropped and re-created on
+   * every pass.
+   *
+   * Returns the number of links removed.
+   */
+  reconcileDeclaredLinks(
+    sourcePath: string,
+    declared: Array<{
+      specId: string;
+      targetFilePath: string;
+      targetQualifiedName: string;
+      kind: SpecLinkKind;
+    }>
+  ): number {
+    const key = (
+      specId: string,
+      filePath: string,
+      qualifiedName: string,
+      kind: string
+    ) => `${specId} ${filePath} ${qualifiedName} ${kind}`;
+    const keep = new Set(
+      declared.map((d) => key(d.specId, d.targetFilePath, d.targetQualifiedName, d.kind))
+    );
+
+    const rows = this.db
+      .prepare(
+        `
+        SELECT l.* FROM spec_links l
+        JOIN specs s ON s.id = l.spec_id
+        WHERE s.source_path = ? AND l.provenance = 'spec-declaration'
+        `
+      )
+      .all(sourcePath) as SpecLinkRow[];
+
+    const doomed = rows.filter(
+      (r) =>
+        !keep.has(key(r.spec_id, r.target_file_path, r.target_qualified_name, r.kind))
+    );
+    if (doomed.length === 0) return 0;
+
+    this.db.transaction(() => {
+      const del = this.db.prepare('DELETE FROM spec_links WHERE id = ?');
+      for (const r of doomed) del.run(r.id);
+    })();
+    return doomed.length;
+  }
+
+  /**
+   * Delete ALL specs for a given source file. CASCADE removes children
    * (parent_id FK) and any spec_links to those specs.
+   *
+   * Re-extraction does NOT use this — it upserts and then calls
+   * {@link sweepRemovedSpecs} (REQ-VSTATE-001). Reach for this only when the
+   * file itself is gone, which is the one case where taking its links with it
+   * is the right answer.
    */
   deleteSpecsByFile(sourcePath: string): void {
     if (!this.stmts.deleteSpecsByFile) {
@@ -673,6 +813,15 @@ export class SpecQueries {
       // node id, signature, provenance, confidence, metadata) still refreshes
       // here so the link stays current.
       const preserve = STICKY_SPEC_LINK_STATES.has(existing.state);
+      // Metadata MERGES rather than replaces (REQ-VSTATE-001): the incoming keys
+      // win, but keys the caller didn't mention — notably the `verification`
+      // record holding a real test run's evidence (REQ-VSTATE-004) — survive a
+      // re-extraction. A wholesale replace would erase the proof behind a
+      // `verified` state while leaving the state itself in place.
+      const mergedMetadata =
+        existing.metadata || link.metadata
+          ? { ...(existing.metadata ?? {}), ...(link.metadata ?? {}) }
+          : null;
       this.db
         .prepare(
           `
@@ -698,7 +847,7 @@ export class SpecQueries {
           nodeSigAtLink: link.nodeSigAtLink ?? null,
           provenance: link.provenance,
           confidence: link.confidence ?? 1.0,
-          metadata: link.metadata ? JSON.stringify(link.metadata) : null,
+          metadata: mergedMetadata ? JSON.stringify(mergedMetadata) : null,
           updatedAt: now,
         });
       return existing.id;
@@ -744,6 +893,25 @@ export class SpecQueries {
       );
     }
     this.stmts.updateSpecLinkState.run(state, driftAxis, updatedAt, id);
+  }
+
+  /**
+   * Replace a link's free-form `metadata`. Used by the verify paths to persist
+   * verification evidence (reason, timestamp, test names — REQ-REVINT-004);
+   * `null` clears it. Separate from `updateSpecLinkState` so a state change and
+   * its evidence are both explicit at the call site.
+   */
+  updateSpecLinkMetadata(
+    id: number,
+    metadata: Record<string, unknown> | null,
+    updatedAt: number = Date.now()
+  ): void {
+    if (!this.stmts.updateSpecLinkMetadata) {
+      this.stmts.updateSpecLinkMetadata = this.db.prepare(
+        `UPDATE spec_links SET metadata = ?, updated_at = ? WHERE id = ?`
+      );
+    }
+    this.stmts.updateSpecLinkMetadata.run(metadata ? JSON.stringify(metadata) : null, updatedAt, id);
   }
 
   /**

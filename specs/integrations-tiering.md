@@ -3,6 +3,14 @@ id: INTEG-TIER-DOC
 title: Two-tier product — core vs opt-in integrations
 owner: specship
 priority: medium
+jira_issue_REQ-INTEG-001: SSHIP-512
+jira_fingerprint_REQ-INTEG-001: c453ef6bd9b9057a
+jira_issue_REQ-INTEG-002: SSHIP-516
+jira_fingerprint_REQ-INTEG-002: 3facd9979b012863
+jira_issue_REQ-INTEG-003: SSHIP-519
+jira_fingerprint_REQ-INTEG-003: e1aef61d776e7c8e
+jira_issue_REQ-INTEG-004: SSHIP-521
+jira_fingerprint_REQ-INTEG-004: 87a33974c04de850
 ---
 
 <!-- id: INTEG-TIER-DOC -->

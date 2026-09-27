@@ -110,10 +110,11 @@ function waitFor<T>(
  */
 describe('REQ-DOMAIN-005 — no new MCP tool; instructions pointer present', () => {
   it('A3: the MCP tool list is unchanged in count and has no domain-named tool', () => {
-    // 8 core (search/callers/callees/impact/node/explore/status/files)
-    // + 1 identity (specship_version — REQ-MCPVER-001)
+    // 8 core (search/callers/callees/impact/node/explore/status/files) —
+    //   status also carries server identity since specship_version folded into
+    //   it (REQ-SURF-006)
     // + 4 spec (spec/link_assert/link_verify/drifted)
-    // + 2 harness (maintainability/fitness — MAINT-DOC/FITNESS-DOC)
+    // + 1 harness (health — maintainability + fitness merged, REQ-SURF-007)
     // + 6 designer
     // + 14 jira (specship_jira_issues — REQ-JIRA-002; specship_jira_issue —
     //   REQ-JIRA-003; specship_jira_pick — REQ-JIRA-004; specship_jira_start —
@@ -124,8 +125,8 @@ describe('REQ-DOMAIN-005 — no new MCP tool; instructions pointer present', () 
     //   REQ-TASKSHIP-003; specship_jira_anchor — REQ-JIRATEAM-007;
     //   specship_jira_epics — REQ-JIRATEAM-008;
     //   specship_jira_regression_pack — REQ-JIRAREG-001;
-    //   specship_jira_regression_record — REQ-JIRAREG-005) = 35.
-    expect(tools.length).toBe(35);
+    //   specship_jira_regression_record — REQ-JIRAREG-005) = 33.
+    expect(tools.length).toBe(33);
     expect(tools.some((t) => /domain/i.test(t.name))).toBe(false);
   });
 

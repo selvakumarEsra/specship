@@ -3,6 +3,14 @@ id: VERIFY-EVID-DOC
 title: Evidence-based verified state
 owner: specship
 priority: high
+jira_issue_REQ-VEVID-001: SSHIP-1636
+jira_fingerprint_REQ-VEVID-001: 9acd7bc1c19bf255
+jira_issue_REQ-VEVID-002: SSHIP-1644
+jira_fingerprint_REQ-VEVID-002: 1a68fbbfea2fd685
+jira_issue_REQ-VEVID-003: SSHIP-1649
+jira_fingerprint_REQ-VEVID-003: b920d109d4c34f73
+jira_issue_REQ-VEVID-004: SSHIP-1654
+jira_fingerprint_REQ-VEVID-004: 2cff6f728a5cb63a
 ---
 
 <!-- id: VERIFY-EVID-DOC -->

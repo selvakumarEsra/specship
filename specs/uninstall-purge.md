@@ -4,6 +4,12 @@ title: Complete uninstall (purge)
 owner: core
 priority: high
 version: 1
+jira_issue_REQ-UNINSTALL-001: SSHIP-1587
+jira_fingerprint_REQ-UNINSTALL-001: 9a916718f3ac815d
+jira_issue_REQ-UNINSTALL-002: SSHIP-1597
+jira_fingerprint_REQ-UNINSTALL-002: 5fb060dce0a76021
+jira_issue_REQ-UNINSTALL-003: SSHIP-1607
+jira_fingerprint_REQ-UNINSTALL-003: 1f30e455fc3102bf
 ---
 
 <!-- id: UNINSTALL-PURGE-DOC -->

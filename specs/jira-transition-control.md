@@ -5,6 +5,10 @@ owner: core
 priority: medium
 version: 1
 brief: jira-generic-transition/brief.md
+jira_issue_REQ-JIRATRANS-001: SSHIP-681
+jira_fingerprint_REQ-JIRATRANS-001: 2a2f537a6bc10736
+jira_issue_REQ-JIRATRANS-002: SSHIP-687
+jira_fingerprint_REQ-JIRATRANS-002: 98944e5eade34a1d
 ---
 
 <!-- id: JIRATRANS-DOC -->

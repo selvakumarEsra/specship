@@ -4,6 +4,16 @@ title: Slash-command namespace
 owner: install
 priority: medium
 version: 1
+jira_issue_REQ-CMD-NS-001: SSHIP-205
+jira_fingerprint_REQ-CMD-NS-001: 2da280064e0c8355
+jira_issue_REQ-CMD-NS-002: SSHIP-209
+jira_fingerprint_REQ-CMD-NS-002: 25468a23e51ee9b6
+jira_issue_REQ-CMD-NS-003: SSHIP-213
+jira_fingerprint_REQ-CMD-NS-003: fc13726c40e3bc28
+jira_issue_REQ-CMD-NS-004: SSHIP-217
+jira_fingerprint_REQ-CMD-NS-004: e1b5aa9ac550cb9e
+jira_issue_REQ-CMD-NS-005: SSHIP-220
+jira_fingerprint_REQ-CMD-NS-005: 04f04764e23e3882
 ---
 
 <!-- id: CMD-NS-DOC -->
@@ -49,8 +59,6 @@ implementations:
   - commands/specship/explore.md
   - commands/specship/spec.md
   - commands/specship/check.md
-  - commands/specship/design-implement.md
-  - commands/specship/design-loop.md
 
 ## Acceptance
 <!-- id: REQ-CMD-NS-001.A1 -->

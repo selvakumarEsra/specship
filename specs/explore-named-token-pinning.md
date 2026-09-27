@@ -3,6 +3,14 @@ id: EXPLORE-PIN-DOC
 title: Explore must return what the agent named
 owner: retrieval
 priority: high
+jira_issue_REQ-EXPLORE-PIN-001: SSHIP-404
+jira_fingerprint_REQ-EXPLORE-PIN-001: a68f7a88dd233e4b
+jira_issue_REQ-EXPLORE-PIN-002: SSHIP-410
+jira_fingerprint_REQ-EXPLORE-PIN-002: 06775a47b3415ab5
+jira_issue_REQ-EXPLORE-PIN-003: SSHIP-414
+jira_fingerprint_REQ-EXPLORE-PIN-003: 9ef7f1fad5887fec
+jira_issue_REQ-EXPLORE-PIN-004: SSHIP-418
+jira_fingerprint_REQ-EXPLORE-PIN-004: 475a0bc22d58cf69
 ---
 
 <!-- id: EXPLORE-PIN-DOC -->

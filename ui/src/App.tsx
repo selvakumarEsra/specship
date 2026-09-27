@@ -23,6 +23,7 @@ import { RunsPage } from './pages/runs';
 import { SessionsPage } from './pages/sessions';
 import { SettingsPage } from './pages/settings';
 import { SpecsPage } from './pages/specs';
+import { TraceabilityPage } from './pages/traceability';
 import { TipsPage } from './pages/tips';
 import { WorkflowsPage } from './pages/workflows';
 import type { PageProps } from './pages/types';
@@ -49,6 +50,7 @@ const NAV: Array<{ group: string; items: NavEntry[] }> = [
       { id: 'dashboard', label: 'Dashboard', icon: 'dashboard' },
       { id: 'graph', label: 'Graph', icon: 'graph' },
       { id: 'specs', label: 'Specs', icon: 'book' },
+      { id: 'traceability', label: 'Traceability', icon: 'matrix' },
       { id: 'drift', label: 'Drift queue', icon: 'drift', badge: (c) => c.drift },
       { id: 'runs', label: 'Runs', icon: 'play', badge: (c) => c.runs, badgeKind: 'warn' },
     ],
@@ -93,6 +95,7 @@ const SCREENS: Record<string, ComponentType<PageProps>> = {
   dashboard: DashboardPage,
   graph: GraphPage,
   specs: SpecsPage,
+  traceability: TraceabilityPage,
   drift: DriftPage,
   runs: RunsPage,
   workflows: WorkflowsPage,

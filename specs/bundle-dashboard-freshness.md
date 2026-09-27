@@ -3,6 +3,10 @@ id: BUNDLE-DASHBOARD-DOC
 title: Bundle ships the current UI and code
 owner: "@selvakumar"
 priority: high
+jira_issue_REQ-BUNDLE-WEB-001: SSHIP-122
+jira_fingerprint_REQ-BUNDLE-WEB-001: 3841d67356987149
+jira_issue_REQ-BUNDLE-WEB-002: SSHIP-128
+jira_fingerprint_REQ-BUNDLE-WEB-002: 7dbd4f790c7822d5
 ---
 
 <!-- id: BUNDLE-DASHBOARD-DOC -->

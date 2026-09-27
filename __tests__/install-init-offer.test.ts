@@ -19,8 +19,10 @@ describe('decideInstallInit (REQ-HANDSHAKE-004)', () => {
     expect(decideInstallInit({ isGitRepo: false, isInitialized: false, yes: false, skipIndex: false })).toBe('skip');
   });
 
-  it('offers interactively inside an un-indexed git repo (A1)', () => {
-    expect(decideInstallInit({ isGitRepo: true, isInitialized: false, yes: false, skipIndex: false })).toBe('offer');
+  it('indexes an un-indexed git repo without asking (A1, REQ-SLIM-003.A1)', () => {
+    // Was an interactive `offer`; indexing is now the default in every mode
+    // and `--skip-index` is the opt-out (REQ-SLIM-003).
+    expect(decideInstallInit({ isGitRepo: true, isInitialized: false, yes: false, skipIndex: false })).toBe('auto-index');
   });
 
   it('auto-indexes by default under --yes inside an un-indexed git repo (A4)', () => {

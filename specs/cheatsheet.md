@@ -4,6 +4,20 @@ title: Session cheat-sheet
 owner: installer
 priority: medium
 version: 1
+jira_issue_REQ-CHEAT-001: SSHIP-138
+jira_fingerprint_REQ-CHEAT-001: 79e4289c596847be
+jira_issue_REQ-CHEAT-002: SSHIP-142
+jira_fingerprint_REQ-CHEAT-002: 4ba8a088d45a9ee6
+jira_issue_REQ-CHEAT-003: SSHIP-146
+jira_fingerprint_REQ-CHEAT-003: 5bb67403b15d0cf8
+jira_issue_REQ-CHEAT-004: SSHIP-149
+jira_fingerprint_REQ-CHEAT-004: c6c449b1e2ecda1c
+jira_issue_REQ-CHEAT-005: SSHIP-152
+jira_fingerprint_REQ-CHEAT-005: 62e30e4dbdcf685d
+jira_issue_REQ-CHEAT-006: SSHIP-156
+jira_fingerprint_REQ-CHEAT-006: a3620abf62f0bc8c
+jira_issue_REQ-CHEAT-007: SSHIP-159
+jira_fingerprint_REQ-CHEAT-007: 5be39b1beeb9e4fd
 ---
 
 <!-- id: CHEATSHEET-DOC -->

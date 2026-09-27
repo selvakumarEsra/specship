@@ -17,6 +17,9 @@ on:
       - "__tests__/**"
       - "server/**"
       - "scripts/**"
+      # The spec-lint gate (REQ-AUTHG-002) makes a spec-only change able to
+      # break this workflow, so a spec-only PR has to run it.
+      - "specs/**"
       - "package.json"
       - "package-lock.json"
       - "vitest.config.ts"
@@ -27,6 +30,9 @@ on:
       - "__tests__/**"
       - "server/**"
       - "scripts/**"
+      # The spec-lint gate (REQ-AUTHG-002) makes a spec-only change able to
+      # break this workflow, so a spec-only PR has to run it.
+      - "specs/**"
       - "package.json"
       - "package-lock.json"
       - "vitest.config.ts"
@@ -51,7 +57,68 @@ jobs:
       # the suite needs a real build first.
       - name: Build CLI + server
         run: npm run build
+      # Spec-quality gate (REQ-AUTHG-002.A1). `specship lint` exits non-zero on
+      # any error-severity finding — duplicate ids, id-less headings, orphaned
+      # `.A<N>` parents, requirements with no acceptance criteria, leftover
+      # `[needs review]` markers — so a malformed spec fails the build the same
+      # way a failing test does. Warnings are advisory and never fail. Run via
+      # the built CLI so this also smoke-tests that the subcommand shipped.
+      # Baseline at the time of wiring: 103 files, 0 errors, 298 warnings.
+      - name: Lint the spec corpus
+        run: |
+          set -o pipefail
+          node dist/bin/specship.js lint specs/ | tee lint-output.txt
+      # A2: the warning count is the visible ratchet baseline. The last line of
+      # the lint output is its totals line, so surface it on the PR without
+      # making anyone open the log.
+      - name: Publish spec-lint summary
+        if: always()
+        run: |
+          {
+            echo "## Spec lint"
+            echo
+            if [ -s lint-output.txt ]; then
+              echo '```'
+              tail -n 1 lint-output.txt
+              echo '```'
+            else
+              echo "_Lint produced no output (step did not run)._"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
       # CI=1 enables the vitest retry that absorbs the known load-flakes
       # (mcp-daemon, mcp-ppid-watchdog) while a real regression still fails.
-      - name: Full unit suite
-        run: CI=1 npm test
+      #
+      # --coverage collects v8 coverage and enforces the ratchet thresholds in
+      # vitest.config.ts (REQ-TVIZ-005.A2): the floors sit just under today's
+      # level, so a change that covers materially less fails here.
+      - name: Full unit suite (with coverage)
+        run: CI=1 npm test -- --coverage
+      # The text-summary already printed above; repeat it as a step summary so
+      # the numbers are visible on the PR without opening the log.
+      - name: Publish coverage summary
+        if: always()
+        run: |
+          {
+            echo "## Coverage"
+            echo
+            if [ -f coverage/coverage-summary.json ]; then
+              node -e '
+                const t = require("./coverage/coverage-summary.json").total;
+                console.log("| Metric | Covered | Total | % |");
+                console.log("|---|---:|---:|---:|");
+                for (const k of ["lines", "statements", "functions", "branches"]) {
+                  const m = t[k];
+                  console.log(`| ${k} | ${m.covered} | ${m.total} | ${m.pct}% |`);
+                }
+              '
+            else
+              echo "_No coverage report produced._"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage
+          retention-days: 7

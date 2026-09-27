@@ -67,22 +67,22 @@ describe('DriftPage (REQ-DESKTOP-022)', () => {
     expect(screen.getByText('Orphaned')).toBeTruthy();
     expect(screen.getByText('code')).toBeTruthy(); // axis pill on the drifted row
 
-    // Expand the drifted row: meta grid + gated Fix (REQ-DESKTOP-005.A2).
+    // Expand the drifted row: meta grid + a live Fix (REQ-TVIZ-009.A2).
     fireEvent.click(screen.getByText('REQ-A-2'));
     expect(screen.getByText('Drift axis')).toBeTruthy();
     const fix = screen.getByText('Fix').closest('button') as HTMLButtonElement;
-    expect(fix.disabled).toBe(true);
-    expect(fix.title).toContain('workflow');
+    expect(fix.disabled).toBe(false);
+    expect(fix.title).toContain('spec-fix');
 
-    // Broken → gated Re-verify; orphaned → gated Re-attach.
+    // Broken → Re-verify; orphaned → Re-attach. Both launch, neither is gated.
     fireEvent.click(screen.getByText('REQ-A-9'));
     const reverify = screen.getByText('Re-verify').closest('button') as HTMLButtonElement;
-    expect(reverify.disabled).toBe(true);
-    expect(reverify.title).toContain('verification workflow');
+    expect(reverify.disabled).toBe(false);
+    expect(reverify.title).toContain('spec-verify');
     fireEvent.click(screen.getByText('REQ-I-1'));
     const reattach = screen.getByText('Re-attach').closest('button') as HTMLButtonElement;
-    expect(reattach.disabled).toBe(true);
-    expect(reattach.title).toContain('workflow');
+    expect(reattach.disabled).toBe(false);
+    expect(reattach.title).toContain('spec-relink');
 
     // Open spec deep-links to the Specs screen with the selection.
     fireEvent.click(screen.getAllByText('Open spec')[0]!);
@@ -125,5 +125,80 @@ describe('DriftPage (REQ-DESKTOP-022)', () => {
       expect(within(navItem()).getByText('3')).toBeTruthy();
     });
     expect(within(navItem()).queryByText('99')).toBeNull();
+  });
+});
+
+/**
+ * REQ-TVIZ-009.A2 — the queue's repair actions launch their existing
+ * workflows through POST /api/workflows/runs and hand the user the run.
+ */
+describe('Drift repair actions (REQ-TVIZ-009.A2)', () => {
+  function mockWithPosts(): Array<{ url: string; body: Record<string, unknown> }> {
+    const posts: Array<{ url: string; body: Record<string, unknown> }> = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      const u = new URL(url, 'http://local');
+      if (init?.method === 'POST') {
+        posts.push({ url: u.pathname, body: JSON.parse(String(init.body)) as Record<string, unknown> });
+        return { ok: true, json: async () => ({ runId: 'run-9', status: 'running' }) };
+      }
+      if (u.pathname === '/api/drift') return { ok: true, json: async () => ({ links: LINKS }) };
+      return { ok: false, status: 404, statusText: 'Not Found', json: async () => ({ error: 'not found' }) };
+    }));
+    return posts;
+  }
+
+  it('A2: Fix launches spec-fix with the SPEC_ID and navigates to the created run', async () => {
+    const posts = mockWithPosts();
+    render(<DriftPage project={null} query={{}} />);
+    await screen.findByText('REQ-A-2');
+
+    fireEvent.click(screen.getByText('REQ-A-2'));
+    fireEvent.click(screen.getByText('Fix').closest('button')!);
+
+    await waitFor(() => expect(posts).toHaveLength(1));
+    expect(posts[0]!.url).toBe('/api/workflows/runs');
+    expect(posts[0]!.body).toEqual({ workflowName: 'spec-fix', inputs: { SPEC_ID: 'REQ-A-2' } });
+    await waitFor(() => expect(location.pathname).toBe('/runs/run-9'));
+  });
+
+  it('A2: Re-attach launches spec-relink; Re-verify launches spec-verify with no inputs', async () => {
+    const posts = mockWithPosts();
+    render(<DriftPage project={null} query={{}} />);
+    await screen.findByText('REQ-I-1');
+
+    fireEvent.click(screen.getByText('REQ-I-1'));
+    fireEvent.click(screen.getByText('Re-attach').closest('button')!);
+    await waitFor(() => expect(posts).toHaveLength(1));
+    expect(posts[0]!.body).toEqual({ workflowName: 'spec-relink', inputs: { SPEC_ID: 'REQ-I-1' } });
+
+    cleanup();
+    const posts2 = mockWithPosts();
+    render(<DriftPage project={null} query={{}} />);
+    await screen.findByText('REQ-A-9');
+    fireEvent.click(screen.getByText('REQ-A-9'));
+    fireEvent.click(screen.getByText('Re-verify').closest('button')!);
+    await waitFor(() => expect(posts2).toHaveLength(1));
+    // spec-verify declares no inputs — don't invent one.
+    expect(posts2[0]!.body).toEqual({ workflowName: 'spec-verify', inputs: {} });
+  });
+
+  it('A2: a failed launch surfaces the error and leaves the row usable', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      const u = new URL(url, 'http://local');
+      if (init?.method === 'POST') {
+        return { ok: false, status: 404, statusText: 'Not Found', json: async () => ({ error: 'workflow not found' }) };
+      }
+      if (u.pathname === '/api/drift') return { ok: true, json: async () => ({ links: LINKS }) };
+      return { ok: false, status: 404, statusText: 'Not Found', json: async () => ({ error: 'not found' }) };
+    }));
+    render(<DriftPage project={null} query={{}} />);
+    await screen.findByText('REQ-A-2');
+
+    fireEvent.click(screen.getByText('REQ-A-2'));
+    fireEvent.click(screen.getByText('Fix').closest('button')!);
+
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toContain('workflow not found');
+    expect((screen.getByText('Fix').closest('button') as HTMLButtonElement).disabled).toBe(false);
   });
 });

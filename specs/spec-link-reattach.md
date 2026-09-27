@@ -4,6 +4,10 @@ title: Spec-link re-attachment and qualified-name matching
 owner: core
 priority: high
 version: 1
+jira_issue_REQ-LINKFIX-001: SSHIP-1110
+jira_fingerprint_REQ-LINKFIX-001: f0ad8ba1c5e462f1
+jira_issue_REQ-LINKFIX-002: SSHIP-1115
+jira_fingerprint_REQ-LINKFIX-002: 7dc44fa73ccb129a
 ---
 
 <!-- id: LINKFIX-DOC -->

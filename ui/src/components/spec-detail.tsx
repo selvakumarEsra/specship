@@ -19,7 +19,7 @@
  *       existing spec write API, with keep-draft failure + sync-lag hints.
  */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { api, isNoProject, type LinkedSpec, type SpecDetailResponse, type SpecDoc } from '../api';
+import { ApiError, api, isNoProject, type CoverageVerdict, type LinkedSpec, type SpecDetailResponse, type SpecDoc } from '../api';
 import { useApi } from '../hooks';
 import { go } from '../router';
 import { normalizeSectionDraft, parseRequirementSection, serializeRequirementSection, type ParsedSection } from '../spec-source';
@@ -41,8 +41,55 @@ export function renderProse(s: string): string {
   return h;
 }
 
-/** States that count as "met" in the acceptance rollup (REQ-DESKTOP-003.A3). */
-const MET_STATES = new Set(['verified', 'implemented', 'completed']);
+/**
+ * Test evidence is the `tests` link kind and nothing else. `implements` says
+ * code claims to satisfy the spec; it is not proof (REQ-TVIZ-006).
+ */
+export function isTestLink(l: LinkedSpec): boolean {
+  return l.kind === 'tests';
+}
+
+/**
+ * Coverage verdict from a spec's `tests` links alone — the same rule the
+ * server's /api/spec/coverage rollup applies (REQ-VSTATE-006 semantics), read
+ * locally so the detail headline needs no extra round-trip (REQ-TVIZ-006.A2).
+ */
+export function testVerdict(links: LinkedSpec[] | undefined): CoverageVerdict {
+  const tests = (links ?? []).filter(isTestLink);
+  if (!tests.length) return 'untested';
+  if (tests.some((l) => l.state === 'broken')) return 'broken';
+  if (tests.every((l) => l.state === 'verified')) return 'verified';
+  return 'tested';
+}
+
+/** Headline copy per verdict (REQ-TVIZ-006.A2). */
+const VERDICT_COPY: Record<CoverageVerdict, { label: string; color: string; bg: string; title: string }> = {
+  untested: {
+    label: 'Untested', color: 'var(--warn)', bg: 'var(--warn-soft)',
+    title: 'No proving test is linked — implementation alone is not evidence.',
+  },
+  tested: {
+    label: 'Tested', color: 'var(--info)', bg: 'var(--info-soft)',
+    title: 'A proving test is linked but has not passed verification yet.',
+  },
+  verified: {
+    label: 'Test-verified', color: 'var(--success)', bg: 'var(--success-soft)',
+    title: 'Every linked proving test is verified.',
+  },
+  broken: {
+    label: 'Test broken', color: 'var(--error)', bg: 'var(--error-soft)',
+    title: 'A linked proving test is broken.',
+  },
+};
+
+/**
+ * A criterion counts as met only when a proving test verifies it
+ * (REQ-TVIZ-006.A3). The old rule counted an `implements`-only criterion —
+ * the exact conflation the coverage rollup exists to end.
+ */
+export function criterionMet(links: LinkedSpec[] | undefined): boolean {
+  return testVerdict(links) === 'verified';
+}
 
 /**
  * Worst-state-wins rollup across a spec's links, mirroring the server's
@@ -144,6 +191,9 @@ function SpecDetailLoaded({ id, project, cache }: { id: string; project: string 
   useEffect(() => { setEditing(false); setSyncNotice(null); }, [id]);
 
   if (data) {
+    // An idea-stage brief is prose, not a requirement: no criteria, no links,
+    // no editor — its own read view (REQ-TVIZ-007.A3).
+    if (data.spec.kind === 'brief') return <BriefRead data={data} />;
     if (editing) {
       return (
         <SpecEditor
@@ -161,8 +211,10 @@ function SpecDetailLoaded({ id, project, cache }: { id: string; project: string 
     return (
       <SpecRead
         data={data}
+        project={project}
         notice={syncNotice}
         onEdit={() => { setSyncNotice(null); setEditing(true); }}
+        onReload={detail.reload}
       />
     );
   }
@@ -182,6 +234,47 @@ function SpecDetailLoaded({ id, project, cache }: { id: string; project: string 
         </button>
       }
     />
+  );
+}
+
+/**
+ * Idea-stage brief read view (REQ-TVIZ-007.A3). The brief's prose is already
+ * on the spec row (the markdown extractor stores the whole body), so this
+ * needs no second fetch; the `spec:` frontmatter key names the requirement
+ * document it graduated into, when it has one.
+ */
+// @implements REQ-TVIZ-007
+function BriefRead({ data }: { data: SpecDetailResponse }) {
+  const { spec } = data;
+  const graduatedTo = typeof spec.metadata?.spec === 'string' ? spec.metadata.spec : null;
+  const captured = typeof spec.metadata?.created === 'string' ? spec.metadata.created : null;
+  return (
+    <div className="scroll-y" style={{ flex: 1, padding: '28px 32px 56px' }}>
+      <div className="sp-doc">
+        <div className="sp-breadcrumb">
+          <Icon name="sparkles" size={13} style={{ color: 'var(--info)', flexShrink: 0 }} />
+          <span className="mono sp-path" style={{ color: 'var(--text-secondary)' }}>{spec.sourcePath ?? ''}</span>
+          <Icon name="chevronRight" size={11} style={{ flexShrink: 0 }} />
+          <span className="mono" style={{ color: 'var(--info)', fontWeight: 600, flexShrink: 0 }}>{spec.id}</span>
+          <CopyBtn text={spec.id} ariaLabel="Copy brief id" />
+        </div>
+        <h1 className="sp-title">{spec.title}</h1>
+        <div className="sp-metaline" style={{ marginBottom: 32 }}>
+          <Pill color="var(--info)" bg="var(--info-soft)" dot>Idea</Pill>
+          {captured && <span className="fact">captured <b>{captured}</b></span>}
+          {graduatedTo && (
+            <span className="fact">specified as <b className="mono">{graduatedTo}</b></span>
+          )}
+          {!graduatedTo && <span className="fact muted">not yet specified</span>}
+        </div>
+        <div className="sp-sec">
+          <div className="sp-label">Brief</div>
+          {spec.body?.trim()
+            ? <div className="sp-prose" dangerouslySetInnerHTML={{ __html: renderProse(spec.body) }} />
+            : <div className="muted" style={{ fontSize: 13 }}>This brief has no body.</div>}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -207,10 +300,15 @@ function DetailSkeleton() {
 // @implements REQ-DESKTOP-004
 // @implements REQ-DESKTOP-005
 // @implements REQ-DESKTOP-015
-function SpecRead({ data, notice, onEdit }: {
+// @implements REQ-TVIZ-006
+// @implements REQ-TVIZ-009
+// @implements REQ-TVIZ-010
+function SpecRead({ data, project, notice, onEdit, onReload }: {
   data: SpecDetailResponse;
+  project?: string | null;
   notice?: string | null;
   onEdit?: () => void;
+  onReload?: () => void;
 }) {
   const { spec, parent, children, links, childLinks } = data;
   const docPath = parent?.sourcePath ?? spec.sourcePath ?? '';
@@ -225,8 +323,15 @@ function SpecRead({ data, notice, onEdit }: {
   const criteria = children.filter((c) => c.kind === 'acceptance');
   const critState = (c: SpecDoc) => rollupState(childLinks[c.id], 'pending');
   const state = rollupState(links, 'drafted');
-  const met = criteria.filter((c) => MET_STATES.has(critState(c))).length;
+  // Met = proven by a verified test link, not merely implemented (006.A3).
+  const met = criteria.filter((c) => criterionMet(childLinks[c.id])).length;
   const accent = (STATE[state] ?? STATE.info!).color;
+
+  // Links split by kind: `tests` prove, everything else implements (006.A1).
+  const testLinks = links.filter(isTestLink);
+  const codeLinks = links.filter((l) => !isTestLink(l));
+  const verdict = testVerdict(links);
+  const verdictCopy = VERDICT_COPY[verdict];
 
   const verifiedAgo = state === 'verified'
     ? timeAgo(links.reduce((m, l) => Math.max(m, l.updatedAt ?? 0), 0) || undefined)
@@ -240,6 +345,34 @@ function SpecRead({ data, notice, onEdit }: {
     : typeof spec.rationale === 'string' ? spec.rationale
     : null;
 
+  // Verify promotes every implements link that isn't verified yet. The server
+  // owns the evidence gate; a `no_test_evidence` refusal is rendered as the
+  // next action to take, not as a failure (REQ-TVIZ-009.A1).
+  const verifiable = codeLinks.filter((l) => typeof l.id === 'number' && l.state !== 'verified');
+  const [verifying, setVerifying] = useState(false);
+  const [verifyMsg, setVerifyMsg] = useState<{ tone: 'error' | 'ok'; text: string } | null>(null);
+  const runVerify = async () => {
+    setVerifying(true);
+    setVerifyMsg(null);
+    try {
+      for (const l of verifiable) {
+        await api.linkVerify({ link_id: l.id as number, result: 'pass' }, project);
+      }
+      setVerifyMsg({ tone: 'ok', text: `Verified ${verifiable.length} link${verifiable.length === 1 ? '' : 's'}.` });
+      onReload?.();
+    } catch (e) {
+      const noEvidence = e instanceof ApiError && e.code === 'no_test_evidence';
+      setVerifyMsg({
+        tone: 'error',
+        text: noEvidence
+          ? 'Declare a proving test first — add a `verifies:` block to this requirement (or an @verifies comment on the test) so there is evidence to promote against.'
+          : e instanceof Error ? e.message : String(e),
+      });
+    } finally {
+      setVerifying(false);
+    }
+  };
+
   const linkTarget = (l: LinkedSpec) =>
     [l.targetFilePath, l.targetQualifiedName].filter(Boolean).join(':') || '—';
   // Reveal focuses the linked symbol itself when it resolved; a spec-focus
@@ -248,6 +381,27 @@ function SpecRead({ data, notice, onEdit }: {
     go('graph', { query: { focus: l.resolvedNodeId || 'spec:' + spec.id } });
 
   const sep = <span className="sep" />;
+
+  const linkRows = (rows: LinkedSpec[]) => (
+    <div className="card" style={{ overflow: 'hidden' }}>
+      {rows.map((l, i) => (
+        <div key={i} className="row gap-10" style={{ padding: '11px 14px', borderTop: i ? '1px solid var(--border-subtle)' : 'none' }}>
+          <StatePill state={l.state} />
+          <Pill>{l.kind || 'implements'}</Pill>
+          {l.driftAxis && <Pill color="var(--warn)" bg="var(--warn-soft)">{l.driftAxis + ' drift'}</Pill>}
+          <span className="mono grow" style={{ fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{linkTarget(l)}</span>
+          {/* Drift age per link — how stale this evidence is (010.A2). */}
+          <span className="mono muted tabular" title="Last state change" style={{ fontSize: 11, flexShrink: 0 }}>
+            {timeAgo(l.updatedAt) ?? '—'}
+          </span>
+          <Pill>{l.provenance || '—'}</Pill>
+          <button className="btn btn-ghost btn-xs" onClick={() => reveal(l)} title="Reveal in the graph">
+            <Icon name="reveal" size={12} />Reveal
+          </button>
+        </div>
+      ))}
+    </div>
+  );
 
   return (
     <div className="scroll-y" style={{ flex: 1, padding: '28px 32px 56px' }}>
@@ -276,6 +430,10 @@ function SpecRead({ data, notice, onEdit }: {
         {/* ---- single meta line ---- */}
         <div className="sp-metaline" style={{ marginBottom: 32 }}>
           <StatePill state={state} pulse={state === 'broken' || state === 'drifted'} />
+          {/* Tested/untested fact, from tests links only (REQ-TVIZ-006.A2). */}
+          <span data-testid="coverage-fact" title={verdictCopy.title}>
+            <Pill color={verdictCopy.color} bg={verdictCopy.bg} dot>{verdictCopy.label}</Pill>
+          </span>
           <Pill>{spec.priority || '—'}</Pill>
           {sep}
           <span className="fact"><b>{spec.kind || 'requirement'}</b></span>
@@ -311,7 +469,11 @@ function SpecRead({ data, notice, onEdit }: {
           <div className="sp-sec">
             <div className="sp-label">
               Acceptance criteria
-              <span className="ct tabular" style={{ color: met === criteria.length ? 'var(--success)' : 'var(--text-muted)' }}>
+              <span
+                className="ct tabular"
+                title="Met = a linked proving test is verified. Implementation alone doesn’t count."
+                style={{ color: met === criteria.length ? 'var(--success)' : 'var(--text-muted)' }}
+              >
                 {met + ' / ' + criteria.length + ' met'}
               </span>
             </div>
@@ -334,33 +496,25 @@ function SpecRead({ data, notice, onEdit }: {
                   <CritMark state={critState(c)} />
                   <span className="sp-crit-id">{subId(c.id)}</span>
                   <span className="sp-crit-text" dangerouslySetInnerHTML={{ __html: renderProse(c.body || c.title) }} />
+                  {/* Why a criterion isn't met, inline (006.A3). */}
+                  {testVerdict(childLinks[c.id]) === 'untested' && (
+                    <span className="muted" title="No proving test links to this criterion" style={{ fontSize: 10.5, flexShrink: 0 }}>
+                      untested
+                    </span>
+                  )}
                 </div>
               ))}
             </div>
           </div>
         )}
 
-        {/* ---- linked code ---- */}
+        {/* ---- linked code (implementation links only — REQ-TVIZ-006.A1) ---- */}
         <div className="sp-sec">
           <div className="sp-label">
             Linked code
-            {links.length > 0 && <span className="ct">{links.length + (links.length === 1 ? ' symbol' : ' symbols')}</span>}
+            {codeLinks.length > 0 && <span className="ct">{codeLinks.length + (codeLinks.length === 1 ? ' symbol' : ' symbols')}</span>}
           </div>
-          {links.length ? (
-            <div className="card" style={{ overflow: 'hidden' }}>
-              {links.map((l, i) => (
-                <div key={i} className="row gap-10" style={{ padding: '11px 14px', borderTop: i ? '1px solid var(--border-subtle)' : 'none' }}>
-                  <StatePill state={l.state} />
-                  {l.driftAxis && <Pill color="var(--warn)" bg="var(--warn-soft)">{l.driftAxis + ' drift'}</Pill>}
-                  <span className="mono grow" style={{ fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{linkTarget(l)}</span>
-                  <Pill>{l.provenance || '—'}</Pill>
-                  <button className="btn btn-ghost btn-xs" onClick={() => reveal(l)} title="Reveal in the graph">
-                    <Icon name="reveal" size={12} />Reveal
-                  </button>
-                </div>
-              ))}
-            </div>
-          ) : (
+          {codeLinks.length ? linkRows(codeLinks) : (
             // Zero links is an alarm state, not a neutral empty (004.A3).
             <div className="card card-pad" style={{ textAlign: 'center', color: 'var(--error)', borderColor: 'rgba(242,85,90,0.3)' }}>
               <Icon name="drift" size={16} />
@@ -369,13 +523,52 @@ function SpecRead({ data, notice, onEdit }: {
           )}
         </div>
 
+        {/* ---- proving tests (kind='tests' — the only evidence, 006.A1) ---- */}
+        <div className="sp-sec">
+          <div className="sp-label">
+            Proving tests
+            {testLinks.length > 0 && <span className="ct">{testLinks.length + (testLinks.length === 1 ? ' test' : ' tests')}</span>}
+          </div>
+          {testLinks.length ? linkRows(testLinks) : (
+            <div className="card card-pad" style={{ textAlign: 'center', color: 'var(--warn)', borderColor: 'rgba(224,160,64,0.3)' }}>
+              <Icon name="drift" size={16} />
+              <div style={{ marginTop: 6, fontSize: 12.5 }}>
+                No proving test — declare one with a <code className="sp-code">verifies:</code> block in the spec.
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* ---- verify outcome (REQ-TVIZ-009.A1) ---- */}
+        {verifyMsg && (
+          <div
+            className="card card-pad row gap-8"
+            role={verifyMsg.tone === 'error' ? 'alert' : undefined}
+            style={{
+              marginBottom: 14, fontSize: 12.5,
+              color: verifyMsg.tone === 'error' ? 'var(--warn)' : 'var(--success)',
+              borderColor: verifyMsg.tone === 'error' ? 'var(--warn)' : 'var(--success)',
+            }}
+          >
+            <Icon name={verifyMsg.tone === 'error' ? 'drift' : 'check'} size={14} style={{ flexShrink: 0 }} />
+            <span>{verifyMsg.text}</span>
+          </div>
+        )}
+
         {/* ---- quick actions (workflow-owned = disabled + explaining tooltip) ---- */}
         <div className="row gap-8" style={{ flexWrap: 'wrap', marginTop: 4 }}>
           <button className="btn btn-primary btn-sm" disabled title="Run automatically by the implementation workflow once Drafted">
             <Icon name="play" size={13} />Implement
           </button>
-          <button className="btn btn-secondary btn-sm" disabled title="Run automatically by the verification workflow">
-            <Icon name="check" size={13} />Verify
+          <button
+            className="btn btn-secondary btn-sm"
+            disabled={!verifiable.length || verifying}
+            title={verifiable.length
+              ? 'Promote this requirement’s implementation links to verified'
+              : 'Nothing to verify — every implementation link is already verified'}
+            onClick={verifiable.length ? () => { void runVerify(); } : undefined}
+          >
+            <Icon name="check" size={13} />{verifying ? 'Verifying…' : 'Verify'}
           </button>
           <button className="btn btn-secondary btn-sm" disabled={!editable} title={editTitle} onClick={editable ? onEdit : undefined}>
             <Icon name="reveal" size={13} />Edit spec
@@ -431,6 +624,14 @@ function seedDraft(data: SpecDetailResponse, section: ParsedSection): EditorDraf
   };
 }
 
+/**
+ * The slice of the draft `serializeRequirementSection` writes back — title,
+ * statement, criteria. Everything else is display-only (REQ-TVIZ-009.A3).
+ */
+export function persistedFields(d: EditorDraft): Pick<EditorDraft, 'title' | 'statement' | 'criteria'> {
+  return { title: d.title, statement: d.statement, criteria: d.criteria };
+}
+
 const EMPTY_DRAFT: EditorDraft = {
   title: '', priority: '', kind: 'requirement', owner: '', statement: '', rationale: '', criteria: [],
 };
@@ -445,8 +646,8 @@ function Field({ label, hint, children }: { label: string; hint?: ReactNode; chi
   );
 }
 
-function PlainSelect({ value, onChange, options, label }: {
-  value: string; onChange: (v: string) => void; options: string[]; label: string;
+function PlainSelect({ value, onChange, options, label, disabled }: {
+  value: string; onChange: (v: string) => void; options: string[]; label: string; disabled?: boolean;
 }) {
   const opts = options.includes(value) ? options : [value, ...options];
   return (
@@ -454,6 +655,7 @@ function PlainSelect({ value, onChange, options, label }: {
       className="input sp-select"
       aria-label={label}
       value={value}
+      disabled={disabled}
       onChange={(e) => onChange(e.target.value)}
       style={{ width: '100%', textTransform: 'capitalize' }}
     >
@@ -599,8 +801,12 @@ function SpecEditor({ data, project, onCancel, onSaved }: {
   );
 
   const [d, setD] = useState<EditorDraft>(() => (section ? seedDraft(data, section) : EMPTY_DRAFT));
-  const snapshot = useRef(JSON.stringify(d));
-  const dirty = JSON.stringify(d) !== snapshot.current;
+  // Dirtiness is measured over the fields the save actually writes. Priority,
+  // kind, owner and rationale have no per-requirement slot in the spec format,
+  // so counting them would let Save promise a write that never happens
+  // (REQ-TVIZ-009.A3) — they render read-only below.
+  const snapshot = useRef(JSON.stringify(persistedFields(d)));
+  const dirty = JSON.stringify(persistedFields(d)) !== snapshot.current;
   const [tab, setTab] = useState('write');
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -694,10 +900,10 @@ function SpecEditor({ data, project, onCancel, onSaved }: {
               <AutoStatus state={currentState} />
             </Field>
             <Field label="Priority">
-              <Segmented options={PRIORITIES} value={d.priority} onChange={(v) => set({ priority: v })} label="Priority" />
+              <Segmented options={PRIORITIES} value={d.priority} onChange={(v) => set({ priority: v })} label="Priority" disabled />
             </Field>
             <Field label="Kind">
-              <PlainSelect value={d.kind} onChange={(v) => set({ kind: v })} options={KIND_OPTIONS} label="Kind" />
+              <PlainSelect value={d.kind} onChange={(v) => set({ kind: v })} options={KIND_OPTIONS} label="Kind" disabled />
             </Field>
             <Field label="Owner">
               <input
@@ -706,12 +912,13 @@ function SpecEditor({ data, project, onCancel, onSaved }: {
                 value={d.owner}
                 aria-label="Owner"
                 placeholder="unassigned"
+                disabled
                 onChange={(e) => set({ owner: e.target.value })}
               />
             </Field>
           </div>
           <div className="muted" style={{ fontSize: 11, margin: '-8px 0 22px' }}>
-            Priority, kind, and owner are document-level in the current spec format — they render from available data but aren’t persisted per-requirement yet.
+            Priority, kind, and owner are document-level in the current spec format — they render from available data and are read-only here, because Save can’t persist them per-requirement (REQ-TVIZ-009.A3).
           </div>
 
           {/* ---- normative statement w/ write / preview ---- */}
@@ -754,7 +961,7 @@ function SpecEditor({ data, project, onCancel, onSaved }: {
           </div>
 
           {/* ---- rationale ---- */}
-          <Field label="Rationale" hint="Optional — why this requirement exists. Presentation-only today: the spec format carries no per-requirement rationale field.">
+          <Field label="Rationale" hint="Read-only — the spec format carries no per-requirement rationale field, so Save can’t write one (REQ-TVIZ-009.A3).">
             <textarea
               className="input sp-textarea"
               value={d.rationale}
@@ -762,6 +969,7 @@ function SpecEditor({ data, project, onCancel, onSaved }: {
               style={{ minHeight: 84 }}
               aria-label="Rationale"
               placeholder="Why does this matter? What breaks without it?"
+              disabled
               onChange={(e) => set({ rationale: e.target.value })}
             />
           </Field>

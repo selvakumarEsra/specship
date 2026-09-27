@@ -526,13 +526,15 @@ import {
   renderLinkedSpecsForNode,
 } from './spec-tools';
 import {
-  maintainabilityToolDefinitions,
   handleSpecshipMaintainability,
 } from './maintainability-tool';
 import {
-  fitnessToolDefinitions,
   handleSpecshipFitness,
 } from './fitness-tool';
+import {
+  healthToolDefinitions,
+  handleSpecshipHealth,
+} from './health-tool';
 import {
   designerToolDefinitions,
   handleDesignerSession,
@@ -696,20 +698,12 @@ export const tools: ToolDefinition[] = [
   },
   {
     name: 'specship_status',
-    description: 'Index health check (files / nodes / edges). Skip unless debugging.',
+    description: 'Index health check (files / nodes / edges) AND server identity — package version, install method (bundle/npm/unknown), the install serving this session, and node version. Works with no project open (identity only). Skip unless debugging or asked which SpecShip is running.',
     inputSchema: {
       type: 'object',
       properties: {
         projectPath: projectPathProperty,
       },
-    },
-  },
-  {
-    name: 'specship_version',
-    description: 'Identify the running SpecShip MCP server: package version, install method (bundle/npm/unknown), install dir, node version, and project root (if bound). Zero-arg, no index required — safe to call before any project is open.',
-    inputSchema: {
-      type: 'object',
-      properties: {},
     },
   },
   {
@@ -747,8 +741,10 @@ export const tools: ToolDefinition[] = [
   },
   // Spec-layer tools (v5): see ./spec-tools.ts for handlers.
   ...specToolDefinitions,
-  ...maintainabilityToolDefinitions,
-  ...fitnessToolDefinitions,
+  // Code health: one tool for maintainability + architecture fitness
+  // (REQ-SURF-007). The two former tools still execute for clients holding a
+  // cached list, but they are off the menu.
+  ...healthToolDefinitions,
   // Designer tools: claude.ai/design driving, vendored from @pro-vi/designer.
   // See ./designer-tools.ts for handlers. Drives a debug Chrome over CDP.
   ...designerToolDefinitions,
@@ -805,11 +801,13 @@ export function filterIntegrationTools(
  * (the nearest `.specship/` root wins).
  */
 const LITE_CORE_TOOLS = new Set(['specship_explore', 'specship_search', 'specship_node']);
+// `specship_status` is deliberately NOT in this group (REQ-SURF-006.A2): it
+// carries the server-identity answer, so the lite tier must keep it.
 const CODE_GRAPH_GROUP = new Set([
   'specship_explore', 'specship_search', 'specship_node',
   'specship_callers', 'specship_callees', 'specship_impact',
-  'specship_files', 'specship_status',
-  'specship_maintainability', 'specship_fitness',
+  'specship_files',
+  'specship_health',
 ]);
 export function applyLiteTierTrim(list: ToolDefinition[], hint: string | null): ToolDefinition[] {
   if (!hint) return list;
@@ -971,7 +969,9 @@ export class ToolHandler {
         'specship_explore',
         'specship_search',
         'specship_node',
-        'specship_version',
+        // Identity probe — folded into status (REQ-SURF-006), which therefore
+        // survives the tiny-repo trim the way specship_version used to.
+        'specship_status',
       ]);
       if (stats.fileCount < TINY_REPO_FILE_THRESHOLD) {
         // Designer tools are not code-graph tools — the tiny-repo flow-question
@@ -1372,11 +1372,13 @@ export class ToolHandler {
       // its own verbose worktree warning but still flows through the
       // staleness wrapper so its pending-files section stays consistent
       // with what the read tools surface.
-      // specship_version (REQ-MCPVER-001): zero-arg identity probe. Answered
-      // before the worktree/staleness/compaction wrappers so it works with no
-      // project open and never touches the DB.
+      // specship_version (REQ-MCPVER-001): zero-arg identity probe, folded into
+      // specship_status (REQ-SURF-006) and off the menu. Still answered here for
+      // clients holding a cached tool list. Runs before the
+      // worktree/staleness/compaction wrappers so it works with no project open
+      // and never touches the DB.
       if (toolName === 'specship_version') {
-        return this.handleVersion();
+        return this.textResult(this.identityBlock());
       }
 
       let result: ToolResult;
@@ -1408,6 +1410,10 @@ export class ToolHandler {
           result = await handleSpecshipLinkVerify(this.getSpecShip(args.projectPath as string | undefined), args); break;
         case 'specship_drifted':
           result = await handleSpecshipDrifted(this.getSpecShip(args.projectPath as string | undefined), args); break;
+        case 'specship_health':
+          result = await handleSpecshipHealth(this.getSpecShip(args.projectPath as string | undefined), args); break;
+        // Folded into specship_health (REQ-SURF-007) and off the menu; still
+        // answered for clients holding a cached tool list.
         case 'specship_maintainability':
           result = await handleSpecshipMaintainability(this.getSpecShip(args.projectPath as string | undefined), args); break;
         case 'specship_fitness':
@@ -3440,12 +3446,13 @@ export class ToolHandler {
   }
 
   /**
-   * Handle specship_version (REQ-MCPVER-001). Identifies the running MCP
-   * server process — the version an agent's tools are being served by,
-   * how it was installed, node version, and (if bound) the project root.
-   * Zero-arg, synchronous, never touches the DB, safe with no project.
+   * Server identity (REQ-MCPVER-001, folded into specship_status by
+   * REQ-SURF-006). Identifies the running MCP server process — the version an
+   * agent's tools are being served by, how it was installed, node version, and
+   * (if bound) the project root. Synchronous, never touches the DB, safe with
+   * no project open.
    */
-  private handleVersion(): ToolResult {
+  private identityBlock(): string {
     const binDirname = pathDirname(__filename);
     const installDir = resolveInstallDir();
     const installMethod = detectInstallMethod(binDirname, installDir);
@@ -3472,14 +3479,24 @@ export class ToolHandler {
       `**node:** ${process.version}`,
       `**projectRoot:** ${projectRoot ?? 'null'}`,
     ];
-    return this.textResult(lines.join('\n'));
+    return lines.join('\n');
   }
 
   /**
    * Handle specship_status
    */
   private async handleStatus(args: Record<string, unknown>): Promise<ToolResult> {
-    let cg = this.getSpecShip(args.projectPath as string | undefined);
+    // Server identity leads the response (REQ-SURF-006.A1) and is answerable
+    // with no project open, so a status call on an unindexed directory still
+    // tells the agent which SpecShip is serving it.
+    const identity = this.identityBlock();
+    let cg: SpecShip;
+    try {
+      cg = this.getSpecShip(args.projectPath as string | undefined);
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      return this.textResult(`${identity}\n\n## SpecShip Status\n\n${detail}`);
+    }
     // Same trick as withStalenessNotice — when an explicit projectPath
     // resolves to the same project as the default session cg, prefer the
     // default so getPendingFiles() (only populated by the default's watcher)
@@ -3501,6 +3518,8 @@ export class ToolHandler {
     const mismatch = this.worktreeMismatchFor(args.projectPath as string | undefined);
 
     const lines: string[] = [
+      identity,
+      '',
       '## SpecShip Status',
       '',
     ];

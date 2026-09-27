@@ -4,6 +4,14 @@ title: Spec-driven steering at install
 owner: installer
 priority: medium
 brief: spec-driven-skill-gate/brief.md   # REQ-SDD-004 originated from this brainstorm brief
+jira_issue_REQ-SDD-001: SSHIP-973
+jira_fingerprint_REQ-SDD-001: a9d89455702f38a9
+jira_issue_REQ-SDD-002: SSHIP-979
+jira_fingerprint_REQ-SDD-002: b2ee94228b6dedbf
+jira_issue_REQ-SDD-003: SSHIP-984
+jira_fingerprint_REQ-SDD-003: 17655ee4d205ed8b
+jira_issue_REQ-SDD-004: SSHIP-989
+jira_fingerprint_REQ-SDD-004: c1da5b40bb748f1a
 ---
 
 <!-- id: SDD-INSTALL-DOC -->

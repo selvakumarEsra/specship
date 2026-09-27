@@ -91,6 +91,9 @@ function commandsDir(loc: Location): string {
 function agentsDir(loc: Location): string {
   return path.join(configDir(loc), 'agents');
 }
+function skillsDir(loc: Location): string {
+  return path.join(configDir(loc), 'skills');
+}
 
 /**
  * Resolve a plugin-asset path (`commands/`, `agents/`, …) the installer copies.
@@ -219,6 +222,24 @@ const RENAMED_FLAT_DOOR_COMMANDS: readonly string[] = [
 
 /** Subagents the installer copies into Claude's agents dir. */
 const SHIPPED_AGENTS = ['specship-explorer.md'] as const;
+
+/**
+ * Skills the installer copies into Claude's skills dir (AUTHG-DOC,
+ * REQ-AUTHG-007). Paths are relative to the skills dir and mirror the repo's
+ * `skills/` layout, so `copyAsset` recreates the per-skill subdirectories on
+ * write. Part of the GOVERNANCE tier: the spec-author skill is what the SDD
+ * steering rule points at, so it ships exactly when that steering does.
+ *
+ * Without this, only the machine that authored the skill had the gap catalog,
+ * quality rubric and review checklist; everyone else got the inline fallback.
+ */
+const SHIPPED_SKILLS = [
+  'spec-author/SKILL.md',
+  'spec-author/references/format.md',
+  'spec-author/references/quality-rubric.md',
+  'spec-author/references/gap-questions.md',
+  'spec-author/references/review-checklist.md',
+] as const;
 
 /** The PostToolUse + SessionStart hooks the installer writes. */
 const SPECSHIP_HOOKS = [
@@ -424,9 +445,13 @@ class ClaudeCodeTarget implements AgentTarget {
     // Writes a marker-delimited "invoke spec-author first" rule into the project
     // CLAUDE.md and a UserPromptSubmit nudge hook. NOT gated on autoAllow — the
     // CLAUDE.md rule executes nothing and the nudge hook only prints guidance.
+    // Also ships the spec-author skill the steering rule names (REQ-AUTHG-007.A1)
+    // — the rule is useless if the skill it points at only exists on the machine
+    // that wrote it.
     if (includeGovernance) {
       files.push(writeSddInstructionsEntry(loc));
       files.push(writeSddHookEntry(loc));
+      for (const f of writeSkillsEntries(loc)) files.push(f);
     }
 
     // 5b. Retrieval-steering nudge hook (STEER-HOOK-DOC, REQ-STEER-001) —
@@ -565,6 +590,10 @@ class ClaudeCodeTarget implements AgentTarget {
     files.push(removeSddInstructionsEntry(loc));
     const sddHookCleanup = cleanupSddHooks(loc);
     if (sddHookCleanup.action === 'removed') files.push(sddHookCleanup);
+    // …and the skills the governance tier installed (REQ-AUTHG-007.A3). Runs
+    // unconditionally, same as the two above, so uninstall reverses install
+    // regardless of which tier was chosen.
+    for (const f of removeSkillsEntries(loc)) files.push(f);
 
     // 5b. Retrieval-steering hook — reverse of install step 5b.
     const steerHookCleanup = cleanupSteerHooks(loc);
@@ -597,6 +626,7 @@ class ClaudeCodeTarget implements AgentTarget {
       instructionsPath(loc),
       ...SHIPPED_COMMANDS.map((f) => path.join(commandsDir(loc), f)),
       ...SHIPPED_AGENTS.map((f) => path.join(agentsDir(loc), f)),
+      ...SHIPPED_SKILLS.map((f) => path.join(skillsDir(loc), f)),
     ];
   }
 }
@@ -1068,6 +1098,38 @@ export function cleanupLegacyCommandsEntries(loc: Location): WriteResult['files'
  */
 export function writeAgentsEntries(loc: Location): WriteResult['files'] {
   return SHIPPED_AGENTS.map((name) => copyAsset(packageAssetPath('agents', name), path.join(agentsDir(loc), name)));
+}
+
+/**
+ * Copy our shipped skills (skills/spec-author/**) into the user's skills dir
+ * (REQ-AUTHG-007.A1). Same idempotency contract as writeCommandsEntries: a
+ * destination with identical bytes reports `unchanged`, and sibling
+ * user-authored skills in the same dir are never touched.
+ */
+export function writeSkillsEntries(loc: Location): WriteResult['files'] {
+  return SHIPPED_SKILLS.map((name) => copyAsset(packageAssetPath('skills', name), path.join(skillsDir(loc), name)));
+}
+
+/**
+ * Inverse of writeSkillsEntries (REQ-AUTHG-007.A3). Deletes each file we
+ * shipped, then prunes the now-empty per-skill directories (deepest first, so
+ * `references/` goes before its parent). A user-authored file left inside keeps
+ * the directory alive — same posture as the `specship/` commands subdir.
+ */
+export function removeSkillsEntries(loc: Location): WriteResult['files'] {
+  const removed = SHIPPED_SKILLS.map((name) => removeFile(path.join(skillsDir(loc), name)));
+
+  // Deepest-first so a parent is only considered after its children are gone.
+  const dirs = [...new Set(SHIPPED_SKILLS.map((name) => path.dirname(path.join(skillsDir(loc), name))))]
+    .sort((a, b) => b.split(path.sep).length - a.split(path.sep).length);
+  for (const dir of [...dirs, path.join(skillsDir(loc), 'spec-author')]) {
+    try {
+      if (fs.existsSync(dir) && fs.readdirSync(dir).length === 0) fs.rmdirSync(dir);
+    } catch {
+      // Leave the directory in place if it can't be removed — never fatal.
+    }
+  }
+  return removed;
 }
 
 /**

@@ -4,6 +4,20 @@ title: Lean, registry-installable read-only dashboard
 owner: "@selvakumar"
 priority: high
 version: 1
+jira_issue_REQ-DASHLEAN-001: SSHIP-692
+jira_fingerprint_REQ-DASHLEAN-001: 61cf2aac9518ea8a
+jira_issue_REQ-DASHLEAN-002: SSHIP-697
+jira_fingerprint_REQ-DASHLEAN-002: 4afe3dfd523dbf7a
+jira_issue_REQ-DASHLEAN-003: SSHIP-700
+jira_fingerprint_REQ-DASHLEAN-003: 68c579deda932b8a
+jira_issue_REQ-DASHLEAN-004: SSHIP-703
+jira_fingerprint_REQ-DASHLEAN-004: 73cada3af2a7fade
+jira_issue_REQ-DASHLEAN-005: SSHIP-707
+jira_fingerprint_REQ-DASHLEAN-005: e0bfc4b72101e88f
+jira_issue_REQ-DASHLEAN-006: SSHIP-711
+jira_fingerprint_REQ-DASHLEAN-006: a01c73940e295cd9
+jira_issue_REQ-DASHLEAN-007: SSHIP-715
+jira_fingerprint_REQ-DASHLEAN-007: dc7e1e3bb74be626
 ---
 
 <!-- id: DASH-LEAN-DOC -->

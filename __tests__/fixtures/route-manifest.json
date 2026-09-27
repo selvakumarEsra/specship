@@ -1,0 +1,216 @@
+{
+  "_doc": [
+    "Checked-in inventory of every /api route the dashboard server registers",
+    "(REQ-TVIZ-004.A3). __tests__/server-route-inventory.test.ts boots the route",
+    "groups, enumerates what they registered, and diffs against this file — so a",
+    "new route cannot land without an explicit line here, and a removed route",
+    "cannot leave a stale one behind.",
+    "",
+    "`tested` records what drives the route: the test files that reference it, or",
+    "`waived: <reason>` when it has no direct test yet. A waiver is a known gap, not",
+    "a pass — prefer adding a test over adding a waiver."
+  ],
+  "routes": {
+    "GET /api/claude/cache": {
+      "tested": "ui/src/__tests__/costs.test.tsx, ui/src/__tests__/dashboard.test.tsx"
+    },
+    "GET /api/claude/compare": {
+      "tested": "ui/src/__tests__/compare.test.tsx"
+    },
+    "GET /api/claude/costs": {
+      "tested": "__tests__/claude-filters.test.ts, ui/src/__tests__/costs.test.tsx, ui/src/__tests__/dashboard.test.tsx"
+    },
+    "GET /api/claude/heatmap": {
+      "tested": "__tests__/claude-filters.test.ts, __tests__/claude-session-summary.test.ts, ui/src/__tests__/dashboard.test.tsx, ui/src/__tests__/heatmap.test.tsx"
+    },
+    "GET /api/claude/heatmap/file": {
+      "tested": "ui/src/__tests__/heatmap.test.tsx"
+    },
+    "GET /api/claude/heatmap/subagent": {
+      "tested": "waived: no direct test yet"
+    },
+    "GET /api/claude/heatmap/tool": {
+      "tested": "ui/src/__tests__/heatmap.test.tsx"
+    },
+    "GET /api/claude/projects": {
+      "tested": "ui/src/__tests__/sessions.test.tsx"
+    },
+    "GET /api/claude/prompts/recent": {
+      "tested": "__tests__/claude-prompts-recent.test.ts, ui/src/__tests__/command-palette.test.tsx"
+    },
+    "GET /api/claude/session/:id": {
+      "tested": "__tests__/claude-session-summary.test.ts, ui/src/__tests__/sessions.test.tsx"
+    },
+    "GET /api/claude/session/:id/events": {
+      "tested": "waived: no direct test yet"
+    },
+    "GET /api/claude/session/:id/summary": {
+      "tested": "__tests__/claude-session-summary.test.ts, ui/src/__tests__/sessions.test.tsx"
+    },
+    "GET /api/claude/sessions": {
+      "tested": "__tests__/claude-filters.test.ts, __tests__/dashint-coverage-unpriced.test.ts, ui/src/__tests__/sessions.test.tsx"
+    },
+    "GET /api/claude/stats": {
+      "tested": "__tests__/claude-tips-state.test.ts, __tests__/surface-removal.test.ts, e2e/tests/api-failure.spec.ts, e2e/tests/dashboard-data.spec.ts, ui/src/__tests__/compare.test.tsx, ui/src/__tests__/costs.test.tsx, ui/src/__tests__/dashboard.test.tsx, ui/src/__tests__/heatmap.test.tsx, ui/src/__tests__/sessions.test.tsx, ui/src/__tests__/tips.test.tsx"
+    },
+    "GET /api/claude/tips": {
+      "tested": "__tests__/claude-tips-scoping.test.ts, __tests__/claude-tips-state.test.ts, ui/src/__tests__/dashboard.test.tsx, ui/src/__tests__/drift.test.tsx, ui/src/__tests__/mcp.test.tsx, ui/src/__tests__/memory.test.tsx, ui/src/__tests__/sample-mode.test.tsx, ui/src/__tests__/settings.test.tsx, ui/src/__tests__/tips.test.tsx"
+    },
+    "GET /api/config": {
+      "tested": "__tests__/config-route.test.ts, ui/src/__tests__/settings.test.tsx"
+    },
+    "GET /api/domain": {
+      "tested": "__tests__/chat-removal.test.ts, __tests__/domain-endpoint.test.ts, __tests__/domain-enrichment.test.ts"
+    },
+    "GET /api/drift": {
+      "tested": "ui/src/__tests__/drift.test.tsx, ui/src/__tests__/mcp.test.tsx, ui/src/__tests__/memory.test.tsx, ui/src/__tests__/sample-mode.test.tsx, ui/src/__tests__/settings.test.tsx, ui/src/__tests__/tips.test.tsx"
+    },
+    "GET /api/graph/callees/:id": {
+      "tested": "waived: no direct test yet"
+    },
+    "GET /api/graph/callers/:id": {
+      "tested": "waived: no direct test yet"
+    },
+    "GET /api/graph/files": {
+      "tested": "waived: no direct test yet"
+    },
+    "GET /api/graph/full": {
+      "tested": "__tests__/graph-full-spec-union.test.ts, ui/src/__tests__/control-states.test.tsx, ui/src/__tests__/dashboard.test.tsx, ui/src/__tests__/graph.test.tsx"
+    },
+    "GET /api/graph/health": {
+      "tested": "__tests__/dashboard-graph-health.test.ts, ui/src/__tests__/control-states.test.tsx, ui/src/__tests__/graph.test.tsx"
+    },
+    "GET /api/graph/impact/:id": {
+      "tested": "waived: no direct test yet"
+    },
+    "GET /api/graph/node": {
+      "tested": "ui/src/__tests__/control-states.test.tsx, ui/src/__tests__/graph.test.tsx"
+    },
+    "GET /api/graph/nodes": {
+      "tested": "waived: no direct test yet"
+    },
+    "GET /api/graph/search": {
+      "tested": "ui/src/__tests__/command-palette.test.tsx"
+    },
+    "GET /api/graph/stats": {
+      "tested": "waived: no direct test yet"
+    },
+    "GET /api/maintainability": {
+      "tested": "waived: no direct test yet"
+    },
+    "GET /api/mcp/servers": {
+      "tested": "ui/src/__tests__/mcp.test.tsx"
+    },
+    "GET /api/memory": {
+      "tested": "ui/src/__tests__/memory.test.tsx, ui/src/__tests__/sample-mode.test.tsx"
+    },
+    "GET /api/projects": {
+      "tested": "__tests__/dashboard-projects-drift.test.ts, ui/src/__tests__/drift.test.tsx, ui/src/__tests__/mcp.test.tsx, ui/src/__tests__/memory.test.tsx, ui/src/__tests__/sample-mode.test.tsx, ui/src/__tests__/settings.test.tsx, ui/src/__tests__/tips.test.tsx"
+    },
+    "GET /api/projects/events": {
+      "tested": "waived: no direct test yet"
+    },
+    "GET /api/reflect": {
+      "tested": "waived: no direct test yet"
+    },
+    "GET /api/reflect/:hash/preview": {
+      "tested": "waived: no direct test yet"
+    },
+    "GET /api/spec/:id": {
+      "tested": "__tests__/spec-brief-endpoint.test.ts, e2e/tests/spec-edit-save.spec.ts, ui/src/__tests__/control-states.test.tsx, ui/src/__tests__/spec-editor.test.tsx, ui/src/__tests__/specs.test.tsx"
+    },
+    "GET /api/spec/:id/brief": {
+      "tested": "__tests__/spec-brief-endpoint.test.ts"
+    },
+    "GET /api/spec/coverage": {
+      "tested": "ui/src/__tests__/traceability.test.tsx, __tests__/spec-coverage.test.ts"
+    },
+    "GET /api/spec/funnel": {
+      "tested": "ui/src/__tests__/specs.test.tsx"
+    },
+    "GET /api/specs": {
+      "tested": "__tests__/domain-endpoint.test.ts, ui/src/__tests__/command-palette.test.tsx, ui/src/__tests__/control-states.test.tsx, ui/src/__tests__/spec-editor.test.tsx, ui/src/__tests__/specs.test.tsx"
+    },
+    "GET /api/status": {
+      "tested": "__tests__/ui-build-guard.test.ts, e2e/tests/api-failure.spec.ts, e2e/tests/dashboard-data.spec.ts, e2e/tests/empty-project.spec.ts, ui/src/__tests__/dashboard.test.tsx, ui/src/__tests__/drift.test.tsx, ui/src/__tests__/mcp.test.tsx, ui/src/__tests__/memory.test.tsx, ui/src/__tests__/sample-mode.test.tsx, ui/src/__tests__/settings.test.tsx, ui/src/__tests__/tips.test.tsx"
+    },
+    "GET /api/workflows": {
+      "tested": "__tests__/surface-removal.test.ts, ui/src/__tests__/drift.test.tsx, ui/src/__tests__/mcp.test.tsx, ui/src/__tests__/memory.test.tsx, ui/src/__tests__/runs-detail.test.tsx, ui/src/__tests__/sample-mode.test.tsx, ui/src/__tests__/settings.test.tsx, ui/src/__tests__/tips.test.tsx, ui/src/__tests__/workflows.test.tsx"
+    },
+    "GET /api/workflows/runs": {
+      "tested": "__tests__/surface-removal.test.ts, ui/src/__tests__/drift.test.tsx, ui/src/__tests__/mcp.test.tsx, ui/src/__tests__/memory.test.tsx, ui/src/__tests__/runs-detail.test.tsx, ui/src/__tests__/sample-mode.test.tsx, ui/src/__tests__/settings.test.tsx, ui/src/__tests__/tips.test.tsx, ui/src/__tests__/workflows.test.tsx"
+    },
+    "GET /api/workflows/runs/:id": {
+      "tested": "__tests__/surface-removal.test.ts, ui/src/__tests__/runs-detail.test.tsx"
+    },
+    "GET /api/workflows/runs/:id/artifacts": {
+      "tested": "ui/src/__tests__/runs-detail.test.tsx"
+    },
+    "GET /api/workflows/runs/:id/events": {
+      "tested": "__tests__/surface-removal.test.ts"
+    },
+    "PATCH /api/mcp/servers/:name": {
+      "tested": "ui/src/__tests__/mcp.test.tsx"
+    },
+    "POST /api/claude/ingest": {
+      "tested": "waived: no direct test yet"
+    },
+    "POST /api/claude/tips/state": {
+      "tested": "__tests__/claude-tips-state.test.ts, ui/src/__tests__/dashboard.test.tsx, ui/src/__tests__/tips.test.tsx"
+    },
+    "POST /api/graph/explore": {
+      "tested": "waived: no direct test yet"
+    },
+    "POST /api/mcp/servers": {
+      "tested": "ui/src/__tests__/mcp.test.tsx"
+    },
+    "POST /api/reflect/:hash/apply": {
+      "tested": "waived: no direct test yet"
+    },
+    "POST /api/reflect/:hash/dismiss": {
+      "tested": "waived: no direct test yet"
+    },
+    "POST /api/reflect/:hash/undo": {
+      "tested": "waived: no direct test yet"
+    },
+    "POST /api/reflect/analyze": {
+      "tested": "waived: no direct test yet"
+    },
+    "POST /api/refresh": {
+      "tested": "waived: no direct test yet"
+    },
+    "POST /api/spec/link-assert": {
+      "tested": "waived: no direct test yet"
+    },
+    "POST /api/spec/link-verify": {
+      "tested": "waived: no direct test yet"
+    },
+    "POST /api/specs": {
+      "tested": "__tests__/domain-endpoint.test.ts, ui/src/__tests__/command-palette.test.tsx, ui/src/__tests__/control-states.test.tsx, ui/src/__tests__/spec-editor.test.tsx, ui/src/__tests__/specs.test.tsx"
+    },
+    "POST /api/workflows/runs": {
+      "tested": "__tests__/surface-removal.test.ts, ui/src/__tests__/drift.test.tsx, ui/src/__tests__/mcp.test.tsx, ui/src/__tests__/memory.test.tsx, ui/src/__tests__/runs-detail.test.tsx, ui/src/__tests__/sample-mode.test.tsx, ui/src/__tests__/settings.test.tsx, ui/src/__tests__/tips.test.tsx, ui/src/__tests__/workflows.test.tsx"
+    },
+    "POST /api/workflows/runs/:id/approve": {
+      "tested": "ui/src/__tests__/runs-detail.test.tsx"
+    },
+    "POST /api/workflows/runs/:id/cancel": {
+      "tested": "ui/src/__tests__/runs-detail.test.tsx"
+    },
+    "POST /api/workflows/runs/:id/purge": {
+      "tested": "waived: no direct test yet"
+    },
+    "POST /api/workflows/runs/:id/reject": {
+      "tested": "ui/src/__tests__/runs-detail.test.tsx"
+    },
+    "POST /api/workflows/runs/:id/resume": {
+      "tested": "ui/src/__tests__/runs-detail.test.tsx"
+    },
+    "PUT /api/config": {
+      "tested": "__tests__/config-route.test.ts, ui/src/__tests__/settings.test.tsx"
+    },
+    "PUT /api/spec/:id": {
+      "tested": "__tests__/spec-brief-endpoint.test.ts, e2e/tests/spec-edit-save.spec.ts, ui/src/__tests__/control-states.test.tsx, ui/src/__tests__/spec-editor.test.tsx, ui/src/__tests__/specs.test.tsx"
+    }
+  }
+}

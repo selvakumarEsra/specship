@@ -41,14 +41,22 @@ import {
   initGrammars,
 } from './extraction';
 import { MarkdownSpecExtractor } from './extraction/specs/markdown-spec-extractor';
+import type { SpecExtractionResult } from './extraction/specs/types';
 import {
   ReferenceResolver,
   createResolver,
   ResolutionResult,
 } from './resolution';
-import { SpecLinkResolver, SpecLinkResolverStats, DriftTransition } from './resolution/spec-link-resolver';
+import {
+  SpecLinkResolver,
+  SpecLinkResolverStats,
+  DriftTransition,
+  canonicalQualifiedName,
+} from './resolution/spec-link-resolver';
 import { computeSpecFunnel, SpecFunnel } from './resolution/brief-link-resolver';
 import { computeDomainGapSeed, DomainGapSeed } from './resolution/domain-gap-seed';
+import { computeSpecCoverage, SpecCoverageReport } from './graph/spec-coverage';
+import { ingestTestReport, VerifyReportResult } from './verify/report-ingest';
 import { SpecQueries } from './db/spec-queries';
 import {
   analyze as reflectAnalyzeImpl,
@@ -91,6 +99,7 @@ import {
   loadEnforceConfig,
   EnforceConfig,
   EnforceReport,
+  EnforceScope,
   RequirementVerification,
 } from './enforce/enforce';
 import { computeBehaviourSurface, BehaviourSurface } from './behaviour/behaviour-surface';
@@ -136,6 +145,23 @@ export type {
   BriefFunnelEntry,
 } from './resolution/brief-link-resolver';
 export { computeDomainGapSeed } from './resolution/domain-gap-seed';
+// Spec coverage rollup + test-report ingestion (VSTATE-DOC).
+export { computeSpecCoverage, formatCoverageLine, verdictFor } from './graph/spec-coverage';
+export type {
+  SpecCoverageReport,
+  RequirementCoverage,
+  CriterionCoverage,
+  CoverageVerdict,
+  LinkRollup,
+} from './graph/spec-coverage';
+export {
+  ingestTestReport,
+  parseVitestJsonReport,
+  caseMatchesLink,
+  TestReportParseError,
+} from './verify/report-ingest';
+export type { VerifyReportResult, ReportedTestCase, LinkOutcome } from './verify/report-ingest';
+export { isRecognizedTestFile, isNonTestEvidence, scanTestTitleRefs } from './resolution/test-title-links';
 export type {
   DomainGapSeed,
   GapSeedEntity,
@@ -173,7 +199,9 @@ export type { FlowDiagramOptions, FlowDiagramConfig, FlowDiagramResult, FlowGrap
 // Architecture-fitness harness (FITNESS-DOC / REQ-FITNESS-001…003).
 export { evaluateFitness, loadFitnessRules, FITNESS_CONFIG_FILE } from './fitness/fitness';
 // Enforcement mode (ENFORCE-DOC / REQ-ENFORCE-001…003).
-export { evaluateEnforcement, loadEnforceConfig, ENFORCE_CONFIG_FILE } from './enforce/enforce';
+export { evaluateEnforcement, loadEnforceConfig, ENFORCE_CONFIG_FILE, normalizePath } from './enforce/enforce';
+// Change-scoped gating (REQ-AUTHG-006) — `specship check --since <ref>`.
+export { changedFilesSince, InvalidRefError } from './enforce/changed-files';
 // Behaviour surface (BEHAVIOUR-DOC / REQ-BEHAVIOUR-001).
 export { computeBehaviourSurface, renderBehaviourSurface, isUiNode } from './behaviour/behaviour-surface';
 export type { BehaviourSurface, BehaviourFlowElement, BehaviourSurfaceDeps } from './behaviour/behaviour-surface';
@@ -182,6 +210,7 @@ export type {
   GateConfig,
   EnforceReport,
   EnforceDeps,
+  EnforceScope,
   CheckOutcome,
   CheckName,
   RequirementVerification,
@@ -299,7 +328,10 @@ export class SpecShip {
     );
     this.orchestrator = new ExtractionOrchestrator(projectRoot, queries);
     this.resolver = createResolver(projectRoot, queries);
-    this.specLinkResolver = new SpecLinkResolver(queries, this.specQueries);
+    this.specLinkResolver = new SpecLinkResolver(queries, this.specQueries, {
+      // The test-title evidence pass reads test files from disk (REQ-VSTATE-002).
+      projectRoot,
+    });
     this.graphManager = new GraphQueryManager(queries);
     this.traverser = new GraphTraverser(queries);
     this.contextBuilder = createContextBuilder(
@@ -327,6 +359,30 @@ export class SpecShip {
    */
   getSpecFunnel(): SpecFunnel {
     return computeSpecFunnel(this.specQueries);
+  }
+
+  /**
+   * The spec coverage rollup (REQ-VSTATE-006): per requirement AND per
+   * acceptance criterion, the implements/tests link counts and states plus a
+   * verdict derived from `tests` links alone. Scoped to one spec id (a document
+   * expands to its requirements) or the whole project when omitted.
+   *
+   * Exposed on the instance so the MCP tool, the CLI and the desktop server all
+   * read the SAME numbers — the coverage line a human approves in the implement
+   * workflow is this function's output, not an LLM's count (REQ-VSTATE-005.A2).
+   */
+  getSpecCoverage(specId?: string): SpecCoverageReport {
+    return computeSpecCoverage(this.specQueries, specId);
+  }
+
+  /**
+   * Ingest a test report (vitest JSON) and move `tests` links accordingly
+   * (REQ-VSTATE-004): a case that passed promotes its link to `verified` with
+   * the run recorded as evidence; a failure demotes it to `broken`. A malformed
+   * report throws {@link TestReportParseError} having changed nothing.
+   */
+  verifyFromReport(reportPath: string, options: { runId?: string } = {}): VerifyReportResult {
+    return ingestTestReport(this.specQueries, this.projectRoot, reportPath, options);
   }
 
   /**
@@ -385,23 +441,34 @@ export class SpecShip {
    * explicit override); with no config every check is advisory and the run
    * passes. The behaviour chain reads `tests`-kind spec-links on each requirement
    * and its acceptance criteria (verified = passing, broken = ran-and-failed).
+   *
+   * `scope` narrows the link-scoped checks to a set of changed files
+   * (REQ-AUTHG-006) — `specship check --since <ref>` supplies it. Omitted, the
+   * gate evaluates the whole repository exactly as before.
    */
-  getEnforce(config?: EnforceConfig): EnforceReport {
+  getEnforce(config?: EnforceConfig, scope?: EnforceScope): EnforceReport {
     const cfg = config ?? loadEnforceConfig(this.projectRoot);
     const sq = this.specQueries;
     const drift = sq.getLinksByState(['drifted', 'broken', 'orphaned']);
     const requirements: RequirementVerification[] = sq.getSpecsByKind('requirement').map((req) => {
-      const testsLinks = sq.getLinksBySpec(req.id).filter((l) => l.kind === 'tests');
+      const ownLinks = sq.getLinksBySpec(req.id);
+      const testsLinks = ownLinks.filter((l) => l.kind === 'tests');
+      // Every link target, any kind — a change to implementation code brings
+      // its requirement into a scoped run, not just a change to its tests.
+      const linkedFiles = ownLinks.map((l) => l.targetFilePath);
       for (const child of sq.getSpecsByParent(req.id)) {
         if (child.kind === 'acceptance') {
-          testsLinks.push(...sq.getLinksBySpec(child.id).filter((l) => l.kind === 'tests'));
+          const childLinks = sq.getLinksBySpec(child.id);
+          testsLinks.push(...childLinks.filter((l) => l.kind === 'tests'));
+          linkedFiles.push(...childLinks.map((l) => l.targetFilePath));
         }
       }
-      return { id: req.id, title: req.title, testsLinks };
+      return { id: req.id, title: req.title, testsLinks, sourcePath: req.sourcePath, linkedFiles };
     });
     return evaluateEnforcement(
       { drift, fitness: this.getFitness(), maintainability: this.getMaintainability(), requirements },
       cfg,
+      scope,
     );
   }
 
@@ -865,10 +932,64 @@ export class SpecShip {
   }
 
   /**
+   * Re-extract ONE spec file without ever deleting the specs it still declares
+   * (REQ-VSTATE-001).
+   *
+   * `spec_links.spec_id` is `ON DELETE CASCADE`, so the delete-then-reinsert
+   * shape that spec indexing used to have destroyed every link the file did not
+   * re-declare — every agent-asserted `tests` link, every verification record —
+   * on any edit to any part of the file. Which also meant the sticky-state and
+   * spec-axis-drift machinery never ran on the real edit path: there was
+   * nothing left to transition.
+   *
+   * The fix is to make the destructive window not exist rather than to repair
+   * it afterwards: `insertSpec` upserts, so a surviving spec's row (and every
+   * link hanging off it) is never deleted, and `sweepRemovedSpecs` deletes only
+   * the ids the author actually removed (A3). Nothing is snapshotted, so
+   * nothing can be lost in a round-trip.
+   *
+   * Surviving specs keep their links, which makes the file's OWN declarations
+   * the other half of the contract: a `verifies:` / `implementations:` bullet
+   * the author deleted must take its link with it, or removing a declaration
+   * would silently mean nothing. `reconcileDeclaredLinks` drops exactly those —
+   * `spec-declaration` provenance only, never a link the file cannot re-create.
+   *
+   * The caller then applies the file's own declarations and runs the spec-axis
+   * drift rule over the surviving rows.
+   */
+  private replaceSpecsForFile(
+    rel: string,
+    source: string,
+    stats?: SpecLinkResolverStats
+  ): SpecExtractionResult {
+    const result = new MarkdownSpecExtractor(rel, source).extract();
+    this.specQueries.insertSpecsBatch(result.specs);
+    this.specQueries.sweepRemovedSpecs(rel, result.specs.map((s) => s.id));
+    // Canonicalized exactly as applyDeclarationCandidates canonicalizes before
+    // upserting, so a surviving declaration matches its own row instead of
+    // being dropped and re-created every pass.
+    const reconciled = this.specQueries.reconcileDeclaredLinks(
+      rel,
+      result.linkCandidates.map((c) => ({
+        specId: c.specId,
+        targetFilePath: c.targetFilePath,
+        targetQualifiedName: canonicalQualifiedName(c.targetQualifiedName),
+        kind: c.kind,
+      }))
+    );
+    if (stats && reconciled > 0) {
+      stats.declarationsReconciled = (stats.declarationsReconciled ?? 0) + reconciled;
+    }
+    return result;
+  }
+
+  /**
    * Internal spec indexing — does NOT take the indexMutex (caller already holds it)
    * and does NOT take the fileLock. Used by indexAll and sync, which manage locks
    * themselves. Returns the links that transitioned into `drifted` during the
-   * pass (spec-side and code-side) so sync can push them (REQ-DRIFT-PUSH-001).
+   * pass (spec-side and code-side) so sync can push them (REQ-DRIFT-PUSH-001),
+   * plus the extraction error/warning counts over the files it reparsed so the
+   * caller can surface them the way `indexSpecs` does (REQ-REVINT-002.A2).
    *
    * The per-file content-hash guard makes re-runs cheap; the comment-link scan
    * + full link re-resolution at the end runs only when a spec file actually
@@ -876,15 +997,19 @@ export class SpecShip {
    * the orchestrator does not track spec files, so sync calls this
    * unconditionally and relies on the hash guard).
    */
-  private async indexSpecsInternal(forceResolve: boolean = true): Promise<DriftTransition[]> {
+  private async indexSpecsInternal(
+    forceResolve: boolean = true
+  ): Promise<{ transitions: DriftTransition[]; errors: number; warnings: number }> {
     const transitions: DriftTransition[] = [];
+    let totalErrors = 0;
+    let totalWarnings = 0;
     const specStats: SpecLinkResolverStats = {
       scanned: 0, reresolved: 0, orphaned: 0, driftedCode: 0,
       candidatesApplied: 0, commentLinksApplied: 0, reattached: 0, transitions,
     };
     let specFilesChanged = 0;
     const specRoots = this.defaultSpecRoots();
-    if (specRoots.length === 0) return transitions;
+    if (specRoots.length === 0) return { transitions, errors: totalErrors, warnings: totalWarnings };
     const specFiles: string[] = [];
     for (const root of specRoots) {
       this.collectSpecFiles(root, specFiles);
@@ -905,9 +1030,9 @@ export class SpecShip {
       if (existing && existing.contentHash === hashHex) continue;
       specFilesChanged++;
 
-      this.specQueries.deleteSpecsByFile(rel);
-      const result = new MarkdownSpecExtractor(rel, source).extract();
-      this.specQueries.insertSpecsBatch(result.specs);
+      const result = this.replaceSpecsForFile(rel, source, specStats);
+      totalErrors += result.errors.filter((e) => e.severity === 'error').length;
+      totalWarnings += result.errors.filter((e) => e.severity === 'warning').length;
       this.specQueries.upsertSpecFile({
         path: rel,
         contentHash: hashHex,
@@ -929,10 +1054,11 @@ export class SpecShip {
     if (specFilesChanged > 0 || forceResolve) {
       const allFiles = this.queries.getAllFiles().map((f) => f.path);
       this.specLinkResolver.applyCodeCommentLinks(allFiles);
+      this.specLinkResolver.applyTestTitleLinks(allFiles, specStats);
       const resolveStats = this.specLinkResolver.resolveAll();
       transitions.push(...resolveStats.transitions);
     }
-    return transitions;
+    return { transitions, errors: totalErrors, warnings: totalWarnings };
   }
 
   /**
@@ -943,7 +1069,9 @@ export class SpecShip {
    *
    * Pipeline per file:
    *   1. Hash file content; skip if `spec_files.content_hash` matches.
-   *   2. Delete prior specs for this file (cascade-deletes children, links).
+   *   2. Replace prior specs for this file, restoring their links afterwards
+   *      (REQ-VSTATE-001) — only links of spec ids the file no longer declares
+   *      are swept.
    *   3. Run MarkdownSpecExtractor → insert specs + virtual node projections.
    *   4. Apply `spec-declaration` link candidates from `implementations:`.
    *   5. Mark previously-linked specs as drifted (drift_axis='spec') when
@@ -1024,12 +1152,10 @@ export class SpecShip {
             continue;
           }
 
-          // Replace prior specs for this file. CASCADE removes children +
-          // spec_links FK'd on spec_id.
-          this.specQueries.deleteSpecsByFile(rel);
-
-          const result = new MarkdownSpecExtractor(rel, source).extract();
-          this.specQueries.insertSpecsBatch(result.specs);
+          // Replace prior specs for this file, preserving their links
+          // (REQ-VSTATE-001) — the CASCADE would otherwise take every link the
+          // file doesn't re-declare with it.
+          const result = this.replaceSpecsForFile(rel, source, stats);
           this.specQueries.upsertSpecFile({
             path: rel,
             contentHash: hashHex,
@@ -1067,6 +1193,9 @@ export class SpecShip {
         // node count is bounded and the scan is O(N) regex over docstrings).
         const allFiles = this.queries.getAllFiles().map((f) => f.path);
         this.specLinkResolver.applyCodeCommentLinks(allFiles, stats);
+        // Spec ids inside `it()` titles in test files → `tests` links
+        // (REQ-VSTATE-002).
+        this.specLinkResolver.applyTestTitleLinks(allFiles, stats);
 
         // Re-resolve all links (post-extraction).
         const resolveStats = this.specLinkResolver.resolveAll();
@@ -1230,7 +1359,10 @@ export class SpecShip {
             result.filesAdded > 0 || result.filesModified > 0 || result.filesRemoved > 0;
           this.fileLock.release();
           try {
-            result.driftedTransitions = await this.indexSpecsInternal(codeChanged);
+            const specPass = await this.indexSpecsInternal(codeChanged);
+            result.driftedTransitions = specPass.transitions;
+            result.specErrors = specPass.errors;
+            result.specWarnings = specPass.warnings;
           } catch {
             // Non-fatal; the next full index catches up.
           } finally {

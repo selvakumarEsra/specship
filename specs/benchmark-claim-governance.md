@@ -3,6 +3,12 @@ id: BENCH-CLAIM-DOC
 title: Benchmark claim governance
 owner: specship
 priority: high
+jira_issue_REQ-BENCH-001: SSHIP-113
+jira_fingerprint_REQ-BENCH-001: e76d28b088eb8e6f
+jira_issue_REQ-BENCH-002: SSHIP-116
+jira_fingerprint_REQ-BENCH-002: 48aec1747c6aaa65
+jira_issue_REQ-BENCH-003: SSHIP-120
+jira_fingerprint_REQ-BENCH-003: 62e92bf483f0ac06
 ---
 
 <!-- id: BENCH-CLAIM-DOC -->

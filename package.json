@@ -9,12 +9,13 @@
   },
   "files": [
     "dist",
-    "scripts",
+    "!dist/**/*.map",
     "README.md",
     ".claude-plugin",
     "commands",
     "agents",
     "hooks",
+    "skills",
     "selectors.json"
   ],
   "scripts": {
@@ -22,8 +23,9 @@
     "build:core": "tsc && tsc -p src/designer/tsconfig.json && npm run copy-assets && node -e \"require('fs').chmodSync('dist/bin/specship.js', 0o755)\"",
     "build:server": "node scripts/build-server-bundle.mjs",
     "preuninstall": "node dist/bin/uninstall.js",
-    "copy-assets": "node -e \"const fs=require('fs');fs.mkdirSync('dist/db',{recursive:true});fs.copyFileSync('src/db/schema.sql','dist/db/schema.sql');fs.mkdirSync('dist/extraction/wasm',{recursive:true});fs.readdirSync('src/extraction/wasm').filter(f=>f.endsWith('.wasm')).forEach(f=>fs.copyFileSync('src/extraction/wasm/'+f,'dist/extraction/wasm/'+f));try{fs.mkdirSync('dist/workflows/defaults',{recursive:true});fs.readdirSync('src/workflows/defaults').filter(f=>/\\.ya?ml$/i.test(f)).forEach(f=>fs.copyFileSync('src/workflows/defaults/'+f,'dist/workflows/defaults/'+f))}catch(e){};['commands','agents','hooks','.claude-plugin'].forEach(d=>{try{fs.cpSync(d,'dist/'+d,{recursive:true})}catch(e){}})\"",
+    "copy-assets": "node scripts/copy-assets.mjs",
     "dev": "tsc --watch",
+    "lint": "tsc --noEmit && tsc --noEmit -p server/tsconfig.json",
     "cli": "npm run build && node dist/bin/specship.js",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -63,6 +65,8 @@
     "@types/cross-spawn": "^6.0.6",
     "@types/node": "^20.19.30",
     "@types/picomatch": "^4.0.2",
+    "@vitest/coverage-v8": "^2.1.9",
+    "fast-check": "^4.10.2",
     "typescript": "^5.0.0",
     "vitest": "^2.1.9"
   },

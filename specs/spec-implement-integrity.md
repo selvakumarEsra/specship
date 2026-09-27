@@ -4,6 +4,10 @@ title: Verified integrity in the spec-implement workflow
 owner: core
 priority: high
 version: 1
+jira_issue_REQ-IMPLINT-001: SSHIP-1061
+jira_fingerprint_REQ-IMPLINT-001: 53b65a2317f08427
+jira_issue_REQ-IMPLINT-002: SSHIP-1065
+jira_fingerprint_REQ-IMPLINT-002: 5226904867aa5073
 ---
 
 <!-- id: IMPLINT-DOC -->

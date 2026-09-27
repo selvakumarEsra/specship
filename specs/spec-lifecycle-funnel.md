@@ -4,6 +4,20 @@ title: Spec lifecycle funnel
 owner: core
 priority: medium
 brief: spec-lifecycle-funnel/brief.md
+jira_issue_REQ-FUNNEL-001: SSHIP-1069
+jira_fingerprint_REQ-FUNNEL-001: e8d1d4da87ff4d05
+jira_issue_REQ-FUNNEL-002: SSHIP-1075
+jira_fingerprint_REQ-FUNNEL-002: 0e173c92ffb9f074
+jira_issue_REQ-FUNNEL-003: SSHIP-1081
+jira_fingerprint_REQ-FUNNEL-003: 08262a051998136d
+jira_issue_REQ-FUNNEL-004: SSHIP-1087
+jira_fingerprint_REQ-FUNNEL-004: ecfdbf062fe45081
+jira_issue_REQ-FUNNEL-005: SSHIP-1093
+jira_fingerprint_REQ-FUNNEL-005: bb18ca8f65b1acfd
+jira_issue_REQ-FUNNEL-006: SSHIP-1097
+jira_fingerprint_REQ-FUNNEL-006: e2cf8f29890aa414
+jira_issue_REQ-FUNNEL-007: SSHIP-1102
+jira_fingerprint_REQ-FUNNEL-007: 9f7bbe86fb20249c
 ---
 
 <!-- id: SPEC-FUNNEL-DOC -->

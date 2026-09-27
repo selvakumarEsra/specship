@@ -180,5 +180,10 @@ export function boundedEditDistance(a: string, b: string, maxDist: number): numb
     if (rowMin > maxDist) return maxDist + 1;
     [prev, cur] = [cur, prev];
   }
-  return prev[bl]!;
+  // Clamp the final cell. The per-row early exit above only runs once per
+  // character of `a`, so a short `a` against a long `b` can finish the DP
+  // without ever tripping it — leaving an unclamped distance above the
+  // promised `maxDist + 1` ceiling, and making the result asymmetric in the
+  // argument order (`("ab","bcccca",4)` → 5 but `("bcccca","ab",4)` → 6).
+  return Math.min(prev[bl]!, maxDist + 1);
 }

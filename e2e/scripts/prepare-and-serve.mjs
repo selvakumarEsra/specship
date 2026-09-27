@@ -16,7 +16,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { buildFixture } from '../lib/fixture.mjs';
-import { BIN, FIXTURE, HOST, PORT, REPO_ROOT } from '../lib/paths.mjs';
+import { BIN, FIXTURE, HOST, MODE, PORT, REPO_ROOT } from '../lib/paths.mjs';
 
 const UI_DIR = path.join(REPO_ROOT, 'ui');
 const WEB_DIR = path.join(UI_DIR, 'dist');
@@ -45,13 +45,17 @@ if (!fs.existsSync(path.join(WEB_DIR, 'index.html'))) {
 
 const env = await buildFixture();
 
+// The unindexed-project server has nothing to ingest — skip the watcher so the
+// zero-data empty states are deterministic (REQ-TVIZ-004.A1).
+const ingestFlag = MODE === 'empty' ? '--no-ingest' : '--ingest';
+
 const child = spawn(
   'node',
   [
     BIN, 'desktop',
     '--web-dir', WEB_DIR,
     '--host', HOST, '--port', String(PORT),
-    '--path', FIXTURE, '--ingest', '--no-watch',
+    '--path', FIXTURE, ingestFlag, '--no-watch',
   ],
   { env, stdio: 'inherit' },
 );

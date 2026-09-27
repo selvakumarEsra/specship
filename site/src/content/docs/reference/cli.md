@@ -19,6 +19,9 @@ description: Every SpecShip command and the flags it accepts.
 | `specship memory capture` | Capture a lesson/anti-pattern as a human-gated memory rule (lesson text on stdin). |
 | `specship memory list` | List the memory rules SpecShip has applied (reflect-managed store). |
 | `specship memory remove <id>` | Remove a SpecShip-managed memory rule by id (previewed; pass --yes to write). |
+| `specship coverage [spec]` | Show spec test-coverage: per requirement and criterion, tests-link state and verdict |
+| `specship lint [paths...]` | Lint spec files for authoring problems (exits non-zero on an error finding) |
+| `specship verify` | Ingest a test report (vitest JSON) and promote/demote spec test links from it |
 | `specship fitness [path]` | Check architecture-fitness rules against the code graph (CI gate; exits non-zero on violation) |
 | `specship check [path]` | Run the enforcement gate (drift + fitness + maintainability + behaviour); exits non-zero on a gating failure |
 | `specship serve` | Start SpecShip as an MCP server for AI assistants (stdio transport) |
@@ -160,7 +163,6 @@ Every `SPECSHIP_*` variable the shipped code reads:
 - `SPECSHIP_START`
 - `SPECSHIP_STATUSLINE`
 - `SPECSHIP_STEER_HOOKS`
-- `SPECSHIP_TOOLDEF_CHARS`
 - `SPECSHIP_UNICODE`
 - `SPECSHIP_USAGE_FILE`
 - `SPECSHIP_UV_BIN`

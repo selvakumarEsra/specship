@@ -367,7 +367,12 @@ interface ServerUsage {
   bytes: number;
   last: number;
   tools: Map<string, { calls: number; bytes: number }>;
-  example: { tool: string; args: Record<string, unknown> } | null;
+  /**
+   * `synthesized: true` means this is NOT a recorded call — it's the server's
+   * top-tool-with-empty-args placeholder, and the UI must mark it as such
+   * (REQ-SURF-009.A2).
+   */
+  example: { tool: string; args: Record<string, unknown>; synthesized: boolean } | null;
 }
 
 /** Aggregate claude_tool_calls into per-server usage + the latest example call. */
@@ -416,13 +421,14 @@ function collectUsage(cg: SpecShipInstance): Map<string, ServerUsage> {
     const [, server, tool] = m as unknown as [string, string, string];
     const s = byServer.get(server);
     if (!s || s.example) continue;
-    try { s.example = { tool, args: JSON.parse(row.input_json) as Record<string, unknown> }; } catch { /* skip bad row */ }
+    try { s.example = { tool, args: JSON.parse(row.input_json) as Record<string, unknown>, synthesized: false }; } catch { /* skip bad row */ }
   }
-  // Fallback example: the server's top tool with empty args.
+  // Fallback example: the server's top tool with empty args. Flagged
+  // synthesized so the page can't pass it off as a recorded call.
   for (const s of byServer.values()) {
     if (s.example) continue;
     const top = [...s.tools.entries()].sort((a, b) => b[1].calls - a[1].calls)[0];
-    if (top) s.example = { tool: top[0], args: {} };
+    if (top) s.example = { tool: top[0], args: {}, synthesized: true };
   }
   return byServer;
 }

@@ -27,6 +27,19 @@ import { Bar, Delta } from './ui';
 export const fmtTok = (n: number): string =>
   n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(n);
 
+/** Characters per token — the rough Claude average the ingest pricing path uses. */
+export const CHARS_PER_TOKEN = 4;
+
+/**
+ * `result_length` / `resultBytes` count CHARACTERS, not tokens. Anything
+ * labelled "tokens" must go through here first, and be labelled as an
+ * estimate — the raw char count overstates tokens ~4× (REQ-REVINT-007.A4).
+ */
+export const estTokens = (chars: number): number => Math.round(chars / CHARS_PER_TOKEN);
+
+/** `fmtTok` over a char count: a formatted ESTIMATED token count. */
+export const fmtEstTok = (chars: number): string => fmtTok(estTokens(chars));
+
 /** Last two path segments — heatmap paths are absolute, cells are small. */
 const shortPath = (p: string): string => p.split('/').filter(Boolean).slice(-2).join('/');
 
@@ -283,7 +296,7 @@ export function TipsRail({ tips, onSetState, noIngest, onIngested }: {
 
 export function Heatstrip({ files, noIngest, onIngested }: { files: HeatmapFile[]; noIngest: boolean; onIngested: () => void }) {
   const stats = files.slice(0, 14).map((f) => {
-    const tokens = f.resultBytes ?? 0;
+    const tokens = estTokens(f.resultBytes ?? 0);
     return { path: f.path, calls: f.calls, tokens, tpc: f.calls > 0 ? tokens / f.calls : 0 };
   });
   const maxTpc = Math.max(...stats.map((s) => s.tpc), 0) || 1;
@@ -293,11 +306,11 @@ export function Heatstrip({ files, noIngest, onIngested }: { files: HeatmapFile[
     value: s.calls,
     intensity: s.tpc / maxTpc,
     sub: s.calls + ' calls',
-    title: `${s.path}\n${s.calls} calls · ${fmtTok(s.tokens)} tokens · ${fmtTok(Math.round(s.tpc))}/call`,
+    title: `${s.path}\n${s.calls} calls · ~${fmtTok(s.tokens)} est. tokens · ~${fmtTok(Math.round(s.tpc))}/call`,
   }));
   return (
     <div className="card card-pad" style={{ display: 'flex', flexDirection: 'column' }}>
-      <CardHead icon="flame" iconColor="var(--warn)" title="Tool-call heatmap" sub="· area = calls, color = tokens / call"
+      <CardHead icon="flame" iconColor="var(--warn)" title="Tool-call heatmap" sub="· area = calls, color = est. tokens / call"
         action={<CrossLink label="Open heatmap" page="heatmap" arrow />} />
       {noIngest || !items.length
         ? (noIngest
@@ -307,7 +320,7 @@ export function Heatstrip({ files, noIngest, onIngested }: { files: HeatmapFile[
           <>
             <Treemap items={items} height={116} selKey={null} onPick={() => go('heatmap')} />
             <div className="row gap-10" style={{ marginTop: 9, alignItems: 'center' }}>
-              <span className="muted" style={{ fontSize: 10 }}>tokens / call</span>
+              <span className="muted" style={{ fontSize: 10 }}>est. tokens / call</span>
               <div style={{ width: 96, height: 6, borderRadius: 999, background: 'linear-gradient(90deg, var(--node-route), var(--warn), var(--error))' }} />
               <span className="muted" style={{ fontSize: 9.5 }}>efficient → wasteful</span>
             </div>

@@ -4,10 +4,23 @@ title: Installable PWA dashboard with desktop notifications
 owner: dashboard
 priority: medium
 brief: dashboard-pwa-notifications/brief.md
+jira_issue_REQ-PWA-001: SSHIP-304
+jira_fingerprint_REQ-PWA-001: fb071028264f2e7e
+jira_issue_REQ-PWA-002: SSHIP-309
+jira_fingerprint_REQ-PWA-002: 8f2c78ae631cb88d
+jira_issue_REQ-PWA-003: SSHIP-317
+jira_fingerprint_REQ-PWA-003: 53065f16a8f92c6b
 ---
 
 <!-- id: PWA-DOC -->
 # Installable PWA dashboard with desktop notifications
+
+> **SUPERSEDED (2026-09-25) by SURF-DOC** (`specs/surface-cleanup.md`,
+> REQ-SURF-001.A3): none of this shipped. There is no web app manifest, no
+> service worker, and no `NotificationsService` — and the `GET /api/events`
+> SSE route this contract's notifications depended on is being removed as
+> dead surface (REQ-SURF-001.A1). Every requirement below is retired and kept
+> for history; nothing here is a live commitment.
 
 The SpecShip dashboard (`specship serve --ui`) is a local web app on
 `127.0.0.1`. To let developers monitor and review their Claude Code work as if

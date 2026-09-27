@@ -20,6 +20,10 @@ import {
   qualifiedNameVariants,
   canonicalQualifiedName,
 } from '../src/resolution/spec-link-resolver';
+import {
+  isRecognizedTestFile,
+  isNonTestEvidence,
+} from '../src/resolution/test-title-links';
 
 function tempDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'cg-link-resolver-'));
@@ -1080,5 +1084,145 @@ describe.skipIf(!fts5Available)('SpecLinkResolver qualified-name variants (REQ-L
     expect(links[0]!.targetQualifiedName).toBe('Store.save');
     expect(links[0]!.provenance).toBe('code-comment');
     expect(links[0]!.confidence).toBe(0.9);
+  });
+});
+
+/**
+ * Test-title evidence links (REQ-VSTATE-002).
+ *
+ * `it('… (REQ-X.A1)', …)` is already how this repo names the criterion a test
+ * proves. These assertions cover reading that title as a `tests` link, refusing
+ * to read the same id out of a non-test file, surviving re-index, and flagging
+ * a `tests` link whose target isn't a test file at all.
+ */
+describe.skipIf(!fts5Available)('test-title evidence links (REQ-VSTATE-002)', () => {
+  let dir: string;
+  let cg: SpecShip;
+
+  const TEST_FILE = '__tests__/widget.test.ts';
+  const SRC_FILE = 'src/widget.ts';
+
+  beforeEach(async () => {
+    dir = tempDir();
+    cg = await SpecShip.init(dir);
+    const sq = cg.getSpecQueries();
+    const now = Date.now();
+    sq.insertSpec({
+      id: 'REQ-FOO-001', kind: 'requirement', title: 'Widget', body: 'b',
+      format: 'markdown', sourcePath: 'specs/foo.md', contentHash: 'h',
+      createdAt: now, updatedAt: now,
+    });
+    sq.insertSpec({
+      id: 'REQ-FOO-001.A1', kind: 'acceptance', title: 'does X', body: 'b',
+      format: 'markdown', sourcePath: 'specs/foo.md', parentId: 'REQ-FOO-001',
+      contentHash: 'h', createdAt: now, updatedAt: now,
+    });
+  });
+
+  afterEach(async () => {
+    cg?.close();
+    clean(dir);
+  });
+
+  /** Write a file on disk AND register its `file` node, as extraction would. */
+  function writeIndexedFile(rel: string, source: string): void {
+    const abs = path.join(dir, rel);
+    fs.mkdirSync(path.dirname(abs), { recursive: true });
+    fs.writeFileSync(abs, source, 'utf-8');
+    const queries = (cg as unknown as { queries: import('../src/db/queries').QueryBuilder }).queries;
+    queries.insertNode({
+      id: `file:${rel}`,
+      kind: 'file',
+      name: path.basename(rel),
+      qualifiedName: rel,
+      filePath: rel,
+      language: 'typescript',
+      startLine: 1,
+      endLine: source.split('\n').length,
+      startColumn: 0,
+      endColumn: 0,
+      updatedAt: Date.now(),
+    });
+  }
+
+  it('an it() title naming a criterion in a test file creates a tests link (REQ-VSTATE-002.A1)', () => {
+    writeIndexedFile(
+      TEST_FILE,
+      `it('does X (REQ-FOO-001.A1)', () => { expect(1).toBe(1); });\n`
+    );
+    cg.getSpecLinkResolver().applyTestTitleLinks([TEST_FILE]);
+
+    const links = cg.getSpecQueries().getLinksBySpec('REQ-FOO-001.A1');
+    expect(links).toHaveLength(1);
+    expect(links[0]!.kind).toBe('tests');
+    expect(links[0]!.targetFilePath).toBe(TEST_FILE);
+    // File-derived provenance — an agent cannot mint this row itself.
+    expect(links[0]!.provenance).toBe('code-comment');
+    // The title rides along: it is what report ingestion matches on.
+    expect(links[0]!.metadata?.testTitles).toEqual(['does X (REQ-FOO-001.A1)']);
+  });
+
+  it('a spec id in a NON-test file string never becomes test evidence (REQ-VSTATE-002.A2)', () => {
+    writeIndexedFile(
+      SRC_FILE,
+      `export function widget() { throw new Error('violates REQ-FOO-001.A1'); }\n` +
+      `// it('does X (REQ-FOO-001.A1)', () => {}) — documentation, not a test\n`
+    );
+    cg.getSpecLinkResolver().applyTestTitleLinks([SRC_FILE]);
+
+    expect(cg.getSpecQueries().getLinksBySpec('REQ-FOO-001.A1')).toHaveLength(0);
+  });
+
+  it('the test-title link is re-created on every pass, so it survives re-index (REQ-VSTATE-002.A3)', () => {
+    writeIndexedFile(TEST_FILE, `it('does X (REQ-FOO-001.A1)', () => {});\n`);
+    const resolver = cg.getSpecLinkResolver();
+    const sq = cg.getSpecQueries();
+
+    resolver.applyTestTitleLinks([TEST_FILE]);
+    const first = sq.getLinksBySpec('REQ-FOO-001.A1')[0]!;
+
+    // Simulate the re-index that used to destroy links: drop the row, re-run.
+    sq.deleteSpecLink(first.id);
+    expect(sq.getLinksBySpec('REQ-FOO-001.A1')).toHaveLength(0);
+    resolver.applyTestTitleLinks([TEST_FILE]);
+
+    const again = sq.getLinksBySpec('REQ-FOO-001.A1');
+    expect(again).toHaveLength(1);
+    expect(again[0]!.targetFilePath).toBe(TEST_FILE);
+  });
+
+  it('a tests link whose target is not in a test file is flagged as non-test evidence (REQ-VSTATE-002.A4)', () => {
+    const sq = cg.getSpecQueries();
+    const queries = (cg as unknown as { queries: import('../src/db/queries').QueryBuilder }).queries;
+    // A FIXTURE carrying an `@verifies` marker — the loophole that let a
+    // non-test satisfy the evidence gate.
+    const fixture = makeNode('__fixtures__/sample.ts', 'sampleFixture', 'function', 1, 'sampleFixture()');
+    fixture.docstring = '@verifies REQ-FOO-001';
+    queries.insertNode(fixture);
+    cg.getSpecLinkResolver().applyCodeCommentLinks(['__fixtures__/sample.ts']);
+
+    const link = sq.getLinksBySpec('REQ-FOO-001').find((l) => l.kind === 'tests');
+    expect(link).toBeDefined();
+    expect(link!.metadata?.nonTestTarget).toBe(true);
+    expect(isNonTestEvidence(link!)).toBe(true);
+    // …and a genuine test file is NOT flagged.
+    writeIndexedFile(TEST_FILE, `it('does X (REQ-FOO-001.A1)', () => {});\n`);
+    cg.getSpecLinkResolver().applyTestTitleLinks([TEST_FILE]);
+    const real = sq.getLinksBySpec('REQ-FOO-001.A1')[0]!;
+    expect(isNonTestEvidence(real)).toBe(false);
+  });
+
+  it('recognizes the documented test-file shapes and nothing else (REQ-VSTATE-002.A4)', () => {
+    for (const p of [
+      '__tests__/foo.ts',
+      'src/foo.test.ts',
+      'src/foo.spec.tsx',
+      'pkg/foo_test.go',
+    ]) {
+      expect(isRecognizedTestFile(p), p).toBe(true);
+    }
+    for (const p of ['src/foo.ts', '__fixtures__/foo.ts', 'specs/foo.md']) {
+      expect(isRecognizedTestFile(p), p).toBe(false);
+    }
   });
 });

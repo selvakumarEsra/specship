@@ -3,6 +3,20 @@ id: MCP-PAGE-DOC
 title: MCP servers page
 owner: web-ng
 priority: medium
+jira_issue_REQ-MCP-001: SSHIP-787
+jira_fingerprint_REQ-MCP-001: 5ae7facb8c6b4553
+jira_issue_REQ-MCP-002: SSHIP-792
+jira_fingerprint_REQ-MCP-002: 8b530565abb09b7c
+jira_issue_REQ-MCP-003: SSHIP-797
+jira_fingerprint_REQ-MCP-003: 0c09d65f9f08133d
+jira_issue_REQ-MCP-004: SSHIP-803
+jira_fingerprint_REQ-MCP-004: 22c33a250c56cb09
+jira_issue_REQ-MCP-005: SSHIP-809
+jira_fingerprint_REQ-MCP-005: 1b1af3cbf3df93b3
+jira_issue_REQ-MCP-006: SSHIP-813
+jira_fingerprint_REQ-MCP-006: 7952792dee48a14a
+jira_issue_REQ-MCP-007: SSHIP-818
+jira_fingerprint_REQ-MCP-007: f3e11915732a27c8
 ---
 
 <!-- id: MCP-PAGE-DOC -->
@@ -59,8 +73,7 @@ state pill. The three run states — running, failed, disabled — MUST be visua
 distinct, and the running state animates its status indicator.
 
 implementations:
-  - packages/web-ng/src/app/pages/mcp/mcp.html:server-row
-  - packages/web-ng/src/app/pages/mcp/mcp.scss:server-row
+  - ui/src/pages/mcp.tsx:ServerRow
 
 ## Acceptance
 <!-- id: REQ-MCP-002.A1 -->
@@ -86,8 +99,6 @@ result tokens returned, and client count.
 
 implementations:
   - ui/src/pages/mcp.tsx:ServerDetail
-  - packages/web-ng/src/app/pages/mcp/mcp-detail.html:status-banner
-  - packages/web-ng/src/app/pages/mcp/mcp-detail.scss:status-banner
 
 ## Acceptance
 <!-- id: REQ-MCP-003.A1 -->
@@ -113,8 +124,7 @@ time. A server exposing no tools MUST show an empty state rather than an empty
 list.
 
 implementations:
-  - packages/web-ng/src/app/pages/mcp/mcp-detail.html:tool-row
-  - ui/src/pages/mcp.tsx:ServerDetail.toggleTool
+  - ui/src/pages/mcp.tsx:ToolRow
 
 ## Acceptance
 <!-- id: REQ-MCP-004.A1 -->
@@ -137,8 +147,7 @@ server's JSON config with a copy control and its config-file hint. A server with
 no clients MUST say so rather than render an empty panel.
 
 implementations:
-  - packages/web-ng/src/app/pages/mcp/mcp-detail.html:used-by
-  - packages/web-ng/src/app/pages/mcp/mcp-detail.html:configuration
+  - ui/src/pages/mcp.tsx:ServerDetail
 
 ## Acceptance
 <!-- id: REQ-MCP-005.A1 -->
