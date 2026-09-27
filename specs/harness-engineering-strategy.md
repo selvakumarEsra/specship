@@ -4,6 +4,12 @@ title: Harness-engineering expansion (maintainability · architecture-fitness ·
 owner: core
 priority: medium
 version: 1
+jira_issue_REQ-STRATEGY-001: SSHIP-421
+jira_fingerprint_REQ-STRATEGY-001: 17ee4c5f8e95cc40
+jira_issue_REQ-STRATEGY-002: SSHIP-426
+jira_fingerprint_REQ-STRATEGY-002: ae44d14e99475134
+jira_issue_REQ-STRATEGY-003: SSHIP-431
+jira_fingerprint_REQ-STRATEGY-003: db127608ca7bc881
 ---
 
 <!-- id: STRATEGY-DOC -->

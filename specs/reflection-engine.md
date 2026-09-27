@@ -5,6 +5,22 @@ owner: core
 priority: high
 version: 1
 brief: reflection-engine/brief.md
+jira_issue_REQ-REFLECT-001: SSHIP-910
+jira_fingerprint_REQ-REFLECT-001: 8cec14d049c4f4b1
+jira_issue_REQ-REFLECT-002: SSHIP-914
+jira_fingerprint_REQ-REFLECT-002: a5ef832420a380fc
+jira_issue_REQ-REFLECT-003: SSHIP-919
+jira_fingerprint_REQ-REFLECT-003: 19b445f1bfbc830f
+jira_issue_REQ-REFLECT-004: SSHIP-922
+jira_fingerprint_REQ-REFLECT-004: 44e6bdf4a2fd196b
+jira_issue_REQ-REFLECT-005: SSHIP-927
+jira_fingerprint_REQ-REFLECT-005: 072158a56d4c7969
+jira_issue_REQ-REFLECT-006: SSHIP-930
+jira_fingerprint_REQ-REFLECT-006: 5e661bfd045e6e2e
+jira_issue_REQ-REFLECT-007: SSHIP-934
+jira_fingerprint_REQ-REFLECT-007: c620559544c73e02
+jira_issue_REQ-REFLECT-008: SSHIP-939
+jira_fingerprint_REQ-REFLECT-008: 937a6cd7d3d6b252
 ---
 
 <!-- id: REFLECT-DOC -->

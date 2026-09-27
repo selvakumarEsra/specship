@@ -4,6 +4,14 @@ title: Enforcement mode (gating harness + behaviour chain)
 owner: core
 priority: medium
 version: 2
+jira_issue_REQ-ENFORCE-001: SSHIP-386
+jira_fingerprint_REQ-ENFORCE-001: 04f83ddb65aa0f4c
+jira_issue_REQ-ENFORCE-002: SSHIP-390
+jira_fingerprint_REQ-ENFORCE-002: b4eb196930336f71
+jira_issue_REQ-ENFORCE-003: SSHIP-394
+jira_fingerprint_REQ-ENFORCE-003: c3bb0b70a129f1c6
+jira_issue_REQ-ENFORCE-004: SSHIP-399
+jira_fingerprint_REQ-ENFORCE-004: e697788fd9272d16
 ---
 
 <!-- id: ENFORCE-DOC -->

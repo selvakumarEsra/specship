@@ -4,6 +4,12 @@ title: Maintainability harness (graph-derived signals)
 owner: core
 priority: medium
 version: 1
+jira_issue_REQ-MAINT-001: SSHIP-767
+jira_fingerprint_REQ-MAINT-001: 26341f8cba6bd494
+jira_issue_REQ-MAINT-002: SSHIP-777
+jira_fingerprint_REQ-MAINT-002: 44979663c6fb77c1
+jira_issue_REQ-MAINT-003: SSHIP-782
+jira_fingerprint_REQ-MAINT-003: a76d49961aa3580b
 ---
 
 <!-- id: MAINT-DOC -->

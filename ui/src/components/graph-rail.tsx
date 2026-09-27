@@ -131,7 +131,9 @@ export function GraphOverviewRail({ project, counts, shown, onSelect }: {
           <Eyebrow>Edge types</Eyebrow>
           <EdgeLegendRow color="var(--text-muted)" label="calls" count={edgeKinds.calls ?? 0} />
           <EdgeLegendRow color="var(--node-spec)" label="implements / documents" count={edgeKinds.implements ?? 0} />
-          <EdgeLegendRow color="var(--node-test)" label="tests" count={edgeKinds.tests ?? 0} />
+          {/* Test evidence is a spec_links count, not an edge bucket — the old
+              `tests` edge bucket was permanently 0 (REQ-REVINT-008.A2). */}
+          <EdgeLegendRow color="var(--node-test)" label="test evidence (links)" count={edgeKinds.tests ?? 0} />
           <EdgeLegendRow color="var(--text-muted)" label="synthesized (heuristic)" count={edgeKinds.synth ?? 0} dashed />
         </div>
         <div>

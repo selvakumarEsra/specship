@@ -4,6 +4,10 @@ title: Dashboard command-doors surface
 owner: web
 priority: medium
 version: 2
+jira_issue_REQ-DASH-DOORS-001: SSHIP-250
+jira_fingerprint_REQ-DASH-DOORS-001: d285d7021dabab28
+jira_issue_REQ-DASH-DOORS-002: SSHIP-254
+jira_fingerprint_REQ-DASH-DOORS-002: 1d9510502999cc01
 ---
 
 <!-- id: DASH-DOORS-DOC -->
@@ -27,7 +31,6 @@ navigation affordance, not just documentation.
 
 implementations:
   - ui/src/pages/dashboard.tsx:DashboardPage
-  - packages/web-ng/src/app/pages/dashboard/dashboard.html
 
 ## Acceptance
 <!-- id: REQ-DASH-DOORS-001.A1 -->
@@ -47,9 +50,7 @@ replaced by their door equivalents (`/specship:spec new`, `/specship:spec domain
 `/specship:spec`).
 
 implementations:
-  - packages/web-ng/src/app/components/draft-with-claude-modal/draft-with-claude-modal.ts
-  - packages/web-ng/src/app/pages/domain/domain.html
-  - packages/web-ng/src/app/pages/chat/chat.ts
+  - ui/src/pages/dashboard.tsx
 
 ## Acceptance
 <!-- id: REQ-DASH-DOORS-002.A1 -->

@@ -51,7 +51,9 @@ lost.
   plan mode, exit it first** (present the spec + the workflow's own gates as
   the plan) — the spec IS the plan, the workflow carries its own plan→approve
   gate, and plan mode blocks the `specship workflow run` launch
-  (REQ-DOORS-007).
+  (REQ-DOORS-007). **On a JIRA-bound repo, first pass the Board-first anchor
+  gate** (see below) — the resolved issue key is attached to the run as
+  `jira: <KEY>` in the spec frontmatter.
 - **`review <SPEC_ID>`** → a read-only rubric pass (see *Review* below); no edits.
 - **`triage <prompt>`** → the triage flow (route a bug / error / one-line
   enhancement to the existing spec it belongs to and append to it): see below.
@@ -175,7 +177,28 @@ the write (step 3) the spec points back at the brief so the funnel promotes it.
    `spec-author` format: frontmatter (id/title/owner/priority), `<!-- id: -->`
    markers above every heading, an RFC-2119 keyword per requirement title, one
    concern per requirement, `## Acceptance` with `.A<N>` bullets (happy +
-   failure). Mark genuinely-unknowable points `[needs review]`. **Seeded from a
+   failure). Mark genuinely-unknowable points `[needs review]`. Declare code and
+   test evidence in the two link blocks (**REQ-REVINT-001**) — same
+   `path:Symbol` bullet syntax, one block per requirement:
+   ```markdown
+   implementations:
+     - src/auth/session.ts:refreshSession
+
+   verifies:
+     - __tests__/session.test.ts:refreshesAnExpiredSession
+   ```
+   `implementations:` records the code that realizes the requirement;
+   `verifies:` records the test that proves it and is the ONLY thing that
+   creates a `tests`-kind link — the evidence a requirement needs to reach the
+   `verified` state. Both blocks take `path:Symbol` bullets; a bare path
+   creates no link. The `Symbol` must be a **real symbol in the file** — an
+   `it(...)`/`describe(...)` title is a string, not a symbol, so a linkable
+   test is a **named function** handed to `it()`
+   (`it('… (REQ-X.A1)', refreshesAnExpiredSession)`), which is the convention
+   the repo's own specs use. When the tests don't exist yet, omit `verifies:`
+   and say so explicitly at the hand-off rather than leaving it silently
+   absent.
+   **Seeded from a
    brief:** the frontmatter MUST also carry `brief: <brief-slug>/brief.md` — the
    value is relative to the spec file's own directory, so a spec at
    `specs/<slug>.md` names `<brief-slug>/brief.md` (A2). After the step-4 sync,
@@ -191,9 +214,12 @@ environment, prefer it; this inline flow is the always-present fallback.)
 ## Review (`review <SPEC_ID>`)
 
 Read-only — do NOT modify the file. Fetch the spec (`specship_spec`), verify each
-`implementations:` path exists (`specship_node`), then walk the rubric and output
-a numbered findings list grouped **STRUCTURAL** (embedded id markers, no stranded
-ids, unique ids, valid frontmatter, valid `implementations:`), **QUALITY**
+`implementations:` path exists (`specship_node`), run `specship lint` on the
+spec's file for the mechanical half, then walk the rubric and output
+a numbered findings list grouped **STRUCTURAL** (the lint's findings: embedded id
+markers, no stranded ids, unique ids, valid frontmatter, valid
+`implementations:`, every requirement has acceptance criteria, plus test-evidence
+declared via `verifies:` or explicitly deferred), **QUALITY**
 (RFC-2119 keywords, no weasel words, no implementation leak, testable acceptance,
 one concern per REQ, failure-path coverage), **HYGIENE** (owner/priority set, no
 stale `[needs review]`/TODO). End with a one-line verdict.
@@ -206,32 +232,118 @@ spec, run the same rubric pass automatically. This is not a separate interview
 and not the opt-in `review <SPEC_ID>` route; it always runs, once, on the
 just-written spec:
 
-1. Walk the **STRUCTURAL / QUALITY / HYGIENE** rubric defined in *Review* above
-   against the new spec.
-2. **Fix STRUCTURAL findings automatically** — missing/stranded/duplicate id
-   markers, invalid frontmatter, broken `implementations:` paths — then re-`sync`.
-3. For **QUALITY findings that would change implementation behaviour** (a vague
+1. **Run `specship lint <path-to-the-new-spec>`** — the structural pass is
+   mechanical, not a mental scan (REQ-AUTHG-003.A1). It reports duplicate ids,
+   headings with no id marker, `.A<N>` ids whose parent requirement is missing,
+   requirements with zero acceptance criteria, bare-path link bullets, and
+   leftover `[needs review]` markers. Add `--json` when you want to act on the
+   findings programmatically.
+2. **Every error-severity lint finding is structural: fix it or block.** Fix
+   automatically where the fix is unambiguous (id markers, frontmatter, a
+   `path:Symbol` bullet that lost its symbol), then re-run the lint and
+   re-`sync`. Do not hand off a spec that still lints with errors — say what is
+   unfixable and stop. Lint *warnings* are advisory: mention them, don't block.
+   Test evidence is part of this check (REQ-REVINT-001.A2): every requirement
+   either declares `verifies:` with `path:Symbol` bullets, or the deferral is
+   stated out loud in the review output. Silence is a finding, not a pass.
+3. Walk the **QUALITY / HYGIENE** halves of the rubric defined in *Review* above
+   — the judgement calls the lint cannot make (is the criterion testable, is
+   there one concern per REQ, is an implementation detail leaking).
+4. For **QUALITY findings that would change implementation behaviour** (a vague
    or untestable acceptance criterion, a leaked implementation detail, a missing
    failure path), surface them as **one** proceed/adjust prompt — apply the
    adjustments or proceed as-is on the user's call. No extra gap-fill interview.
-4. HYGIENE nits are noted in passing; they don't block the hand-off.
+5. HYGIENE nits are noted in passing; they don't block the hand-off.
 
 This is what enforces REQ-DOORS-002.A3 ("speed does not sacrifice correctness")
 for the fast-path rather than leaving it aspirational.
+
+## JIRA offer (automatic, every authoring path — REQ-JIRAPUB-003)
+
+After the Post-write review completes, **when the JIRA integration is
+configured** (the `specship_jira_*` tools are present and not returning the
+"not configured" pointer), offer **exactly one** prompt:
+
+> Create a JIRA Story for this spec? (its acceptance criteria become Sub-tasks)
+
+- **Yes** → call `specship_jira_publish` with the new requirement's `spec_id`
+  (pass `project` only if the user names one; the configured default applies
+  otherwise). Relay the result — the created key, Sub-task count, and the
+  updated spec path — and note that commits for this spec should be prefixed
+  with the key (`PROJ-123: …`). The publish writes `jira_issue:` into the
+  spec's frontmatter, which is what wires branch naming, PR linkage, and
+  tracking automatically.
+- **No** → proceed to the implement hand-off unchanged; write nothing to JIRA.
+- **JIRA not configured** → skip this section entirely — no prompt, no
+  mention (REQ-JIRAPUB-003.A1).
+
+## Board-first intake gate (bound repo, REQ-JIRATEAM-006)
+
+When the repo carries a `jira` binding in `specship.config.json`, the JIRA
+offer above is **not optional** — a new spec MUST be created in JIRA under
+an epic before the authoring flow reports done. Resolve the epic in this
+order:
+
+1. Spec frontmatter `epicKey:` — if the draft already carries one, use it.
+2. Binding default `jira.epicKey` in `specship.config.json` — use it and
+   record it into the spec frontmatter.
+3. Offer to pick from the project's open epics (007 supplies the menu). Once
+   picked, write the chosen `epicKey:` into the spec frontmatter.
+
+Then publish. The published Story is parented under that epic, and the
+result is stamped into the spec's frontmatter (`jira_issue`, `epicKey`,
+`jira_fingerprint`).
+
+**Refusal (A3).** On a bound repo with no resolvable epic and the user
+declines to pick, **do NOT create an unanchored Story**. Print exactly:
+
+> Refusing to create a JIRA Story without an epic anchor. Set `jira.epicKey`
+> in `specship.config.json` (the committed binding) or pick an epic — I
+> won't create an unanchored Story.
+
+**Unbound repo (A5).** No binding → the intake gate does not apply. The
+plain JIRA offer above still runs when JIRA is user-level configured.
+
+**Re-publish (A4).** A later re-publish (from `auto-publish` on `sync`, or a
+manual re-publish) NEVER re-parents a live Story. If the spec's frontmatter
+`epicKey` differs from JIRA's live parent, SpecShip logs a `reparent_skipped`
+warning and leaves JIRA untouched — moving a Story between epics is a JIRA
+UI action, not a SpecShip side effect.
 
 ## Fast-path (`fast <description>`)
 
 For a solo dev who wants to record intent and move, **without** the brainstorm /
 gap-question interview (REQ-DOORS-002):
 
-1. Ground briefly with `specship_explore` on terms from the description (one call).
-2. Draft a complete spec in memory following the `spec-author` format — frontmatter
+1. **Ask exactly two questions before drafting** (REQ-AUTHG-003.A2) — the floor
+   the fast-path never goes below, because guessing either answer produces a
+   spec that specifies only the happy path and has no stated boundary:
+   - What is the **primary failure mode** — the way this most plausibly goes
+     wrong in production?
+   - What is the **primary non-goal** — the nearest thing this explicitly does
+     not do?
+
+   Put both in one message, accept terse answers, and ask nothing else. The
+   failure-mode answer becomes a negative-path acceptance criterion; the
+   non-goal answer becomes the document's non-goals line. If the user declines
+   to answer, say what you are assuming for each and draft on.
+2. Ground briefly with `specship_explore` on terms from the description (one call).
+3. Draft a complete spec in memory following the `spec-author` format — frontmatter
    (id/title/owner/priority), `<!-- id: -->` markers above every heading, an
    RFC-2119 keyword per requirement, `## Acceptance` with `.A<N>` bullets (happy +
    failure). Pick sensible defaults instead of asking; mark only genuinely
-   unknowable points `[needs review]`.
-3. `Write` it to `specs/<slug>.md` and tell the user the path.
-4. `specship sync`, then run the shared **Post-write review** (below) — it is
+   unknowable points `[needs review]`, and only in a requirement's prose —
+   never inside an acceptance bullet, where `specship lint` treats the marker
+   as an error (an unresolved criterion cannot be verified). Include both link
+   blocks —
+   `implementations:` for the code and `verifies:` for the test evidence, each a
+   list of `path:Symbol` bullets naming a real symbol — for a test, a named
+   function passed to `it()` (**REQ-REVINT-001**). `verifies:` is what creates
+   the `tests`-kind link that gates promotion to `verified`; speed is no reason
+   to skip it. If the tests aren't written yet, omit the block and name the gap
+   in the hand-off line — never leave test evidence silently missing.
+4. `Write` it to `specs/<slug>.md` and tell the user the path.
+5. `specship sync`, then run the shared **Post-write review** (below) — it is
    part of the single guided step, so speed doesn't skip the backstop. Then hand
    off with `/specship:spec implement <ID>` when ready.
 
@@ -331,6 +443,31 @@ targeted per-type questions, and **only on explicit confirmation** `Write` a
 `domain`-kind fact under `specs/domain/` (frontmatter `id: DOM-<AREA>-NNN`,
 `type:` one of term/rule/decision/constraint, linked via `depends_on`/`parent_id`).
 Then `specship sync`.
+
+## Board-first anchor gate (REQ-JIRATEAM-007)
+
+On a JIRA-bound repo, **every work-creating flow** — `implement`, `fast`,
+`triage`-that-writes, and any external `start` — first resolves a JIRA anchor
+before the workflow launches. Read-only routes (`list`, `ideas`, `review`,
+bare `SPEC_ID` detail, `domain`) are **never** gated.
+
+Steps for the gate:
+
+1. Call `mcp__specship__specship_jira_anchor` (or `resolveWorkAnchor` via the
+   library). Pass `issue_key` when the user typed one; otherwise pass
+   `picked_issue_key` when the caller has just picked one from
+   `specship_jira_issues`; otherwise omit both.
+2. **`unbound`** → the repo has no JIRA binding. Proceed unchanged.
+3. **`anchored`** → attach the returned key to the spec's frontmatter as
+   `jira: <KEY>` (if not already present) and pass it into the existing
+   pick→spec→implement pipeline.
+4. **`refused`** → print the tool's refusal verbatim (it already lists the
+   pickable epic-scoped work when applicable) and **exit** — do not run
+   `specship workflow run`. The fix is named (either `jira.epicKey` in
+   `specship.config.json` or a `specship_jira_pick <KEY>`).
+
+Note: `explore`, `search`, `callers`, `callees`, `impact`, `status`,
+`coverage`, and `track` are read-only retrieval and are NOT gated.
 
 ## After editing code for a spec
 

@@ -4,6 +4,10 @@ title: Spec document projection
 owner: core
 priority: high
 brief: spec-document-projection/brief.md
+jira_issue_REQ-PROJECTION-001: SSHIP-1050
+jira_fingerprint_REQ-PROJECTION-001: 4eb5ab3f9a708e59
+jira_issue_REQ-PROJECTION-002: SSHIP-1057
+jira_fingerprint_REQ-PROJECTION-002: fbefb1d34f94a55f
 ---
 
 <!-- id: SPEC-PROJECTION-DOC -->

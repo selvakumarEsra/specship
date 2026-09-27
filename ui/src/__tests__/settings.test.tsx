@@ -113,6 +113,27 @@ describe('SettingsPage via App (REQ-DESKTOP-028)', () => {
     expect(screen.getAllByText('native').length).toBeGreaterThanOrEqual(1);
   });
 
+  it('REQ-REVINT-007.A1: About never claims the MCP server is running', async () => {
+    mockFetch([{ ingestEnabled: true }]);
+    render(<App />);
+
+    await screen.findAllByText('v9.9.9');
+    // The row used to print a hardcoded "running" with no probe behind it.
+    expect(screen.queryByText('MCP server')).toBeNull();
+    expect(screen.queryByText('running')).toBeNull();
+  });
+
+  it('REQ-SURF-004: the dead boot-animation and editor controls are gone, Density stays', async () => {
+    mockFetch([{ ingestEnabled: true }]);
+    render(<App />);
+
+    await screen.findByText('Density');
+    expect(screen.queryByText('Boot animation')).toBeNull();
+    expect(screen.queryByText('Editor')).toBeNull();
+    expect(screen.queryByText('Open files with')).toBeNull();
+    expect(screen.queryByText(/Replay intro/)).toBeNull();
+  });
+
   it('REQ-DESKTOP-034: shows the product version at the bottom-left of the sidebar', async () => {
     mockFetch([{ ingestEnabled: false }]);
     render(<App />);

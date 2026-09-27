@@ -9,7 +9,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { REPO_ROOT, WORK, FIXTURE, HOME_DIR } from './paths.mjs';
+import { REPO_ROOT, WORK, FIXTURE, HOME_DIR, MODE } from './paths.mjs';
 
 const SRC_ORDERS = `// Fixture source — enough symbols/edges for a non-empty graph.
 export interface Order {
@@ -72,14 +72,20 @@ export class OrderService {
 }
 `;
 
-/** Init + index the fixture via the built library (no interactive CLI prompts). */
-async function indexFixture() {
+/**
+ * Init + index the fixture via the built library (no interactive CLI prompts).
+ * With `index: false` it stops after `SpecShip.init` — a real, openable project
+ * whose graph is empty, which is what the unindexed-project e2e needs
+ * (REQ-TVIZ-004.A1).
+ */
+async function indexFixture({ index = true } = {}) {
   const mod = await import(pathToFileURL(path.join(REPO_ROOT, 'dist', 'index.js')).href);
   const SpecShip = mod.SpecShip ?? mod.default?.SpecShip ?? mod.default;
   const cg = await SpecShip.init(FIXTURE, { index: false });
-  const result = await cg.indexAll();
+  const result = index ? await cg.indexAll() : null;
   if (typeof cg.destroy === 'function') cg.destroy();
   else if (typeof cg.close === 'function') cg.close();
+  if (!index) return;
   if (!result || (result.nodesCreated ?? result.nodes ?? 0) === 0) {
     // Not fatal on shape mismatch, but a zero-node index means nothing renders.
     console.warn('[e2e fixture] index produced no nodes:', JSON.stringify(result));
@@ -143,17 +149,28 @@ function seedTranscripts() {
   }
 }
 
-/** Wipe + rebuild the whole hermetic fixture. Returns the env to spawn serve with. */
+/**
+ * Wipe + rebuild the whole hermetic fixture. Returns the env to spawn serve with.
+ *
+ * In `MODE === 'empty'` the project is initialized but deliberately left bare:
+ * no sources, no specs, no index pass, no transcripts. That is the state a user
+ * sees right after `specship init` — every screen must render an explicit empty
+ * state rather than a crash or a blank panel (REQ-TVIZ-004.A1).
+ */
 export async function buildFixture() {
+  const empty = MODE === 'empty';
   fs.rmSync(WORK, { recursive: true, force: true });
   fs.mkdirSync(path.join(FIXTURE, 'src'), { recursive: true });
-  fs.writeFileSync(path.join(FIXTURE, 'src', 'orders.ts'), SRC_ORDERS);
-  fs.writeFileSync(path.join(FIXTURE, 'src', 'service.ts'), SRC_SERVICE);
-  fs.mkdirSync(path.join(FIXTURE, 'specs'), { recursive: true });
-  fs.writeFileSync(path.join(FIXTURE, 'specs', 'orders.md'), SPEC_ORDERS);
   fs.mkdirSync(HOME_DIR, { recursive: true });
 
-  await indexFixture();
-  seedTranscripts();
+  if (!empty) {
+    fs.writeFileSync(path.join(FIXTURE, 'src', 'orders.ts'), SRC_ORDERS);
+    fs.writeFileSync(path.join(FIXTURE, 'src', 'service.ts'), SRC_SERVICE);
+    fs.mkdirSync(path.join(FIXTURE, 'specs'), { recursive: true });
+    fs.writeFileSync(path.join(FIXTURE, 'specs', 'orders.md'), SPEC_ORDERS);
+  }
+
+  await indexFixture({ index: !empty });
+  if (!empty) seedTranscripts();
   return { ...process.env, HOME: HOME_DIR, USERPROFILE: HOME_DIR };
 }

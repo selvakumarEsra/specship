@@ -1,7 +1,8 @@
 /**
  * Model-aware context compaction (MODCTX-DOC).
  *
- * Lower-tier models (Haiku; Sonnet to a lesser degree) pay more attention
+ * Lower-tier models (lite-tier models — Haiku, Gemini Flash; standard tier
+ * to a lesser degree) pay more attention
  * cost per token of scaffolding. When the session runs on one, code-graph
  * tool responses pass through a deterministic, fence-preserving compactor:
  * SpecShip's own prose (boilerplate notices, meta-guidance, blank runs)
@@ -13,6 +14,10 @@
  * status-line render, and `recordSessionModel` persists it to
  * `.specship/session/model.json`; the MCP server reads it per call.
  * Unknown model → `full` tier → identity (never compact blind).
+ *
+ * Tiers are capability names (`lite` / `standard` / `full`), not model-family
+ * names (REQ-GEMINI-007): the provider mapping table below is what binds a
+ * concrete model id (Claude or Gemini) to a tier.
  */
 
 import * as fs from 'fs';
@@ -20,7 +25,7 @@ import { modelMarkerPath, writeJsonAtomic, readJsonSafe } from '../statusline/pa
 import { findNearestSpecShipRoot } from '../directory';
 import { resolveSetting } from '../config/runtime-settings';
 
-export type ModelTier = 'haiku' | 'sonnet' | 'full';
+export type ModelTier = 'lite' | 'standard' | 'full';
 
 export interface ModelMarker {
   v: 1;
@@ -116,13 +121,31 @@ export function readModelFromTranscript(transcriptPath: string): string | null {
   }
 }
 
+/**
+ * Provider mapping table (REQ-GEMINI-007): model id → capability tier.
+ * Ordered, most-specific-first — the first match wins, so a looser rule can
+ * never swallow a narrower one (`gemini-2.5-flash-lite` must not fall through
+ * to a `pro`/full rule). Adding a provider means adding rows here, not
+ * scattering substring checks across the codebase.
+ */
+const TIER_RULES: Array<{ match: RegExp; tier: ModelTier }> = [
+  { match: /haiku/, tier: 'lite' },
+  // `[\s\w.-]*` so both ids (`gemini-2.5-flash`) and display names
+  // (`Gemini 2.5 Flash`) match — the marker can carry either.
+  { match: /gemini[\s\w.-]*flash/, tier: 'lite' }, // flash and flash-lite
+  { match: /sonnet/, tier: 'standard' },
+  { match: /gemini[\s\w.-]*pro/, tier: 'full' },
+  { match: /opus|fable/, tier: 'full' },
+];
+
 /** Map a model id / display name to a compaction tier. */
 export function modelTier(model: string | null | undefined): ModelTier {
   if (!model) return 'full';
   const m = model.toLowerCase();
-  if (m.includes('haiku')) return 'haiku';
-  if (m.includes('sonnet')) return 'sonnet';
-  return 'full';
+  for (const rule of TIER_RULES) {
+    if (rule.match.test(m)) return rule.tier;
+  }
+  return 'full'; // unknown id → never compact blind
 }
 
 /**
@@ -131,6 +154,12 @@ export function modelTier(model: string | null | undefined): ModelTier {
  * else the session model marker; else `full`. Both switches resolve
  * through the settings chain (env > project `.specship/settings.json` >
  * `~/.specship/settings.json`), so a repo can pin its behavior.
+ *
+ * The session model marker is a **Claude-only channel** (status line /
+ * SessionStart hook / transcript tail). A Gemini CLI session writes no
+ * marker, so detection there falls through to `SPECSHIP_MODEL`/settings —
+ * which accepts Gemini ids — and otherwise resolves `full`. No Claude
+ * channel is ever misread on a non-Claude host (REQ-GEMINI-007.A4).
  */
 export function detectModelTier(
   projectRoot: string | null,
@@ -165,8 +194,8 @@ const TERSE_NOTICES: Array<[RegExp, string]> = [
   ],
 ];
 
-/** Blast-radius bullets kept on the haiku tier before "+N more". */
-const HAIKU_BLAST_CAP = 3;
+/** Blast-radius bullets kept on the lite tier before "+N more". */
+const LITE_BLAST_CAP = 3;
 
 /**
  * Compact one tool-response markdown string for a tier (REQ-MODCTX-002/003).
@@ -181,14 +210,14 @@ export function compactToolResult(text: string, tier: ModelTier): string {
     if (i % 2 === 1) return part; // fenced code — never touched
     let p = part;
     for (const [re, terse] of TERSE_NOTICES) p = p.replace(re, terse);
-    if (tier === 'haiku') p = capBlastRadius(p);
+    if (tier === 'lite') p = capBlastRadius(p);
     // Collapse runs of blank lines (prose only).
     p = p.replace(/\n{3,}/g, '\n\n');
     return p;
   });
 
   // Visibility (REQ-MODCTX-003.A1): one line naming the tier — worded to
-  // ASSERT completeness. Measured on the haiku baseline (express, 2/2 runs):
+  // ASSERT completeness. Measured on the lite baseline (express, 2/2 runs):
   // the original wording ("— SPECSHIP_COMPACT=0 for full output") read as
   // "this output is incomplete" to a small model, which then re-Read files
   // it had been handed (4 Reads / 11 turns vs 0-1 / 5-7 without the banner).
@@ -197,7 +226,7 @@ export function compactToolResult(text: string, tier: ModelTier): string {
 }
 
 /**
- * Cap the "### Blast radius" bullet list (haiku tier). Truncation is loud —
+ * Cap the "### Blast radius" bullet list (lite tier). Truncation is loud —
  * an explicit "+N more" line, never silent (REQ-MODCTX-002.A3).
  */
 function capBlastRadius(prose: string): string {
@@ -216,7 +245,7 @@ function capBlastRadius(prose: string): string {
     if (line.trim() === '') { kept.push(line); continue; }
     if (!line.startsWith('- ')) break; // section ended
     bullets++;
-    if (bullets <= HAIKU_BLAST_CAP) kept.push(line);
+    if (bullets <= LITE_BLAST_CAP) kept.push(line);
     else dropped++;
   }
   if (dropped === 0) return prose;

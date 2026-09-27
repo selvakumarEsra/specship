@@ -4,6 +4,24 @@ title: JIRA integration for solo developers
 owner: core
 priority: medium
 brief: integrate-jira-into-specship/brief.md
+jira_issue_REQ-JIRA-001: SSHIP-532
+jira_fingerprint_REQ-JIRA-001: ca4de67c50ff101d
+jira_issue_REQ-JIRA-002: SSHIP-536
+jira_fingerprint_REQ-JIRA-002: 54d16d60db8811fe
+jira_issue_REQ-JIRA-003: SSHIP-543
+jira_fingerprint_REQ-JIRA-003: fd19aaa7b6ea9f31
+jira_issue_REQ-JIRA-004: SSHIP-547
+jira_fingerprint_REQ-JIRA-004: c61a92aac5e9a849
+jira_issue_REQ-JIRA-005: SSHIP-551
+jira_fingerprint_REQ-JIRA-005: 3debbbc24642ca4a
+jira_issue_REQ-JIRA-006: SSHIP-554
+jira_fingerprint_REQ-JIRA-006: dfcd70da9c99c48e
+jira_issue_REQ-JIRA-007: SSHIP-558
+jira_fingerprint_REQ-JIRA-007: d28febd153ee4a0b
+jira_issue_REQ-JIRA-008: SSHIP-563
+jira_fingerprint_REQ-JIRA-008: 4fed47d753d22a16
+jira_issue_REQ-JIRA-009: SSHIP-567
+jira_fingerprint_REQ-JIRA-009: 6b74da264a54a249
 ---
 
 <!-- id: JIRA-DOC -->

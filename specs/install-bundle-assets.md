@@ -3,6 +3,10 @@ id: INSTALL-BUNDLE-ASSETS-DOC
 title: Bundled package ships the installer's plugin assets
 owner: installer
 priority: high
+jira_issue_REQ-INSTALL-ASSETS-001: SSHIP-464
+jira_fingerprint_REQ-INSTALL-ASSETS-001: 46082e7d8c4162a5
+jira_issue_REQ-INSTALL-ASSETS-002: SSHIP-470
+jira_fingerprint_REQ-INSTALL-ASSETS-002: 9cbf630fa2d49a71
 ---
 
 <!-- id: INSTALL-BUNDLE-ASSETS-DOC -->

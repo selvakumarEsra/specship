@@ -1,30 +1,12 @@
 /**
- * MCP tool: specship_maintainability (REQ-MAINT-003).
+ * Maintainability report handler (REQ-MAINT-003).
  *
- * Returns the graph-derived maintainability report to the agent — coupling,
- * size hotspots, dependency cycles, dead-code candidates. Mirrors the spec-tools
- * pattern (a free function + a tool-definition array, wired into ToolHandler in
- * tools.ts). Type-only imports keep this free of a runtime cycle with tools.ts.
+ * The menu slot moved to the merged `specship_health` (REQ-SURF-007); this
+ * handler stays so `execute()` keeps answering clients holding a cached
+ * `specship_maintainability` tool list.
  */
 import type { SpecShip } from '../index';
-import type { ToolDefinition, ToolResult } from './tools';
-
-export const maintainabilityToolDefinitions: ToolDefinition[] = [
-  {
-    name: 'specship_maintainability',
-    description:
-      'Report graph-derived maintainability signals for the codebase: coupling hotspots (fan-in/out), oversized symbols + god-files, dependency cycles, and dead-code candidates. Deterministic, no new parse. Thresholds come from specship.config.json (maintainability.thresholds).',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        projectPath: {
-          type: 'string',
-          description: 'Path to a different project with .specship/ initialized. Omit for the current project.',
-        },
-      },
-    },
-  },
-];
+import type { ToolResult } from './tools';
 
 const text = (body: string): ToolResult => ({ content: [{ type: 'text', text: body }] });
 

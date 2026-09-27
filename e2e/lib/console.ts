@@ -6,6 +6,10 @@ import type { Page } from '@playwright/test';
  * expected to boot every screen clean. Add an entry ONLY for an unavoidable
  * third-party warning, and always with a comment saying what it is and why it
  * cannot be fixed on our side.
+ *
+ * A spec that deliberately induces a failure (`api-failure.spec.ts`) passes its
+ * own narrow allowlist to `captureConsoleErrors` instead of widening this one —
+ * a fault-path exemption must not relax the bar for every other screen.
  */
 export const CONSOLE_ALLOWLIST: RegExp[] = [
   // (intentionally empty)

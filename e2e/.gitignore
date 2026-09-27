@@ -1,5 +1,7 @@
 node_modules/
 .tmp/
+.tmp-fault/
+.tmp-empty/
 test-results/
 playwright-report/
 blob-report/

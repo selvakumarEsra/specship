@@ -4,6 +4,16 @@ title: Install handshake — prove the install worked, tell the user what's next
 owner: core
 priority: high
 version: 1
+jira_issue_REQ-HANDSHAKE-001: SSHIP-473
+jira_fingerprint_REQ-HANDSHAKE-001: 1ac01fe2e54c5db7
+jira_issue_REQ-HANDSHAKE-002: SSHIP-476
+jira_fingerprint_REQ-HANDSHAKE-002: 3dcba1281fdedf92
+jira_issue_REQ-HANDSHAKE-003: SSHIP-481
+jira_fingerprint_REQ-HANDSHAKE-003: 4d5c18c202457e05
+jira_issue_REQ-HANDSHAKE-004: SSHIP-485
+jira_fingerprint_REQ-HANDSHAKE-004: 3c08d3b67c63ca94
+jira_issue_REQ-HANDSHAKE-005: SSHIP-490
+jira_fingerprint_REQ-HANDSHAKE-005: f96b346a3723ffa4
 ---
 
 <!-- id: INSTALL-HANDSHAKE-DOC -->

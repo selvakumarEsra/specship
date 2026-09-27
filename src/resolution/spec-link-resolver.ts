@@ -35,11 +35,18 @@ import {
   SpecLink,
   SpecLinkState,
   SpecLinkProvenance,
+  SpecLinkKind,
   STICKY_SPEC_LINK_STATES,
 } from '../types';
 import { QueryBuilder } from '../db/queries';
 import { SpecQueries } from '../db/spec-queries';
 import { SpecLinkCandidate } from '../extraction/specs/types';
+import {
+  isRecognizedTestFile,
+  scanTestTitleRefs,
+} from './test-title-links';
+import * as fs from 'fs';
+import * as path from 'path';
 
 /** Pattern: `// @implements REQ-X` or `# @implements REQ-X` etc. */
 const CODE_COMMENT_IMPL = /@implements\s+([A-Za-z][A-Za-z0-9_.-]*)/g;
@@ -90,6 +97,12 @@ export interface SpecLinkResolverOptions {
    * If true, log a one-line summary per resolved link.
    */
   verbose?: boolean;
+  /**
+   * Absolute project root. Required by {@link SpecLinkResolver.applyTestTitleLinks},
+   * which reads test files from disk to scan their `it()` titles
+   * (REQ-VSTATE-002); without it that pass is a no-op.
+   */
+  projectRoot?: string;
 }
 
 export interface SpecLinkResolverStats {
@@ -99,6 +112,19 @@ export interface SpecLinkResolverStats {
   driftedCode: number;
   candidatesApplied: number;
   commentLinksApplied: number;
+  /**
+   * `tests` links created from a spec id inside an `it()` / `test()` title in a
+   * test file (REQ-VSTATE-002). Optional so existing stats literals keep
+   * compiling — every producer sets it.
+   */
+  testTitleLinksApplied?: number;
+  /**
+   * `spec-declaration` links removed this pass because the bullet that declared
+   * them is no longer in the spec file (REQ-VSTATE-001). Deleting a declaration
+   * deletes its link, and the count is how that stays visible rather than
+   * silent. Optional so existing stats literals keep compiling.
+   */
+  declarationsReconciled?: number;
   /**
    * Orphaned links whose logical target reappeared this pass and were
    * auto-reattached to `implemented` (REQ-LINKFIX-001).
@@ -167,6 +193,21 @@ export function sourceSpecIds(spec: Spec): string[] {
   }
   // Dedup while preserving order.
   return [...new Set(out)];
+}
+
+/**
+ * Metadata carrying the non-test-target flag for a `tests` link
+ * (REQ-VSTATE-002.A4). Returns `undefined` for every other link kind so
+ * non-evidence links keep clean metadata. The flag is written on EVERY pass
+ * (true and false) so a target that moves into — or out of — a test file
+ * self-corrects instead of keeping a stale verdict.
+ */
+function nonTestEvidenceFlag(
+  kind: SpecLinkKind,
+  targetFilePath: string
+): Record<string, unknown> | undefined {
+  if (kind !== 'tests') return undefined;
+  return { nonTestTarget: !isRecognizedTestFile(targetFilePath) };
 }
 
 export class SpecLinkResolver {
@@ -306,8 +347,13 @@ export class SpecLinkResolver {
    * `kind` is a hint, not a hard filter — we prefer an exact-kind match
    * but fall back to any kind on the same path/qname (a function turned
    * method is still "the same logical symbol" from the spec's POV).
+   *
+   * Public so the assert paths (MCP tool + dashboard route) can validate a
+   * target BEFORE recording a link (REQ-REVINT-003) — the same lookup the
+   * resolver uses, so validate-then-insert and the later resolve pass can
+   * never disagree.
    */
-  private findLogicalTarget(
+  findLogicalTarget(
     filePath: string,
     qualifiedName: string,
     kind: NodeKind
@@ -378,6 +424,10 @@ export class SpecLinkResolver {
         nodeSigAtLink: resolvedNode?.signature,
         provenance: 'spec-declaration' as SpecLinkProvenance,
         confidence: 0.7,
+        // A `verifies:` bullet pointing outside a recognized test file is
+        // flagged, not trusted (REQ-VSTATE-002.A4) — fixtures and helpers may be
+        // declared, but the flag keeps them out of the evidence gate.
+        metadata: nonTestEvidenceFlag(c.kind, c.targetFilePath),
         createdAt: now,
         updatedAt: now,
       });
@@ -438,6 +488,9 @@ export class SpecLinkResolver {
                 nodeSigAtLink: node.signature,
                 provenance: 'code-comment' as SpecLinkProvenance,
                 confidence: 0.9,
+                // An `@verifies` marker on a symbol that isn't in a test file
+                // is flagged the same way as a declared one (REQ-VSTATE-002.A4).
+                metadata: nonTestEvidenceFlag(kind, node.filePath),
                 createdAt: now,
                 updatedAt: now,
               });
@@ -445,6 +498,76 @@ export class SpecLinkResolver {
             }
           }
         }
+      }
+    }
+  }
+
+  /**
+   * Scan TEST FILES for spec ids inside `it()` / `test()` titles and emit
+   * `tests`-kind links (REQ-VSTATE-002).
+   *
+   * One link per (spec id, test file): the target is the test file's `file`
+   * node — the only node the graph actually has for a test case's location —
+   * and the matched titles ride along in `metadata.testTitles`, which is what
+   * `specship verify --report` matches a reported case against (REQ-VSTATE-004).
+   *
+   * File-derived by construction: nothing is remembered between passes, so the
+   * links are re-created on every extraction and survive re-index (A3). Only
+   * recognized test files are scanned, so a spec id in a source file's message
+   * string can never become evidence (A2).
+   *
+   * Requires `projectRoot` in the resolver options (it reads the files); a
+   * resolver without one silently skips the pass.
+   */
+  applyTestTitleLinks(changedFiles: string[], stats?: SpecLinkResolverStats): void {
+    const root = this.opts.projectRoot;
+    if (!root) return;
+    const now = Date.now();
+
+    for (const file of changedFiles) {
+      if (!isRecognizedTestFile(file)) continue;
+      let source: string;
+      try {
+        source = fs.readFileSync(path.resolve(root, file), 'utf-8');
+      } catch {
+        continue; // deleted / unreadable — the resolve pass handles the fallout
+      }
+
+      // Group the file's titles by spec id so one link carries every title in
+      // that file which names the same criterion.
+      const titlesBySpec = new Map<string, string[]>();
+      for (const ref of scanTestTitleRefs(source)) {
+        const titles = titlesBySpec.get(ref.specId) ?? [];
+        if (!titles.includes(ref.title)) titles.push(ref.title);
+        titlesBySpec.set(ref.specId, titles);
+      }
+      if (titlesBySpec.size === 0) continue;
+
+      const fileNode = this.findLogicalTarget(file, file, 'file');
+
+      for (const [specId, titles] of titlesBySpec) {
+        const spec = this.specQueries.getSpecById(specId);
+        if (!spec) continue; // not a real spec id — just words in a title
+        this.specQueries.upsertSpecLink({
+          specId,
+          targetFilePath: file,
+          targetQualifiedName: canonicalQualifiedName(fileNode?.qualifiedName ?? file),
+          targetNodeKind: 'file',
+          resolvedNodeId: fileNode?.id,
+          kind: 'tests',
+          state: fileNode ? 'implemented' : 'orphaned',
+          driftAxis: null,
+          specHashAtLink: spec.contentHash,
+          // A file node's "signature" is not a stable drift axis (any edit to
+          // the file would trip it), so no baseline is taken here.
+          nodeSigAtLink: undefined,
+          provenance: 'code-comment' as SpecLinkProvenance,
+          confidence: 0.9,
+          metadata: { testTitles: titles, evidenceSource: 'test-title', nonTestTarget: false },
+          createdAt: now,
+          updatedAt: now,
+        });
+        if (stats) stats.testTitleLinksApplied = (stats.testTitleLinksApplied ?? 0) + 1;
       }
     }
   }

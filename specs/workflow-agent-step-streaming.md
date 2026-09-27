@@ -4,6 +4,12 @@ title: Stream agent-step activity into the workflow run view
 owner: core
 priority: high
 brief: workflow-agent-step-streaming/brief.md
+jira_issue_REQ-WFSTREAM-001: SSHIP-1658
+jira_fingerprint_REQ-WFSTREAM-001: d1dfc877b2012da0
+jira_issue_REQ-WFSTREAM-002: SSHIP-1669
+jira_fingerprint_REQ-WFSTREAM-002: 04c5dad551fd0e70
+jira_issue_REQ-WFSTREAM-003: SSHIP-1678
+jira_fingerprint_REQ-WFSTREAM-003: c34b2ba32f60b4c4
 ---
 
 <!-- id: WF-STREAM-DOC -->

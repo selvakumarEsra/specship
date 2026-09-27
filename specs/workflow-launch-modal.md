@@ -3,6 +3,12 @@ id: WF-LAUNCH-DOC
 title: Workflow launch modal
 owner: web-ng
 priority: medium
+jira_issue_REQ-WF-LAUNCH-001: SSHIP-1780
+jira_fingerprint_REQ-WF-LAUNCH-001: 1ce5c5b820200d0c
+jira_issue_REQ-WF-LAUNCH-002: SSHIP-1788
+jira_fingerprint_REQ-WF-LAUNCH-002: 28ec6d8711e636eb
+jira_issue_REQ-WF-LAUNCH-003: SSHIP-1797
+jira_fingerprint_REQ-WF-LAUNCH-003: c3517ebe6ff94eed
 ---
 
 <!-- id: WF-LAUNCH-DOC -->

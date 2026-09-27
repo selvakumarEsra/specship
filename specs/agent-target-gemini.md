@@ -11,13 +11,13 @@ jira_fingerprint_REQ-GEMINI-002: 80f873d64381857c
 jira_issue_REQ-GEMINI-003: SSHIP-55
 jira_fingerprint_REQ-GEMINI-003: 7512a4f8dbe0f3fe
 jira_issue_REQ-GEMINI-004: SSHIP-58
-jira_fingerprint_REQ-GEMINI-004: 5d711f66f181d2fe
+jira_fingerprint_REQ-GEMINI-004: d5c05d16a1ffe668
 jira_issue_REQ-GEMINI-005: SSHIP-61
-jira_fingerprint_REQ-GEMINI-005: 6337f5225ca067bf
+jira_fingerprint_REQ-GEMINI-005: dde32fd0d774fa74
 jira_issue_REQ-GEMINI-006: SSHIP-64
 jira_fingerprint_REQ-GEMINI-006: 3f684dd984a9a430
 jira_issue_REQ-GEMINI-007: SSHIP-68
-jira_fingerprint_REQ-GEMINI-007: ae839b9275f8d254
+jira_fingerprint_REQ-GEMINI-007: 761be48e4b321386
 jira_issue_REQ-GEMINI-008: SSHIP-73
 jira_fingerprint_REQ-GEMINI-008: 4d4e35f023392939
 ---
@@ -164,9 +164,6 @@ as a marker-delimited block, with the same idempotence, upgrade self-healing,
 and surgical-removal semantics the Claude target applies to CLAUDE.md.
 Content outside the markers MUST never be modified.
 
-implementations:
-  - src/installer/targets/gemini.ts:writeGeminiSddInstructionsEntry
-
 ## Acceptance
 <!-- id: REQ-GEMINI-004.A1 -->
 - Installing into a GEMINI.md with existing user content preserves that
@@ -188,9 +185,6 @@ A command whose body depends on Claude-only machinery (e.g. dispatching the
 instruction or be excluded with a note, never shipped broken.
 [needs review: which commands are in the Gemini set vs excluded — decide at
 implementation from the capability matrix]
-
-implementations:
-  - src/installer/targets/gemini.ts:writeGeminiCommandsEntries
 
 ## Acceptance
 <!-- id: REQ-GEMINI-005.A1 -->
@@ -247,6 +241,17 @@ implementations:
   - src/mcp/model-context.ts:modelTier
   - src/mcp/model-context.ts:detectModelTier
   - src/mcp/model-context.ts:compactToolResult
+  - src/mcp/tools.ts:ToolHandler.getTools
+  - src/mcp/tools.ts:ToolHandler.buildFlowFromNamedSymbols
+  - src/activation/steering.ts:buildSteeringNudge
+  - src/statusline/render.ts:renderSegment
+  - src/statusline/index.ts:buildSegment
+
+verifies:
+  - __tests__/model-context.test.ts:geminiIdsMapToCapabilityTiers
+  - __tests__/model-context.test.ts:unknownModelIdResolvesFull
+  - __tests__/model-context.test.ts:specshipModelAcceptsGeminiIdWithoutMarker
+  - __tests__/model-context.test.ts:geminiSessionWithoutClaudeChannelResolvesFull
 
 ## Acceptance
 <!-- id: REQ-GEMINI-007.A1 -->

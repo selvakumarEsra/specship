@@ -3,6 +3,10 @@ id: MIXMODEL-DOC
 title: Mixed-model workflows — frontier judgment, small-model execution
 owner: specship
 priority: medium
+jira_issue_REQ-MIX-001: SSHIP-841
+jira_fingerprint_REQ-MIX-001: 849f6ebd83c842ba
+jira_issue_REQ-MIX-002: SSHIP-845
+jira_fingerprint_REQ-MIX-002: b55b0ca3eb15b218
 ---
 
 <!-- id: MIXMODEL-DOC -->

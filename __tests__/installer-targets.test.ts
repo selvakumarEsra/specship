@@ -34,6 +34,12 @@ import {
   statusLineState,
 } from '../src/installer/targets/claude';
 import { geminiTarget } from '../src/installer/targets/gemini';
+import {
+  resolveStatusLine,
+  resolveAutoAllow,
+  describeInstallDefaults,
+} from '../src/installer/install-defaults';
+import { decideInstallInit } from '../src/installer/init-offer';
 
 function mkTmpDir(label: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), `cg-targets-${label}-`));
@@ -285,6 +291,75 @@ describe('Claude target — specifics', () => {
     claudeTarget.install('local', { autoAllow: false });
     const agent = path.join(tmpCwd, '.claude', 'agents', 'specship-explorer.md');
     expect(fs.existsSync(agent)).toBe(true);
+  });
+
+  it('install ships the spec-author skill + its references (REQ-AUTHG-007.A1)', () => {
+    claudeTarget.install('local', { autoAllow: false });
+    const skill = path.join(tmpCwd, '.claude', 'skills', 'spec-author');
+    expect(fs.existsSync(path.join(skill, 'SKILL.md'))).toBe(true);
+    for (const ref of ['format.md', 'quality-rubric.md', 'gap-questions.md', 'review-checklist.md']) {
+      expect(fs.existsSync(path.join(skill, 'references', ref))).toBe(true);
+    }
+    // The frontmatter name is what makes Claude Code load it as a skill.
+    expect(fs.readFileSync(path.join(skill, 'SKILL.md'), 'utf-8')).toContain('name: spec-author');
+  });
+
+  it('the shipped gap catalog carries the project-invariants section (REQ-AUTHG-007.A2)', () => {
+    claudeTarget.install('local', { autoAllow: false });
+    const catalog = fs.readFileSync(
+      path.join(tmpCwd, '.claude', 'skills', 'spec-author', 'references', 'gap-questions.md'),
+      'utf-8',
+    );
+    expect(catalog).toContain('Project invariants');
+    // Keyed by surface: each of the four invariants named in the spec.
+    expect(catalog).toContain('server-instructions.ts'); // MCP
+    expect(catalog).toContain('monotonic');              // MCP budgets
+    expect(catalog).toContain('CHANGELOG');              // installer
+    expect(catalog).toContain('tool-call count');        // retrieval
+    expect(catalog).toContain('NodeKind');               // extraction
+    expect(catalog).toContain('copy-assets');            // extraction
+  });
+
+  it('re-running install leaves the skill byte-identical and reports unchanged (REQ-AUTHG-007.A1)', () => {
+    claudeTarget.install('local', { autoAllow: false });
+    const skillFile = path.join(tmpCwd, '.claude', 'skills', 'spec-author', 'SKILL.md');
+    const before = fs.readFileSync(skillFile, 'utf-8');
+
+    const second = claudeTarget.install('local', { autoAllow: false });
+
+    expect(fs.readFileSync(skillFile, 'utf-8')).toBe(before);
+    const reported = second.files.filter((f) => f.path.replace(/\\/g, '/').includes('/skills/spec-author/'));
+    expect(reported.length).toBe(5);
+    expect(reported.every((f) => f.action === 'unchanged')).toBe(true);
+  });
+
+  it('uninstall removes the skill and prunes its directories (REQ-AUTHG-007.A3)', () => {
+    claudeTarget.install('local', { autoAllow: false });
+    const skillDir = path.join(tmpCwd, '.claude', 'skills', 'spec-author');
+    expect(fs.existsSync(path.join(skillDir, 'SKILL.md'))).toBe(true);
+
+    claudeTarget.uninstall('local');
+
+    expect(fs.existsSync(skillDir)).toBe(false);
+  });
+
+  it('uninstall preserves a user-authored sibling skill (REQ-AUTHG-007.A3)', () => {
+    claudeTarget.install('local', { autoAllow: false });
+    const mine = path.join(tmpCwd, '.claude', 'skills', 'my-skill', 'SKILL.md');
+    fs.mkdirSync(path.dirname(mine), { recursive: true });
+    fs.writeFileSync(mine, '---\nname: my-skill\n---\nMine\n');
+
+    claudeTarget.uninstall('local');
+
+    expect(fs.existsSync(path.join(tmpCwd, '.claude', 'skills', 'spec-author'))).toBe(false);
+    expect(fs.readFileSync(mine, 'utf-8')).toContain('name: my-skill');
+  });
+
+  it('--no-sdd does not install the spec-author skill (REQ-WEDGE-001.A2)', () => {
+    // The skill is the governance tier's authoring asset — the SDD steering rule
+    // is what points at it, so a retrieval-only install has no use for it.
+    claudeTarget.install('local', { autoAllow: false, sdd: false });
+    expect(fs.existsSync(path.join(tmpCwd, '.claude', 'skills', 'spec-author'))).toBe(false);
   });
 
   it('install --sdd adds the governance tier on top of retrieval (REQ-WEDGE-002.A1)', () => {
@@ -599,9 +674,10 @@ describe('Claude target — specifics', () => {
     expect(sessionCommands).toContain('specship sync --quiet --drift-summary');
 
     expect(after.permissions?.allow).toContain('mcp__specship__specship_search');
-    // Harness read tools are auto-allowed too (MAINT-DOC / FITNESS-DOC).
-    expect(after.permissions?.allow).toContain('mcp__specship__specship_maintainability');
-    expect(after.permissions?.allow).toContain('mcp__specship__specship_fitness');
+    // The merged harness read tool is auto-allowed too (REQ-SURF-007).
+    expect(after.permissions?.allow).toContain('mcp__specship__specship_health');
+    expect(after.permissions?.allow).not.toContain('mcp__specship__specship_maintainability');
+    expect(after.permissions?.allow).not.toContain('mcp__specship__specship_fitness');
   });
 
   it('cleanupLegacyHooks preserves a sibling hook sharing our matcher group', () => {
@@ -969,6 +1045,22 @@ describe('Claude target — specifics', () => {
 });
 
 describe('Installer targets — registry', () => {
+  // `uninstallTargets` below really deletes files under the resolved home, so
+  // this block MUST run against a sandbox: without it the suite strips the
+  // developer's own ~/.claude assets (commands, subagent, spec-author skill).
+  let tmpHome: string;
+  let homeRestore: { restore: () => void };
+
+  beforeEach(() => {
+    tmpHome = mkTmpDir('home');
+    homeRestore = setHome(tmpHome);
+  });
+
+  afterEach(() => {
+    homeRestore.restore();
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  });
+
   it('getTarget returns the Claude target by id', () => {
     expect(getTarget('claude')?.id).toBe('claude');
     expect(getTarget('not-a-real-target')).toBeUndefined();
@@ -1221,6 +1313,21 @@ describe('Gemini target — specifics', () => {
   }
 
   /**
+   * REQ-AUTHG-007.A1 — the spec-author skill is a Claude-only asset. Gemini has
+   * no skills surface, so even a governance-tier (`sdd: true`) install must not
+   * write one, in either scope.
+   */
+  function geminiInstallWritesNoSkill(): void {
+    geminiTarget.install('local', { autoAllow: true, sdd: true });
+    geminiTarget.install('global', { autoAllow: true, sdd: true });
+
+    for (const root of [tmpCwd, tmpHome]) {
+      expect(fs.existsSync(path.join(root, '.claude', 'skills'))).toBe(false);
+      expect(fs.existsSync(path.join(root, '.gemini', 'skills'))).toBe(false);
+    }
+  }
+
+  /**
    * `src/bin/uninstall.ts` (the npm preuninstall sweep) loops `ALL_TARGETS`,
    * so registering Gemini changes what `npm rm -g` cleans up. Asserted
    * explicitly because it's a behaviour change, not just new coverage.
@@ -1241,6 +1348,7 @@ describe('Gemini target — specifics', () => {
   it('uninstall on a virgin home returns not-found without throwing (REQ-GEMINI-002.A2)', geminiUninstallOnVirginHomeIsNotFound);
   it('re-install preserves an integration a previous install enabled (REQ-GEMINI-003.A2)', geminiReinstallPreservesIntegrations);
   it('names every unsupported surface in one note and writes nothing else (REQ-GEMINI-006.A1/A2)', geminiInstallNotesUnsupportedSurfaces);
+  it('never installs the spec-author skill (REQ-AUTHG-007.A1)', geminiInstallWritesNoSkill);
   it('npm-uninstall sweeps the Gemini entry too (REQ-GEMINI-008)', geminiEntrySweptByRegistryUninstall);
 });
 
@@ -1342,4 +1450,194 @@ describe('Claude target — status-line opt-in', () => {
     writeStatusLineEntry('local');
     expect(statusLineState('local')).toBe('ours');
   });
+});
+
+/**
+ * SLIM-DOC, REQ-SLIM-003 — an interactive `specship install` asks at most one
+ * question (where to write the config). Everything else is defaulted and named
+ * in the closing summary with its opt-out flag.
+ *
+ * The prompts themselves run through @clack/prompts, which the installer loads
+ * via a `new Function('return import(...)')` escape hatch that vitest cannot
+ * intercept — so the POLICY is tested directly (it lives in pure functions, the
+ * same shape as `decideInstallInit`) and the absence of the removed prompts is
+ * asserted against the flow's source.
+ */
+describe('REQ-SLIM-003 — interactive install asks at most one question', () => {
+  let tmpHome: string;
+  let tmpCwd: string;
+  let origCwd: string;
+  let homeRestore: { restore: () => void };
+
+  const settingsPath = () => path.join(tmpCwd, '.claude', 'settings.json');
+  const readSettings = () => JSON.parse(fs.readFileSync(settingsPath(), 'utf-8'));
+
+  beforeEach(() => {
+    tmpHome = mkTmpDir('home');
+    tmpCwd = mkTmpDir('cwd');
+    origCwd = process.cwd();
+    process.chdir(tmpCwd);
+    homeRestore = setHome(tmpHome);
+  });
+  afterEach(() => {
+    homeRestore.restore();
+    process.chdir(origCwd);
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+    fs.rmSync(tmpCwd, { recursive: true, force: true });
+  });
+
+  describe('status line (REQ-SLIM-003.A1)', () => {
+    it('defaults ON when no flag was given', () => {
+      expect(resolveStatusLine(undefined, true)).toBe(true);
+    });
+
+    it('is never installed for a target that has no status line', () => {
+      expect(resolveStatusLine(undefined, false)).toBe(false);
+      expect(resolveStatusLine(true, false)).toBe(false);
+    });
+
+    it('REQ-SLIM-003.A3: --statusline and --skip-statusline still decide it', () => {
+      expect(resolveStatusLine(true, true)).toBe(true);
+      expect(resolveStatusLine(false, true)).toBe(false);
+    });
+
+    it('writes the segment on a default install — no prompt, no flag', () => {
+      claudeTarget.install('local', {
+        autoAllow: resolveAutoAllow(undefined, true),
+        installStatusLine: resolveStatusLine(undefined, true),
+      });
+      expect(readSettings().statusLine._specship).toBe(true);
+    });
+
+    it('REQ-SLIM-003.A4: an existing status line is neither prompted about nor overwritten', () => {
+      fs.mkdirSync(path.dirname(settingsPath()), { recursive: true });
+      fs.writeFileSync(
+        settingsPath(),
+        JSON.stringify({ statusLine: { type: 'command', command: 'my-own-statusline.sh' } }, null, 2) + '\n',
+      );
+      expect(statusLineState('local')).toBe('foreign');
+
+      // The default-ON path runs the same write as the old opt-in path; the
+      // never-overwrite guard is `writeStatusLineEntry`, one layer down.
+      const result = claudeTarget.install('local', {
+        autoAllow: resolveAutoAllow(undefined, true),
+        installStatusLine: resolveStatusLine(undefined, true),
+      });
+
+      expect(readSettings().statusLine.command).toBe('my-own-statusline.sh');
+      expect(readSettings().statusLine._specship).toBeUndefined();
+      expect(result.files.some((f) => f.action === 'kept')).toBe(true);
+      expect((result.notes ?? []).join('\n')).toContain('specship statusline');
+    });
+  });
+
+  describe('auto-allow permissions (REQ-SLIM-003.A1)', () => {
+    it('defaults ON when no flag was given, OFF for a non-Claude target', () => {
+      expect(resolveAutoAllow(undefined, true)).toBe(true);
+      expect(resolveAutoAllow(undefined, false)).toBe(false);
+    });
+
+    it('REQ-SLIM-003.A3: --no-permissions still opts out', () => {
+      expect(resolveAutoAllow(false, true)).toBe(false);
+    });
+  });
+
+  describe('initial indexing (REQ-SLIM-003.A1)', () => {
+    it('indexes an un-indexed git repo without asking, in either mode', () => {
+      expect(decideInstallInit({ isGitRepo: true, isInitialized: false, yes: false, skipIndex: false }))
+        .toBe('auto-index');
+      expect(decideInstallInit({ isGitRepo: true, isInitialized: false, yes: true, skipIndex: false }))
+        .toBe('auto-index');
+    });
+
+    it('REQ-SLIM-003.A3: --skip-index still opts out', () => {
+      expect(decideInstallInit({ isGitRepo: true, isInitialized: false, yes: false, skipIndex: true }))
+        .toBe('skip');
+    });
+
+    it('still does nothing for an already-indexed project or a non-project', () => {
+      expect(decideInstallInit({ isGitRepo: true, isInitialized: true, yes: false, skipIndex: false }))
+        .toBe('skip');
+      expect(decideInstallInit({ isGitRepo: false, isInitialized: false, yes: false, skipIndex: false }))
+        .toBe('skip');
+    });
+  });
+
+  describe('the summary names every defaulted decision (REQ-SLIM-003.A2)', () => {
+    it('names the status line, the permissions and the index, each with its opt-out flag', () => {
+      const lines = describeInstallDefaults({
+        statusLine: 'added',
+        statusLineDefaulted: true,
+        autoAllow: true,
+        autoAllowDefaulted: true,
+        index: 'indexed',
+        indexDefaulted: true,
+      });
+      const text = lines.join('\n');
+      expect(lines).toHaveLength(3);
+      expect(text).toContain('status line');
+      expect(text).toContain('--skip-statusline');
+      expect(text).toContain('--no-permissions');
+      expect(text).toContain('--skip-index');
+    });
+
+    it('says so when an existing status line was kept instead of replaced', () => {
+      const text = describeInstallDefaults({
+        statusLine: 'kept-existing',
+        statusLineDefaulted: true,
+        autoAllow: false,
+        autoAllowDefaulted: false,
+        index: 'skipped',
+        indexDefaulted: false,
+      }).join('\n');
+      expect(text).toContain('left untouched');
+      expect(text).toContain('--skip-statusline');
+    });
+
+    it('does not echo a decision the user made with a flag', () => {
+      expect(describeInstallDefaults({
+        statusLine: 'skipped',
+        statusLineDefaulted: false,
+        autoAllow: false,
+        autoAllowDefaulted: false,
+        index: 'skipped',
+        indexDefaulted: false,
+      })).toEqual([]);
+    });
+  });
+
+  describe('the removed prompts are gone from the flow', () => {
+    const installerSrc = fs.readFileSync(
+      path.join(__dirname, '..', 'src', 'installer', 'index.ts'),
+      'utf-8',
+    );
+    const cliSrc = fs.readFileSync(
+      path.join(__dirname, '..', 'src', 'bin', 'specship.ts'),
+      'utf-8',
+    );
+
+    it('the location question is still asked', () => {
+      expect(installerSrc).toContain('Apply ${agents} config to just this project, or all of them?');
+    });
+
+    it('REQ-SLIM-003.A1: no status-line question remains', () => {
+      expect(installerSrc).not.toContain('Add a SpecShip status-line segment?');
+    });
+
+    it('REQ-SLIM-003.A1: no auto-allow question remains', () => {
+      expect(installerSrc).not.toContain('Auto-allow SpecShip commands?');
+    });
+
+    it('REQ-SLIM-003.A1: no indexing question remains', () => {
+      expect(cliSrc).not.toContain('now, so Claude can explore it?');
+    });
+  });
+
+  // OPEN CONFLICT: REQ-SLIM-003.A1 ("asks only the install-location question")
+  // and REQ-ENFORCE-004.A3 ("the --sdd install asks once whether to gate the
+  // drift and behaviour checks") cannot both hold. The gate ask is left in
+  // place — silently enabling gating would break a ratified requirement and
+  // change `specship check`'s exit code — pending a product decision on which
+  // requirement gives way.
+  it.todo('REQ-SLIM-003.A1: the gate question is defaulted too (blocked on REQ-ENFORCE-004.A3)');
 });

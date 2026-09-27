@@ -5,6 +5,18 @@ owner: web
 priority: medium
 version: 1
 brief: spec-detail-page/snapshot.html
+jira_issue_REQ-SPECDETAIL-001: SSHIP-1025
+jira_fingerprint_REQ-SPECDETAIL-001: 1e44ee190d76881c
+jira_issue_REQ-SPECDETAIL-002: SSHIP-1029
+jira_fingerprint_REQ-SPECDETAIL-002: e893001f580c9dbb
+jira_issue_REQ-SPECDETAIL-003: SSHIP-1034
+jira_fingerprint_REQ-SPECDETAIL-003: 4423eecc8e06acb3
+jira_issue_REQ-SPECDETAIL-004: SSHIP-1038
+jira_fingerprint_REQ-SPECDETAIL-004: d46fa89f02091f32
+jira_issue_REQ-SPECDETAIL-005: SSHIP-1042
+jira_fingerprint_REQ-SPECDETAIL-005: 2c9318584a6b3706
+jira_issue_REQ-SPECDETAIL-006: SSHIP-1046
+jira_fingerprint_REQ-SPECDETAIL-006: 4eefbe983dc960cd
 ---
 
 <!-- id: DASH-SPECDETAIL-DOC -->
@@ -28,7 +40,7 @@ loading (skeleton), when empty, and on a not-found / errored id — never a blan
 screen or an unhandled throw.
 
 implementations:
-  - packages/web-ng/src/app/app.routes.ts
+  - ui/src/router.ts
   - ui/src/components/spec-detail.tsx:SpecDetail
 
 ## Acceptance
@@ -48,7 +60,7 @@ carrying the spec's link state, priority, kind, owner, and last-verified time.
 Fields that are absent in the data are omitted, not shown blank.
 
 implementations:
-  - packages/web-ng/src/app/pages/spec-detail/spec-detail.html
+  - ui/src/components/spec-detail.tsx
 
 ## Acceptance
 <!-- id: REQ-SPECDETAIL-002.A1 -->
@@ -68,7 +80,6 @@ only when the data model supplies separate rationale content.
 
 implementations:
   - ui/src/components/spec-detail.tsx:SpecDetail
-  - packages/web-ng/src/app/pages/spec-detail/spec-detail.html
 
 ## Acceptance
 <!-- id: REQ-SPECDETAIL-003.A1 -->
@@ -123,8 +134,8 @@ detail page renders an action bar — Implement, Verify, Edit spec, Show in grap
 to the Graph page focused on a linked symbol).
 
 implementations:
-  - packages/web-ng/src/app/pages/specs/specs.html
-  - packages/web-ng/src/app/pages/spec-detail/spec-detail.html
+  - ui/src/pages/specs.tsx
+  - ui/src/components/spec-detail.tsx
 
 ## Acceptance
 <!-- id: REQ-SPECDETAIL-006.A1 -->

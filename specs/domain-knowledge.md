@@ -5,6 +5,22 @@ owner: core
 priority: high
 version: 1
 brief: domain-knowledge/brief.md
+jira_issue_REQ-DOMAIN-001: SSHIP-342
+jira_fingerprint_REQ-DOMAIN-001: a709c80762a0f263
+jira_issue_REQ-DOMAIN-002: SSHIP-347
+jira_fingerprint_REQ-DOMAIN-002: 2db52ce0428948b5
+jira_issue_REQ-DOMAIN-003: SSHIP-351
+jira_fingerprint_REQ-DOMAIN-003: 6b7852bd058c4d8e
+jira_issue_REQ-DOMAIN-004: SSHIP-355
+jira_fingerprint_REQ-DOMAIN-004: 38098ea1ba191941
+jira_issue_REQ-DOMAIN-005: SSHIP-360
+jira_fingerprint_REQ-DOMAIN-005: dd56cbcb3c40cca0
+jira_issue_REQ-DOMAIN-006: SSHIP-364
+jira_fingerprint_REQ-DOMAIN-006: 35522c527da30a39
+jira_issue_REQ-DOMAIN-007: SSHIP-370
+jira_fingerprint_REQ-DOMAIN-007: 9cd53e633ca6636b
+jira_issue_REQ-DOMAIN-008: SSHIP-374
+jira_fingerprint_REQ-DOMAIN-008: d36122a2f771f8c3
 ---
 
 <!-- id: DOMAIN-DOC -->
@@ -130,7 +146,7 @@ principle. Manual authoring of an equivalent Markdown file MUST be a first-class
 alternative that produces the same indexed result after `specship sync`.
 
 implementations:
-  - commands/ss-domain.md
+  - commands/specship/spec.md
 
 ## Acceptance
 <!-- id: REQ-DOMAIN-004.A1 -->
@@ -169,6 +185,11 @@ implementations:
 <!-- id: REQ-DOMAIN-006 -->
 ## The dashboard MUST present a dedicated Domain page with type-grouped readable cards
 
+> **SUPERSEDED (2026-09-25) by DASHLM-DOC** (`specs/dashboard-quality-lastmile.md`,
+> REQ-DASHLM-002; marked per REQ-SURF-008.A2): the Domain page never shipped,
+> so this stood as a live contract against nothing. Re-contracted there against
+> the real `GET /api/domain` shape. Retired and kept for history.
+
 The desktop UI MUST add a **Domain** page (route + sidebar entry)
 that renders domain facts grouped into `Terms`, `Rules`, `Decisions`, and
 `Constraints` sections. A coverage strip MUST show `documented · gaps`. Each fact
@@ -178,10 +199,7 @@ MUST render as a readable card showing its statement/body, what it governs
 kind union MUST gain `'domain'`.
 
 implementations:
-  - packages/web-ng/src/app/pages/domain/domain.ts
-  - ui/src/router.ts:usePathRoute
-  - packages/web-ng/src/app/shell/sidebar/sidebar.ts
-  - packages/web-ng/src/app/api/types.ts:Spec
+  - ui/src/pages/domain.tsx
 
 ## Acceptance
 <!-- id: REQ-DOMAIN-006.A1 -->
@@ -208,7 +226,7 @@ it MUST use server-local modules or the dynamic loader. Existing routes MUST kee
 working.
 
 implementations:
-  - packages/server/src/routes/domain.ts
+  - server/src/routes/domain.ts
 
 ## Acceptance
 <!-- id: REQ-DOMAIN-007.A1 -->
@@ -224,6 +242,11 @@ implementations:
 <!-- id: REQ-DOMAIN-008 -->
 ## The Domain page MUST show each fact's governed spec and live inherited state
 
+> **SUPERSEDED (2026-09-25) by DASHLM-DOC** (`specs/dashboard-quality-lastmile.md`,
+> REQ-DASHLM-002; marked per REQ-SURF-008.A2): its UI half has no page to land
+> in. Re-contracted there. Retired and kept for history — the server-side
+> enrichment it describes is still what `GET /api/domain` returns.
+
 `GET /api/domain` MUST enrich every returned fact with the requirement spec(s) it
 governs (its `depends_on` / `parent_id` targets) and the inherited code-link
 state derived from the linked spec's `implements` links (`verified` / `drifted` /
@@ -234,8 +257,8 @@ state, and MUST expose the **Review** affordance when the inherited state is
 "No linked code yet".
 
 implementations:
-  - packages/server/src/routes/domain.ts
-  - packages/web-ng/src/app/pages/domain/domain.ts
+  - server/src/routes/domain.ts
+  - ui/src/pages/domain.tsx
 
 ## Acceptance
 <!-- id: REQ-DOMAIN-008.A1 -->

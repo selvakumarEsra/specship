@@ -3,6 +3,12 @@ id: INSTALL-SCOPE-DOC
 title: specship install is wiring-only — binary acquisition is a separate step
 owner: specship
 priority: high
+jira_issue_REQ-SCOPE-001: SSHIP-504
+jira_fingerprint_REQ-SCOPE-001: f4fd0d0fb7575c4d
+jira_issue_REQ-SCOPE-002: SSHIP-507
+jira_fingerprint_REQ-SCOPE-002: ae3427f9648214d1
+jira_issue_REQ-SCOPE-003: SSHIP-510
+jira_fingerprint_REQ-SCOPE-003: 5d1d11f36d2e253e
 ---
 
 <!-- id: INSTALL-SCOPE-DOC -->

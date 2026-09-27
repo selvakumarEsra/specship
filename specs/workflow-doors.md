@@ -4,6 +4,22 @@ title: Consolidate the command surface into a few progressive doors
 owner: core
 priority: medium
 version: 3
+jira_issue_REQ-DOORS-001: SSHIP-1689
+jira_fingerprint_REQ-DOORS-001: bd1b25e86356d480
+jira_issue_REQ-DOORS-002: SSHIP-1696
+jira_fingerprint_REQ-DOORS-002: bfef6fe04cc4f5e9
+jira_issue_REQ-DOORS-003: SSHIP-1704
+jira_fingerprint_REQ-DOORS-003: fa703c84afa12705
+jira_issue_REQ-DOORS-004: SSHIP-1710
+jira_fingerprint_REQ-DOORS-004: 2eb477e8f1e38653
+jira_issue_REQ-DOORS-005: SSHIP-1721
+jira_fingerprint_REQ-DOORS-005: 63afde2ecf9cb82b
+jira_issue_REQ-DOORS-006: SSHIP-1728
+jira_fingerprint_REQ-DOORS-006: ad35486a41fbbedd
+jira_issue_REQ-DOORS-007: SSHIP-1737
+jira_fingerprint_REQ-DOORS-007: d92cbedea625c394
+jira_issue_REQ-DOORS-008: SSHIP-1745
+jira_fingerprint_REQ-DOORS-008: ea4aa4d8e4f0a833
 ---
 
 <!-- id: WORKFLOW-DOORS-DOC -->

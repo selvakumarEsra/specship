@@ -172,6 +172,18 @@ describe('GraphPage (REQ-DESKTOP-021)', () => {
     });
   });
 
+  it('REQ-REVINT-008.A2: the rail labels the tests count as spec-link evidence', async () => {
+    mockFetch(ROUTES);
+    const { container } = render(<GraphPage project={null} query={{}} />);
+    const rail = () => within(railEl(container));
+    await rail().findByText('Edge types');
+
+    // The bucket is now resolved tests/validates spec_links, not an (impossible)
+    // edge between nodes of kind 'test' — the label says so.
+    expect(rail().getByText('test evidence (links)')).toBeTruthy();
+    expect(rail().queryByText('tests')).toBeNull();
+  });
+
   it('A4: an empty graph renders the run-specship-index guidance, not a blank canvas', async () => {
     mockFetch({ ...ROUTES, '/api/graph/full': { nodes: [], edges: [], total: 0, shown: 0 } });
     render(<GraphPage project={null} query={{}} />);

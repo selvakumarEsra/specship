@@ -42,7 +42,7 @@ const SPECSHIP = mkServer({
   resultBytes: 210_000,
   lastUsed: new Date().toISOString(),
   tools: [{ name: 'specship_explore', calls: 300, resultBytes: 90_000 }],
-  exampleCall: { tool: 'specship_explore', args: { query: 'auth flow' } },
+  exampleCall: { tool: 'specship_explore', args: { query: 'auth flow' }, synthesized: false },
 });
 
 const GITHUB = mkServer({ name: 'github', state: 'connected' });
@@ -139,6 +139,27 @@ describe('McpPage via App (REQ-DESKTOP-026)', () => {
     expect(screen.getByText('×300')).toBeTruthy();
     // The real example call from claude_tool_calls.input_json.
     expect(screen.getByText('specship_explore {"query":"auth flow"}')).toBeTruthy();
+    expect(screen.getByText('latest recorded input')).toBeTruthy();
+    expect(screen.queryByText('synthesized')).toBeNull();
+  });
+
+  it('REQ-SURF-009.A2: a synthesized example call is marked, not passed off as recorded', async () => {
+    const synth = mkServer({
+      ...SPECSHIP,
+      name: 'specship',
+      // What the route emits when no input_json was ever recorded: the top
+      // tool with empty args.
+      exampleCall: { tool: 'specship_explore', args: {}, synthesized: true },
+    });
+    mockFetch([{ servers: [synth, GITHUB] }]);
+    render(<App />);
+
+    fireEvent.click(await screen.findByText('specship'));
+
+    await screen.findByText('specship_explore {}');
+    expect(screen.getByText('synthesized')).toBeTruthy();
+    expect(screen.getByText(/not a call that happened/)).toBeTruthy();
+    expect(screen.queryByText('latest recorded input')).toBeNull();
   });
 
   it('A3: enable/disable confirms, PATCHes the owning file and reflects the new state', async () => {

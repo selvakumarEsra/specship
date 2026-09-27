@@ -539,8 +539,8 @@ When running as an MCP server, SpecShip exposes these tools to Claude Code:
 | `specship_impact` | Analyze what code is affected by changing a symbol |
 | `specship_node` | Get one specific symbol's details + full source (returns every overload for an ambiguous name) |
 | `specship_files` | Get indexed file structure (faster than filesystem scanning) |
-| `specship_status` | Check index health and statistics |
-| `specship_version` | Identify the running MCP server — version, install method, where it was loaded from, node version |
+| `specship_status` | Check index health and statistics, plus server identity — version, install method, where it was loaded from, node version |
+| `specship_health` | Code-health report — maintainability (coupling hotspots, god files, cycles, dead code) and fitness (dependency/layering rules), filterable via `checks` |
 
 The JIRA integration adds fourteen more (`specship_jira_issues`, `_issue`, `_pick`, `_start`, `_track`, `_publish`, `_transition`, `_add_task`, `_anchor`, `_epics`, `_coverage`, `_reconcile`, `_regression_pack`, `_regression_record`) — see below.
 

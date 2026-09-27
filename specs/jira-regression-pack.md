@@ -4,6 +4,16 @@ title: Domain-organised regression test pack in JIRA
 owner: core
 priority: high
 version: 1
+jira_issue_REQ-JIRAREG-001: SSHIP-605
+jira_fingerprint_REQ-JIRAREG-001: 1ad428edfdce7704
+jira_issue_REQ-JIRAREG-002: SSHIP-610
+jira_fingerprint_REQ-JIRAREG-002: a8171abd22ed379a
+jira_issue_REQ-JIRAREG-003: SSHIP-614
+jira_fingerprint_REQ-JIRAREG-003: 007b84288ea88a8a
+jira_issue_REQ-JIRAREG-004: SSHIP-619
+jira_fingerprint_REQ-JIRAREG-004: 976d9220f78a9e50
+jira_issue_REQ-JIRAREG-005: SSHIP-623
+jira_fingerprint_REQ-JIRAREG-005: 77f61d915fbf1f4f
 ---
 
 <!-- id: JIRA-REGRESSION-DOC -->

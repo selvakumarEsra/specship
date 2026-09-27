@@ -20,6 +20,16 @@ const projLabel = (p: { name: string; path: string }): string => {
   return base.split('/').filter(Boolean).pop() ?? base;
 };
 
+/**
+ * Drift is only measured for the primary project (the one with an indexed spec
+ * graph); every other row comes back null. Say "not measured" rather than
+ * claiming a clean graph we never looked at (REQ-REVINT-007.A3).
+ */
+const driftPhrase = (drift: number | null): string => {
+  if (drift == null) return ', drift not measured for this project';
+  return drift > 0 ? `, ${drift} drifted links` : ', no drifted links';
+};
+
 // @implements REQ-DESKTOP-024
 export function ComparePage(_props: PageProps) {
   const stats = useApi(() => api.claudeStats(), []);
@@ -100,7 +110,7 @@ function CompareBody({ projects, off, onToggle }: {
             <span style={{ fontWeight: 600, fontSize: 13 }}>Most efficient: </span>
             <span className="mono" style={{ color: 'var(--success)' }}>{projLabel(best)}</span>
             <span className="secondary" style={{ fontSize: 12.5 }}>
-              {' '}— {Math.round(best.cacheHit * 100)}% cache hit, ${best.avgCost.toFixed(2)} avg/session{best.drift ? `, ${best.drift} drifted links` : ', no drifted links'}.
+              {' '}— {Math.round(best.cacheHit * 100)}% cache hit, ${best.avgCost.toFixed(2)} avg/session{driftPhrase(best.drift)}.
             </span>
           </div>
         </div>
@@ -122,7 +132,11 @@ function CompareBody({ projects, off, onToggle }: {
             {td(p.sessions)}
             {td('$' + p.avgCost.toFixed(2))}
             <span className="mono tabular" style={{ width: 70, textAlign: 'right', fontSize: 12, color: cacheColor(p.cacheHit) }}>{Math.round(p.cacheHit * 100)}%</span>
-            <span className="mono tabular" style={{ width: 60, textAlign: 'right', fontSize: 12, color: p.drift > 10 ? 'var(--warn)' : 'var(--text-secondary)' }}>{p.drift}</span>
+            <span
+              className="mono tabular"
+              title={p.drift == null ? 'Not measured — only the primary project has an indexed spec graph' : undefined}
+              style={{ width: 60, textAlign: 'right', fontSize: 12, color: p.drift == null ? 'var(--text-muted)' : p.drift > 10 ? 'var(--warn)' : 'var(--text-secondary)' }}
+            >{p.drift ?? '—'}</span>
             <span className="row gap-4" style={{ width: 150, justifyContent: 'flex-end', overflow: 'hidden' }}>
               {p.topTools.map((t) => (
                 <code key={t} className="mono" style={{ fontSize: 9.5, background: 'var(--bg-canvas)', padding: '1px 5px', borderRadius: 3, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>{t}</code>

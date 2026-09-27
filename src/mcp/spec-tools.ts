@@ -19,6 +19,9 @@ import { renderBehaviourSurface } from '../behaviour/behaviour-surface';
 import { writeBackImplementation } from '../extraction/specs/spec-file-writeback';
 import type { ToolDefinition, ToolResult } from './tools';
 import { canonicalQualifiedName } from '../resolution/spec-link-resolver';
+import { isNonTestEvidence } from '../resolution/test-title-links';
+import { formatCoverageLine } from '../graph/spec-coverage';
+import type { SpecCoverageReport } from '../graph/spec-coverage';
 import { summarizeBriefFunnel, ideaCaptureFields } from '../resolution/brief-link-resolver';
 import type { FunnelLookup } from '../resolution/brief-link-resolver';
 
@@ -76,7 +79,7 @@ export const specToolDefinitions: ToolDefinition[] = [
   {
     name: 'specship_spec',
     description:
-      'Fetch a spec/requirement by its ID. Call this FIRST whenever the user mentions a spec ID (e.g., REQ-AUTH-005) or a requirement. Returns the spec body, its parent doc and sibling requirements, and the code it currently links to with link state (verified / drifted / orphaned). Use this instead of Read-ing the spec file — it returns more (linked code + state) than the file alone. Called WITHOUT a spec_id, it returns the project\'s spec lifecycle funnel: brainstormed ideas → specs → implemented, with per-document rollups. Pass `list: true` for a flat inventory instead: every requirement grouped by document with exactly one rolled-up status each (authored / in-progress / implemented / verified / needs-attention) plus per-status totals. Pass `ideas: true` for the ideas review view: exactly the idea-state briefs (unlinked brainstorm briefs) with each one\'s age since capture and labels, closing with the promotion hand-off (`/specship:spec new <brief-id>`). Pass `query` instead to SEARCH specs by free text — call this FIRST when a user describes a change (a bug, an error, a one-line enhancement) and you need to find which existing spec it belongs to; it returns scored, ranked candidates (id, title, kind, snippet) over the spec full-text index.',
+      'Fetch a spec/requirement by its ID. Call this FIRST whenever the user mentions a spec ID (e.g., REQ-AUTH-005) or a requirement. Returns the spec body, its parent doc and sibling requirements, and the code it currently links to with link state (verified / drifted / orphaned). Use this instead of Read-ing the spec file — it returns more (linked code + state) than the file alone. Called WITHOUT a spec_id, it returns the project\'s spec lifecycle funnel: brainstormed ideas → specs → implemented, with per-document rollups. Pass `list: true` for a flat inventory instead: every requirement grouped by document with exactly one rolled-up status each (authored / in-progress / implemented / verified / needs-attention) plus per-status totals. Pass `ideas: true` for the ideas review view: exactly the idea-state briefs (unlinked brainstorm briefs) with each one\'s age since capture and labels, closing with the promotion hand-off (`/specship:spec new <brief-id>`). Pass `query` instead to SEARCH specs by free text — call this FIRST when a user describes a change (a bug, an error, a one-line enhancement) and you need to find which existing spec it belongs to; it returns scored, ranked candidates (id, title, kind, snippet) over the spec full-text index. Pass `coverage: true` (with or without a spec_id) for the TEST-COVERAGE rollup: per requirement and per acceptance criterion, a verdict of untested / tested / verified / broken derived from `tests` links only — use it to answer "is this actually proven" rather than "is there code".',
     inputSchema: {
       type: 'object',
       properties: {
@@ -99,6 +102,11 @@ export const specToolDefinitions: ToolDefinition[] = [
           description:
             'Provide with no spec_id to get the ideas review view: exactly the idea-state briefs (unlinked brainstorm briefs), each with its age since capture and labels, closing with the promotion hand-off (/specship:spec new <brief-id>). A free-text `query`, `list`, and a `spec_id` all take precedence.',
         },
+        coverage: {
+          type: 'boolean',
+          description:
+            "Return the spec's TEST-COVERAGE rollup instead of its detail: per requirement and per acceptance criterion, the implements/tests link counts and a verdict (untested / tested / verified / broken). The verdict derives from `tests` links only — implemented code is never counted as met. Omit spec_id for the whole project.",
+        },
         behaviour_surface: {
           type: 'boolean',
           description:
@@ -111,7 +119,7 @@ export const specToolDefinitions: ToolDefinition[] = [
   {
     name: 'specship_link_assert',
     description:
-      'Declare that a code symbol implements (or tests / documents / validates) a spec. Call this AFTER editing code in response to a spec — before reporting done. Idempotent: calling it again refreshes the link with the latest signature snapshot. Higher-priority signal than the // @implements REQ-X comment backstop (the extractor catches comment-only links automatically).',
+      'Declare that a code symbol implements (or tests / documents / validates) a spec. Call this AFTER editing code in response to a spec — before reporting done. Idempotent: calling it again refreshes the link with the latest signature snapshot. The target is validated against the graph: a file:symbol that does not resolve is REFUSED with near-miss suggestions rather than recorded, so pass the fully-qualified name exactly as indexed (specship_search if unsure). Higher-priority signal than the // @implements REQ-X comment backstop (the extractor catches comment-only links automatically).',
     inputSchema: {
       type: 'object',
       properties: {
@@ -146,7 +154,7 @@ export const specToolDefinitions: ToolDefinition[] = [
   {
     name: 'specship_link_verify',
     description:
-      'Report the outcome of verifying a spec→code link (e.g., after running tests). pass → state moves to "verified"; fail → "broken" with the optional reason in metadata. Use this in spec-verify / spec-fix workflows or after manual test runs.',
+      'Report the outcome of verifying a spec→code link (e.g., after running tests). pass → state moves to "verified"; fail → "broken". The reason, an ISO timestamp, and any test names passed as `evidence` are persisted on the link and shown wherever it is rendered — pass the test name(s) you actually ran. Use this in spec-verify / spec-fix workflows or after manual test runs.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -161,7 +169,12 @@ export const specToolDefinitions: ToolDefinition[] = [
         },
         reason: {
           type: 'string',
-          description: 'Optional explanation (test name, failure message, etc.)',
+          description: 'Optional explanation (what was run, failure message, etc.). Persisted on the link with a timestamp.',
+        },
+        evidence: {
+          type: 'array',
+          description: 'The test(s) this verdict is based on, e.g. ["__tests__/auth.test.ts:signs in a user"]. Persisted as the link\'s verification evidence.',
+          items: { type: 'string' },
         },
         projectPath: projectPathProperty,
       },
@@ -203,12 +216,96 @@ const error = (msg: string): ToolResult => ({
   isError: true,
 });
 
-/** Format one link line for inclusion in `specship_spec` / `specship_drifted`. */
+/**
+ * Test evidence that came from a FILE, not from an agent's own assertion
+ * (REQ-REVINT-005.A2). A `verifies:` block gives provenance
+ * `spec-declaration`; an `@verifies REQ-X` comment on the test gives
+ * `code-comment`. `agent-asserted` is a DB-only row the implementing agent can
+ * write itself, so it must not count toward promotion eligibility.
+ */
+function isFileDerivedEvidence(link: SpecLink): boolean {
+  if (link.provenance !== 'spec-declaration' && link.provenance !== 'code-comment') {
+    return false;
+  }
+  // …and it must point INTO a test file (REQ-VSTATE-002.A4): a `verifies:`
+  // bullet or `@verifies` marker on a fixture is a declaration, not evidence.
+  return !isNonTestEvidence(link);
+}
+
+/**
+ * The persisted verification record on a link, if any (REQ-REVINT-004). Shaped
+ * by the verify handlers; read defensively because `metadata` is free-form.
+ */
+function verificationOf(link: SpecLink): { verifiedAt?: string; reason?: string; evidence?: string[] } | null {
+  const v = (link.metadata as Record<string, unknown> | undefined)?.verification;
+  if (!v || typeof v !== 'object') return null;
+  const rec = v as Record<string, unknown>;
+  const evidence = Array.isArray(rec.evidence)
+    ? rec.evidence.filter((e): e is string => typeof e === 'string')
+    : undefined;
+  return {
+    verifiedAt: typeof rec.verifiedAt === 'string' ? rec.verifiedAt : undefined,
+    reason: typeof rec.reason === 'string' ? rec.reason : undefined,
+    evidence,
+  };
+}
+
+/**
+ * Format one link line for inclusion in `specship_spec` / `specship_drifted`.
+ * A verified / broken link renders its persisted evidence on a second line
+ * (REQ-REVINT-004.A2) so the state is auditable wherever links are shown.
+ */
 function formatLink(link: SpecLink): string {
   const resolved = link.resolvedNodeId ? '✓' : '✗';
   const driftSuffix = link.driftAxis ? ` [drift=${link.driftAxis}]` : '';
   const conf = link.confidence !== undefined ? ` (${link.confidence.toFixed(2)})` : '';
-  return `  - [${link.state}${driftSuffix}] ${resolved} ${link.kind} → ${link.targetFilePath}:${link.targetQualifiedName} <${link.provenance}${conf}>  #${link.id}`;
+  const head = `  - [${link.state}${driftSuffix}] ${resolved} ${link.kind} → ${link.targetFilePath}:${link.targetQualifiedName} <${link.provenance}${conf}>  #${link.id}`;
+  const v = verificationOf(link);
+  if (!v || !v.verifiedAt) return head;
+  const parts = [`verified ${v.verifiedAt}`];
+  if (v.evidence?.length) parts.push(`evidence: ${v.evidence.join(', ')}`);
+  if (v.reason) parts.push(v.reason);
+  return `${head}\n      ↳ ${parts.join(' · ')}`;
+}
+
+/**
+ * Render the coverage rollup for the agent (REQ-VSTATE-006.A2).
+ *
+ * Leads with the verdict per criterion because that is the actionable unit: an
+ * `untested` line names exactly which criterion still needs a test, and the
+ * counts behind it show whether the gap is "no code" or "code, no proof".
+ */
+function renderCoverage(report: SpecCoverageReport): string {
+  const lines: string[] = [];
+  const scope = report.specId ?? 'project';
+  lines.push(`# Spec coverage — ${scope}`);
+  lines.push('');
+  lines.push(
+    '_Verdicts derive from `tests` links only. An `implements` link is a claim, not evidence — a criterion with code but no test reads `untested`._'
+  );
+  lines.push('');
+  if (report.requirements.length === 0) {
+    lines.push(
+      report.specId
+        ? `_No requirements under "${report.specId}" — nothing to report._`
+        : '_No requirements indexed yet._'
+    );
+    return lines.join('\n');
+  }
+  for (const req of report.requirements) {
+    lines.push(`## ${req.specId} — ${req.title}`);
+    lines.push(
+      `**${req.verdict}** · implements: ${req.implementsLinks.count} · tests: ${req.testsLinks.count} · criteria with tests: ${req.criteriaWithTests}/${req.criteriaCount}`
+    );
+    for (const c of req.criteria) {
+      lines.push(
+        `- [${c.verdict}] ${c.specId} — implements: ${c.implementsLinks.count}, tests: ${c.testsLinks.count}`
+      );
+    }
+    lines.push('');
+  }
+  lines.push(formatCoverageLine(report));
+  return lines.join('\n');
 }
 
 /**
@@ -571,6 +668,14 @@ export async function handleSpecshipSpec(
     return text(buildIdeas(sq));
   }
 
+  // Coverage mode (REQ-VSTATE-006.A2): with or without a spec_id, return the
+  // test-coverage rollup. Sits before the no-id funnel branch so
+  // `coverage: true` alone reports the whole project.
+  if (args.coverage === true) {
+    const scope = typeof specId === 'string' && specId.length > 0 ? specId : undefined;
+    return text(renderCoverage(cg.getSpecCoverage(scope)));
+  }
+
   // No id → the lifecycle funnel (REQ-FUNNEL-005). The id case below is unchanged.
   if (specId === undefined || specId === null || specId === '') {
     return text(buildFunnel(sq));
@@ -623,7 +728,9 @@ export async function handleSpecshipSpec(
     // Evidence status (VERIFY-EVID-DOC, REQ-VEVID-003): distinguish
     // "implemented, evidenced" from "implemented, no test evidence" — the
     // latter can never promote to verified until evidence is declared.
-    const hasEvidence = links.some((l) => l.kind === 'tests');
+    // File-derived only, matching the promotion gate (REQ-REVINT-005.A2) — an
+    // agent-asserted tests row must not read as evidence here either.
+    const hasEvidence = links.some((l) => l.kind === 'tests' && isFileDerivedEvidence(l));
     const hasImplements = links.some((l) => l.kind === 'implements');
     if (hasImplements && !hasEvidence && spec.kind === 'requirement') {
       lines.push('');
@@ -708,6 +815,66 @@ export async function handleSpecshipSpec(
   return text(lines.join('\n'));
 }
 
+/**
+ * Near-miss suggestions for an assert target that doesn't resolve
+ * (REQ-REVINT-003.A2): the same symbol name found in OTHER files, plus
+ * same-file symbols whose name is close to what was asserted. The agent gets a
+ * retry target, not a listing — both lists are capped. Never throws: a failed
+ * lookup degrades to "no suggestions", because the refusal itself is the
+ * load-bearing part.
+ */
+const SUGGESTION_CAP = 5;
+
+/**
+ * How close two lowercased symbol names are, for near-miss ranking: 0 = not a
+ * candidate. A containment either way scores highest; otherwise a shared
+ * leading run of ≥3 characters, which is what catches the common failure mode
+ * (a mistyped or half-remembered tail — `authentikate` for `authenticate`).
+ */
+function nameCloseness(needle: string, candidate: string): number {
+  if (needle === candidate) return Number.MAX_SAFE_INTEGER;
+  if (candidate.includes(needle) || needle.includes(candidate)) return 1000;
+  let shared = 0;
+  while (shared < needle.length && shared < candidate.length && needle[shared] === candidate[shared]) shared++;
+  return shared >= 3 ? shared : 0;
+}
+
+function nearMissSuggestions(cg: SpecShip, filePath: string, qualifiedName: string): string {
+  const base = qualifiedName.split('.').pop() ?? qualifiedName;
+  const lines: string[] = [];
+  try {
+    const elsewhere = cg
+      .getNodesByName(base)
+      .filter((n) => n.filePath !== filePath)
+      .slice(0, SUGGESTION_CAP);
+    if (elsewhere.length > 0) {
+      lines.push(
+        `Same symbol name in other files: ${elsewhere.map((n) => `${n.filePath}:${n.qualifiedName}`).join(', ')}`
+      );
+    }
+
+    const needle = base.toLowerCase();
+    const sameFile = cg
+      .getNodesInFile(filePath)
+      .map((n) => ({ n, score: nameCloseness(needle, n.name.toLowerCase()) }))
+      .filter((c) => c.score > 0)
+      .sort((a, z) => z.score - a.score)
+      .slice(0, SUGGESTION_CAP)
+      .map((c) => c.n);
+    if (sameFile.length > 0) {
+      lines.push(
+        `Similar symbols in ${filePath}: ${sameFile.map((n) => n.qualifiedName).join(', ')}`
+      );
+    }
+  } catch {
+    // Index unavailable — fall through to the no-suggestion form.
+  }
+  if (lines.length === 0) {
+    return `No near-miss candidates found — check the path and the fully-qualified name (use specship_search).`;
+  }
+  return lines.join('\n');
+}
+
 export async function handleSpecshipLinkAssert(
   cg: SpecShip,
   args: Record<string, unknown>
@@ -738,19 +905,32 @@ export async function handleSpecshipLinkAssert(
     return error(`Spec "${specId}" not found. Make sure the spec file is indexed (specship index).`);
   }
 
-  // Find current node (if any) so we can snapshot its signature.
+  // Validate the target BEFORE recording anything (REQ-REVINT-003): a typo'd
+  // or invented symbol used to land as `implemented` and poison the funnel
+  // until a later resolver pass demoted it.
   const resolver = cg.getSpecLinkResolver();
-  // Use the resolver's logical target lookup indirectly via SpecQueries: a
-  // separate small lookup keeps spec-tools standalone.
-  const candidates = cg
-    .getSpecQueries()
-    .getLinksByLogicalTarget(targetFilePath, targetQualifiedName);
-  // The lookup above returns existing links, not current nodes — use the
-  // queries directly for that.
-  // Lightweight node lookup via QueryBuilder is not exposed here, so let the
-  // resolver fill in resolved_node_id on its next pass; we leave it NULL
-  // for this assertion and rely on the upcoming resolveAll to populate.
-  void candidates;
+  let node = resolver.findLogicalTarget(targetFilePath, targetQualifiedName, targetNodeKind);
+  if (!node && !cg.isIndexing()) {
+    // The index lags writes by ~1s, so a symbol the agent just wrote may not be
+    // extracted yet. Sync before refusing — otherwise a correct assertion made
+    // immediately after an edit would be rejected on a timing artifact.
+    try {
+      await cg.sync();
+    } catch {
+      // Sync failure isn't the agent's problem here — fall through to the
+      // refusal, which tells it what to do next either way.
+    }
+    node = resolver.findLogicalTarget(targetFilePath, targetQualifiedName, targetNodeKind);
+  }
+  if (!node) {
+    return error(
+      `${targetFilePath}:${targetQualifiedName} does not resolve to an indexed symbol, so no link was recorded ` +
+        `(a link to a symbol that doesn't exist is indistinguishable from an orphan).\n` +
+        nearMissSuggestions(cg, targetFilePath, targetQualifiedName) +
+        `\nRe-call specship_link_assert with a target that exists, or add a \`- ${targetFilePath}:${targetQualifiedName}\` ` +
+        `bullet under \`implementations:\` in ${spec.sourcePath} once the symbol is written.`
+    );
+  }
 
   const now = Date.now();
   const linkId = sq.upsertSpecLink({
@@ -758,21 +938,19 @@ export async function handleSpecshipLinkAssert(
     targetFilePath,
     targetQualifiedName,
     targetNodeKind,
-    resolvedNodeId: undefined,
+    // Resolved node id + signature snapshot (A1): the signature is the drift
+    // baseline the resolver compares against on every later pass.
+    resolvedNodeId: node.id,
     kind,
     state: 'implemented',
     driftAxis: null,
     specHashAtLink: spec.contentHash,
-    nodeSigAtLink: undefined,
+    nodeSigAtLink: node.signature,
     provenance: 'agent-asserted',
     confidence: 1.0,
     createdAt: now,
     updatedAt: now,
   });
-
-  // Run the resolver against this single file so resolved_node_id gets
-  // populated immediately (otherwise it sits NULL until the next index/sync).
-  resolver.resolveLinksForFiles([targetFilePath]);
 
   // Persist the assertion into the spec file's `implementations:` block —
   // the file is the source of truth; the DB row alone would vanish on a full
@@ -806,6 +984,11 @@ export async function handleSpecshipLinkVerify(
   const linkId = args.link_id;
   const result = args.result;
   const reason = typeof args.reason === 'string' ? args.reason : undefined;
+  const evidence = Array.isArray(args.evidence)
+    ? args.evidence.filter((e): e is string => typeof e === 'string' && e.length > 0)
+    : typeof args.evidence === 'string' && args.evidence.length > 0
+      ? [args.evidence]
+      : [];
 
   if (typeof linkId !== 'number' || !Number.isFinite(linkId)) {
     return error('link_id is required (number)');
@@ -825,12 +1008,15 @@ export async function handleSpecshipLinkVerify(
   // least one declared test-evidence link (kind='tests', from a `verifies:`
   // block or an `@verifies REQ-X` comment on the test). A green suite alone
   // proves nothing about THIS spec — evidence-less specs cap at
-  // `implemented` (REQ-VEVID-002.A2).
+  // `implemented` (REQ-VEVID-002.A2). Only FILE-DERIVED evidence counts
+  // (REQ-REVINT-005.A2): an agent-asserted tests link is a DB-only row the
+  // implementing agent can mint for itself, so it would let a run promote past
+  // its own gate.
   if (result === 'pass' && link.kind === 'implements') {
-    const evidence = sq
+    const evidenceLinks = sq
       .getLinksBySpec(link.specId)
-      .filter((l) => l.kind === 'tests');
-    if (evidence.length === 0) {
+      .filter((l) => l.kind === 'tests' && isFileDerivedEvidence(l));
+    if (evidenceLinks.length === 0) {
       return error(
         `Cannot promote ${link.specId} to verified: no test evidence is linked to it. ` +
           `Declare the test(s) that prove this requirement — add a \`verifies:\` block to the spec ` +
@@ -842,6 +1028,17 @@ export async function handleSpecshipLinkVerify(
 
   const newState: SpecLinkState = result === 'pass' ? 'verified' : 'broken';
   sq.updateSpecLinkState(linkId, newState, null);
+  // Persist the verification evidence (REQ-REVINT-004): `verified` is a proof
+  // claim, so the reason, the moment it was made, and any test identity the
+  // caller supplied have to outlive the call. The timestamp is recorded even
+  // with no reason (A3) — evidence is never silently absent.
+  const verification: Record<string, unknown> = {
+    result,
+    verifiedAt: new Date().toISOString(),
+  };
+  if (reason) verification.reason = reason;
+  if (evidence.length > 0) verification.evidence = evidence;
+  sq.updateSpecLinkMetadata(linkId, { ...(link.metadata ?? {}), verification });
 
   // JIRA push (REQ-JIRAPUB-005): a verified acceptance criterion on a
   // JIRA-backed spec advances its published Sub-task (and, when all Sub-tasks

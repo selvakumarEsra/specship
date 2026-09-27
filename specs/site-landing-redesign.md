@@ -4,6 +4,18 @@ title: Site landing redesign + docs restyle
 owner: core
 priority: medium
 version: 1
+jira_issue_REQ-LANDING-001: SSHIP-997
+jira_fingerprint_REQ-LANDING-001: a3db180acb68f81a
+jira_issue_REQ-LANDING-002: SSHIP-1001
+jira_fingerprint_REQ-LANDING-002: d550088c11f25c19
+jira_issue_REQ-LANDING-003: SSHIP-1006
+jira_fingerprint_REQ-LANDING-003: 35288f13aef16bcb
+jira_issue_REQ-LANDING-004: SSHIP-1009
+jira_fingerprint_REQ-LANDING-004: 5e884f15e39d7fdc
+jira_issue_REQ-LANDING-005: SSHIP-1012
+jira_fingerprint_REQ-LANDING-005: 3dfdad2ca2d208a2
+jira_issue_REQ-LANDING-006: SSHIP-1016
+jira_fingerprint_REQ-LANDING-006: 172c9993dab48833
 ---
 
 <!-- id: LANDING-DOC -->

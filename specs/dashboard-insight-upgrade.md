@@ -4,6 +4,18 @@ title: Dashboard insight upgrade
 owner: specship
 priority: medium
 version: 1
+jira_issue_REQ-DASHUX-001: SSHIP-286
+jira_fingerprint_REQ-DASHUX-001: 1373fc089f53f7b9
+jira_issue_REQ-DASHUX-002: SSHIP-289
+jira_fingerprint_REQ-DASHUX-002: 0de9a06bed7fe181
+jira_issue_REQ-DASHUX-003: SSHIP-292
+jira_fingerprint_REQ-DASHUX-003: f25958d5d7c97ad5
+jira_issue_REQ-DASHUX-004: SSHIP-295
+jira_fingerprint_REQ-DASHUX-004: 1d6fbd3e8ade255d
+jira_issue_REQ-DASHUX-005: SSHIP-298
+jira_fingerprint_REQ-DASHUX-005: 9d42c7d4d6ff14a4
+jira_issue_REQ-DASHUX-006: SSHIP-301
+jira_fingerprint_REQ-DASHUX-006: 184367bbe61c9b5e
 ---
 
 <!-- id: DASHUX-DOC -->
@@ -82,6 +94,11 @@ implementations:
 <!-- id: REQ-DASHUX-004 -->
 ## Project-scoped pages SHOULD refresh from the server event stream
 
+> **SUPERSEDED (2026-09-25) by SURF-DOC** (`specs/surface-cleanup.md`,
+> REQ-SURF-008.A2 / REQ-SURF-001.A1): no page ever subscribed, and the
+> `GET /api/events` stream this depends on is being removed as dead surface.
+> Retired and kept for history.
+
 The dashboard, drift queue, and costs pages subscribe to the server's SSE
 event stream and re-fetch their resources when a relevant event (index
 update, ingest progress) arrives, debounced, so the pages track the live
@@ -103,6 +120,12 @@ implementations:
 
 <!-- id: REQ-DASHUX-005 -->
 ## Tips MUST merge into Improvements as one surface
+
+> **SUPERSEDED (2026-09-25) by DASHLM-DOC** (`specs/dashboard-quality-lastmile.md`,
+> REQ-DASHLM-003; marked per REQ-SURF-008.A2): neither a Tips nor an
+> Improvements page exists to merge, so the merge contract had nothing to
+> govern. DASHLM-003 contracts the single Improvements page directly. Retired
+> and kept for history.
 
 Tips and Improvements present the same mined-from-transcripts insight with
 the same actions. They become one sidebar destination ("Improvements") with

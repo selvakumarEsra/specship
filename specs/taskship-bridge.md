@@ -3,6 +3,12 @@ id: TASKSHIP-BRIDGE-DOC
 title: taskship bridge — daily pull and task creation over the JIRA bus
 owner: specship
 priority: medium
+jira_issue_REQ-TASKSHIP-001: SSHIP-1559
+jira_fingerprint_REQ-TASKSHIP-001: 9238921d6a7eb0b8
+jira_issue_REQ-TASKSHIP-002: SSHIP-1569
+jira_fingerprint_REQ-TASKSHIP-002: 5416eeb841c26fbf
+jira_issue_REQ-TASKSHIP-003: SSHIP-1575
+jira_fingerprint_REQ-TASKSHIP-003: f60f74491a28a74c
 ---
 
 <!-- id: TASKSHIP-BRIDGE-DOC -->

@@ -171,7 +171,7 @@ export function buildSegment(rawStdin: string, noColor = !!process.env.NO_COLOR)
   // SAME chain the MCP server uses (marker + SPECSHIP_MODEL/SPECSHIP_COMPACT),
   // so the user-facing element only appears when compaction is actually
   // active. Any resolution failure drops the element, never the line (A5).
-  let compact: 'haiku' | 'sonnet' | null = null;
+  let compact: 'lite' | 'standard' | null = null;
   if (root) {
     try {
       const tier = detectModelTier(root);

@@ -3,10 +3,37 @@ id: OFFLINE-DOC
 title: Offline mode (desktop dashboard)
 owner: dashboard
 priority: medium
+jira_issue_REQ-OFFLINE-001: SSHIP-870
+jira_fingerprint_REQ-OFFLINE-001: 79eb8c24116db9f5
+jira_issue_REQ-OFFLINE-002: SSHIP-875
+jira_fingerprint_REQ-OFFLINE-002: 7c7a38a2ae0ae340
+jira_issue_REQ-OFFLINE-003: SSHIP-880
+jira_fingerprint_REQ-OFFLINE-003: fa82587d1a3fe4a0
+jira_issue_REQ-OFFLINE-004: SSHIP-886
+jira_fingerprint_REQ-OFFLINE-004: b3b36c44497c8596
+jira_issue_REQ-OFFLINE-005: SSHIP-890
+jira_fingerprint_REQ-OFFLINE-005: 5cacd85e9c361593
+jira_issue_REQ-OFFLINE-006: SSHIP-895
+jira_fingerprint_REQ-OFFLINE-006: d0ea11cc887cf9e9
 ---
 
 <!-- id: OFFLINE-DOC -->
 # Offline mode (desktop dashboard)
+
+> **REQ-OFFLINE-001..004 SUPERSEDED (2026-09-25) by SURF-DOC**
+> (`specs/surface-cleanup.md`, REQ-SURF-003.A1): there is no offline cache in
+> the React desktop SPA — the service worker was never carried over — so the
+> cached shell, the Offline indicator, the persisted last-known data, and the
+> offline action-disabling all describe infrastructure that does not exist.
+> Those four requirements are retired and carry no implementation links.
+> **REQ-OFFLINE-005 stays live** — the static handler's asset-404 behavior is
+> real and shipped. REQ-OFFLINE-006 was already superseded (2026-07-15).
+>
+> Scope note: these ids are **this document's** (OFFLINE-DOC).
+> `specs/offline-install-package.md` (OFFLINE-INSTALL-DOC) independently
+> defines a live `REQ-OFFLINE-001..005` set for the air-gapped install
+> bundle — an unresolved id collision between two documents, not a claim
+> about that contract, which is unaffected by this supersession.
 
 When the SpecShip server is unreachable — the `specship serve` process is
 stopped, crashed, or the machine is offline — the desktop dashboard MUST
@@ -24,6 +51,9 @@ result.
 
 <!-- id: REQ-OFFLINE-001 -->
 ## The UI MUST load when the server is unreachable
+
+> **SUPERSEDED (2026-09-25, REQ-SURF-003.A1):** no local cache of the app
+> shell exists. Retained for history; carries no implementation links.
 
 Opening or reloading the dashboard at its usual address while the server is
 unreachable MUST render the application from a locally-cached copy — the app
@@ -45,11 +75,11 @@ version.
 <!-- id: REQ-OFFLINE-001.A4 -->
 - A first-ever visit while the server has never been reachable (nothing cached yet) still fails gracefully — the user sees an in-app "can't reach the server" state, not a blank page or a stack trace.
 
-implementations:
-  - server/src/static-handler.ts:makeStaticHandler
-
 <!-- id: REQ-OFFLINE-002 -->
 ## The connection indicator MUST show Offline when the server is unreachable
+
+> **SUPERSEDED (2026-09-25, REQ-SURF-003.A1):** part of the retired offline
+> contract. Retained for history; carries no implementation links.
 
 The UI exposes a single connection-state indicator with exactly two states:
 **● Live** when the server is reachable and serving data, and **● Offline**
@@ -67,12 +97,11 @@ when reachability changes without requiring a manual page reload.
 <!-- id: REQ-OFFLINE-002.A4 -->
 - Any live-stream status shown on a detail view (e.g. the session / run event stream) reads "Offline" when the server is unreachable, rather than remaining on "Live".
 
-implementations:
-  - ui/src/api.ts:api
-  - ui/src/pages/dashboard.tsx:DashboardPage
-
 <!-- id: REQ-OFFLINE-003 -->
 ## Last-known data MUST stay visible offline and be marked stale
+
+> **SUPERSEDED (2026-09-25, REQ-SURF-003.A1):** no reload-surviving data cache
+> exists. Retained for history; carries no implementation links.
 
 Data that has been fetched successfully at least once MUST remain visible when
 the server becomes unreachable, served from a cache that survives a full page
@@ -92,12 +121,11 @@ REQ-OFFLINE-004 for actions.
 <!-- id: REQ-OFFLINE-003.A5 -->
 - A surface that has never been loaded while online shows an explicit "no cached data — connect to load" empty state offline, not a spinner that never resolves.
 
-implementations:
-  - ui/src/api.ts:runEventsUrl
-  - ui/src/api.ts:api
-
 <!-- id: REQ-OFFLINE-004 -->
 ## Server-dependent actions MUST be disabled with an offline notice
+
+> **SUPERSEDED (2026-09-25, REQ-SURF-003.A1):** there is no Offline state for
+> controls to react to. Retained for history; carries no implementation links.
 
 Controls that require a live server round-trip — the global Refresh, spec
 edits/saves, and workflow runs — MUST be disabled while the indicator is
@@ -113,10 +141,6 @@ silently lose the user's input.
 <!-- id: REQ-OFFLINE-004.A3 -->
 - When the server returns, the previously-disabled controls re-enable automatically (no manual reload required).
 
-implementations:
-  - ui/src/hooks.ts:useApi
-  - ui/src/api.ts:api
-
 <!-- id: REQ-OFFLINE-005 -->
 ## A missing static asset MUST NOT be answered with the app shell
 
@@ -129,7 +153,8 @@ the asset's URL — and surfaces as a module-MIME error that persists until the
 user manually clears site data. (Observed 2026-07-03: a tab holding a stale
 build requested its old content-hashed bundle during a server restart window;
 the shell fallback answered it and the offline cache stored HTML under the
-bundle URL.)
+bundle URL.) That offline cache no longer exists (REQ-SURF-003.A1), but the
+browser's own HTTP cache is enough to make this rule load-bearing.
 
 Extension-less paths (client routes like `/memory`) MUST keep falling back to
 the shell so deep links keep working — including route params that contain

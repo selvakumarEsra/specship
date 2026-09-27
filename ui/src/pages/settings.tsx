@@ -1,10 +1,14 @@
 /**
- * Settings — appearance, backend info, Claude Code ingest, editor, about
+ * Settings — appearance, backend info, Claude Code ingest, about
  * (REQ-DESKTOP-028). TSX port of specs/specship-desktop/screens-settings.jsx.
  * Appearance changes apply immediately + persist (A1, via theme.ts/prefs.ts
  * localStorage); the transcript-ingest toggle round-trips /api/config (A2, so
  * the analytics screens' useIngestConfig banner reacts); About shows the real
  * product version + DB backend from /api/status (A3).
+ *
+ * The design bundle's boot-animation toggle and editor picker are gone — no
+ * boot splash and no open-in-editor feature ever shipped behind them
+ * (REQ-SURF-004).
  */
 import { type ReactNode, useState } from 'react';
 import { api } from '../api';
@@ -12,18 +16,7 @@ import { Module } from '../components/dashboard-modules';
 import { Icon } from '../components/icons';
 import { PageHead, Segmented } from '../components/ui';
 import { useApi, useIngestConfig } from '../hooks';
-import {
-  type DensityPref,
-  type EditorPref,
-  EDITORS,
-  BOOTED_SESSION_KEY,
-  applyDensity,
-  getBootAnim,
-  getDensity,
-  getEditor,
-  setBootAnim,
-  setEditor,
-} from '../prefs';
+import { type DensityPref, applyDensity, getDensity } from '../prefs';
 import { applyTheme, getThemePref, type ThemePref } from '../theme';
 import type { PageProps } from './types';
 
@@ -91,8 +84,6 @@ function AboutRow({ label, value, color }: { label: string; value: ReactNode; co
 export function SettingsPage(_props: PageProps) {
   const [theme, setTheme] = useState<ThemePref>(getThemePref);
   const [density, setDensity] = useState<DensityPref>(getDensity);
-  const [boot, setBoot] = useState<boolean>(getBootAnim);
-  const [editor, setEditorState] = useState<EditorPref>(getEditor);
 
   const status = useApi(() => api.status(_props.project), [_props.project]);
   const ingest = useIngestConfig();
@@ -101,8 +92,6 @@ export function SettingsPage(_props: PageProps) {
 
   const setThemeAndApply = (v: string) => { const t = v as ThemePref; setTheme(t); applyTheme(t); };
   const setDensityAndApply = (v: string) => { const d = v as DensityPref; setDensity(d); applyDensity(d); };
-  const toggleBoot = () => { const next = !boot; setBoot(next); setBootAnim(next); };
-  const pickEditor = (v: string) => { const e = v as EditorPref; setEditorState(e); setEditor(e); };
 
   const toggleIngest = async () => {
     const next = !(ingest.data?.ingestEnabled ?? false);
@@ -116,11 +105,6 @@ export function SettingsPage(_props: PageProps) {
     } finally {
       setSavingIngest(false);
     }
-  };
-
-  const replayIntro = () => {
-    try { sessionStorage.removeItem(BOOTED_SESSION_KEY); } catch { /* storage unavailable */ }
-    location.reload();
   };
 
   return (
@@ -142,14 +126,6 @@ export function SettingsPage(_props: PageProps) {
               options={[{ value: 'comfortable', label: 'Comfortable' }, { value: 'compact', label: 'Compact' }]}
             />
           </Field>
-          <ToggleRow label="Boot animation" desc="The graph-assembly splash on app launch" on={boot} onClick={toggleBoot} />
-          {!boot && (
-            <div style={{ paddingTop: 4 }}>
-              <button className="btn btn-secondary btn-sm" onClick={replayIntro}>
-                <Icon name="refresh" size={13} /> Replay intro
-              </button>
-            </div>
-          )}
         </Section>
 
         <Section icon="sessions" title="Claude Code">
@@ -166,12 +142,6 @@ export function SettingsPage(_props: PageProps) {
           {savingIngest && (
             <div className="muted" style={{ fontSize: 11.5, padding: '4px 0' }}>Saving…</div>
           )}
-        </Section>
-
-        <Section icon="reveal" title="Editor">
-          <Field label="Open files with" hint="Used by Reveal / Open in editor">
-            <Segmented value={editor} onChange={pickEditor} options={EDITORS.map((e) => ({ value: e.value, label: e.label }))} />
-          </Field>
         </Section>
 
         <Section icon="database" title="Backend">
@@ -193,7 +163,9 @@ export function SettingsPage(_props: PageProps) {
               <>
                 <AboutRow label="Version" value={`v${s.version}`} />
                 <AboutRow label="Backend" value={s.backend} color="var(--success)" />
-                <AboutRow label="MCP server" value="running" color="var(--success)" />
+                {/* No MCP-server row: this page has no probe for it, and the
+                    literal "running" it used to print was a guess
+                    (REQ-REVINT-007.A1). The MCP page probes for real. */}
               </>
             )}
           </Module>

@@ -3,6 +3,16 @@ id: MODCTX-DOC
 title: Model-aware context compaction
 owner: specship
 priority: medium
+jira_issue_REQ-MODCTX-001: SSHIP-847
+jira_fingerprint_REQ-MODCTX-001: 78116b5af66960d8
+jira_issue_REQ-MODCTX-002: SSHIP-854
+jira_fingerprint_REQ-MODCTX-002: e58106189cb3e6a5
+jira_issue_REQ-MODCTX-003: SSHIP-859
+jira_fingerprint_REQ-MODCTX-003: 76132df24eed2606
+jira_issue_REQ-MODCTX-004: SSHIP-862
+jira_fingerprint_REQ-MODCTX-004: d440b294004c0c45
+jira_issue_REQ-MODCTX-005: SSHIP-864
+jira_fingerprint_REQ-MODCTX-005: 5aad83418ac0b013
 ---
 
 <!-- id: MODCTX-DOC -->

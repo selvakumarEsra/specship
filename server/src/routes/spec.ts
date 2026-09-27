@@ -27,6 +27,8 @@ interface LinkVerifyBody {
   link_id: number;
   result: 'pass' | 'fail';
   reason?: string;
+  /** Test name(s) the verdict is based on — persisted as evidence (REQ-REVINT-004). */
+  evidence?: string[];
 }
 
 interface SpecPutBody {
@@ -153,6 +155,23 @@ export async function registerSpecRoutes(app: FastifyInstance): Promise<void> {
     return cg.getSpecFunnel();
   });
 
+  /**
+   * GET /api/spec/coverage[?spec=<id>] — the test-coverage rollup
+   * (REQ-VSTATE-006.A2).
+   *
+   * Registered before `/api/spec/:id` and matched statically (same shape as
+   * `/api/spec/funnel`), so `coverage` is never read as a spec id. Computed on
+   * the dynamically-loaded instance — no runtime import of the package here.
+   *
+   * The verdicts come from `tests` links only, which is the point: the
+   * dashboard previously counted an `implements` link as "met".
+   */
+  app.get('/api/spec/coverage', async (req: FastifyRequest<{ Querystring: ProjectQuery & { spec?: string } }>, reply) => {
+    const cg = await resolveCg(app, req, reply); if (!cg) return;
+    const scope = req.query.spec && req.query.spec.length > 0 ? req.query.spec : undefined;
+    return cg.getSpecCoverage(scope);
+  });
+
   app.get('/api/spec/:id', async (req: FastifyRequest<{ Params: { id: string }; Querystring: ProjectQuery }>, reply) => {
     const cg = await resolveCg(app, req, reply); if (!cg) return;
     const sq = cg.getSpecQueries();
@@ -256,25 +275,33 @@ export async function registerSpecRoutes(app: FastifyInstance): Promise<void> {
     const spec = sq.getSpecById(body.spec_id);
     if (!spec) return reply.code(404).send({ error: 'spec not found' });
 
+    // Validate the target against the graph before recording (REQ-REVINT-003.A3
+    // — same rule as the MCP tool). The dashboard's caller can't retry from a
+    // refusal the way an agent can, so an unresolvable target is recorded as
+    // `orphaned` and reported back as such — never as `implemented`.
+    const nodeKind = body.target_node_kind ?? 'function';
+    const node = cg
+      .getSpecLinkResolver()
+      .findLogicalTarget(body.target_file_path, body.target_qualified_name, nodeKind);
+
     const now = Date.now();
     const id = sq.upsertSpecLink({
       specId: body.spec_id,
       targetFilePath: body.target_file_path,
       targetQualifiedName: body.target_qualified_name,
-      targetNodeKind: body.target_node_kind ?? 'function',
-      resolvedNodeId: undefined,
+      targetNodeKind: nodeKind,
+      resolvedNodeId: node?.id,
       kind: body.kind ?? 'implements',
-      state: 'implemented',
+      state: node ? 'implemented' : 'orphaned',
       driftAxis: null,
       specHashAtLink: spec.contentHash,
-      nodeSigAtLink: undefined,
+      nodeSigAtLink: node?.signature,
       provenance: 'agent-asserted',
       confidence: 1.0,
       createdAt: now,
       updatedAt: now,
     });
-    cg.getSpecLinkResolver().resolveLinksForFiles([body.target_file_path]);
-    return { id, ok: true };
+    return { id, ok: true, resolved: node !== null, state: node ? 'implemented' : 'orphaned' };
   });
 
   app.post('/api/spec/link-verify', async (req: FastifyRequest<{ Body: LinkVerifyBody; Querystring: ProjectQuery }>, reply) => {
@@ -290,8 +317,16 @@ export async function registerSpecRoutes(app: FastifyInstance): Promise<void> {
     // tool: promoting an `implements` link to verified requires the spec to
     // have at least one test-evidence link (kind='tests'). Without this the
     // dashboard's Verify button would bypass the gate.
+    // File-derived evidence only (REQ-REVINT-005.A2): an agent-asserted `tests`
+    // link is a DB-only row, so it can't underwrite a promotion.
     if (body.result === 'pass' && link.kind === 'implements') {
-      const hasEvidence = sq.getLinksBySpec(link.specId).some((l) => l.kind === 'tests');
+      const hasEvidence = sq
+        .getLinksBySpec(link.specId)
+        .some(
+          (l) =>
+            l.kind === 'tests' &&
+            (l.provenance === 'spec-declaration' || l.provenance === 'code-comment'),
+        );
       if (!hasEvidence) {
         return reply.code(409).send({
           error: `no test evidence linked to ${link.specId} — declare its proving test via a "verifies:" block in the spec (or an @verifies comment on the test) before promoting to verified`,
@@ -300,6 +335,16 @@ export async function registerSpecRoutes(app: FastifyInstance): Promise<void> {
       }
     }
     sq.updateSpecLinkState(body.link_id, body.result === 'pass' ? 'verified' : 'broken', null);
+    // Persist the evidence behind the verdict (REQ-REVINT-004) — same record
+    // shape as the MCP tool, so both surfaces render one audit trail.
+    const verification: Record<string, unknown> = {
+      result: body.result,
+      verifiedAt: new Date().toISOString(),
+    };
+    if (body.reason) verification.reason = body.reason;
+    const evidence = (body.evidence ?? []).filter((e) => typeof e === 'string' && e.length > 0);
+    if (evidence.length > 0) verification.evidence = evidence;
+    sq.updateSpecLinkMetadata(body.link_id, { ...(link.metadata ?? {}), verification });
     return { ok: true, state: body.result === 'pass' ? 'verified' : 'broken' };
   });
 

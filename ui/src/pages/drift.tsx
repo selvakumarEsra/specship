@@ -14,6 +14,17 @@ import type { PageProps } from './types';
 
 const DRIFT_STATES = ['drifted', 'broken', 'orphaned'];
 
+/**
+ * Repair action per link state (REQ-TVIZ-009.A2). Each launches the existing
+ * default workflow through POST /api/workflows/runs; `spec-verify` takes no
+ * declared inputs, so it gets none rather than a SPEC_ID the runner ignores.
+ */
+const REPAIR: Record<string, { label: string; icon: string; workflow: string; withSpecId: boolean; title: string }> = {
+  drifted: { label: 'Fix', icon: 'wrench', workflow: 'spec-fix', withSpecId: true, title: 'Launch the spec-fix workflow for this spec' },
+  broken: { label: 'Re-verify', icon: 'refresh', workflow: 'spec-verify', withSpecId: false, title: 'Launch the spec-verify workflow' },
+  orphaned: { label: 'Re-attach', icon: 'graph', workflow: 'spec-relink', withSpecId: true, title: 'Launch the spec-relink workflow for this spec' },
+};
+
 // @implements REQ-DESKTOP-022
 export function DriftPage({ project }: PageProps) {
   const drift = useApi(() => api.drift(project), [project]);
@@ -67,7 +78,7 @@ export function DriftPage({ project }: PageProps) {
         <Empty icon="check" title="Nothing drifted" body="Every spec link is intact — the graph matches the specs." />
       ) : (
         <div className="scroll-y" style={{ flex: 1, borderTop: '1px solid var(--border-subtle)' }}>
-          {links.map((l, i) => <DriftRow key={l.id != null ? String(l.id) : i} link={l} />)}
+          {links.map((l, i) => <DriftRow key={l.id != null ? String(l.id) : i} link={l} project={project} />)}
         </div>
       )}
     </div>
@@ -83,11 +94,27 @@ function metaCell(label: string, value: string) {
   );
 }
 
-function DriftRow({ link }: { link: DriftLink }) {
+// @implements REQ-TVIZ-009
+function DriftRow({ link, project }: { link: DriftLink; project: string | null }) {
   const [open, setOpen] = useState(false);
+  const [launching, setLaunching] = useState(false);
+  const [launchError, setLaunchError] = useState<string | null>(null);
   const target = [link.targetFilePath, link.targetQualifiedName].filter(Boolean).join(':') || '—';
   const prov = link.provenance || '—';
   const age = timeAgo(link.updatedAt) ?? '—';
+  const repair = REPAIR[link.state];
+
+  // Launch, then hand the user the run it created — the repair is a workflow,
+  // and the run page is where its approval gates live.
+  const launch = () => {
+    if (!repair || launching) return;
+    setLaunching(true);
+    setLaunchError(null);
+    api.launchRun(repair.workflow, repair.withSpecId ? { SPEC_ID: link.specId } : {}, project).then(
+      (r) => go('runs', { param: r.runId }),
+      (e) => { setLaunchError(e instanceof Error ? e.message : String(e)); setLaunching(false); },
+    );
+  };
   return (
     <div style={{ borderBottom: '1px solid var(--border-subtle)' }}>
       <div
@@ -119,24 +146,20 @@ function DriftRow({ link }: { link: DriftLink }) {
             {metaCell('Age', age)}
           </div>
           <div className="row gap-8">
-            {link.state === 'drifted' && (
-              <button className="btn btn-primary btn-sm" disabled title="Run automatically by the drift-repair workflow — fixes are workflow-owned">
-                <Icon name="wrench" size={12} />Fix
-              </button>
-            )}
-            {link.state === 'broken' && (
-              <button className="btn btn-primary btn-sm" disabled title="Run automatically by the verification workflow">
-                <Icon name="refresh" size={12} />Re-verify
-              </button>
-            )}
-            {link.state === 'orphaned' && (
-              <button className="btn btn-primary btn-sm" disabled title="Run automatically by the relink workflow — re-attach is workflow-owned">
-                <Icon name="graph" size={12} />Re-attach
+            {repair && (
+              <button className="btn btn-primary btn-sm" disabled={launching} title={repair.title} onClick={launch}>
+                <Icon name={repair.icon} size={12} />{launching ? 'Launching…' : repair.label}
               </button>
             )}
             <button className="btn btn-secondary btn-sm" onClick={() => go('specs', { query: { sel: link.specId } })}>Open spec</button>
             <button className="btn btn-secondary btn-sm" onClick={() => go('graph', { query: { focus: 'spec:' + link.specId } })}>Show in graph</button>
           </div>
+          {launchError && (
+            <div className="row gap-6" role="alert" style={{ marginTop: 8, color: 'var(--error)', fontSize: 12 }}>
+              <Icon name="cancel" size={13} style={{ flexShrink: 0 }} />
+              <span>Couldn’t launch {repair?.workflow} — {launchError}</span>
+            </div>
+          )}
         </div>
       )}
     </div>

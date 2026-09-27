@@ -9,7 +9,7 @@ import { useState, type CSSProperties, type ReactNode } from 'react';
 import { api, type ClaudeHeatmapResponse, type HeatmapFile } from '../api';
 import { IngestGuidance } from '../components/claude-analytics';
 import { HBars, Sparkline, Treemap } from '../components/charts';
-import { fmtTok, Module } from '../components/dashboard-modules';
+import { estTokens, fmtTok, Module } from '../components/dashboard-modules';
 import { Icon } from '../components/icons';
 import { Bar, CopyBtn, PageHead, RangeSelector, Segmented } from '../components/ui';
 import { useApi } from '../hooks';
@@ -18,6 +18,15 @@ import type { PageProps } from './types';
 
 /** Last two path segments — heatmap paths are absolute, cells are small. */
 const shortPath = (p: string): string => p.split('/').filter(Boolean).slice(-2).join('/');
+
+/**
+ * Every token figure on this page is ESTIMATED from a character count
+ * (`resultBytes` / `bytes` are `result_length`, i.e. chars) via estTokens, and
+ * labelled `~` / "est." accordingly (REQ-REVINT-007.A4). The efficiency
+ * thresholds below are therefore in estimated tokens, not chars.
+ */
+const TPC_HOT = 5000;   // est. tokens per call — wasteful
+const TPC_WARM = 2000;  // est. tokens per call — worth a look
 
 type SelKind = 'file' | 'tool' | 'subagent';
 interface Sel { type: SelKind; key: string }
@@ -71,17 +80,19 @@ function HeatmapBody({ h, range, metric, onMetric, sel, pick }: {
   sel: Sel | null; pick: (type: SelKind, key: string) => void;
 }) {
   const totalCalls = h.tools.reduce((a, t) => a + t.calls, 0);
-  const totalTok = h.tools.reduce((a, t) => a + (t.resultBytes ?? 0), 0);
+  const totalTok = estTokens(h.tools.reduce((a, t) => a + (t.resultBytes ?? 0), 0));
   if (!totalCalls) {
     return <div className="muted" style={{ fontSize: 12, padding: '14px 4px' }}>No tool calls in this range.</div>;
   }
   const busiest = [...h.files].sort((a, b) => b.calls - a.calls)[0];
-  const heaviest = [...h.tools].sort((a, b) => (b.resultBytes ?? 0) - (a.resultBytes ?? 0))[0];
-  const toolsByTok = [...h.tools].sort((a, b) => (b.resultBytes ?? 0) - (a.resultBytes ?? 0));
-  const maxTok = Math.max(...h.tools.map((t) => t.resultBytes ?? 0), 0) || 1;
+  const toolsByTok = h.tools
+    .map((t) => ({ name: t.name, calls: t.calls, tokens: estTokens(t.resultBytes ?? 0) }))
+    .sort((a, b) => b.tokens - a.tokens);
+  const heaviest = toolsByTok[0];
+  const maxTok = Math.max(...toolsByTok.map((t) => t.tokens), 0) || 1;
 
   const fileStats = h.files.map((f) => {
-    const tokens = f.resultBytes ?? 0;
+    const tokens = estTokens(f.resultBytes ?? 0);
     return { ...f, tokens, tpc: f.calls > 0 ? tokens / f.calls : 0 };
   });
   const maxTpc = Math.max(...fileStats.map((f) => f.tpc), 0) || 1;
@@ -90,8 +101,8 @@ function HeatmapBody({ h, range, metric, onMetric, sel, pick }: {
     label: shortPath(f.path),
     value: metric === 'tokens' ? f.tokens : f.calls,
     intensity: f.tpc / maxTpc,
-    sub: metric === 'tokens' ? fmtTok(f.tokens) : f.calls + ' calls',
-    title: `${f.path}\n${f.calls} calls · ${fmtTok(f.tokens)} result tokens · ${fmtTok(Math.round(f.tpc))}/call`,
+    sub: metric === 'tokens' ? '~' + fmtTok(f.tokens) : f.calls + ' calls',
+    title: `${f.path}\n${f.calls} calls · ~${fmtTok(f.tokens)} est. result tokens · ~${fmtTok(Math.round(f.tpc))}/call`,
   }));
 
   return (
@@ -99,9 +110,9 @@ function HeatmapBody({ h, range, metric, onMetric, sel, pick }: {
       {/* summary row */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 14 }}>
         <HSum label="Tool calls" value={totalCalls.toLocaleString()} icon="wrench" color="var(--node-spec)" sub={'this ' + range} />
-        <HSum label="Result tokens" value={fmtTok(totalTok)} icon="database" color="var(--node-route)" sub="returned to context" />
+        <HSum label="Result tokens (est.)" value={'~' + fmtTok(totalTok)} icon="database" color="var(--node-route)" sub="returned to context, chars ÷ 4" />
         <HSum label="Busiest file" value={busiest ? shortPath(busiest.path) : '—'} icon="box" color="var(--warn)" sub={busiest ? busiest.calls + ' calls' : ''} />
-        <HSum label="Heaviest tool" value={heaviest?.name ?? '—'} icon="flame" color="var(--error)" sub={heaviest ? fmtTok(heaviest.resultBytes ?? 0) + ' tokens' : ''} />
+        <HSum label="Heaviest tool" value={heaviest?.name ?? '—'} icon="flame" color="var(--error)" sub={heaviest ? '~' + fmtTok(heaviest.tokens) + ' est. tokens' : ''} />
       </div>
 
       {/* files treemap */}
@@ -109,7 +120,7 @@ function HeatmapBody({ h, range, metric, onMetric, sel, pick }: {
         <div className="row gap-8" style={{ marginBottom: 12 }}>
           <Icon name="box" size={14} style={{ color: 'var(--warn)' }} />
           <span style={{ fontWeight: 600, fontSize: 12.5 }}>Files</span>
-          <span className="muted" style={{ fontSize: 11 }}>· area = {metric === 'tokens' ? 'result tokens' : 'tool calls'}, color = tokens / call</span>
+          <span className="muted" style={{ fontSize: 11 }}>· area = {metric === 'tokens' ? 'est. result tokens' : 'tool calls'}, color = est. tokens / call</span>
           <div className="grow" />
           <Segmented size="sm" label="Treemap metric" value={metric} onChange={onMetric} options={[{ value: 'calls', label: 'Calls' }, { value: 'tokens', label: 'Tokens' }]} />
         </div>
@@ -117,7 +128,7 @@ function HeatmapBody({ h, range, metric, onMetric, sel, pick }: {
           ? <Treemap items={items} height={268} selKey={sel?.type === 'file' ? sel.key : null} onPick={(c) => pick('file', c.key)} />
           : <div className="muted" style={{ fontSize: 12, padding: '14px 4px' }}>No file-touching tool calls in this range.</div>}
         <div className="row gap-12" style={{ marginTop: 10, alignItems: 'center' }}>
-          <span className="muted" style={{ fontSize: 10.5 }}>tokens / call</span>
+          <span className="muted" style={{ fontSize: 10.5 }}>est. tokens / call</span>
           <div style={{ width: 120, height: 7, borderRadius: 999, overflow: 'hidden', background: 'linear-gradient(90deg, var(--node-route), var(--warn), var(--error))' }} />
           <span className="muted" style={{ fontSize: 10 }}>efficient → wasteful</span>
           <div className="grow" />
@@ -131,11 +142,11 @@ function HeatmapBody({ h, range, metric, onMetric, sel, pick }: {
           <div className="row gap-8" style={{ marginBottom: 4 }}>
             <Icon name="wrench" size={14} style={{ color: 'var(--node-code)' }} />
             <span style={{ fontWeight: 600, fontSize: 12.5 }}>Tools</span>
-            <span className="muted" style={{ fontSize: 11 }}>· by result tokens, ranked</span>
+            <span className="muted" style={{ fontSize: 11 }}>· by est. result tokens, ranked</span>
           </div>
           <div className="row" style={{ padding: '8px 0 4px', fontSize: 9.5, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>
             <span style={{ width: 116 }}>Tool</span>
-            <span className="grow">Result tokens</span>
+            <span className="grow">Est. result tokens</span>
             <span style={{ width: 36, textAlign: 'right' }}>Calls</span>
             <span style={{ width: 64, textAlign: 'right' }}>Per call</span>
             <span style={{ width: 48, textAlign: 'right' }}>Total</span>
@@ -143,13 +154,13 @@ function HeatmapBody({ h, range, metric, onMetric, sel, pick }: {
           </div>
           <div className="col gap-2">
             {toolsByTok.map((t) => (
-              <ToolEffRow key={t.name} name={t.name} calls={t.calls} tokens={t.resultBytes ?? 0} maxTok={maxTok}
+              <ToolEffRow key={t.name} name={t.name} calls={t.calls} tokens={t.tokens} maxTok={maxTok}
                 selected={sel?.type === 'tool' && sel.key === t.name} onClick={() => pick('tool', t.name)} />
             ))}
           </div>
           <div className="muted" style={{ fontSize: 10.5, marginTop: 10, display: 'flex', gap: 12 }}>
-            <Legend color="var(--error)" label=">20k / call" />
-            <Legend color="var(--warn)" label=">8k" />
+            <Legend color="var(--error)" label={`>${fmtTok(TPC_HOT)} est. / call`} />
+            <Legend color="var(--warn)" label={`>${fmtTok(TPC_WARM)}`} />
             <Legend color="var(--success)" label="lean" />
           </div>
         </div>
@@ -194,7 +205,7 @@ function ToolEffRow({ name, calls, tokens, maxTok, selected, onClick }: {
   name: string; calls: number; tokens: number; maxTok: number; selected: boolean; onClick: () => void;
 }) {
   const tpc = tokens / Math.max(1, calls);
-  const eff = tpc > 20000 ? 'var(--error)' : tpc > 8000 ? 'var(--warn)' : 'var(--success)';
+  const eff = tpc > TPC_HOT ? 'var(--error)' : tpc > TPC_WARM ? 'var(--warn)' : 'var(--success)';
   return (
     <div
       onClick={onClick}
@@ -209,8 +220,8 @@ function ToolEffRow({ name, calls, tokens, maxTok, selected, onClick }: {
         <div style={{ width: (tokens / maxTok) * 100 + '%', height: '100%', background: eff, borderRadius: 4 }} />
       </div>
       <span className="mono tabular muted" style={{ width: 36, textAlign: 'right', fontSize: 10.5, flexShrink: 0 }}>×{calls}</span>
-      <span className="mono tabular" style={{ width: 64, textAlign: 'right', fontSize: 10.5, color: eff, flexShrink: 0 }}>{fmtTok(Math.round(tpc))}/call</span>
-      <span className="mono tabular" style={{ width: 48, textAlign: 'right', fontSize: 11.5, fontWeight: 600, flexShrink: 0 }}>{fmtTok(tokens)}</span>
+      <span className="mono tabular" style={{ width: 64, textAlign: 'right', fontSize: 10.5, color: eff, flexShrink: 0 }}>~{fmtTok(Math.round(tpc))}/call</span>
+      <span className="mono tabular" style={{ width: 48, textAlign: 'right', fontSize: 11.5, fontWeight: 600, flexShrink: 0 }}>~{fmtTok(tokens)}</span>
       <Icon name="chevronRight" size={12} style={{ color: 'var(--text-faint)', flexShrink: 0 }} />
     </div>
   );
@@ -279,7 +290,7 @@ function FileRail({ path, range, files, onClose }: { path: string; range: string
       <RailBody state={detail}>
         {(d) => {
           const totalBytes = d.byTool.reduce((a, t) => a + t.bytes, 0) || 1;
-          const heavy = d.byTool.find((t) => t.bytes > 40000);
+          const heavy = d.byTool.find((t) => estTokens(t.bytes) > 10000);
           return (
             <>
               <div className="row" style={{ gap: 20, marginBottom: 16 }}>
@@ -299,7 +310,7 @@ function FileRail({ path, range, files, onClose }: { path: string; range: string
                 <div style={{ background: 'var(--warn-soft)', border: '1px solid rgba(229,165,10,0.25)', borderRadius: 8, padding: '9px 11px', marginBottom: 16, display: 'flex', gap: 9 }}>
                   <Icon name="flame" size={14} style={{ color: 'var(--warn)', flexShrink: 0, marginTop: 1 }} />
                   <div style={{ fontSize: 11.5, lineHeight: 1.5 }}>
-                    <span className="mono" style={{ color: 'var(--warn)' }}>{heavy.name}</span> returned <span className="mono">{fmtTok(heavy.bytes)}</span> tokens here. A structural query would cover it in a fraction.
+                    <span className="mono" style={{ color: 'var(--warn)' }}>{heavy.name}</span> returned an estimated <span className="mono">~{fmtTok(estTokens(heavy.bytes))}</span> tokens here. A structural query would cover it in a fraction.
                   </div>
                 </div>
               )}
@@ -311,16 +322,16 @@ function FileRail({ path, range, files, onClose }: { path: string; range: string
                     <span className="mono" style={{ fontSize: 11.5, width: 92, flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tc.name}</span>
                     <div className="grow"><Bar frac={tc.bytes / totalBytes} color={tc.bytes > 40000 ? 'var(--error)' : tc.bytes > 12000 ? 'var(--warn)' : 'var(--node-code)'} /></div>
                     <span className="mono tabular muted" style={{ fontSize: 10.5, width: 22, textAlign: 'right' }}>×{tc.calls}</span>
-                    <span className="mono tabular" style={{ fontSize: 10.5, width: 44, textAlign: 'right' }}>{fmtTok(tc.bytes)}</span>
+                    <span className="mono tabular" style={{ fontSize: 10.5, width: 44, textAlign: 'right' }}>~{fmtTok(estTokens(tc.bytes))}</span>
                   </div>
                 ))}
-                <div className="muted" style={{ fontSize: 10 }}>bar = result tokens · × = call count</div>
+                <div className="muted" style={{ fontSize: 10 }}>bar = est. result tokens · × = call count</div>
               </div>
 
               <div className="eyebrow" style={{ marginBottom: 8 }}>Touched in {d.sessions.length} session{d.sessions.length === 1 ? '' : 's'}</div>
               <div className="col gap-6">
                 {d.sessions.map((s) => (
-                  <SessionLinkRow key={s.session_id} id={s.session_id} meta={`${s.calls} calls · ${fmtTok(s.bytes)} tokens${s.last_model ? ' · ' + s.last_model : ''}`} />
+                  <SessionLinkRow key={s.session_id} id={s.session_id} meta={`${s.calls} calls · ~${fmtTok(estTokens(s.bytes))} est. tokens${s.last_model ? ' · ' + s.last_model : ''}`} />
                 ))}
               </div>
             </>
@@ -338,7 +349,8 @@ function ToolRail({ name, range, onClose }: { name: string; range: string; onClo
       <DrillHeader icon="wrench" color="var(--node-code)" title={name} copy={name} onClose={onClose} />
       <RailBody state={detail}>
         {(d) => {
-          const avg = d.totals.calls > 0 ? Math.round(d.totals.bytes / d.totals.calls) : 0;
+          const totalTok = estTokens(d.totals.bytes);
+          const avg = d.totals.calls > 0 ? Math.round(totalTok / d.totals.calls) : 0;
           const maxBytes = Math.max(...d.inputs.map((i) => i.bytes), 0) || 1;
           return (
             <>
@@ -348,8 +360,8 @@ function ToolRail({ name, range, onClose }: { name: string; range: string; onClo
                   <div className="tabular" style={{ fontSize: 24, fontWeight: 700, lineHeight: 1 }}>{d.totals.calls}</div>
                 </div>
                 <div>
-                  <div className="muted" style={{ fontSize: 10.5 }}>Result tokens</div>
-                  <div className="tabular" style={{ fontSize: 24, fontWeight: 700, lineHeight: 1, color: d.totals.bytes > 1e6 ? 'var(--error)' : 'var(--text-primary)' }}>{fmtTok(d.totals.bytes)}</div>
+                  <div className="muted" style={{ fontSize: 10.5 }}>Result tokens (est.)</div>
+                  <div className="tabular" style={{ fontSize: 24, fontWeight: 700, lineHeight: 1, color: totalTok > 250_000 ? 'var(--error)' : 'var(--text-primary)' }}>~{fmtTok(totalTok)}</div>
                 </div>
                 <div>
                   <div className="muted" style={{ fontSize: 10.5 }}>Sessions</div>
@@ -358,7 +370,7 @@ function ToolRail({ name, range, onClose }: { name: string; range: string; onClo
               </div>
               <div className="row gap-8" style={{ marginBottom: 16 }}>
                 <span className="muted" style={{ fontSize: 11 }}>avg per call</span>
-                <span className="mono tabular" style={{ fontSize: 12, color: avg > 30000 ? 'var(--error)' : avg > 8000 ? 'var(--warn)' : 'var(--text-secondary)' }}>{fmtTok(avg)} tokens</span>
+                <span className="mono tabular" style={{ fontSize: 12, color: avg > 7500 ? 'var(--error)' : avg > TPC_WARM ? 'var(--warn)' : 'var(--text-secondary)' }}>~{fmtTok(avg)} est. tokens</span>
               </div>
 
               <div className="eyebrow" style={{ marginBottom: 8 }}>Top inputs</div>
@@ -368,7 +380,7 @@ function ToolRail({ name, range, onClose }: { name: string; range: string; onClo
                     <span className="mono" style={{ fontSize: 11, width: 150, flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-secondary)' }} title={inp.input}>{inp.input}</span>
                     <div className="grow"><Bar frac={inp.bytes / maxBytes} color={inp.bytes > 40000 ? 'var(--error)' : 'var(--node-code)'} /></div>
                     <span className="mono tabular muted" style={{ fontSize: 10, width: 20, textAlign: 'right' }}>×{inp.calls}</span>
-                    <span className="mono tabular" style={{ fontSize: 10, width: 40, textAlign: 'right' }}>{fmtTok(inp.bytes)}</span>
+                    <span className="mono tabular" style={{ fontSize: 10, width: 40, textAlign: 'right' }}>~{fmtTok(estTokens(inp.bytes))}</span>
                   </div>
                 ))}
                 {!d.inputs.length && <div className="muted" style={{ fontSize: 11.5 }}>No recorded inputs.</div>}

@@ -4,6 +4,26 @@ title: JIRA team lane — shared binding, auto-tracked specs, coverage, reconcil
 owner: core
 priority: high
 version: 1
+jira_issue_REQ-JIRATEAM-001: SSHIP-628
+jira_fingerprint_REQ-JIRATEAM-001: b1e570f05c0518bb
+jira_issue_REQ-JIRATEAM-002: SSHIP-633
+jira_fingerprint_REQ-JIRATEAM-002: 8dc7a4afc60e5cac
+jira_issue_REQ-JIRATEAM-003: SSHIP-639
+jira_fingerprint_REQ-JIRATEAM-003: 5730dbfa634e4196
+jira_issue_REQ-JIRATEAM-004: SSHIP-644
+jira_fingerprint_REQ-JIRATEAM-004: d8ca0955d0d515f9
+jira_issue_REQ-JIRATEAM-005: SSHIP-649
+jira_fingerprint_REQ-JIRATEAM-005: ec5b4b439e2b949a
+jira_issue_REQ-JIRATEAM-006: SSHIP-654
+jira_fingerprint_REQ-JIRATEAM-006: a097211d7ba47426
+jira_issue_REQ-JIRATEAM-007: SSHIP-660
+jira_fingerprint_REQ-JIRATEAM-007: 5261af6d3a844167
+jira_issue_REQ-JIRATEAM-008: SSHIP-665
+jira_fingerprint_REQ-JIRATEAM-008: cf5c8229cebf62e6
+jira_issue_REQ-JIRATEAM-009: SSHIP-670
+jira_fingerprint_REQ-JIRATEAM-009: 9e7559fe2f8f4dfc
+jira_issue_REQ-JIRATEAM-010: SSHIP-675
+jira_fingerprint_REQ-JIRATEAM-010: 70840246f63a78c6
 ---
 
 <!-- id: JIRA-TEAM-DOC -->

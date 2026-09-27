@@ -1,29 +1,12 @@
 /**
- * MCP tool: specship_fitness (REQ-FITNESS-003.A3).
+ * Architecture-fitness report handler (REQ-FITNESS-003.A3).
  *
- * Returns the architecture-fitness evaluation to the agent — violations of the
- * declared rules plus any config errors — so it can check conformance before
- * committing. Type-only imports keep this free of a runtime cycle with tools.ts.
+ * The menu slot moved to the merged `specship_health` (REQ-SURF-007); this
+ * handler stays so `execute()` keeps answering clients holding a cached
+ * `specship_fitness` tool list.
  */
 import type { SpecShip } from '../index';
-import type { ToolDefinition, ToolResult } from './tools';
-
-export const fitnessToolDefinitions: ToolDefinition[] = [
-  {
-    name: 'specship_fitness',
-    description:
-      'Evaluate the project\'s architecture-fitness rules (specship.config.json `fitness.rules`) against the code graph: forbidden dependencies, layering allow-lists, module isolation. Returns concrete violations (source → target, file:line) plus config errors (a rule whose selector matches nothing). Use to check architecture conformance before committing.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        projectPath: {
-          type: 'string',
-          description: 'Path to a different project with .specship/ initialized. Omit for the current project.',
-        },
-      },
-    },
-  },
-];
+import type { ToolResult } from './tools';
 
 const text = (body: string): ToolResult => ({ content: [{ type: 'text', text: body }] });
 

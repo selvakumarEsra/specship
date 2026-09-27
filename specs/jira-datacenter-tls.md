@@ -3,6 +3,12 @@ id: JIRATLS-DOC
 title: JIRA Data Center — corporate TLS and context-path base URLs
 owner: specship
 priority: high
+jira_issue_REQ-JIRATLS-001: SSHIP-523
+jira_fingerprint_REQ-JIRATLS-001: 44184b87798ea598
+jira_issue_REQ-JIRATLS-002: SSHIP-528
+jira_fingerprint_REQ-JIRATLS-002: 34406b2fb5053b11
+jira_issue_REQ-JIRATLS-003: SSHIP-530
+jira_fingerprint_REQ-JIRATLS-003: f73d85a38b9258a4
 ---
 
 <!-- id: JIRATLS-DOC -->

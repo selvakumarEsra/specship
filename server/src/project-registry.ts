@@ -102,7 +102,7 @@ export class ProjectRegistry {
    * Exempt `projectPath` from LRU eviction. The server pins its primary:
    * routes capture the primary instance by reference (`app.primaryCg`), so
    * an eviction CLOSES a handle they still use and every request 500s with
-   * "database connection is not open". Surfaced when the /api/events sweep
+   * "database connection is not open". Surfaced when a cross-project sweep
    * started opening many projects through this cache.
    */
   pin(projectPath: string): void { this.pinned.add(projectPath); }

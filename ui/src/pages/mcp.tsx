@@ -50,7 +50,7 @@ function ScopePill({ scope }: { scope: McpServer['scope'] }) {
   return <Pill color={sc.color} bg={soft(sc.color)}><Icon name={sc.icon} size={10} />{sc.label}</Pill>;
 }
 
-/** Display string for the real example call (latest input_json row). */
+/** Display string for the example call (latest input_json row, or a synthesized one). */
 function exampleText(srv: McpServer): string | null {
   if (!srv.exampleCall) return null;
   return `${srv.exampleCall.tool} ${JSON.stringify(srv.exampleCall.args)}`;
@@ -196,6 +196,7 @@ function ServerDetail({ srv, onBack, onChanged }: {
   const st = SRV_STATE[srv.state];
   const sc = SCOPE[srv.scope];
   const example = exampleText(srv);
+  const synthesized = srv.exampleCall?.synthesized === true;
   const lastMs = srv.lastUsed ? Date.parse(srv.lastUsed) : 0;
   const configJson = srv.entry ? JSON.stringify({ mcpServers: { [srv.name]: srv.entry } }, null, 2) : null;
   const canToggle = srv.configFile != null;
@@ -280,18 +281,29 @@ function ServerDetail({ srv, onBack, onChanged }: {
           )}
         </div>
 
-        {/* Example call — the latest real input from claude_tool_calls (A2). */}
+        {/* Example call — the latest real input from claude_tool_calls (A2),
+            or the server's synthesized placeholder, labelled as such so it
+            can't be mistaken for a recorded call (REQ-SURF-009.A2). */}
         <div className="card card-pad" style={{ minWidth: 0 }}>
           <div className="row gap-8" style={{ marginBottom: 12 }}>
             <Icon name="command" size={14} style={{ color: 'var(--node-code)' }} />
             <span style={{ fontWeight: 600, fontSize: 12.5 }}>Example call</span>
-            {example && <span className="muted" style={{ fontSize: 10.5 }}>latest recorded input</span>}
+            {example && (synthesized
+              ? <Pill color="var(--warn)" bg={soft('var(--warn)')}>synthesized</Pill>
+              : <span className="muted" style={{ fontSize: 10.5 }}>latest recorded input</span>)}
           </div>
           {example ? (
-            <div className="row gap-8" style={{ background: 'var(--bg-canvas)', border: '1px solid var(--border-subtle)', borderRadius: 7, padding: '8px 11px' }}>
-              <span className="mono grow" style={{ fontSize: 11.5, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{example}</span>
-              <CopyBtn text={example} />
-            </div>
+            <>
+              <div className="row gap-8" style={{ background: 'var(--bg-canvas)', border: '1px solid ' + (synthesized ? 'rgba(229,165,10,0.35)' : 'var(--border-subtle)'), borderRadius: 7, padding: '8px 11px' }}>
+                <span className="mono grow" style={{ fontSize: 11.5, color: synthesized ? 'var(--text-secondary)' : 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{example}</span>
+                <CopyBtn text={example} />
+              </div>
+              {synthesized && (
+                <div className="muted" style={{ fontSize: 10.5, marginTop: 7 }}>
+                  Constructed from this server's most-called tool — no arguments were recorded, so this is a shape, not a call that happened.
+                </div>
+              )}
+            </>
           ) : (
             <div className="muted" style={{ fontSize: 11.5 }}>No calls recorded yet.</div>
           )}

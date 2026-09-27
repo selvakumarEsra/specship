@@ -4,6 +4,16 @@ title: Report the running SpecShip version inside Claude Code
 owner: core
 priority: medium
 version: 1
+jira_issue_REQ-MCPVER-001: SSHIP-822
+jira_fingerprint_REQ-MCPVER-001: 433d36432b064a51
+jira_issue_REQ-MCPVER-002: SSHIP-828
+jira_fingerprint_REQ-MCPVER-002: 600736180b94a1dc
+jira_issue_REQ-MCPVER-003: SSHIP-832
+jira_fingerprint_REQ-MCPVER-003: 17dc920acc810bfb
+jira_issue_REQ-MCPVER-004: SSHIP-835
+jira_fingerprint_REQ-MCPVER-004: ac8a7c1ca67c64d1
+jira_issue_REQ-MCPVER-005: SSHIP-838
+jira_fingerprint_REQ-MCPVER-005: e38c4b1a9d1dae8c
 ---
 
 <!-- id: MCP-VERSION-DOC -->
@@ -45,7 +55,7 @@ The reported identity comprises:
 implementations:
   - src/mcp/version.ts:SpecShipPackageVersion
   - src/update/updater.ts:resolveInstallDir
-  - src/mcp/tools.ts:ToolHandler.handleVersion
+  - src/mcp/tools.ts:ToolHandler.handleStatus
 
 verifies:
   - __tests__/mcp-version-tool.test.ts

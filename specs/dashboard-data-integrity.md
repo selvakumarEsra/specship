@@ -4,6 +4,24 @@ title: Dashboard data integrity
 owner: specship
 priority: high
 version: 2
+jira_issue_REQ-DASHINT-001: SSHIP-258
+jira_fingerprint_REQ-DASHINT-001: 8cc742d0e567a852
+jira_issue_REQ-DASHINT-002: SSHIP-262
+jira_fingerprint_REQ-DASHINT-002: bec1cb9741d1045f
+jira_issue_REQ-DASHINT-003: SSHIP-266
+jira_fingerprint_REQ-DASHINT-003: 7359cbb522bd19b0
+jira_issue_REQ-DASHINT-004: SSHIP-269
+jira_fingerprint_REQ-DASHINT-004: a2e5aa404f427a8b
+jira_issue_REQ-DASHINT-005: SSHIP-272
+jira_fingerprint_REQ-DASHINT-005: 62a08a049bc9cecd
+jira_issue_REQ-DASHINT-006: SSHIP-274
+jira_fingerprint_REQ-DASHINT-006: 7364e06061ed1c53
+jira_issue_REQ-DASHINT-007: SSHIP-277
+jira_fingerprint_REQ-DASHINT-007: dbb102de12853295
+jira_issue_REQ-DASHINT-008: SSHIP-280
+jira_fingerprint_REQ-DASHINT-008: 7672e29e388dc3d1
+jira_issue_REQ-DASHINT-009: SSHIP-283
+jira_fingerprint_REQ-DASHINT-009: 3310d1e3cc2b0a08
 ---
 
 <!-- id: DASHINT-DOC -->

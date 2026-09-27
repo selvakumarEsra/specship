@@ -15,7 +15,7 @@
  * untouched so the workspace dev path keeps working.
  */
 import { execFileSync } from 'node:child_process';
-import { existsSync, statSync, cpSync } from 'node:fs';
+import { existsSync, statSync, cpSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -69,6 +69,7 @@ const uiOut = path.join(root, 'dist', 'ui');
 if (process.env.SPECSHIP_SKIP_WEB_BUILD === '1') {
   console.warn('[build-server-bundle] SPECSHIP_SKIP_WEB_BUILD=1 — desktop SPA build skipped (dist/ui not refreshed)');
   if (existsSync(path.join(uiDist, 'index.html'))) {
+    rmSync(path.join(uiOut, 'assets'), { recursive: true, force: true });
     cpSync(uiDist, uiOut, { recursive: true });
     console.log('[build-server-bundle] copied EXISTING (possibly stale) ui/dist → dist/ui/');
   }
@@ -86,6 +87,12 @@ if (process.env.SPECSHIP_SKIP_WEB_BUILD === '1') {
     console.error('[build-server-bundle] ui build produced no dist/index.html — refusing to ship a bundle without the dashboard');
     process.exit(1);
   }
+  // Wipe the SPA's assets/ first: its filenames are content-hashed, so a
+  // plain merge accumulates every past build's bundle in the shipped
+  // package. Only assets/ — dist/ui/ ALSO holds the tsc output of the
+  // engine's src/ui/ (shimmer-progress etc.), which a whole-dir wipe
+  // deletes, breaking the CLI (`Cannot find module '../ui/shimmer-progress'`).
+  rmSync(path.join(uiOut, 'assets'), { recursive: true, force: true });
   cpSync(uiDist, uiOut, { recursive: true });
   console.log('[build-server-bundle] built + copied desktop SPA → dist/ui/');
 }

@@ -18,7 +18,6 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import Fastify, { FastifyInstance, FastifyRequest } from 'fastify';
 import cors from '@fastify/cors';
 import { startWatcher, primaryProjectMatcher, type WatcherHandle } from './ingest/index.js';
-import { backfillDisplaced } from './ingest/impact-backfill.js';
 import { recostUnpricedPrompts } from './ingest/pricing-backfill.js';
 import { ProjectRegistry, type SpecShipInstance } from './project-registry.js';
 import { makeStaticHandler, isAssetPath } from './static-handler.js';
@@ -29,7 +28,6 @@ import { registerClaudeRoutes } from './routes/claude.js';
 import { registerStatusRoutes } from './routes/status.js';
 import { registerMemoryRoutes } from './routes/memory.js';
 import { registerProjectsRoutes } from './routes/projects.js';
-import { registerEventsRoutes } from './routes/events.js';
 import { registerReflectRoutes } from './routes/reflect.js';
 import { registerMaintainabilityRoutes } from './routes/maintainability.js';
 import { registerDomainRoutes } from './routes/domain.js';
@@ -174,12 +172,35 @@ export async function createServer(options: ServerOptions): Promise<ServerHandle
     });
   }
 
+  // Test-only fault injection (REQ-TVIZ-004.A2). `E2E_FAULT` holds a
+  // comma-separated list of `/api` path substrings; a matching request is
+  // answered 500 instead of reaching its handler, so the e2e suite can prove
+  // the SPA degrades to an error state on any route without a code change per
+  // test. The hook is registered ONLY when the variable is set — with it unset
+  // (every production boot) there is no hook and no per-request work at all.
+  const faultPatterns = (process.env.E2E_FAULT ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (faultPatterns.length > 0) {
+    console.error(`[specship-server] E2E_FAULT active — 500ing /api paths matching: ${faultPatterns.join(', ')}`);
+    app.addHook('onRequest', async (req, reply) => {
+      const pathOnly = req.url.split('?')[0] ?? req.url;
+      if (!pathOnly.startsWith('/api/')) return;
+      const hit = faultPatterns.find((p) => pathOnly.includes(p));
+      if (!hit) return;
+      await reply.code(500).send({ error: `injected fault (E2E_FAULT=${hit})`, code: 'e2e_fault' });
+    });
+  }
+
   // Lazy-load specship. Used as the open() impl for the registry, and
   // (only when a primary path is set) to open the primary instance below.
   const cgMod = await loadSpecShip();
-  // maxOpen must exceed the /api/events cross-project sweep size (10) plus
-  // the primary and a user-picked project, or the sweep churns open/close
-  // cycles through the LRU on every poll.
+  // maxOpen must exceed the /api/projects drift sweep size
+  // (DRIFT_SWEEP_LIMIT = 10 in routes/projects.ts) plus the primary and a
+  // user-picked project, or the sweep churns open/close cycles through the
+  // LRU on every request. (The removed cross-project alert poller swept the
+  // same width — REQ-SURF-001.A2.)
   const registry = new ProjectRegistry({ verbose, maxOpen: 16 }, (p) => cgMod.SpecShip.open(p));
 
   // Primary project (optional). When set, specship-scoped routes default to
@@ -234,16 +255,8 @@ export async function createServer(options: ServerOptions): Promise<ServerHandle
     ownedWatcher = true;
     if (verbose) console.error('[specship-server] JSONL ingest watcher started');
 
-    // Backfill displaced_files / resolution for pre-upgrade rows (is_specship=1,
-    // resolution IS NULL). Idempotent — safe to run on every boot. Non-fatal:
-    // a failure here must never abort server startup.
-    try {
-      backfillDisplaced(dbHandle as Parameters<typeof startWatcher>[0], resolveGraph);
-      if (verbose) console.error('[specship-server] specship-impact backfill complete');
-    } catch (err) {
-      console.error('[specship-server] specship-impact backfill failed (non-fatal):',
-        err instanceof Error ? err.message : String(err));
-    }
+    // The specship-impact boot backfill is gone with the engine it fed
+    // (REQ-SURF-005) — nothing reads displaced_files/resolution any more.
 
     // Re-cost prompts ingested while their model family was unpriced,
     // e.g. fable sessions stuck at $0 (REQ-DASHINT-001.A2). Idempotent.
@@ -316,7 +329,6 @@ export async function createServer(options: ServerOptions): Promise<ServerHandle
   await registerClaudeRoutes(app);
   await registerMemoryRoutes(app);
   await registerProjectsRoutes(app);
-  await registerEventsRoutes(app);
   await registerReflectRoutes(app);
   await registerMaintainabilityRoutes(app);
   await registerDomainRoutes(app);

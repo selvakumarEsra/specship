@@ -526,13 +526,15 @@ import {
   renderLinkedSpecsForNode,
 } from './spec-tools';
 import {
-  maintainabilityToolDefinitions,
   handleSpecshipMaintainability,
 } from './maintainability-tool';
 import {
-  fitnessToolDefinitions,
   handleSpecshipFitness,
 } from './fitness-tool';
+import {
+  healthToolDefinitions,
+  handleSpecshipHealth,
+} from './health-tool';
 import {
   designerToolDefinitions,
   handleDesignerSession,
@@ -696,20 +698,12 @@ export const tools: ToolDefinition[] = [
   },
   {
     name: 'specship_status',
-    description: 'Index health check (files / nodes / edges). Skip unless debugging.',
+    description: 'Index health check (files / nodes / edges) AND server identity — package version, install method (bundle/npm/unknown), the install serving this session, and node version. Works with no project open (identity only). Skip unless debugging or asked which SpecShip is running.',
     inputSchema: {
       type: 'object',
       properties: {
         projectPath: projectPathProperty,
       },
-    },
-  },
-  {
-    name: 'specship_version',
-    description: 'Identify the running SpecShip MCP server: package version, install method (bundle/npm/unknown), install dir, node version, and project root (if bound). Zero-arg, no index required — safe to call before any project is open.',
-    inputSchema: {
-      type: 'object',
-      properties: {},
     },
   },
   {
@@ -747,8 +741,10 @@ export const tools: ToolDefinition[] = [
   },
   // Spec-layer tools (v5): see ./spec-tools.ts for handlers.
   ...specToolDefinitions,
-  ...maintainabilityToolDefinitions,
-  ...fitnessToolDefinitions,
+  // Code health: one tool for maintainability + architecture fitness
+  // (REQ-SURF-007). The two former tools still execute for clients holding a
+  // cached list, but they are off the menu.
+  ...healthToolDefinitions,
   // Designer tools: claude.ai/design driving, vendored from @pro-vi/designer.
   // See ./designer-tools.ts for handlers. Drives a debug Chrome over CDP.
   ...designerToolDefinitions,
@@ -792,17 +788,51 @@ export function filterIntegrationTools(
 }
 
 /**
+ * Lite-tier menu trim (LOWMODEL-DOC, REQ-LOWMODEL-004): small-model tool
+ * choice degrades with menu size, so the code-graph group trims to the core
+ * three; spec/link tools and enabled integrations are untouched. Composes
+ * with the tiny-repo gate and SPECSHIP_MCP_TOOLS as an intersection.
+ * Schemas never vary — only the list; `execute()` still answers a
+ * trimmed-away tool for clients that cached the full list (A2).
+ *
+ * Needs only a project-root hint, NOT an open DB — tier detection reads the
+ * session model marker file. That is what lets the proxy's connect-time
+ * static list trim too (A4); `hint` may be any path at or under the project
+ * (the nearest `.specship/` root wins).
+ */
+const LITE_CORE_TOOLS = new Set(['specship_explore', 'specship_search', 'specship_node']);
+// `specship_status` is deliberately NOT in this group (REQ-SURF-006.A2): it
+// carries the server-identity answer, so the lite tier must keep it.
+const CODE_GRAPH_GROUP = new Set([
+  'specship_explore', 'specship_search', 'specship_node',
+  'specship_callers', 'specship_callees', 'specship_impact',
+  'specship_files',
+  'specship_health',
+]);
+export function applyLiteTierTrim(list: ToolDefinition[], hint: string | null): ToolDefinition[] {
+  if (!hint) return list;
+  const root = findNearestSpecShipRoot(hint);
+  if (!root || detectModelTier(root) !== 'lite') return list;
+  return list.filter(t => !CODE_GRAPH_GROUP.has(t.name) || LITE_CORE_TOOLS.has(t.name));
+}
+
+/**
  * Allowlist-filtered tool definitions WITHOUT an engine — the static surface the
  * proxy answers `tools/list` with before any project is open. Mirrors
  * `ToolHandler.getTools()` in the no-SpecShip case (the dynamic per-repo budget
  * note in a description only adds once `cg` is loaded; the schemas are static).
+ * When a project-root hint is given, the lite-tier trim applies here too
+ * (REQ-LOWMODEL-004.A4) — the marker file needs no DB open.
  */
-export function getStaticTools(): ToolDefinition[] {
+export function getStaticTools(projectRootHint?: string | null): ToolDefinition[] {
   const base = filterIntegrationTools(tools);
   const raw = process.env.SPECSHIP_MCP_TOOLS;
-  if (!raw || !raw.trim()) return base;
-  const allow = new Set(raw.split(',').map(s => s.trim().replace(/^specship_/, '')).filter(Boolean));
-  return allow.size ? base.filter(t => allow.has(t.name.replace(/^specship_/, ''))) : base;
+  let visible = base;
+  if (raw && raw.trim()) {
+    const allow = new Set(raw.split(',').map(s => s.trim().replace(/^specship_/, '')).filter(Boolean));
+    if (allow.size) visible = base.filter(t => allow.has(t.name.replace(/^specship_/, '')));
+  }
+  return applyLiteTierTrim(visible, projectRootHint ?? null);
 }
 
 /**
@@ -939,7 +969,9 @@ export class ToolHandler {
         'specship_explore',
         'specship_search',
         'specship_node',
-        'specship_version',
+        // Identity probe — folded into status (REQ-SURF-006), which therefore
+        // survives the tiny-repo trim the way specship_version used to.
+        'specship_status',
       ]);
       if (stats.fileCount < TINY_REPO_FILE_THRESHOLD) {
         // Designer tools are not code-graph tools — the tiny-repo flow-question
@@ -949,24 +981,9 @@ export class ToolHandler {
         );
       }
 
-      // Haiku-tier menu trim (LOWMODEL-DOC, REQ-LOWMODEL-004): small-model
-      // tool choice degrades with menu size, so the code-graph group trims
-      // to the core three; spec/link tools and enabled integrations are
-      // untouched. Composes with the tiny-repo gate as an intersection.
-      // Schemas never vary — only the list; `execute()` still answers a
-      // trimmed-away tool for clients that cached the full list (A2).
-      if (detectModelTier(this.cg.getProjectRoot()) === 'haiku') {
-        const HAIKU_CORE = new Set(['specship_explore', 'specship_search', 'specship_node']);
-        const CODE_GRAPH_GROUP = new Set([
-          'specship_explore', 'specship_search', 'specship_node',
-          'specship_callers', 'specship_callees', 'specship_impact',
-          'specship_files', 'specship_status',
-          'specship_maintainability', 'specship_fitness',
-        ]);
-        visible = visible.filter(
-          t => !CODE_GRAPH_GROUP.has(t.name) || HAIKU_CORE.has(t.name)
-        );
-      }
+      // Lite-tier menu trim — shared with the proxy's static list (A4);
+      // see applyLiteTierTrim above for the full contract.
+      visible = applyLiteTierTrim(visible, this.cg.getProjectRoot());
 
       return visible.map(tool => {
         if (tool.name === 'specship_explore') {
@@ -1178,11 +1195,11 @@ export class ToolHandler {
   /**
    * Model-aware compaction (MODCTX-DOC, REQ-MODCTX-002/003). Resolves the
    * session's model tier (status-line marker / SPECSHIP_MODEL; SPECSHIP_COMPACT=0
-   * disables) and, on haiku/sonnet, compresses the response's prose
+   * disables) and, on the lite/standard tiers, compresses the response's prose
    * scaffolding — fenced code stays byte-verbatim. Full tier is identity.
    */
   /**
-   * Tier-change listeners (LOWMODEL-DOC, REQ-LOWMODEL-004.A3): the haiku
+   * Tier-change listeners (LOWMODEL-DOC, REQ-LOWMODEL-004.A3): the lite-tier
    * menu trim changes `tools/list`, so a mid-session /model switch must ride
    * an MCP `notifications/tools/list_changed`. Sessions subscribe here; the
    * change is detected on the next code-graph call (the same funnel that
@@ -1355,11 +1372,13 @@ export class ToolHandler {
       // its own verbose worktree warning but still flows through the
       // staleness wrapper so its pending-files section stays consistent
       // with what the read tools surface.
-      // specship_version (REQ-MCPVER-001): zero-arg identity probe. Answered
-      // before the worktree/staleness/compaction wrappers so it works with no
-      // project open and never touches the DB.
+      // specship_version (REQ-MCPVER-001): zero-arg identity probe, folded into
+      // specship_status (REQ-SURF-006) and off the menu. Still answered here for
+      // clients holding a cached tool list. Runs before the
+      // worktree/staleness/compaction wrappers so it works with no project open
+      // and never touches the DB.
       if (toolName === 'specship_version') {
-        return this.handleVersion();
+        return this.textResult(this.identityBlock());
       }
 
       let result: ToolResult;
@@ -1391,6 +1410,10 @@ export class ToolHandler {
           result = await handleSpecshipLinkVerify(this.getSpecShip(args.projectPath as string | undefined), args); break;
         case 'specship_drifted':
           result = await handleSpecshipDrifted(this.getSpecShip(args.projectPath as string | undefined), args); break;
+        case 'specship_health':
+          result = await handleSpecshipHealth(this.getSpecShip(args.projectPath as string | undefined), args); break;
+        // Folded into specship_health (REQ-SURF-007) and off the menu; still
+        // answered for clients holding a cached tool list.
         case 'specship_maintainability':
           result = await handleSpecshipMaintainability(this.getSpecShip(args.projectPath as string | undefined), args); break;
         case 'specship_fitness':
@@ -1513,7 +1536,7 @@ export class ToolHandler {
       }
       const withWorktree = this.withWorktreeNotice(result, args.projectPath as string | undefined);
       const withStaleness = this.withStalenessNotice(withWorktree, args.projectPath as string | undefined);
-      // Model-aware compaction (MODCTX-DOC): on haiku/sonnet sessions the
+      // Model-aware compaction (MODCTX-DOC): on lite/standard sessions the
       // prose scaffolding compresses; code stays byte-verbatim. Only the
       // code-graph tools reach this funnel — designer/jira returned above
       // (REQ-MODCTX-004).
@@ -1944,7 +1967,7 @@ export class ToolHandler {
         out.push('## Flow (call path among the symbols you queried)', '');
         for (let i = 0; i < best!.length; i++) {
           const step = best![i]!;
-          if (tier === 'haiku') {
+          if (tier === 'lite') {
             // LOWMODEL-DOC REQ-LOWMODEL-003: small models don't synthesize
             // the flow from evidence — render each hop as ONE explicit line
             // with its mechanism inline. Additive formatting only; the code
@@ -3423,12 +3446,13 @@ export class ToolHandler {
   }
 
   /**
-   * Handle specship_version (REQ-MCPVER-001). Identifies the running MCP
-   * server process — the version an agent's tools are being served by,
-   * how it was installed, node version, and (if bound) the project root.
-   * Zero-arg, synchronous, never touches the DB, safe with no project.
+   * Server identity (REQ-MCPVER-001, folded into specship_status by
+   * REQ-SURF-006). Identifies the running MCP server process — the version an
+   * agent's tools are being served by, how it was installed, node version, and
+   * (if bound) the project root. Synchronous, never touches the DB, safe with
+   * no project open.
    */
-  private handleVersion(): ToolResult {
+  private identityBlock(): string {
     const binDirname = pathDirname(__filename);
     const installDir = resolveInstallDir();
     const installMethod = detectInstallMethod(binDirname, installDir);
@@ -3455,14 +3479,24 @@ export class ToolHandler {
       `**node:** ${process.version}`,
       `**projectRoot:** ${projectRoot ?? 'null'}`,
     ];
-    return this.textResult(lines.join('\n'));
+    return lines.join('\n');
   }
 
   /**
    * Handle specship_status
    */
   private async handleStatus(args: Record<string, unknown>): Promise<ToolResult> {
-    let cg = this.getSpecShip(args.projectPath as string | undefined);
+    // Server identity leads the response (REQ-SURF-006.A1) and is answerable
+    // with no project open, so a status call on an unindexed directory still
+    // tells the agent which SpecShip is serving it.
+    const identity = this.identityBlock();
+    let cg: SpecShip;
+    try {
+      cg = this.getSpecShip(args.projectPath as string | undefined);
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      return this.textResult(`${identity}\n\n## SpecShip Status\n\n${detail}`);
+    }
     // Same trick as withStalenessNotice — when an explicit projectPath
     // resolves to the same project as the default session cg, prefer the
     // default so getPendingFiles() (only populated by the default's watcher)
@@ -3484,6 +3518,8 @@ export class ToolHandler {
     const mismatch = this.worktreeMismatchFor(args.projectPath as string | undefined);
 
     const lines: string[] = [
+      identity,
+      '',
       '## SpecShip Status',
       '',
     ];

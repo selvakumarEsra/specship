@@ -2,8 +2,9 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { buildSteeringNudge, STEERING_TEXT, STEERING_TEXT_HAIKU } from '../src/activation/steering';
+import { buildSteeringNudge, STEERING_TEXT, STEERING_TEXT_LITE } from '../src/activation/steering';
 import { recordSessionModel } from '../src/mcp/model-context';
+import { getStaticTools } from '../src/mcp/tools';
 
 /**
  * LOWMODEL-DOC (specs/lower-model-handling.md) — opinionated, not terse:
@@ -44,17 +45,60 @@ describe('REQ-LOWMODEL-002 — tier-aware steering', () => {
       recordSessionModel(dir, 'claude-fable-5');
       expect(buildSteeringNudge(dir, {})).toBe(STEERING_TEXT);
       recordSessionModel(dir, 'claude-haiku-4-5');
-      expect(buildSteeringNudge(dir, {})).toBe(STEERING_TEXT_HAIKU);
+      expect(buildSteeringNudge(dir, {})).toBe(STEERING_TEXT_LITE);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
   });
 
   it('A2: the haiku template stays under ~80 tokens and steers against subagents', () => {
-    expect(STEERING_TEXT_HAIKU.length / 4).toBeLessThan(85); // ~4 chars/token
-    expect(STEERING_TEXT_HAIKU).toContain('Do not spawn subagents');
-    expect(STEERING_TEXT_HAIKU).toContain('specship_explore');
+    expect(STEERING_TEXT_LITE.length / 4).toBeLessThan(85); // ~4 chars/token
+    expect(STEERING_TEXT_LITE).toContain('Do not spawn subagents');
+    expect(STEERING_TEXT_LITE).toContain('specship_explore');
   });
+});
+
+describe('REQ-LOWMODEL-004.A4 — static (proxy) tools/list trims on the lite tier', () => {
+  // @verifies REQ-LOWMODEL-004
+  function staticListTrimsOnLiteMarker(): void {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lowmodel-static-'));
+    fs.mkdirSync(path.join(dir, '.specship'));
+    fs.writeFileSync(path.join(dir, '.specship', 'specship.db'), '');
+    try {
+      recordSessionModel(dir, 'claude-haiku-4-5');
+      const names = getStaticTools(dir).map((t) => t.name);
+      for (const core of ['specship_explore', 'specship_search', 'specship_node']) {
+        expect(names).toContain(core);
+      }
+      for (const trimmed of ['specship_callers', 'specship_callees', 'specship_impact', 'specship_files', 'specship_health']) {
+        expect(names).not.toContain(trimmed);
+      }
+      // REQ-SURF-006.A2: status is the identity probe now — the lite trim keeps it.
+      expect(names).toContain('specship_status');
+      // Spec/link tools are not in the code-graph group — untouched.
+      expect(names).toContain('specship_spec');
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  }
+  it('lite marker → static list trims the code-graph group to the core three (REQ-LOWMODEL-004.A4)', staticListTrimsOnLiteMarker);
+
+  function staticListUnchangedWithoutLiteMarker(): void {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lowmodel-static-'));
+    fs.mkdirSync(path.join(dir, '.specship'));
+    fs.writeFileSync(path.join(dir, '.specship', 'specship.db'), '');
+    try {
+      recordSessionModel(dir, 'claude-fable-5');
+      const withFrontier = getStaticTools(dir).map((t) => t.name);
+      expect(withFrontier).toContain('specship_callers');
+      const noRoot = getStaticTools().map((t) => t.name);
+      expect(noRoot).toContain('specship_callers');
+      expect(noRoot).toEqual(withFrontier);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  }
+  it('frontier marker or no root → static list unchanged (REQ-LOWMODEL-004.A4)', staticListUnchangedWithoutLiteMarker);
 });
 
 describe('REQ-LOWMODEL-005 — harness model arm (source guard)', () => {
@@ -155,14 +199,16 @@ describe.skipIf(!fts5Available)('handler-level (REQ-LOWMODEL-001/003/004)', () =
     for (const t of ['specship_explore', 'specship_search', 'specship_node']) {
       expect(haikuList).toContain(t);
     }
-    for (const t of ['specship_callers', 'specship_impact', 'specship_status', 'specship_maintainability']) {
+    for (const t of ['specship_callers', 'specship_impact', 'specship_health']) {
       expect(fullList).toContain(t);
       expect(haikuList).not.toContain(t);
     }
-    // REQ-MCPVER-001.A4: specship_version survives both the tiny-repo and
-    // haiku menu trims — it's the identity probe, always available.
-    expect(fullList).toContain('specship_version');
-    expect(haikuList).toContain('specship_version');
+    // REQ-SURF-006.A2: specship_status carries the identity answer since
+    // specship_version folded into it, so it survives both the tiny-repo and
+    // haiku menu trims — and the retired tool name is off the menu entirely.
+    expect(fullList).toContain('specship_status');
+    expect(haikuList).toContain('specship_status');
+    expect(fullList).not.toContain('specship_version');
     expect(names()).toEqual(fullList); // back to full after env cleared
   });
 

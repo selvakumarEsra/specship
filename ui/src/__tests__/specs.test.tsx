@@ -47,8 +47,11 @@ const DETAIL_A1 = {
     provenance: 'agent-asserted', resolvedNodeId: 'node-7', updatedAt: NOW - 7_200_000,
   }],
   childLinks: {
-    'REQ-A-1.A1': [{ specId: 'REQ-A-1.A1', kind: 'verifies', state: 'verified' }],
-    'REQ-A-1.A2': [{ specId: 'REQ-A-1.A2', kind: 'verifies', state: 'implemented' }],
+    // A1 is proven by a verified test → met. A2 has an implements link in the
+    // best possible state and STILL isn't met: implementation is not evidence
+    // (REQ-TVIZ-006.A3). A3 has nothing at all.
+    'REQ-A-1.A1': [{ specId: 'REQ-A-1.A1', kind: 'tests', state: 'verified' }],
+    'REQ-A-1.A2': [{ specId: 'REQ-A-1.A2', kind: 'implements', state: 'verified' }],
     'REQ-A-1.A3': [],
   },
   source: null,
@@ -88,9 +91,44 @@ const DETAIL_I1 = {
   source: null,
 };
 
+const FUNNEL = {
+  summary: {
+    ideas: 2, specified: 1, conflicts: 1, documents: 2, requirements: 3,
+    links: { implemented: 4, verified: 2, drifted: 1, broken: 0, orphaned: 1 },
+  },
+  documents: [],
+  ideas: [],
+  conflicts: [],
+};
+
+const COVERAGE = {
+  specId: null,
+  requirements: [
+    {
+      specId: 'REQ-A-1', title: 'Validate session token', kind: 'requirement',
+      implementsLinks: { count: 2, states: { verified: 2 } },
+      testsLinks: { count: 1, states: { verified: 1 } },
+      verdict: 'verified', criteria: [],
+      criteriaTotals: { untested: 2, tested: 0, verified: 1, broken: 0 },
+      criteriaWithTests: 1, criteriaCount: 3,
+    },
+    {
+      specId: 'REQ-A-2', title: 'Reject expired tokens', kind: 'requirement',
+      implementsLinks: { count: 1, states: { drifted: 1 } },
+      testsLinks: { count: 0, states: {} },
+      verdict: 'untested', criteria: [],
+      criteriaTotals: { untested: 1, tested: 0, verified: 0, broken: 0 },
+      criteriaWithTests: 0, criteriaCount: 1,
+    },
+  ],
+  totals: { requirements: 2, criteria: 4, criteriaWithTests: 1, criteriaVerified: 1, criteriaBroken: 0 },
+};
+
 function routesWithDetails(): Record<string, unknown> {
   return {
     '/api/specs': SPECS,
+    '/api/spec/funnel': FUNNEL,
+    '/api/spec/coverage': COVERAGE,
     '/api/spec/REQ-A-1': DETAIL_A1,
     '/api/spec/REQ-A-2': DETAIL_A2,
     '/api/spec/REQ-I-1': DETAIL_I1,
@@ -103,7 +141,8 @@ function mockFetch(routes: Record<string, unknown>): string[] {
   vi.stubGlobal('fetch', vi.fn(async (url: string) => {
     calls.push(url);
     const u = new URL(url, 'http://local');
-    const body = routes[u.pathname];
+    // Fastify decodes path params; a spec id like `brief:sso` arrives encoded.
+    const body = routes[decodeURIComponent(u.pathname)];
     if (body === undefined) {
       return { ok: false, status: 404, statusText: 'Not Found', json: async () => ({ error: 'not found: ' + u.pathname }) };
     }
@@ -114,7 +153,7 @@ function mockFetch(routes: Record<string, unknown>): string[] {
 
 /** The 280px tree pane — first child of the page's flex row. */
 function treePane(container: HTMLElement): HTMLElement {
-  return (container.firstElementChild as HTMLElement).firstElementChild as HTMLElement;
+  return container.querySelector('div[style*="width: 280px"]') as HTMLElement;
 }
 
 beforeEach(() => {
@@ -168,7 +207,7 @@ describe('SpecsPage (REQ-DESKTOP-022)', () => {
     expect(screen.getByText('specs/auth.md')).toBeTruthy();          // breadcrumb doc path
     expect(screen.getByText('P0')).toBeTruthy();                     // priority pill
     expect(screen.getByText('selva')).toBeTruthy();                  // owner
-    expect(screen.getByText('2 / 3 met')).toBeTruthy();              // acceptance rollup
+    expect(screen.getByText('1 / 3 met')).toBeTruthy();              // acceptance rollup (test-proven only)
     expect(screen.getByText('src/auth.ts:validateSession')).toBeTruthy(); // linked code target
     expect(screen.getByText('agent-asserted')).toBeTruthy();         // provenance pill
 
@@ -188,9 +227,11 @@ describe('SpecsPage (REQ-DESKTOP-022)', () => {
     const implement = screen.getByText('Implement').closest('button') as HTMLButtonElement;
     expect(implement.disabled).toBe(true);
     expect(implement.title).toContain('implementation workflow');
+    // Verify is live now (REQ-TVIZ-009.A1); this spec's only implements link
+    // is already verified, so there is nothing to promote.
     const verify = screen.getByText('Verify').closest('button') as HTMLButtonElement;
     expect(verify.disabled).toBe(true);
-    expect(verify.title).toContain('verification workflow');
+    expect(verify.title).toContain('Nothing to verify');
     // Edit enables only when the raw source is available (REQ-DESKTOP-005);
     // these fixtures ship source: null, so it stays disabled with the reason.
     const edit = screen.getByText('Edit spec').closest('button') as HTMLButtonElement;
@@ -277,19 +318,19 @@ describe('SpecsPage (REQ-DESKTOP-022)', () => {
     const segments = Array.from(container.querySelectorAll('.row.gap-4 > div'));
     expect(segments).toHaveLength(3);
     expect(segments.map((s) => s.getAttribute('title'))).toEqual([
-      'A1 · Verified', 'A2 · Implemented', 'A3 · Pending',
+      'A1 · Verified', 'A2 · Verified', 'A3 · Pending',
     ]);
 
     // Mark classes: two met checks, one hollow ring for pending (003.A1).
     const marks = Array.from(container.querySelectorAll('.sp-crit-mark'));
     expect(marks).toHaveLength(3);
     expect(marks[0]!.querySelector('svg')).toBeTruthy();  // verified → glyph
-    expect(marks[1]!.querySelector('svg')).toBeTruthy();  // implemented → glyph
+    expect(marks[1]!.querySelector('svg')).toBeTruthy();  // verified link → glyph
     expect(marks[2]!.querySelector('svg')).toBeNull();    // pending → hollow ring
     expect(marks[2]!.querySelector('span')).toBeTruthy();
 
     // Rollup is muted while unmet (003.A3).
-    const rollup = screen.getByText('2 / 3 met') as HTMLElement;
+    const rollup = screen.getByText('1 / 3 met') as HTMLElement;
     expect(rollup.style.color).toBe('var(--text-muted)');
   });
 
@@ -326,5 +367,107 @@ describe('SpecsPage (REQ-DESKTOP-022)', () => {
     expect(verified.textContent).toBe('verified1');
     expect(drifted.textContent).toBe('drifted1');
     expect(tree().getByRole('button', { name: /broken/i }).textContent).toBe('broken0');
+  });
+});
+
+/**
+ * REQ-TVIZ-007 — the Specs page carries the funnel and per-requirement
+ * coverage, and stops dropping idea-stage briefs on the floor. Plus the
+ * document-row drift shading of REQ-TVIZ-010.A2.
+ */
+describe('SpecsPage funnel + coverage (REQ-TVIZ-007)', () => {
+  it('A1: renders funnel stat tiles from /api/spec/funnel', async () => {
+    const calls = mockFetch(routesWithDetails());
+    render(<SpecsPage project={null} query={{}} />);
+
+    const tiles = await screen.findByTestId('funnel-tiles');
+    expect(calls).toContain('/api/spec/funnel');
+    const t = within(tiles);
+    expect(t.getByTitle('Ideas').textContent).toContain('2');
+    expect(t.getByTitle('Requirements').textContent).toContain('3');
+    expect(t.getByTitle('Verified').textContent).toContain('2');
+    // Drift tile sums drifted + broken + orphaned (1 + 0 + 1).
+    expect(t.getByTitle('Drift').textContent).toContain('2');
+    expect(tiles.textContent).toContain('1 brief/spec conflict');
+  });
+
+  it('A1: a funnel the server cannot answer leaves the tree standing', async () => {
+    const routes = routesWithDetails();
+    delete routes['/api/spec/funnel'];
+    mockFetch(routes);
+    render(<SpecsPage project={null} query={{}} />);
+
+    await screen.findByText('auth.md');
+    expect(screen.queryByTestId('funnel-tiles')).toBeNull();
+  });
+
+  it('A2: requirement rows show code/test/criteria indicators and documents roll them up', async () => {
+    mockFetch(routesWithDetails());
+    render(<SpecsPage project={null} query={{}} />);
+    await screen.findByText('auth.md');
+
+    const chips = await screen.findAllByTestId('coverage-chips');
+    // REQ-A-1: 2 code links, 1 test link, 1 of 3 criteria have a test.
+    expect(chips[0]!.textContent).toBe('2c1t1/3');
+    // REQ-A-2: implemented but untested — the test count reads 0.
+    expect(chips[1]!.textContent).toBe('1c0t0/1');
+
+    // The document row sums its requirements (REQ-TVIZ-007.A2).
+    const rollup = screen.getAllByTestId('doc-rollup')[0]!;
+    expect(rollup.textContent).toBe('3c 1t 1/4');
+  });
+
+  it('A2: coverage the server cannot answer degrades to no chips, not wrong chips', async () => {
+    const routes = routesWithDetails();
+    delete routes['/api/spec/coverage'];
+    mockFetch(routes);
+    render(<SpecsPage project={null} query={{}} />);
+
+    await screen.findByText('auth.md');
+    expect(screen.queryByTestId('coverage-chips')).toBeNull();
+    expect(screen.queryByTestId('doc-rollup')).toBeNull();
+  });
+
+  it('A3: idea-stage briefs render as their own branch instead of being dropped', async () => {
+    const routes = routesWithDetails();
+    routes['/api/specs'] = {
+      ...SPECS,
+      specs: [
+        ...SPECS.specs,
+        { id: 'brief:rate-limits', kind: 'brief', title: 'Brainstorm: rate limits', sourcePath: 'specs/rate-limits/brief.md', metadata: {} },
+        { id: 'brief:sso', kind: 'brief', title: 'Brainstorm: SSO', sourcePath: 'specs/sso/brief.md', metadata: { spec: 'specs/sso.md' } },
+      ],
+    };
+    routes['/api/spec/brief:rate-limits'] = {
+      spec: { id: 'brief:rate-limits', kind: 'brief', title: 'Brainstorm: rate limits', body: 'What if we **capped** bursts?', sourcePath: 'specs/rate-limits/brief.md', metadata: { created: '2026-09-01' } },
+      parent: null, siblings: [], children: [], links: [], childLinks: {}, source: null,
+    };
+    mockFetch(routes);
+    render(<SpecsPage project={null} query={{}} />);
+
+    const branch = await screen.findByTestId('ideas-branch');
+    expect(within(branch).getByText('Ideas')).toBeTruthy();
+    expect(within(branch).getByText('Brainstorm: rate limits')).toBeTruthy();
+    // A brief that already graduated into a spec is marked as such.
+    expect(within(branch).getByTitle('Already specified')).toBeTruthy();
+
+    // Selecting a brief opens the idea read view, not a requirement view.
+    fireEvent.click(within(branch).getByText('Brainstorm: rate limits'));
+    await screen.findByRole('heading', { name: 'Brainstorm: rate limits' });
+    expect(screen.getByText('Idea')).toBeTruthy();
+    expect(screen.getByText('Brief')).toBeTruthy();
+  });
+
+  it('REQ-TVIZ-010.A2: document rows shade by their worst drift state', async () => {
+    mockFetch(routesWithDetails());
+    const { container } = render(<SpecsPage project={null} query={{}} />);
+    await screen.findByText('auth.md');
+
+    // auth.md holds the drifted REQ-A-2; ingest.md holds nothing unhealthy.
+    const auth = (screen.getByText('auth.md').closest('[data-drift]')) as HTMLElement;
+    expect(auth.getAttribute('data-drift')).toBe('drifted');
+    expect(auth.style.background).toBe('var(--warn-soft)');
+    expect(screen.getByText('ingest.md').closest('[data-drift]')).toBeNull();
+    expect(container.querySelectorAll('[data-drift]')).toHaveLength(1);
   });
 });

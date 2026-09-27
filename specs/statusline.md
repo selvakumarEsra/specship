@@ -4,6 +4,32 @@ title: SpecShip status-line segment
 owner: core
 priority: medium
 version: 5
+jira_issue_REQ-STATUSLINE-001: SSHIP-1415
+jira_fingerprint_REQ-STATUSLINE-001: 262d91f231a79d3c
+jira_issue_REQ-STATUSLINE-002: SSHIP-1425
+jira_fingerprint_REQ-STATUSLINE-002: 065d4a168d50793e
+jira_issue_REQ-STATUSLINE-003: SSHIP-1435
+jira_fingerprint_REQ-STATUSLINE-003: 5f510eba6c67325b
+jira_issue_REQ-STATUSLINE-004: SSHIP-1441
+jira_fingerprint_REQ-STATUSLINE-004: 8aaea6c224df099d
+jira_issue_REQ-STATUSLINE-005: SSHIP-1453
+jira_fingerprint_REQ-STATUSLINE-005: 67c0912eee0cc022
+jira_issue_REQ-STATUSLINE-006: SSHIP-1465
+jira_fingerprint_REQ-STATUSLINE-006: 88154b1e4fa8d1ed
+jira_issue_REQ-STATUSLINE-007: SSHIP-1475
+jira_fingerprint_REQ-STATUSLINE-007: a49ee087933d3e6e
+jira_issue_REQ-STATUSLINE-008: SSHIP-1483
+jira_fingerprint_REQ-STATUSLINE-008: 4f2ee96e149c8e42
+jira_issue_REQ-STATUSLINE-009: SSHIP-1499
+jira_fingerprint_REQ-STATUSLINE-009: 7664d5d22ca9acda
+jira_issue_REQ-STATUSLINE-010: SSHIP-1513
+jira_fingerprint_REQ-STATUSLINE-010: 5d568de800201753
+jira_issue_REQ-STATUSLINE-011: SSHIP-1521
+jira_fingerprint_REQ-STATUSLINE-011: c536d37c8cd2b6d4
+jira_issue_REQ-STATUSLINE-012: SSHIP-1529
+jira_fingerprint_REQ-STATUSLINE-012: ff1cc0b0fda02b6e
+jira_issue_REQ-STATUSLINE-013: SSHIP-1543
+jira_fingerprint_REQ-STATUSLINE-013: d9aaf170714cf49d
 ---
 
 <!-- id: SHIP-STATUSLINE-DOC -->

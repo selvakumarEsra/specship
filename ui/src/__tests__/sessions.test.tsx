@@ -54,7 +54,6 @@ const SUMMARY = {
   skills: [{ name: 'spec-implement', count: 2 }],
   filesTouched: [{ path: '/Users/dev/specship/src/index.ts', ops: 3, lastOp: 'Edit' }],
   durationMs: 3600000,
-  specship: { spendTokens: 0, savedTokens: 0, netTokens: 0 },
 };
 
 const STATS_LIVE = {

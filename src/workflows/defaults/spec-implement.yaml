@@ -100,9 +100,137 @@ nodes:
 
       When done, output a short diff summary (which files changed and why).
 
-  - id: verify
+  - id: quality_gate
     kind: bash
     depends_on: [implement]
+    output_type: quality_report
+    timeout: 600000
+    bash: |
+      # REQ-AUTHG-005.A1 — the project's own lint/typecheck, run in the
+      # worktree right after implement. The QUALITY_GATE marker is the
+      # contract the remediation node routes on: a project with neither a lint
+      # script nor a typecheck config says so explicitly, so "nothing ran" can
+      # never be mistaken for "clean" (same doctrine as VERIFY_RESULT=skipped).
+      QUALITY_CMD=""
+      if [ -f package.json ]; then
+        # The worktree may not have dependencies yet (verify installs them
+        # later) and lint needs them — bootstrap quietly, and treat a failed
+        # install as "no gate" rather than as a lint failure.
+        if [ ! -d node_modules ]; then
+          npm ci --no-audit --no-fund >/dev/null 2>&1 || npm install --no-audit --no-fund >/dev/null 2>&1 || true
+        fi
+        if node -e 'const s=(require("./package.json").scripts)||{};process.exit(s.lint?0:1)' 2>/dev/null; then
+          QUALITY_CMD="npm run lint --if-present"
+        elif [ -f tsconfig.json ]; then
+          QUALITY_CMD="npx --no-install tsc --noEmit"
+        fi
+      elif [ -f Cargo.toml ]; then
+        if command -v cargo >/dev/null 2>&1; then QUALITY_CMD="cargo clippy --no-deps"; fi
+      elif [ -f pyproject.toml ] || [ -f requirements.txt ]; then
+        if command -v ruff >/dev/null 2>&1; then QUALITY_CMD="ruff check ."; fi
+      fi
+      if [ -z "$QUALITY_CMD" ]; then
+        echo "QUALITY_GATE=skipped"
+        echo "QUALITY_REASON=no lint script and no typecheck configuration in this project"
+        exit 0
+      fi
+      echo "QUALITY_CMD=$QUALITY_CMD"
+      if OUT=$($QUALITY_CMD 2>&1); then
+        echo "QUALITY_GATE=passed"
+      else
+        echo "QUALITY_GATE=failed"
+        printf '%s\n' "$OUT" | tail -n 80
+      fi
+      # Exiting 0 on a lint failure is deliberate: the marker — not this node's
+      # exit code — drives the revise loop. quality_recheck is what halts.
+
+  - id: fix_quality
+    kind: prompt
+    depends_on: [quality_gate]
+    output_type: quality_fix
+    allowed_tools:
+      - Read
+      - Edit
+      - Write
+      - Bash
+      - mcp__specship__specship_explore
+      - mcp__specship__specship_node
+    prompt: |
+      Lint / typecheck result for the code you just wrote:
+
+      $quality_gate.output
+
+      Route on the QUALITY_GATE marker — do not re-judge the raw output:
+
+      - QUALITY_GATE=passed or QUALITY_GATE=skipped → change NOTHING. Output
+        exactly `FIX_QUALITY=not-needed` and stop.
+      - QUALITY_GATE=failed → fix every reported error, then re-run the
+        QUALITY_CMD shown above to confirm. Fix the code, never the lint
+        configuration; never silence or disable a rule to make it pass.
+
+      Output `FIX_QUALITY=fixed` (clean re-run) or `FIX_QUALITY=still-failing`
+      followed by the errors that remain.
+
+  - id: quality_recheck
+    kind: bash
+    depends_on: [fix_quality]
+    output_type: quality_result
+    timeout: 600000
+    bash: |
+      # REQ-AUTHG-005.A1 — the authoritative half of the gate. The fix node is
+      # a prompt, so its "FIX_QUALITY=fixed" claim is a claim, not evidence:
+      # this node re-runs the same command and halts the run while it still
+      # fails, so failing lint/typecheck never reaches verify, the link node,
+      # or the human gate.
+      GATE_OUT=$quality_gate.output
+      MARKER=$(printf '%s' "$GATE_OUT" | grep -oE 'QUALITY_GATE=[a-z-]+' | tail -n 1 | cut -d= -f2)
+      CMD=$(printf '%s' "$GATE_OUT" | grep -E '^QUALITY_CMD=' | tail -n 1 | cut -d= -f2-)
+      if [ "$MARKER" = "skipped" ] || [ -z "$CMD" ]; then
+        echo "QUALITY_RESULT=skipped"
+        echo "This project has no lint or typecheck gate — nothing was checked."
+        exit 0
+      fi
+      if OUT=$($CMD 2>&1); then
+        echo "QUALITY_RESULT=clean"
+        exit 0
+      fi
+      echo "QUALITY_RESULT=failed"
+      printf '%s\n' "$OUT" | tail -n 80
+      echo "HALT_CAUSE=lint/typecheck still fails after the fix attempt — the change is not reviewable yet"
+      exit 1
+
+  - id: diff
+    kind: bash
+    depends_on: [quality_recheck]
+    output_type: diff
+    bash: |
+      # REQ-AUTHG-004.A1 — the full diff, from git, into a run artifact. The
+      # human gate and the adversarial reviewer read THIS; the implement node's
+      # prose about what it believes it changed is not the change.
+      # `git add -A -N` registers new files as intent-to-add so untracked work
+      # appears in `git diff HEAD` without staging any content.
+      git add -A -N >/dev/null 2>&1 || true
+      echo "DIFF_BEGIN"
+      git --no-pager diff HEAD | head -c 400000
+      echo
+      echo "DIFF_END"
+
+  - id: diff_stat
+    kind: bash
+    depends_on: [diff]
+    output_type: diff_stat
+    bash: |
+      # REQ-AUTHG-004.A2 — the stat block the final gate shows: file names and
+      # insertions/deletions counted by git. Its own small node so the approval
+      # message carries the summary while the full diff stays in the `diff`
+      # artifact.
+      echo "DIFF_STAT_BEGIN"
+      git --no-pager diff HEAD --stat
+      echo "DIFF_STAT_END"
+
+  - id: verify
+    kind: bash
+    depends_on: [diff_stat]
     output_type: test_results
     timeout: 600000
     bash: |
@@ -111,25 +239,67 @@ nodes:
       # The VERIFY_RESULT marker is the machine-readable contract the link
       # node routes on (REQ-IMPLINT-001.A1): a skipped run must never be
       # mistaken for a passing one.
+      # Install and build failures fail fast with their own markers
+      # (REQ-REVINT-006.A1) — a broken environment or a build break is NOT a
+      # test failure, and must never be attributed to one.
       if [ -f package.json ]; then
         # A fresh worktree has no node_modules/ or build output — a verify
         # failure must mean the tests failed, not that the environment was
         # missing (WF-REJECT-DOC, REQ-WFREJ-005).
-        if [ ! -d node_modules ]; then npm ci --no-audit --no-fund || npm install --no-audit --no-fund; fi
-        npm run build --if-present
+        if [ ! -d node_modules ]; then
+          if ! { npm ci --no-audit --no-fund || npm install --no-audit --no-fund; }; then
+            echo "VERIFY_RESULT=env-failed"; exit 1
+          fi
+        fi
+        if ! npm run build --if-present; then echo "VERIFY_RESULT=build-failed"; exit 1; fi
         if npm test; then echo "VERIFY_RESULT=ran-and-passed"; else echo "VERIFY_RESULT=ran-and-failed"; exit 1; fi
       elif [ -f Cargo.toml ]; then
+        if ! cargo build; then echo "VERIFY_RESULT=build-failed"; exit 1; fi
         if cargo test; then echo "VERIFY_RESULT=ran-and-passed"; else echo "VERIFY_RESULT=ran-and-failed"; exit 1; fi
       elif [ -f pyproject.toml ] || [ -f requirements.txt ]; then
+        if ! python -c 'import pytest' 2>/dev/null; then echo "VERIFY_RESULT=env-failed"; exit 1; fi
         if python -m pytest; then echo "VERIFY_RESULT=ran-and-passed"; else echo "VERIFY_RESULT=ran-and-failed"; exit 1; fi
       else
         echo "no recognised test framework; tests did NOT run"
         echo "VERIFY_RESULT=skipped"
       fi
 
+  - id: route_verify
+    kind: bash
+    depends_on: [verify]
+    output_type: verify_route
+    bash: |
+      # Deterministic verify routing (REQ-VSTATE-005.A1): the VERIFY_RESULT
+      # marker is parsed HERE, in code, and turned into a LINK_ACTION the link
+      # node obeys. It used to be a prompt reading a test log — the one decision
+      # that governs whether links may be promoted was hallucinable.
+      VERIFY_OUT=$verify.output
+      MARKER=$(printf '%s' "$VERIFY_OUT" | grep -oE 'VERIFY_RESULT=[a-z-]+' | tail -n 1 | cut -d= -f2)
+      [ -n "$MARKER" ] || MARKER=missing
+      echo "VERIFY_RESULT=$MARKER"
+      # env-failed / build-failed halt BEFORE any link mutation, naming the
+      # environment cause (REQ-VSTATE-005.A3) — neither is a test failure.
+      case "$MARKER" in
+        ran-and-passed)
+          echo "LINK_ACTION=assert-and-verify-pass" ;;
+        ran-and-failed)
+          echo "LINK_ACTION=assert-and-verify-fail" ;;
+        skipped)
+          echo "LINK_ACTION=assert-only" ;;
+        env-failed)
+          echo "HALT_CAUSE=environment setup failed (dependency install) — nothing is known about the tests"
+          exit 1 ;;
+        build-failed)
+          echo "HALT_CAUSE=build failed — nothing is known about the tests"
+          exit 1 ;;
+        *)
+          echo "HALT_CAUSE=no VERIFY_RESULT marker found in the verify output — an unknown result is never a pass"
+          exit 1 ;;
+      esac
+
   - id: link
     kind: prompt
-    depends_on: [verify]
+    depends_on: [route_verify]
     output_type: link_summary
     allowed_tools:
       - mcp__specship__specship_link_assert
@@ -141,13 +311,30 @@ nodes:
       requirements), call specship_link_assert with the spec_id, the
       file path, and the qualified symbol name.
 
-      Then route on the VERIFY_RESULT marker in the test results below
-      (REQ-IMPLINT-001):
-      - VERIFY_RESULT=ran-and-passed → after each assert, call
+      You MUST NOT assert a `tests`-kind link (REQ-REVINT-005.A1). Every
+      specship_link_assert call here is an implementation link — leave `kind`
+      at its default and never pass kind: 'tests'. Test evidence is
+      file-derived only: it comes from the spec's `verifies:` block or an
+      `@verifies` comment on the test symbol, never from this node. A workflow
+      that minted its own test evidence would be promoting itself past the
+      gate that exists to check it.
+
+      Then act on LINK_ACTION, which a bash node already computed from the
+      VERIFY_RESULT marker (REQ-VSTATE-005.A1). Do NOT re-derive it from the
+      test log — read it:
+
+      $route_verify.output
+
+      - LINK_ACTION=assert-and-verify-pass → after each assert, call
         specship_link_verify with result="pass".
-      - VERIFY_RESULT=skipped → do NOT call specship_link_verify at all;
+      - LINK_ACTION=assert-and-verify-fail → call specship_link_verify with
+        result="fail" and the failing test name as the reason.
+      - LINK_ACTION=assert-only → do NOT call specship_link_verify at all;
         the links stay in the `implemented` state. Tests that did not run
         are never reported as passing.
+
+      A run whose environment or build broke never reaches this node — the
+      routing step halts it first (REQ-VSTATE-005.A3).
 
       Implementation diff summary:
       $implement.output
@@ -160,34 +347,88 @@ nodes:
       skipped.
 
   - id: coverage
-    kind: prompt
+    kind: bash
     depends_on: [link]
     output_type: coverage_summary
-    allowed_tools:
-      - mcp__specship__specship_spec
-    prompt: |
-      Report acceptance-criteria test coverage for $INPUT.SPEC_ID
-      (REQ-IMPLINT-002). Call specship_spec with the spec_id, count its
-      acceptance criteria (the .A<N> children; if the spec has none,
-      treat the requirement itself as one criterion), and count how many
-      of them carry a `tests`-kind link.
+    bash: |
+      # The acceptance-criteria coverage line is computed FROM THE DB
+      # (REQ-VSTATE-005.A2) — `specship coverage --line` renders the same
+      # `getSpecCoverage` report the MCP tool and the dashboard read, so the
+      # number on the approval gate cannot disagree with them. It used to be
+      # counted by a prompt.
+      if command -v specship >/dev/null 2>&1; then SS=specship
+      elif [ -x node_modules/.bin/specship ]; then SS=node_modules/.bin/specship
+      elif [ -x dist/bin/specship.js ]; then SS="node dist/bin/specship.js"
+      else SS=""; fi
+      if [ -z "$SS" ]; then
+        echo "COVERAGE_UNAVAILABLE=specship CLI not found — acceptance-criteria coverage was NOT computed"
+        exit 0
+      fi
+      LINE=$($SS coverage $INPUT.SPEC_ID --line) || {
+        echo "COVERAGE_UNAVAILABLE=specship coverage failed — coverage was NOT computed"
+        exit 0
+      }
+      echo "$LINE"
+      N=$(printf '%s' "$LINE" | awk '{print $1}')
+      M=$(printf '%s' "$LINE" | awk '{print $3}')
+      if [ "$N" != "$M" ]; then
+        echo "Close the gap with /specship:spec behaviour $INPUT.SPEC_ID."
+      fi
 
-      Output exactly one or two lines:
-      - "N of M acceptance criteria for $INPUT.SPEC_ID have linked tests."
-      - If N < M, add: "Close the gap with /specship:spec behaviour
-        $INPUT.SPEC_ID."
+  - id: adversarial_review
+    kind: prompt
+    depends_on: [coverage]
+    output_type: adversarial_review
+    allowed_tools:
+      - Read
+      - Grep
+      - mcp__specship__specship_spec
+      - mcp__specship__specship_explore
+      - mcp__specship__specship_node
+      - mcp__specship__specship_search
+    prompt: |
+      Adversarial review (REQ-AUTHG-005.A3). You are NOT the implementer — your
+      job is to find what the implementation missed. This node is read-only:
+      you have no Edit, Write or Bash tool and must not try to fix anything.
+
+      Call specship_spec($INPUT.SPEC_ID) and read the spec body, including
+      every acceptance criterion.
+
+      The change under review (from git, not from the implementer's summary):
+
+      $diff.output
+
+      Report this and nothing else:
+
+      1. One line per acceptance criterion:
+         `<AC id>: satisfied | partial | unaddressed — <one sentence, grounded
+         in the diff>`. Judge from the diff and the code you read; "the
+         implementer said so" is not evidence.
+      2. `Untested new code paths:` the branches/functions this diff adds that
+         no test in the diff exercises (`none` if there are none).
+      3. `Verdict:` one line — the most serious gap a reviewer should look at
+         first, or `no gaps found`.
 
   - id: final_review
     kind: approval
-    depends_on: [coverage]
+    depends_on: [adversarial_review]
     message: |
       Implementation complete for $INPUT.SPEC_ID.
+
+      Changes (git diff --stat — measured, not summarized):
+      $diff_stat.output
+
+      Lint / typecheck:
+      $quality_recheck.output
 
       Links asserted:
       $link.output
 
       Acceptance-criteria test coverage:
       $coverage.output
+
+      Adversarial review:
+      $adversarial_review.output
 
       Approve to finalize the run (worktree is left for you to inspect
       and merge), or reject to abandon.

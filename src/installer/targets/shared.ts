@@ -49,10 +49,10 @@ export function getSpecShipPermissions(integrations: string[] = []): string[] {
     'mcp__specship__specship_impact',
     'mcp__specship__specship_files',
     'mcp__specship__specship_status',
-    // Harness read tools (MAINT-DOC / FITNESS-DOC) — read-only analysis the
-    // agent may run while exploring, so auto-allow to avoid a prompt.
-    'mcp__specship__specship_maintainability',
-    'mcp__specship__specship_fitness',
+    // Harness read tool (MAINT-DOC / FITNESS-DOC, merged per REQ-SURF-007) —
+    // read-only analysis the agent may run while exploring, so auto-allow to
+    // avoid a prompt.
+    'mcp__specship__specship_health',
   ];
   if (integrations.includes('designer')) {
     // Designer tools (vendored from @pro-vi/designer) — the design loop is

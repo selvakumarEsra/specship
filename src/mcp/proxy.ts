@@ -229,7 +229,10 @@ export async function runLocalHandshakeProxy(deps: LocalHandshakeDeps): Promise<
         writeClient({ jsonrpc: '2.0', id: msg.id, result: { protocolVersion: PROTOCOL_VERSION, capabilities: { tools: {} }, serverInfo: SERVER_INFO, instructions: SERVER_INSTRUCTIONS } });
         routeToDaemon(line); // prime the daemon so it resolves the project (its reply is suppressed below)
       } else if (msg.method === 'tools/list') {
-        writeClient({ jsonrpc: '2.0', id: msg.id, result: { tools: getStaticTools() } });
+        // Pass the project root so the lite-tier menu trim applies to the
+        // connect-time list too (REQ-LOWMODEL-004.A4) — marker file only,
+        // no DB open, so this stays on the fast handshake path.
+        writeClient({ jsonrpc: '2.0', id: msg.id, result: { tools: getStaticTools(deps.root) } });
       } else if (msg.method === 'resources/list') {
         // No resources exposed — answer the probe locally so it never reaches
         // the daemon as an unhandled method and logs `-32601`. (#621)

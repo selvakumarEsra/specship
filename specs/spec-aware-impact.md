@@ -4,6 +4,8 @@ title: Spec-aware impact — blast radius includes governing specs
 owner: core
 priority: medium
 version: 1
+jira_issue: SSHIP-1020
+jira_fingerprint: 8fbea65c59acc665
 ---
 
 <!-- id: IMPACT-SPEC-DOC -->

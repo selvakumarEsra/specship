@@ -115,10 +115,10 @@ export type DriftSource = (slug: string) =>
   Promise<{ getSpecQueries(): { getLinksByState(states: string[]): unknown[] } } | null>;
 
 /**
- * Bound on how many projects get a live driftCount per request. Mirrors the
- * /api/events sweep: every lookup opens the project's graph through the
- * registry LRU (maxOpen 16), so an unbounded pass over a large project list
- * churns open/close cycles on every GET. enumerate() sorts by recency, so
+ * Bound on how many projects get a live driftCount per request: every lookup
+ * opens the project's graph through the registry LRU (maxOpen 16), so an
+ * unbounded pass over a large project list churns open/close cycles on every
+ * GET. enumerate() sorts by recency, so
  * the bounded prefix is exactly what the switcher surfaces first; the rest
  * stay `null` (unknown), which the UI renders as no pill.
  */

@@ -111,6 +111,21 @@ describe('HeatmapPage (REQ-DESKTOP-024)', () => {
     expect(screen.getByText(/Touched in 1 session/)).toBeTruthy();
   });
 
+  it('REQ-REVINT-007.A4: result sizes render as estimated tokens, not raw chars', async () => {
+    mockFetch(STATS_LIVE);
+    render(<HeatmapPage project={null} query={{}} />);
+
+    // 900000 + 400000 chars of tool results ≈ 325k tokens, not 1.3M.
+    await screen.findByText('Result tokens (est.)');
+    expect(screen.getByText('~325.0k')).toBeTruthy();
+    expect(screen.queryByText('1.3M')).toBeNull();
+    // Read: 900000 chars over 120 calls ≈ 1.9k est. tokens/call, not 7.5k.
+    expect(screen.getByText('~1.9k/call')).toBeTruthy();
+    expect(screen.queryByText('7.5k/call')).toBeNull();
+    // The efficiency legend is in estimated tokens too.
+    expect(screen.getByText('>5.0k est. / call')).toBeTruthy();
+  });
+
   it('A3: zero ingested sessions renders Settings-ingest guidance, not zeros', async () => {
     mockFetch(STATS_ZERO);
     render(<HeatmapPage project={null} query={{}} />);

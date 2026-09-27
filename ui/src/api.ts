@@ -106,6 +106,8 @@ export interface NodeRef {
 
 /** One spec_links row attached to a node (src/types.ts SpecLink, camelCased). */
 export interface LinkedSpec {
+  /** spec_links row id — what POST /api/spec/link-verify takes. */
+  id?: number;
   specId: string;
   kind: string;
   state: string;
@@ -167,6 +169,69 @@ export interface SpecDetailResponse {
   /** Per-child (acceptance criterion) links, for the N/M-met rollup. */
   childLinks: Record<string, LinkedSpec[]>;
   source: string | null;
+}
+
+// ---- Spec funnel + coverage (REQ-TVIZ-007/-008) ----
+
+/** GET /api/spec/funnel — src/resolution/brief-link-resolver.ts SpecFunnel. */
+export interface SpecFunnelResponse {
+  summary: {
+    ideas: number;
+    specified: number;
+    conflicts: number;
+    documents: number;
+    requirements: number;
+    links: { implemented: number; verified: number; drifted: number; broken: number; orphaned: number };
+  };
+  documents: Array<{ id: string; title: string; rollup: Record<string, number> }>;
+  ideas: Array<{ briefId: string; title: string; capturedAt: number | null; labels: string[] }>;
+  conflicts: Array<{ briefId: string; briefSide: string | null; specSide: string | null }>;
+}
+
+/**
+ * Test-coverage verdict for one spec node (src/graph/spec-coverage.ts).
+ * Derived from `tests` links ONLY — an `implements`-only spec is `untested`.
+ */
+export type CoverageVerdict = 'untested' | 'tested' | 'verified' | 'broken';
+
+export interface LinkRollup {
+  count: number;
+  states: Record<string, number>;
+}
+
+export interface CriterionCoverage {
+  specId: string;
+  title: string;
+  kind: string;
+  implementsLinks: LinkRollup;
+  testsLinks: LinkRollup;
+  verdict: CoverageVerdict;
+}
+
+export interface RequirementCoverage extends CriterionCoverage {
+  criteria: CriterionCoverage[];
+  criteriaTotals: Record<CoverageVerdict, number>;
+  criteriaWithTests: number;
+  criteriaCount: number;
+}
+
+/** GET /api/spec/coverage — the Wave 2 rollup both the matrix and the tree read. */
+export interface SpecCoverageResponse {
+  specId: string | null;
+  requirements: RequirementCoverage[];
+  totals: {
+    requirements: number;
+    criteria: number;
+    criteriaWithTests: number;
+    criteriaVerified: number;
+    criteriaBroken: number;
+  };
+}
+
+/** POST /api/spec/link-verify — promote or fail one link. */
+export interface LinkVerifyResponse {
+  ok: boolean;
+  state: string;
 }
 
 /** PUT /api/spec/:id — whole-file overwrite + re-sync (REQ-DESKTOP-011). */
@@ -316,11 +381,15 @@ export interface RecentPromptsResponse {
 
 // ---- Claude analytics shapes (server/src/routes/claude.ts) ----
 
-/** One dashboard stat-tile metric: value + WoW delta + 7-point sparkline. */
+/**
+ * One dashboard stat-tile metric: value + WoW delta + 7-point sparkline.
+ * `delta` and `series` are OPTIONAL — a metric with no prior-window snapshot
+ * omits them rather than sending 0/[] (REQ-REVINT-007.A2).
+ */
 export interface StatMetric {
   value: number;
-  delta: number;
-  series: number[];
+  delta?: number;
+  series?: number[];
 }
 
 export interface ClaudeStatsResponse {
@@ -470,7 +539,6 @@ export interface ClaudeSessionSummaryResponse {
   skills: Array<{ name: string; count: number }>;
   filesTouched: Array<{ path: string; ops: number; lastOp: string }>;
   durationMs: number;
-  specship: { spendTokens: number; savedTokens: number; netTokens: number };
 }
 
 /** One row from GET /api/claude/projects — Claude-cost projects (by cwd). */
@@ -496,7 +564,9 @@ export interface ClaudeCompareProject {
   avgCost: number;
   prompts: number;
   cacheHit: number;
-  drift: number;
+  /** null = not measured. Only the primary project has an indexed spec graph
+   *  here, so every other row is unknown, not clean (REQ-REVINT-007.A3). */
+  drift: number | null;
   byModel: Array<{ model: string; cost: number }>;
   topTools: string[];
   [key: string]: unknown;
@@ -528,13 +598,6 @@ export interface HeatmapSubagentDetail {
   subagent: string;
   totals: { calls: number; sessions: number };
   invocations: Array<{ session_id: string; ts: number; description: string; prompt: string; last_model: string | null }>;
-}
-
-export interface SpecshipImpactResponse {
-  spendTokens: number;
-  savedTokens: number;
-  netTokens: number;
-  [key: string]: unknown;
 }
 
 // ---- Memory (server/src/routes/memory.ts, REQ-DESKTOP-025) ----
@@ -581,10 +644,13 @@ export interface McpServerTool {
   resultBytes: number;
 }
 
-/** Latest real call from claude_tool_calls (input_json); args {} = fallback. */
+/** Latest real call from claude_tool_calls (input_json). */
 export interface McpExampleCall {
   tool: string;
   args: Record<string, unknown>;
+  /** true = server-synthesized placeholder (top tool, empty args), not a
+   *  recorded call. The page labels it as such (REQ-SURF-009.A2). */
+  synthesized: boolean;
 }
 
 export interface McpServer {
@@ -645,6 +711,16 @@ export const api = {
     getJson<SpecDetailResponse>(q(`/api/spec/${encodeURIComponent(id)}`, project)),
   specSave: (id: string, content: string, project?: string | null) =>
     putJson<SpecSaveResponse>(q(`/api/spec/${encodeURIComponent(id)}`, project), { content }),
+  specFunnel: (project?: string | null) => getJson<SpecFunnelResponse>(q('/api/spec/funnel', project)),
+  // Scoped to one spec with `spec`, or the whole project when omitted.
+  specCoverage: (spec?: string | null, project?: string | null) =>
+    getJson<SpecCoverageResponse>(q('/api/spec/coverage' + (spec ? `?spec=${encodeURIComponent(spec)}` : ''), project)),
+  // Promote (`pass`) or fail a link. A `pass` on an `implements` link with no
+  // test evidence comes back 409 / `no_test_evidence` (REQ-TVIZ-009.A1).
+  linkVerify: (
+    body: { link_id: number; result: 'pass' | 'fail'; reason?: string; evidence?: string[] },
+    project?: string | null,
+  ) => postJson<LinkVerifyResponse>(q('/api/spec/link-verify', project), body),
   drift: (project?: string | null) => getJson<DriftResponse>(q('/api/drift', project)),
   runs: (project?: string | null) => getJson<RunsResponse>(q('/api/workflows/runs', project)),
   workflows: (project?: string | null) => getJson<WorkflowsResponse>(q('/api/workflows', project)),
@@ -688,8 +764,6 @@ export const api = {
     getJson<ClaudeSessionSummaryResponse>(`/api/claude/session/${encodeURIComponent(id)}/summary`),
   claudeProjects: () => getJson<ClaudeProjectsResponse>('/api/claude/projects'),
   claudeCompare: () => getJson<ClaudeCompareResponse>('/api/claude/compare'),
-  specshipImpact: (range = 'week') =>
-    getJson<SpecshipImpactResponse>(`/api/claude/specship-impact?range=${range}`),
   ingestNow: () => postJson<{ ok: boolean }>('/api/claude/ingest'),
   memory: (project?: string | null) => getJson<MemoryResponse>(q('/api/memory', project)),
   mcpServers: () => getJson<McpServersResponse>('/api/mcp/servers'),

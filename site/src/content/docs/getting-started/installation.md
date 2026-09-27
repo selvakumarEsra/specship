@@ -55,7 +55,9 @@ specship install --print-config               # print the MCP snippet, no file w
 |---|---|---|
 | `--location` | `global`, `local` | prompt (highlights `local`) |
 | `--path <repo>` | target repo to wire + initialize, from any cwd | current directory |
-| `--yes` | (boolean) non-interactive | prompt every step → `local` |
+| `--yes` | (boolean) non-interactive | interactive asks one question (location) → `local` |
+| `--skip-statusline` | (boolean) don't add the SpecShip status-line segment (an existing status line is never overwritten either way) | segment added |
+| `--skip-index` | (boolean) don't index the project being wired | indexed |
 | `--no-sdd` | (boolean) skip the spec-driven layer (`/specship:spec` + `/specship:check` doors + steering) — retrieval-only | spec-driven layer ON |
 | `--with-jira` | (boolean) enable the optional JIRA integration (talks to your Atlassian instance; never auto-allowed — Claude prompts per call) | off (core stays 100% local) |
 | `--with-designer` | (boolean) enable the optional Designer integration (**experimental** — drives claude.ai/design via a debug Chrome session) | off |

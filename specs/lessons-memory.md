@@ -4,6 +4,12 @@ title: Capture lessons to memory, and review/manage memory items
 owner: core
 priority: medium
 version: 1
+jira_issue_REQ-MEMLESSON-001: SSHIP-734
+jira_fingerprint_REQ-MEMLESSON-001: 91e5d1c866229611
+jira_issue_REQ-MEMLESSON-002: SSHIP-740
+jira_fingerprint_REQ-MEMLESSON-002: 68807af88a201899
+jira_issue_REQ-MEMLESSON-003: SSHIP-744
+jira_fingerprint_REQ-MEMLESSON-003: a9595e232f302c38
 ---
 
 <!-- id: MEMLESSON-DOC -->

@@ -32,7 +32,8 @@ const LIVE_ROUTES: Record<string, unknown> = {
     lastSessionCost: { value: 11.84, delta: 0.12, series: [5, 6, 7, 8, 11.84] },
     toolCalls: { value: 451, delta: -0.08, series: [40, 52, 38, 61, 44, 57, 49] },
     subagentPct: { value: 31, delta: 0.04, series: [22, 26, 24, 30, 28, 33, 31] },
-    drift: { value: 7, delta: 0, series: [] },
+    // No delta/series: link state has no prior-window snapshot (REQ-REVINT-007.A2).
+    drift: { value: 7 },
     sessionCount: 12,
   },
   '/api/claude/costs': {
@@ -70,7 +71,8 @@ const ZERO_ROUTES: Record<string, unknown> = {
     lastSessionCost: { value: 0, delta: 0, series: [] },
     toolCalls: { value: 0, delta: 0, series: [] },
     subagentPct: { value: 0, delta: 0, series: [] },
-    drift: { value: 7, delta: 0, series: [] },
+    // No delta/series: link state has no prior-window snapshot (REQ-REVINT-007.A2).
+    drift: { value: 7 },
     sessionCount: 0,
   },
   '/api/claude/costs': { total: 0, wowDelta: 0, series: [], byModel: [], topPrompts: [] },
@@ -200,5 +202,28 @@ describe('DashboardPage (REQ-DESKTOP-020)', () => {
     // The drift tile stays live — it's a graph metric, not transcript-fed.
     expect(screen.getByText('Drift queue')).toBeTruthy();
     expect(screen.getAllByText('7').length).toBeGreaterThan(0);
+  });
+
+  it('REQ-REVINT-007.A2: the drift tile shows no trend when no delta was computed', async () => {
+    mockFetch(LIVE_ROUTES, []);
+    render(<DashboardPage project={null} query={{}} />);
+
+    await screen.findByText('Drift queue');
+    // The server omits drift.delta entirely; the tile must not invent a trend
+    // (it used to render a red "↑ +0" off a hardcoded delta: 0).
+    expect(screen.queryByText('+0')).toBeNull();
+    // Tiles that DO have a delta still render one.
+    expect(screen.getAllByText(/\+12%|-8%/).length).toBeGreaterThan(0);
+  });
+
+  it('REQ-REVINT-007.A4: heatstrip result sizes are labeled as estimated tokens', async () => {
+    mockFetch(LIVE_ROUTES, []);
+    render(<DashboardPage project={null} query={{}} />);
+
+    await screen.findByText('Tool-call heatmap');
+    // 800000 chars of tool result ≈ 200k tokens, not 800k.
+    const cell = screen.getAllByTitle(/mcp\/tools\.ts/)[0]!;
+    expect(cell.getAttribute('title')).toContain('200.0k est. tokens');
+    expect(cell.getAttribute('title')).not.toContain('800.0k');
   });
 });

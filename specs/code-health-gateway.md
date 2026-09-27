@@ -4,6 +4,12 @@ title: Code-health report is a trustworthy gateway, not a noise flood
 owner: core
 priority: high
 version: 1
+jira_issue_REQ-HEALTH-001: SSHIP-194
+jira_fingerprint_REQ-HEALTH-001: e56348b6e2691240
+jira_issue_REQ-HEALTH-002: SSHIP-198
+jira_fingerprint_REQ-HEALTH-002: 5bb96b63a44f210e
+jira_issue_REQ-HEALTH-003: SSHIP-202
+jira_fingerprint_REQ-HEALTH-003: 8d1415f1e1aafe50
 ---
 
 <!-- id: HEALTH-GATEWAY-DOC -->

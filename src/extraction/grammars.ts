@@ -6,7 +6,9 @@
  * are compiled, keeping V8 WASM memory pressure low on large codebases.
  */
 
+import * as fs from 'fs';
 import * as path from 'path';
+import * as zlib from 'zlib';
 import { Parser, Language as WasmLanguage } from 'web-tree-sitter';
 import { Language } from '../types';
 
@@ -136,6 +138,32 @@ export function isPlayRoutesFile(filePath: string): boolean {
 }
 
 /**
+ * Resolve a vendored grammar to something `Language.load` accepts.
+ *
+ * The build ships grammars above a size threshold gzipped (see
+ * scripts/copy-assets.mjs) so the npm package stays small; the raw `.wasm`
+ * still sits next to the source in git, so both shapes must load. Returns the
+ * file path when the plain `.wasm` is there (nothing to do), otherwise the
+ * decompressed bytes of the sibling `.wasm.gz`.
+ */
+export function resolveVendoredGrammar(wasmDir: string, wasmFile: string): string | Uint8Array {
+  const wasmPath = path.join(wasmDir, wasmFile);
+  if (fs.existsSync(wasmPath)) return wasmPath;
+
+  const gzPath = `${wasmPath}.gz`;
+  // Not there either — hand back the plain path so the failure reads as a
+  // missing grammar rather than a missing archive.
+  if (!fs.existsSync(gzPath)) return wasmPath;
+
+  try {
+    return zlib.gunzipSync(fs.readFileSync(gzPath));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Corrupt compressed grammar ${gzPath}: ${message}`);
+  }
+}
+
+/**
  * Caches for loaded grammars and parsers
  */
 const parserCache = new Map<Language, Parser>();
@@ -185,10 +213,10 @@ export async function loadGrammarsForLanguages(languages: Language[]): Promise<v
       // ABI-13 build that corrupts the shared WASM heap under web-tree-sitter
       // 0.25 (drops nested calls/imports on every file after the first); we
       // vendor the upstream ABI-15 wasm instead.
-      const wasmPath = (lang === 'pascal' || lang === 'scala' || lang === 'lua' || lang === 'luau')
-        ? path.join(__dirname, 'wasm', wasmFile)
+      const wasmSource = (lang === 'pascal' || lang === 'scala' || lang === 'lua' || lang === 'luau')
+        ? resolveVendoredGrammar(path.join(__dirname, 'wasm'), wasmFile)
         : require.resolve(`tree-sitter-wasms/out/${wasmFile}`);
-      const language = await WasmLanguage.load(wasmPath);
+      const language = await WasmLanguage.load(wasmSource);
       languageCache.set(lang, language);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

@@ -3,6 +3,16 @@ id: DASH-CHAT-DOC
 title: Dashboard chat over the local knowledge base (no LLM)
 owner: "@selvakumar"
 priority: medium
+jira_issue_REQ-DASH-CHAT-001: SSHIP-224
+jira_fingerprint_REQ-DASH-CHAT-001: 3c32c8344bd75bae
+jira_issue_REQ-DASH-CHAT-002: SSHIP-229
+jira_fingerprint_REQ-DASH-CHAT-002: 2b6f756734d380e1
+jira_issue_REQ-DASH-CHAT-003: SSHIP-235
+jira_fingerprint_REQ-DASH-CHAT-003: b9a64f1cf3284dc4
+jira_issue_REQ-DASH-CHAT-004: SSHIP-240
+jira_fingerprint_REQ-DASH-CHAT-004: c59a4cd274a55dd1
+jira_issue_REQ-DASH-CHAT-005: SSHIP-244
+jira_fingerprint_REQ-DASH-CHAT-005: d1fcbbf9f6f3c964
 ---
 
 <!-- id: DASH-CHAT-DOC -->

@@ -66,10 +66,10 @@ describe('runtime settings resolution', () => {
 
   it('002.A2+A3: compaction and model tier resolve through the chain', () => {
     writeProject({ SPECSHIP_MODEL: 'claude-haiku-4-5' });
-    expect(detectModelTier(repo, {}, home)).toBe('haiku'); // A3: repo forces tier
+    expect(detectModelTier(repo, {}, home)).toBe('lite'); // A3: repo forces tier
     writeInstall({ SPECSHIP_COMPACT: '0' });
     writeProject({ SPECSHIP_MODEL: 'claude-haiku-4-5', SPECSHIP_COMPACT: '1' });
-    expect(detectModelTier(repo, {}, home)).toBe('haiku'); // project re-enables over install-off
+    expect(detectModelTier(repo, {}, home)).toBe('lite'); // project re-enables over install-off
     writeProject({ SPECSHIP_MODEL: 'claude-haiku-4-5', SPECSHIP_COMPACT: '0' });
     expect(detectModelTier(repo, {}, home)).toBe('full'); // project-level kill-switch
   });

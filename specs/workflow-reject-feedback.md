@@ -3,6 +3,16 @@ id: WF-REJECT-DOC
 title: Workflow reject is feedback, never disposal
 owner: specship
 priority: high
+jira_issue_REQ-WFREJ-001: SSHIP-1807
+jira_fingerprint_REQ-WFREJ-001: 0441cfef1df0835e
+jira_issue_REQ-WFREJ-002: SSHIP-1808
+jira_fingerprint_REQ-WFREJ-002: 8421cf067399a43f
+jira_issue_REQ-WFREJ-003: SSHIP-1813
+jira_fingerprint_REQ-WFREJ-003: 330939baa76e9ed0
+jira_issue_REQ-WFREJ-004: SSHIP-1817
+jira_fingerprint_REQ-WFREJ-004: afe46e21bda31d04
+jira_issue_REQ-WFREJ-005: SSHIP-1820
+jira_fingerprint_REQ-WFREJ-005: 333d054ae2f6e368
 ---
 
 <!-- id: WF-REJECT-DOC -->

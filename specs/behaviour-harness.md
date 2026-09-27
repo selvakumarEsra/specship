@@ -9,6 +9,10 @@ jira_issue_REQ-BEHAVIOUR-001: SSHIP-90
 jira_fingerprint_REQ-BEHAVIOUR-001: 515c52993ab99603
 jira_issue_REQ-BEHAVIOUR-002: SSHIP-95
 jira_fingerprint_REQ-BEHAVIOUR-002: 9faa4e3482f56269
+jira_issue_REQ-BEHAVIOUR-003: SSHIP-104
+jira_fingerprint_REQ-BEHAVIOUR-003: cfc844aabd051b9a
+jira_issue_REQ-BEHAVIOUR-004: SSHIP-109
+jira_fingerprint_REQ-BEHAVIOUR-004: 77dd41438f6c9887
 ---
 
 <!-- id: BEHAVIOUR-DOC -->

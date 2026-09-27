@@ -14,8 +14,10 @@ inputs:
 systemPromptAppend: |
   You are fixing code so a spec's link returns to "verified" state.
   Call specship_spec($INPUT.SPEC_ID) first to see the current state and
-  drift_axis. After fixing, call specship_link_verify({result: "pass"})
-  on each affected link before reporting done.
+  drift_axis. Link state changes only in the link_verify node, only after
+  the reviewer's approval, and only as the run's VERIFY_RESULT marker
+  allows — a verify leg that was skipped or never got past install/build
+  proves nothing and promotes nothing (REQ-REVINT-006).
 
 nodes:
   - id: diagnose
@@ -78,33 +80,122 @@ nodes:
     output_type: test_results
     timeout: 600000
     bash: |
+      # Same VERIFY_RESULT marker contract as spec-implement
+      # (REQ-REVINT-006.A2): the link_verify node routes on the marker, so a
+      # skipped run can never be mistaken for a passing one, and an
+      # environment or build failure is never attributed to the tests.
       if [ -f package.json ]; then
-        npm test
+        # A fresh worktree has no node_modules/ or build output.
+        if [ ! -d node_modules ]; then
+          if ! { npm ci --no-audit --no-fund || npm install --no-audit --no-fund; }; then
+            echo "VERIFY_RESULT=env-failed"; exit 1
+          fi
+        fi
+        if ! npm run build --if-present; then echo "VERIFY_RESULT=build-failed"; exit 1; fi
+        if npm test; then echo "VERIFY_RESULT=ran-and-passed"; else echo "VERIFY_RESULT=ran-and-failed"; exit 1; fi
       elif [ -f Cargo.toml ]; then
-        cargo test
+        if ! cargo build; then echo "VERIFY_RESULT=build-failed"; exit 1; fi
+        if cargo test; then echo "VERIFY_RESULT=ran-and-passed"; else echo "VERIFY_RESULT=ran-and-failed"; exit 1; fi
       elif [ -f pyproject.toml ] || [ -f requirements.txt ]; then
-        python -m pytest
+        if ! python -c 'import pytest' 2>/dev/null; then echo "VERIFY_RESULT=env-failed"; exit 1; fi
+        if python -m pytest; then echo "VERIFY_RESULT=ran-and-passed"; else echo "VERIFY_RESULT=ran-and-failed"; exit 1; fi
       else
-        echo "no recognised test framework; skipping"
+        echo "no recognised test framework; tests did NOT run"
+        echo "VERIFY_RESULT=skipped"
       fi
+
+  - id: route_verify
+    kind: bash
+    depends_on: [verify]
+    output_type: verify_route
+    bash: |
+      # Deterministic verify routing (REQ-VSTATE-005.A1): code parses the
+      # VERIFY_RESULT marker and emits the LINK_ACTION the link node obeys, so
+      # the decision that governs link promotion isn't a prompt's reading of a
+      # test log. env-failed / build-failed halt here, before the approval gate
+      # and before any link mutation, naming the cause (REQ-VSTATE-005.A3).
+      VERIFY_OUT=$verify.output
+      MARKER=$(printf '%s' "$VERIFY_OUT" | grep -oE 'VERIFY_RESULT=[a-z-]+' | tail -n 1 | cut -d= -f2)
+      [ -n "$MARKER" ] || MARKER=missing
+      echo "VERIFY_RESULT=$MARKER"
+      case "$MARKER" in
+        ran-and-passed)
+          echo "LINK_ACTION=verify-pass" ;;
+        ran-and-failed)
+          echo "LINK_ACTION=verify-fail" ;;
+        skipped)
+          echo "LINK_ACTION=no-verify" ;;
+        env-failed)
+          echo "HALT_CAUSE=environment setup failed (dependency install) — nothing is known about the tests"
+          exit 1 ;;
+        build-failed)
+          echo "HALT_CAUSE=build failed — nothing is known about the tests"
+          exit 1 ;;
+        *)
+          echo "HALT_CAUSE=no VERIFY_RESULT marker found in the verify output — an unknown result is never a pass"
+          exit 1 ;;
+      esac
+
+  - id: approve_links
+    kind: approval
+    depends_on: [route_verify]
+    message: |
+      Fix applied for $INPUT.SPEC_ID — approve before any link changes state
+      (REQ-REVINT-006.A4).
+
+      Files changed:
+      $apply.output
+
+      Verify routing (computed in code, REQ-VSTATE-005.A1 — `no-verify`
+      means no test ran, so nothing here can reach `verified`):
+      $route_verify.output
+
+      Test results:
+      $verify.output
+
+      Approve to let the link states be updated, or reject to leave every
+      link exactly as it is.
+    capture_response: true
 
   - id: link_verify
     kind: prompt
-    depends_on: [verify]
+    depends_on: [approve_links]
     output_type: link_summary
     allowed_tools:
       - mcp__specship__specship_spec
       - mcp__specship__specship_link_assert
       - mcp__specship__specship_link_verify
     prompt: |
-      For each link that was drifted/broken on $INPUT.SPEC_ID, now that
-      the fix has been applied and tests pass, call specship_link_verify
-      with result="pass" (or "fail" if a test failed for that link).
+      The reviewer has approved updating link state for $INPUT.SPEC_ID.
+
+      Act on LINK_ACTION — a bash node already derived it from the
+      VERIFY_RESULT marker (REQ-VSTATE-005.A1). Do NOT re-derive it from the
+      test log; read it here:
+
+      $route_verify.output
+
+      - LINK_ACTION=verify-pass → for each link that was drifted/broken, call
+        specship_link_verify with result="pass" (or "fail" if a test failed
+        for that link specifically).
+      - LINK_ACTION=verify-fail → call specship_link_verify with
+        result="fail" for the affected links. Never "pass".
+      - LINK_ACTION=no-verify → no test ran, so nothing is proven. Do NOT
+        call specship_link_verify at all; no link may reach `verified`
+        (REQ-REVINT-006.A3). Report that verification was skipped.
+
+      A run whose environment or build broke never reaches this node — the
+      routing step halts it first (REQ-VSTATE-005.A3).
 
       If a link is orphaned because the symbol moved, call
-      specship_link_assert at the new location.
+      specship_link_assert at the new location. Never pass kind: 'tests' —
+      test evidence is file-derived (`verifies:` block or an `@verifies`
+      comment), never minted by this workflow (REQ-REVINT-005.A1).
+
+      Reviewer feedback (if any):
+      $approve_links.output
 
       Test results:
       $verify.output
 
-      Output: one line per link with the new state.
+      Output: one line per link with the new state, ending with one line
+      stating whether verification ran, failed, or was skipped.
