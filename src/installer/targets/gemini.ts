@@ -63,7 +63,15 @@ export function settingsPath(loc: Location): string {
  */
 function geminiEntry(integrations: string[] = []): Record<string, unknown> {
   const { type: _stdioIsImplied, ...server } = getMcpServerConfig(integrations);
-  return server;
+  // Host marker (REQ-LOWEND-001): tier auto-detection's Gemini leg only runs
+  // when the server was launched by Gemini CLI. This env is that evidence —
+  // present in both the written entry and the printable snippet by
+  // construction, absent from every Claude Code launch.
+  const env = {
+    ...(server as { env?: Record<string, string> }).env,
+    SPECSHIP_HOST: 'gemini',
+  };
+  return { ...server, env };
 }
 
 /**

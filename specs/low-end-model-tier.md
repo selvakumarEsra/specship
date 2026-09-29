@@ -47,22 +47,40 @@ adding perceptible latency to a tool response.
 implementations:
   - src/mcp/model-context.ts:detectModelTier
   - src/mcp/model-context.ts:modelTier
+  - src/mcp/gemini-session.ts:readGeminiSessionModel
+
+verifies:
+  - __tests__/gemini-session-tier.test.ts:projectSettingsFlashResolvesLiteWithNoClaudeChannel
+  - __tests__/gemini-session-tier.test.ts:specshipModelOverrideWinsBothWays
+  - __tests__/gemini-session-tier.test.ts:malformedOrUnreadableSourcesDegradeSilently
 
 ## Acceptance
 <!-- id: REQ-LOWEND-001.A1 -->
 - On a Gemini CLI session whose configuration names a `flash` model, tool
   results are compacted at the model's mapped tier with no Claude Code
   marker, transcript, or hook present.
+  verifies:
+    - __tests__/gemini-session-tier.test.ts:projectSettingsFlashResolvesLiteWithNoClaudeChannel
+    - __tests__/gemini-session-tier.test.ts:objectModelShapeIsAccepted
+    - __tests__/gemini-session-tier.test.ts:geminiModelEnvWins
+    - __tests__/gemini-session-tier.test.ts:projectSettingsBeatGlobal
 <!-- id: REQ-LOWEND-001.A2 -->
 - Setting the documented override to `lite` yields lite-tier output even when
   auto-detection finds nothing; setting it to `full` disables compaction even
   when auto-detection finds a flash model.
+  verifies:
+    - __tests__/gemini-session-tier.test.ts:specshipModelOverrideWinsBothWays
+    - __tests__/model-context.test.ts:tierNamesAreAcceptedAsOverrideValues
 <!-- id: REQ-LOWEND-001.A3 -->
 - With no override and no detectable model, output is byte-identical to
   today's full-tier output.
+  verifies:
+    - __tests__/gemini-session-tier.test.ts:nothingDetectedIsByteIdenticalFullOutput
 <!-- id: REQ-LOWEND-001.A4 -->
 - A malformed or unreadable Gemini settings source never errors a tool call —
   detection degrades to `full` silently.
+  verifies:
+    - __tests__/gemini-session-tier.test.ts:malformedOrUnreadableSourcesDegradeSilently
 
 <!-- id: REQ-LOWEND-002 -->
 ## The `flash` vs `flash-lite` tier assignment MUST be decided by eval, not assumption
