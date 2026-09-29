@@ -424,3 +424,28 @@ Reproduce:
 bash scripts/agent-eval/bench-readme.sh      # 7 repos × with/without × 4 runs (RUNS=4) → /tmp/ab-readme
 node scripts/agent-eval/parse-bench-readme.mjs   # medians + % saved (summed per-turn tokens)
 ```
+
+---
+
+## Gemini CLI rows (LOWEND-DOC REQ-LOWEND-005) — runner shipped, numbers pending
+
+`scripts/agent-eval/run-all-gemini.sh` runs the same with/without A/B through
+Gemini CLI pinned to `gemini-3.5-flash`, normalizing the host's output into the
+shared metrics schema (`scripts/agent-eval/eval-metrics.mjs`). Gemini rows are
+recorded **here**, not in the README block: the CLI reports no dollar figure, so
+`costUsd` is `null` and the comparison is tool calls, wall-clock, and the
+Read/Grep fallback rate.
+
+```bash
+scripts/agent-eval/run-all-gemini.sh <repo> "<Q>"                # auto tier
+SPECSHIP_MODEL=lite     scripts/agent-eval/run-all-gemini.sh <repo> "<Q>"
+SPECSHIP_MODEL=standard scripts/agent-eval/run-all-gemini.sh <repo> "<Q>"
+```
+
+**No measured Gemini row exists yet.** The runner was implemented and its
+preflight verified against the installed `@google/gemini-cli` 0.28.0 — which on
+this machine is unauthenticated, so the preflight correctly refuses to run
+(`exit 1`, naming the auth step) and no arm executed. REQ-LOWEND-002's
+`lite` vs `standard` decision therefore stays **open**: `TIER_RULES` keeps
+mapping every `gemini…flash` id to `lite` until the two tier arms above are run
+on a corpus repo and their medians recorded in this section.

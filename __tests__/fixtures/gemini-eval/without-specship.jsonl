@@ -1,0 +1,11 @@
+{"type":"init","timestamp":"2026-09-29T11:00:00.000Z","session_id":"s-2","model":"gemini-3.5-flash"}
+{"type":"tool_use","timestamp":"2026-09-29T11:00:02.000Z","tool_name":"search_file_content","tool_id":"t1","parameters":{"pattern":"renderScene"}}
+{"type":"tool_result","timestamp":"2026-09-29T11:00:03.000Z","tool_id":"t1","status":"success"}
+{"type":"tool_use","timestamp":"2026-09-29T11:00:04.000Z","tool_name":"read_file","tool_id":"t2","parameters":{"absolute_path":"/repo/src/scene/Scene.ts"}}
+{"type":"tool_result","timestamp":"2026-09-29T11:00:06.000Z","tool_id":"t2","status":"success"}
+{"type":"tool_use","timestamp":"2026-09-29T11:00:07.000Z","tool_name":"read_many_files","tool_id":"t3","parameters":{"paths":"/repo/src/renderer/renderScene.ts"}}
+{"type":"tool_result","timestamp":"2026-09-29T11:00:09.000Z","tool_id":"t3","status":"success"}
+{"type":"tool_use","timestamp":"2026-09-29T11:00:10.000Z","tool_name":"run_shell_command","tool_id":"t4","parameters":{"command":"rg -n mutateElement src | head -20"}}
+{"type":"tool_result","timestamp":"2026-09-29T11:00:12.000Z","tool_id":"t4","status":"success"}
+{"type":"message","timestamp":"2026-09-29T11:02:05.000Z","role":"assistant","content":"The render path goes through Scene.ts and renderScene.ts."}
+{"type":"result","timestamp":"2026-09-29T11:02:08.000Z","status":"success","stats":{"total_tokens":53500,"input_tokens":52100,"output_tokens":1400,"cached":9000,"input":43100,"duration_ms":128500,"tool_calls":4}}

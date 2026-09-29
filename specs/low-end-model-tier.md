@@ -190,13 +190,27 @@ This runner is the gate for REQ-LOWEND-002 and the measurement for
 REQ-LOWEND-003/004 under the real model. `flash-lite` MAY be added as a
 second pinned row later; it is not required now.
 
+implementations:
+  - scripts/agent-eval/run-all-gemini.sh
+  - scripts/agent-eval/parse-run-gemini.mjs:parseGeminiRun
+  - scripts/agent-eval/eval-metrics.mjs:emptyMetrics
+  - scripts/agent-eval/eval-metrics.mjs:renderMetrics
+  - scripts/agent-eval/parse-run.mjs:parseClaudeStream
+
 ## Acceptance
 <!-- id: REQ-LOWEND-005.A1 -->
 - A documented harness invocation runs the eval under Gemini CLI pinned to
   `gemini-3.5-flash` and emits the same A/B metrics schema as the Claude
   runner.
+  verifies:
+    - __tests__/lowend-eval-harness.test.ts:geminiRunnerEmitsTheClaudeMetricsSchema
 <!-- id: REQ-LOWEND-005.A2 -->
 - With no usable `gemini` binary the run exits non-zero naming the
   prerequisite; nothing is recorded as a pass.
+  verifies:
+    - __tests__/lowend-eval-harness.test.ts:missingOrUnauthenticatedGeminiFailsTheRun
+    - __tests__/lowend-eval-harness.test.ts:unparseableOutputIsNeverAZeroToolPass
 <!-- id: REQ-LOWEND-005.A3 -->
 - The existing Claude-driven eval path is unchanged and still passes.
+  verifies:
+    - __tests__/lowend-eval-harness.test.ts:claudeRunnerRendersAByteIdenticalBlock

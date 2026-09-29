@@ -15,6 +15,12 @@ const fmtTok = (t) => (t >= 1e6 ? `${(t / 1e6).toFixed(1)}M` : `${Math.round(t /
 /**
  * Render the README benchmarks block (markers included) from a manifest.
  * Deterministic: same manifest → same bytes, so drift is byte-comparable.
+ *
+ * `models` is a free-form stamp of whatever the measured runs reported, so a
+ * Gemini row (`gemini-3.5-flash`) is a legal stamp value. It is NOT rendered
+ * into this table, though: the cost column has no Gemini figure (the CLI
+ * reports none, and BENCH-CLAIM forbids inventing one). Gemini A/B rows are
+ * recorded in docs/benchmarks/call-sequence-analysis.md instead.
  */
 export function renderBenchSection(m) {
   const lines = [];
