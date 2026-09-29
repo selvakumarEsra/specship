@@ -1,14 +1,15 @@
 <#
 .SYNOPSIS
-  Offline / air-gapped install of SpecShip from a PRE-BUILT self-contained
-  bundle (Windows). No npm, no compiler, no network.
+  Offline / air-gapped install of SpecShip from a PRE-BUILT bundle (Windows).
+  No npm, no compiler, no network — but the target must already have Node
+  >= 22.5 < 25 on PATH; the bundle ships no runtime.
 
 .DESCRIPTION
   This is NOT a build-from-source flow. Point it at a release bundle for the
   target's platform — an extracted specship-<target>\ directory, or a
   specship-<target>.zip / .tar.gz archive — and it delegates to the installer
   baked inside that bundle (install.ps1), which adds the launcher to PATH and
-  wires Claude Code via the vendored Node.
+  wires Claude Code via the machine's Node.
 
   Bundles come from the GitHub Releases page on a connected machine, or
   scripts/build-bundle.sh. Building from a source checkout is a different flow.

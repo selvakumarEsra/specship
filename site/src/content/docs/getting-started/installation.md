@@ -87,7 +87,7 @@ specship init
 
 ## Supported platforms
 
-Every release ships a self-contained build (bundled Node runtime — nothing to compile) for all three desktop OSes, on both x64 and arm64:
+Every release ships a prebuilt bundle (nothing to compile; runs on your machine's Node 22.5+, below 25) for all three desktop OSes, on both x64 and arm64:
 
 | Platform | Architectures | Install |
 |---|---|---|
@@ -97,11 +97,11 @@ Every release ships a self-contained build (bundled Node runtime — nothing to 
 
 ## Offline / air-gapped install
 
-Every release is a **self-contained bundle** — a vendored Node runtime plus the app, with zero native addons to compile — so it installs on a machine with **no npm, no compiler, and no internet**. Download the bundle on a connected machine, copy it across, and run the installer baked inside it.
+Every release is a **prebuilt bundle** — the app with zero native addons to compile — so it installs on a machine with **no npm, no compiler, and no internet**. The one prerequisite is **Node.js 22.5 or newer (below 25)** already installed on that machine; the bundle ships no runtime of its own and runs on yours. Download the bundle on a connected machine, copy it across, and run the installer baked inside it.
 
 **1. On a machine with internet**, grab the archive matching the *offline* machine's platform from the [Releases page](https://github.com/selvakumarEsra/specship/releases) — `specship-<target>.tar.gz` (or `.zip` on Windows), where `<target>` is one of `darwin-arm64`, `darwin-x64`, `linux-x64`, `linux-arm64`, `win32-x64`, `win32-arm64`.
 
-**2. On the offline machine**, extract the archive and run the bundle's own installer. It puts `specship` on your `PATH`, then **asks where to wire Claude Code** — globally (every project) or a specific repo (project-local, indexing that repo) — using only the bundled runtime; nothing is compiled and nothing is fetched:
+**2. On the offline machine**, extract the archive and run the bundle's own installer. It puts `specship` on your `PATH`, then **asks where to wire Claude Code** — globally (every project) or a specific repo (project-local, indexing that repo) — using only the bundled app and your machine's Node; nothing is compiled and nothing is fetched:
 
 ```bash
 tar -xzf specship-<target>.tar.gz
@@ -124,7 +124,7 @@ cd your-repo && specship init
 
 **From a source checkout?** `scripts/offline-install.sh <bundle>` (and `scripts/offline-install.ps1` on Windows) does the same given a downloaded bundle directory or archive. This is a bundle-install path, **not a build from source** — it never runs npm or a compiler on the target.
 
-The bundle vendors its own Node, so the offline machine needs no Node installed. `npm i -g` is *not* an offline path (it resolves per-platform packages from the npm registry) — use the release archive above.
+If the offline machine has no `node` on its `PATH` — or one outside 22.5–24.x — the installer stops with a clear message instead of leaving a broken install. `npm i -g` is *not* an offline path (it resolves per-platform packages from the npm registry) — use the release archive above.
 
 ## Uninstall
 

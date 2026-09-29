@@ -3,9 +3,12 @@
   SpecShip offline / air-gapped installer (Windows, bundled into the release zip).
 
 .DESCRIPTION
-  Runs from inside an extracted self-contained bundle. Installs SpecShip using
-  ONLY files already in this bundle: the vendored Node runtime, the compiled
-  app, and the launcher. No package manager, no compiler, no network access.
+  Runs from inside an extracted bundle. Installs SpecShip using ONLY files
+  already in this bundle (the compiled app and the launcher) plus the machine's
+  own Node. No package manager, no compiler, no network access.
+
+  Requires Node >= 22.5.0 and < 25.0.0 on PATH — the bundle ships no runtime
+  (REQ-OFFLINE-006).
 
 .PARAMETER SkipClaude
   Install onto PATH only; leave Claude Code config untouched.
@@ -39,6 +42,27 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+# Resolve the machine's Node and gate its version (REQ-OFFLINE-006). The floor
+# guarantees the built-in node:sqlite (FTS5); the ceiling matches the Node 25
+# hard exit in the CLI. Run before anything is installed or wired, so an
+# unsuitable machine is left untouched.
+function Resolve-NodeExe {
+  $cmd = Get-Command node -ErrorAction SilentlyContinue
+  if (-not $cmd) {
+    Write-Error "specship: Node.js is required (>= 22.5.0, < 25.0.0) but no 'node' was found on PATH. Install it from https://nodejs.org"
+    exit 1
+  }
+  $exe = $cmd.Source
+  $raw = (& $exe -v 2>$null | Select-Object -First 1)
+  $parsed = $null
+  if ($raw) { [void][version]::TryParse(($raw -replace '^v', '' -replace '-.*$', ''), [ref]$parsed) }
+  if (-not $parsed -or $parsed -lt [version]'22.5.0' -or $parsed -ge [version]'25.0.0') {
+    Write-Error "specship: Node.js >= 22.5.0 and < 25.0.0 is required (found $raw at $exe). Install a supported version from https://nodejs.org"
+    exit 1
+  }
+  return $exe
+}
+
 # Bundle root = the directory holding this script.
 $bundle = Split-Path -Parent $MyInvocation.MyCommand.Path
 $installDir = if ($env:SPECSHIP_INSTALL_DIR) { $env:SPECSHIP_INSTALL_DIR } else { Join-Path $env:LOCALAPPDATA 'specship' }
@@ -56,6 +80,10 @@ if ($Uninstall) {
   Write-Host "SpecShip uninstalled (removed $installDir)."
   exit 0
 }
+
+# Gate on the machine's Node before touching anything (REQ-OFFLINE-006.A3):
+# an unsupported machine gets no install dir, no PATH entry, and no wiring.
+$nodeExe = Resolve-NodeExe
 
 # 1. Relocate the bundle into a stable install dir (overwritten on upgrade),
 #    unless this script is already running from that location.
@@ -75,7 +103,7 @@ if (($userPath -split ';') -notcontains $binDir) {
   Write-Host "Added $binDir to your user PATH (open a new terminal to pick it up)."
 }
 
-# 3. Wire Claude Code via the vendored Node (no system Node, no network).
+# 3. Wire Claude Code via the machine's resolved Node (no npm, no network).
 #    REQ-OFFLINE-005: the wiring target is asked, never assumed — a blind
 #    project-local install from here would land in the bundle directory.
 if (-not $SkipClaude) {
@@ -101,8 +129,7 @@ if (-not $SkipClaude) {
 }
 
 if (-not $SkipClaude) {
-  $nodeExe = Join-Path $dest 'node.exe'
-  $cliJs   = Join-Path $dest 'lib\dist\bin\specship.js'
+  $cliJs = Join-Path $dest 'lib\dist\bin\specship.js'
   if ($Path) {
     if (-not (Test-Path $Path -PathType Container)) {
       Write-Error "specship: -Path '$Path' is not a directory"
