@@ -42,13 +42,25 @@ The settings-file chain currently covers the behavior switches (`SPECSHIP_NO_STE
 | `SPECSHIP_NO_CHEATSHEET=1` | Turn off the session-start cheat-sheet of SpecShip commands (prints once per session startup) | cheat-sheet on |
 | `SPECSHIP_NO_STATUSLINE_TIPS=1` | Turn off the rotating usage tip on the status-line segment | tips on |
 | `SPECSHIP_COMPACT=0` | Disable smaller-model output compaction entirely (also disables the tier-specific rendering) | compaction auto by model |
-| `SPECSHIP_MODEL=<id>` | Force the model tier for compaction — normally detected automatically from the session | auto-detect |
+| `SPECSHIP_MODEL=<tier-or-id>` | Force the model tier for compaction — either a tier name (`lite`, `standard`, `full`) or a model id (`gemini-3.5-flash`, `claude-haiku-4-5`). Wins over auto-detection | auto-detect |
 | `SPECSHIP_INTEGRATIONS` | Which optional tool groups the MCP server exposes (`jira`, `designer`). The installer writes this into the MCP entry for `--with-jira` / `--with-designer`; you rarely set it by hand | none (local-only core) |
 | `SPECSHIP_WATCH_DEBOUNCE_MS` | Auto-sync debounce after a file change (clamped 100 ms – 60 s) | `2000` |
 | `SPECSHIP_NO_DAEMON=1` | Disable the file watcher (sandboxed environments; run `specship sync` manually) | watcher on |
 | `SPECSHIP_MCP_TOOLS` | Comma-separated allowlist trimming the exposed MCP tool surface | all tools |
 
 The complete generated list of every `SPECSHIP_*` variable the code reads is in the [CLI reference](/reference/cli/#environment-variables).
+
+### How the model tier is detected
+
+Compaction is sized to the model running the session, resolved in this order — the first hit wins:
+
+1. `SPECSHIP_COMPACT=0` — compaction off entirely.
+2. `SPECSHIP_MODEL` — the manual override, naming a tier or a model id.
+3. The Claude Code session model, recorded by the status line / session-start hook.
+4. Gemini CLI's own configuration: the `GEMINI_MODEL` environment variable, then `model` in `.gemini/settings.json` (your project's file first, then `~/.gemini/settings.json`). This is how a Gemini CLI session gets a tier — it has no status line or hooks to read. This step only runs when the server was launched by Gemini CLI, which `specship install --target gemini` guarantees by setting `SPECSHIP_HOST=gemini` in the MCP entry (include it if you paste the entry by hand). A Claude Code session in a repo that also uses Gemini CLI is never affected by these files.
+5. Nothing detected — full output, unchanged. SpecShip never compacts for a model it can't identify.
+
+Gemini settings are only ever read, never written, and an unreadable or malformed settings file is simply treated as "unknown model".
 
 ## Where data lives
 

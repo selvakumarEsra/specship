@@ -65,7 +65,7 @@ An actual environment variable (shell `export`, or Claude Code's `settings.json`
 | `SPECSHIP_NO_CHEATSHEET=1` | Turn off the session-start cheat-sheet of SpecShip commands |
 | `SPECSHIP_NO_STATUSLINE_TIPS=1` | Turn off the rotating usage tip on the status-line segment |
 | `SPECSHIP_COMPACT=0` | Disable the smaller-model output compaction entirely |
-| `SPECSHIP_MODEL=<model>` | Force the model tier for compaction (normally auto-detected) |
+| `SPECSHIP_MODEL=<tier-or-id>` | Force the model tier for compaction — a tier name (`lite`/`standard`/`full`) or a model id. Normally auto-detected: from the Claude Code session model, or on Gemini CLI from `GEMINI_MODEL` / `.gemini/settings.json` |
 | `SPECSHIP_INTEGRATIONS` | Written by the installer for `--with-jira`/`--with-designer` — which optional tool groups the MCP server exposes |
 | `SPECSHIP_WATCH_DEBOUNCE_MS` | Auto-sync debounce window (default 2000, clamped 100ms–60s) |
 | `SPECSHIP_NO_DAEMON=1` | Disable the file watcher (sandboxed environments) |

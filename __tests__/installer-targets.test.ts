@@ -1282,15 +1282,16 @@ describe('Gemini target — specifics', () => {
   /** REQ-GEMINI-003.A2 — a prior install's integrations survive an upgrade. */
   function geminiReinstallPreservesIntegrations(): void {
     geminiTarget.install('global', { autoAllow: true, withJira: true });
+    // SPECSHIP_HOST=gemini is the tier-detection host marker (REQ-LOWEND-001).
     expect(readSettings('global').mcpServers.specship.env)
-      .toEqual({ SPECSHIP_INTEGRATIONS: 'jira' });
+      .toEqual({ SPECSHIP_INTEGRATIONS: 'jira', SPECSHIP_HOST: 'gemini' });
 
     // A later install that omits --with-jira must not disable it, and adding
     // designer must union rather than replace.
     expect(geminiTarget.install('global', { autoAllow: true }).files[0].action).toBe('unchanged');
     geminiTarget.install('global', { autoAllow: true, withDesigner: true });
     expect(readSettings('global').mcpServers.specship.env)
-      .toEqual({ SPECSHIP_INTEGRATIONS: 'designer,jira' });
+      .toEqual({ SPECSHIP_INTEGRATIONS: 'designer,jira', SPECSHIP_HOST: 'gemini' });
   }
 
   /** REQ-GEMINI-006.A1/A2 — the capability gap is stated, and nothing Claude-shaped is written. */

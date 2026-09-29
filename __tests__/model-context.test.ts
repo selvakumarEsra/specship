@@ -53,11 +53,18 @@ Found 12 symbols across 3 files.
 
 describe('model tier resolution (REQ-MODCTX-001)', () => {
   let dir: string;
+  // An empty tmp homedir keeps the settings-chain and Gemini
+  // (`~/.gemini/settings.json`, REQ-LOWEND-001) reads off the real machine.
+  let home: string;
   beforeEach(() => {
     dir = fs.mkdtempSync(path.join(os.tmpdir(), 'modctx-'));
+    home = fs.mkdtempSync(path.join(os.tmpdir(), 'modctx-home-'));
     fs.mkdirSync(path.join(dir, '.specship'), { recursive: true });
   });
-  afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
+  afterEach(() => {
+    fs.rmSync(dir, { recursive: true, force: true });
+    fs.rmSync(home, { recursive: true, force: true });
+  });
 
   it('maps ids and display names to tiers', () => {
     expect(modelTier('claude-haiku-4-5-20251001')).toBe('lite');
@@ -65,6 +72,16 @@ describe('model tier resolution (REQ-MODCTX-001)', () => {
     expect(modelTier('claude-fable-5')).toBe('full');
     expect(modelTier(null)).toBe('full');
   });
+
+  /** @verifies REQ-LOWEND-001.A2 */
+  function tierNamesAreAcceptedAsOverrideValues(): void {
+    expect(modelTier('lite')).toBe('lite');
+    expect(modelTier('standard')).toBe('standard');
+    expect(modelTier('full')).toBe('full');
+    expect(detectModelTier(dir, { SPECSHIP_MODEL: 'lite' }, home)).toBe('lite');
+    expect(detectModelTier(dir, { SPECSHIP_MODEL: 'standard' }, home)).toBe('standard');
+  }
+  it('the override may name a tier, not only a model id (REQ-LOWEND-001.A2)', tierNamesAreAcceptedAsOverrideValues);
 
   /** @verifies REQ-GEMINI-007.A1 */
   function geminiIdsMapToCapabilityTiers(): void {
@@ -92,23 +109,23 @@ describe('model tier resolution (REQ-MODCTX-001)', () => {
       workspace: { current_dir: dir },
     });
     buildSegment(stdin, true);
-    expect(detectModelTier(dir, {})).toBe('lite');
+    expect(detectModelTier(dir, {}, home)).toBe('lite');
   });
 
   it('A2: no marker + no override → full tier', () => {
-    expect(detectModelTier(dir, {})).toBe('full');
+    expect(detectModelTier(dir, {}, home)).toBe('full');
   });
 
   it('A3: SPECSHIP_MODEL overrides the marker', () => {
     recordSessionModel(dir, 'Sonnet 4.6');
-    expect(detectModelTier(dir, { SPECSHIP_MODEL: 'claude-haiku-4-5' })).toBe('lite');
+    expect(detectModelTier(dir, { SPECSHIP_MODEL: 'claude-haiku-4-5' }, home)).toBe('lite');
   });
 
   /** @verifies REQ-GEMINI-007.A3 */
   function specshipModelAcceptsGeminiIdWithoutMarker(): void {
     expect(fs.existsSync(modelMarkerPath(dir))).toBe(false);
-    expect(detectModelTier(dir, { SPECSHIP_MODEL: 'gemini-2.5-flash' })).toBe('lite');
-    expect(detectModelTier(dir, { SPECSHIP_MODEL: 'gemini-2.5-pro' })).toBe('full');
+    expect(detectModelTier(dir, { SPECSHIP_MODEL: 'gemini-2.5-flash' }, home)).toBe('lite');
+    expect(detectModelTier(dir, { SPECSHIP_MODEL: 'gemini-2.5-pro' }, home)).toBe('full');
     // The override must not manufacture a marker — it's a read-only channel.
     expect(fs.existsSync(modelMarkerPath(dir))).toBe(false);
   }
@@ -119,10 +136,10 @@ describe('model tier resolution (REQ-MODCTX-001)', () => {
     // No status-line render, no SessionStart hook, no transcript — the marker
     // channel is Claude-only, so nothing is misread and the tier stays full.
     expect(fs.existsSync(modelMarkerPath(dir))).toBe(false);
-    expect(detectModelTier(dir, {})).toBe('full');
+    expect(detectModelTier(dir, {}, home)).toBe('full');
     recordSessionModel(dir, 'gemini-2.5-flash');
-    expect(detectModelTier(dir, {})).toBe('lite');
-    expect(detectModelTier(dir, { SPECSHIP_COMPACT: '0' })).toBe('full');
+    expect(detectModelTier(dir, {}, home)).toBe('lite');
+    expect(detectModelTier(dir, { SPECSHIP_COMPACT: '0' }, home)).toBe('full');
   }
   it('a Gemini session (no Claude marker) resolves full; the kill-switch still wins (REQ-GEMINI-007.A4)', geminiSessionWithoutClaudeChannelResolvesFull);
 
