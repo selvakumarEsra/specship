@@ -1,0 +1,23 @@
+{
+  "session_id": "s-3",
+  "response": "Updating an element schedules renderScene.",
+  "stats": {
+    "models": {
+      "gemini-3.5-flash": {
+        "api": { "totalRequests": 3, "totalErrors": 0, "totalLatencyMs": 39000 },
+        "tokens": { "input": 14400, "prompt": 18400, "candidates": 900, "total": 19400, "cached": 4000, "thoughts": 100, "tool": 0 }
+      }
+    },
+    "tools": {
+      "totalCalls": 2,
+      "totalSuccess": 2,
+      "totalFail": 0,
+      "totalDurationMs": 4200,
+      "byName": {
+        "specship_explore": { "count": 1, "success": 1, "fail": 0, "durationMs": 3100 },
+        "read_file": { "count": 1, "success": 1, "fail": 0, "durationMs": 1100 }
+      }
+    },
+    "files": { "totalLinesAdded": 0, "totalLinesRemoved": 0 }
+  }
+}

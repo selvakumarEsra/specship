@@ -36,6 +36,43 @@ real repos with **≥3 different flow prompts** each:
    1.0) — that failure fails the A/B pass bar**, so a ranking change cannot
    silently regress named-target retrieval.
 
+## Gemini runner (LOWEND-DOC REQ-LOWEND-005)
+
+The same A/B methodology through Gemini CLI, pinned to `gemini-3.5-flash`:
+
+```bash
+scripts/agent-eval/run-all-gemini.sh <repo> "<Q>"                # auto tier
+SPECSHIP_MODEL=lite     scripts/agent-eval/run-all-gemini.sh <repo> "<Q>"
+SPECSHIP_MODEL=standard scripts/agent-eval/run-all-gemini.sh <repo> "<Q>"
+```
+
+- **Prerequisites are hard failures** (REQ-LOWEND-005.A2): no `gemini` on
+  PATH, or a smoke call that fails/auth-errors, exits 1 before any arm runs.
+  A skipped Gemini eval is never recorded as a pass.
+- **Arms are settings-driven**, not flag-driven — Gemini CLI has no
+  `--mcp-config`/`--strict-mcp-config`. The runner writes
+  `<repo>/.gemini/settings.json` per arm (with = `mcpServers.specship`
+  carrying `SPECSHIP_HOST=gemini` so the host-gated tier detection fires;
+  without = none), pins `--allowed-mcp-server-names` so a global entry can't
+  leak in, and restores any pre-existing file on exit.
+- **The two `SPECSHIP_MODEL` arms are REQ-LOWEND-002's decision procedure**:
+  run `lite` and `standard` under the same question and adopt the tier with
+  the lower fallback rate that still meets the pass bar.
+- `EVAL_RUNS` defaults to **2** — the ≥2-runs-per-arm rule applies here too.
+- **No cost figure.** Gemini CLI reports no dollar amount, so `costUsd` is
+  `null` and prints as `n/a`; comparisons use tool calls, wall-clock, and the
+  Read/Grep fallback rate. Gemini rows go in
+  `docs/benchmarks/call-sequence-analysis.md`, not the README block.
+- Arms run with `--output-format stream-json` (the only Gemini form that
+  carries the **ordered** tool sequence; plain `json` is aggregate-only —
+  `parse-run-gemini.mjs` reads both). Flags and both output schemas were
+  read out of the installed `@google/gemini-cli` 0.28.0, not assumed.
+- Metrics from both hosts share one schema (`eval-metrics.mjs`);
+  `parse-run-gemini.mjs` normalizes Gemini's tool names
+  (`read_file`→`Read`, `search_file_content`→`Grep`,
+  `run_shell_command`→`Bash`) so fallback counting is comparable. Output it
+  cannot recognize exits 2 rather than scoring a zero-tool run.
+
 Questions must be **repo-anchored** ("in THIS repository's source…") — a
 generic question lets the without-arm answer from training data and voids
 the control (measured on express/haiku).
