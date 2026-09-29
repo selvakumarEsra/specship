@@ -5,7 +5,7 @@ description: Get up and running with SpecShip in seconds.
 
 Get up and running with SpecShip in seconds.
 
-## No Node.js required — one command grabs the right build for your OS
+## One command grabs the right build for your OS (needs Node 22.5+, below 25)
 
 ```bash
 # macOS / Linux
@@ -22,7 +22,7 @@ npx @specship/specship        # zero-install, or:
 npm i -g @specship/specship
 ```
 
-SpecShip bundles its own runtime — nothing to compile, no native build, works the same everywhere. SpecShip is **Claude Code only**; run `specship install` to wire it in (project-local by default).
+Nothing to compile, no native build — it runs on the Node.js already on your machine (22.5 or newer, below 25) and works the same everywhere. SpecShip is **Claude Code only**; run `specship install` to wire it in (project-local by default).
 
 ## Initialize Projects
 

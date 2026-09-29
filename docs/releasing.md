@@ -49,8 +49,9 @@ only when a `[X.Y.Z]` block was pre-created, which the rule above forbids.)
 Releases are built and published by the **GitHub Actions "Release"
 workflow** (`.github/workflows/release.yml`). It runs
 `scripts/prepare-release.mjs` to promote `[Unreleased]` (auto-committing the
-CHANGELOG move back to `main`), bundles a Node runtime per platform
-(`scripts/build-bundle.sh`), and publishes the GitHub Release plus the npm
+CHANGELOG move back to `main`), builds one app bundle per platform
+(`scripts/build-bundle.sh` — no Node runtime is vendored; bundles run on the
+machine's Node 22.5+, below 25), and publishes the GitHub Release plus the npm
 thin-installer (`scripts/pack-npm.sh`: shim package + per-platform
 packages). **Publishing manually is wrong** — a plain `npm publish` ships
 the root package (non-bundled), which breaks anyone on Node < 22.5.
