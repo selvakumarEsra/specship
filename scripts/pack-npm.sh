@@ -3,8 +3,9 @@
 # Assemble the npm thin-installer packages from built bundles (esbuild pattern).
 #
 # Produces, under release/npm/:
-#   specship-<target>/   one per built bundle — the vendored Node + app, tagged
-#                         with os/cpu so npm installs only the matching one.
+#   specship-<target>/   one per built bundle — the compiled app + deps (no
+#                         bundled runtime), tagged with os/cpu so npm installs
+#                         only the matching one.
 #   main/                 the @specship/specship shim package: a tiny bin
 #                         that execs the matching platform bundle, with every
 #                         platform package in optionalDependencies.
@@ -48,22 +49,21 @@ for archive in "${archives[@]}"; do
       unzip -q "$archive" -d "$tmpx"
       mv "$tmpx/specship-${target}"/* "$pkgdir"/
       rm -rf "$tmpx"
-      nodefile="node.exe"
       ;;
     *)
       tar -xzf "$archive" -C "$pkgdir" --strip-components=1
-      nodefile="node"
       ;;
   esac
-  VERSION="$VERSION" SCOPE="$SCOPE" TARGET="$target" OSV="$os" ARCHV="$arch" NODEFILE="$nodefile" \
+  VERSION="$VERSION" SCOPE="$SCOPE" TARGET="$target" OSV="$os" ARCHV="$arch" \
     node -e '
       const fs=require("fs");
       fs.writeFileSync(process.argv[1], JSON.stringify({
         name: `${process.env.SCOPE}/specship-${process.env.TARGET}`,
         version: process.env.VERSION,
-        description: `SpecShip self-contained bundle for ${process.env.TARGET}`,
+        description: `SpecShip platform bundle for ${process.env.TARGET} (runs on your installed Node.js >= 22.5 < 25)`,
         os: [process.env.OSV], cpu: [process.env.ARCHV],
-        files: [process.env.NODEFILE, "lib", "bin"],
+        engines: { node: ">=22.5.0 <25.0.0" },
+        files: ["lib", "bin"],
         license: "MIT"
       }, null, 2) + "\n");
     ' "$pkgdir/package.json"
@@ -72,7 +72,7 @@ for archive in "${archives[@]}"; do
 done
 
 # Main shim package.
-#   npm-shim.js  CLI/MCP launcher (execs the bundled Node) — the `bin`.
+#   npm-shim.js  CLI/MCP launcher (runs the bundle on the machine's Node) — the `bin`.
 #   npm-sdk.js   programmatic/embedded entry (#354): re-exports the installed
 #                platform bundle's compiled library — the `main`.
 #   dist/        the .d.ts tree only (types). The runtime .js stays in the
@@ -101,8 +101,9 @@ VERSION="$VERSION" SCOPE="$SCOPE" TARGETS="${targets[*]}" \
     fs.writeFileSync(process.argv[1], JSON.stringify({
       name: `${process.env.SCOPE}/specship`,
       version: process.env.VERSION,
-      description: "Local-first code intelligence for AI agents (MCP). Self-contained — bundles its own runtime.",
+      description: "Local-first code intelligence for AI agents (MCP). Runs on your installed Node.js (>= 22.5 < 25).",
       bin: { specship: "npm-shim.js" },
+      engines: { node: ">=22.5.0 <25.0.0" },
       main: "npm-sdk.js",
       types: "dist/index.d.ts",
       exports: {

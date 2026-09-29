@@ -7,7 +7,7 @@
 **Stops your agent re-reading the codebase — structural answers in a few calls, not a grep-and-Read crawl · 100% local**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Self-contained](https://img.shields.io/badge/Node.js-bundled%20%C2%B7%20none%20required-brightgreen.svg)](https://nodejs.org/)
+[![Node.js](https://img.shields.io/badge/Node.js-22.5%2B%20%C2%B7%20%3C%2025-brightgreen.svg)](https://nodejs.org/)
 
 [![Windows](https://img.shields.io/badge/Windows-supported-blue.svg)](#supported-platforms)
 [![macOS](https://img.shields.io/badge/macOS-supported-blue.svg)](#supported-platforms)
@@ -21,13 +21,13 @@
 
 ### 1. Install the CLI
 
-No particular Node.js version to manage — the published install bundles its own runtime (Node 24 with FTS5, which SpecShip needs) and runs the same regardless of your system Node. You just need `npm` to fetch it:
+SpecShip runs on the Node.js already on your machine — any version from **22.5 up to (but not including) 25** works (that range ships the built-in SQLite with FTS5 that SpecShip needs; no compiler, nothing native to build). Install with `npm`:
 
 ```bash
 npm i -g @specship/specship@latest
 ```
 
-Offline / air-gapped machine? No npm, no compiler, and no network needed. Every release is a **self-contained bundle** (a vendored Node runtime plus the app). On a connected machine, download the archive matching the offline machine's platform from the [Releases page](https://github.com/selvakumarEsra/specship/releases), copy it across, extract it, and run the installer baked inside:
+Offline / air-gapped machine? No npm, no compiler, and no network needed — just **Node 22.5 or newer (below 25) already installed** on that machine, which the bundle runs on. On a connected machine, download the archive matching the offline machine's platform from the [Releases page](https://github.com/selvakumarEsra/specship/releases), copy it across, extract it, and run the installer baked inside:
 
 ```bash
 tar -xzf specship-<target>.tar.gz   # or unzip specship-<target>.zip on Windows
@@ -35,7 +35,7 @@ cd specship-<target>
 ./install.sh                        # .\install.ps1 on Windows
 ```
 
-That symlinks `specship` onto your `PATH`, then asks where to wire Claude Code — globally or a specific repo (`--global` / `--path <repo>` for scripts) — using only the bundled runtime; nothing is compiled on the target. From a checkout, `./scripts/offline-install.sh <bundle>` (`.ps1` on Windows) does the same given a downloaded bundle. See [Offline / air-gapped install](https://specship.cc/getting-started/installation/#offline--air-gapped-install) for the full walkthrough.
+That symlinks `specship` onto your `PATH`, then asks where to wire Claude Code — globally or a specific repo (`--global` / `--path <repo>` for scripts) — using your machine's Node (22.5–24.x); nothing is compiled on the target. From a checkout, `./scripts/offline-install.sh <bundle>` (`.ps1` on Windows) does the same given a downloaded bundle. See [Offline / air-gapped install](https://specship.cc/getting-started/installation/#offline--air-gapped-install) for the full walkthrough.
 
 ### 2. Wire up Claude Code
 
@@ -641,7 +641,7 @@ that drive the graph directly: `DatabaseConnection`, `QueryBuilder`,
   dependencies — is fetched alongside the shim.
 - The API runs on **your** runtime, so it needs **Node 22.5+** for the built-in
   `node:sqlite` (Electron qualifies when its bundled Node is 22.5+). The CLI and
-  MCP server are unaffected — they run on the self-contained bundled runtime.
+  MCP server have the same requirement — they run on your machine's Node too.
 - TypeScript types ship with the package. As with any Node-targeting library,
   keep `@types/node` available and `skipLibCheck: true` (the common default).
 
@@ -671,8 +671,9 @@ negation is the explicit opt-in.
 
 ## Supported Platforms
 
-Every release ships a self-contained build (bundled Node runtime — nothing to
-compile) for all three desktop OSes, on both Intel/AMD (x64) and ARM (arm64):
+Every release ships a prebuilt bundle (nothing to compile; runs on your
+machine's Node 22.5+, below 25) for all three desktop OSes, on both Intel/AMD
+(x64) and ARM (arm64):
 
 | Platform | Architectures | Install |
 |----------|---------------|---------|
@@ -715,7 +716,7 @@ See [Get Started](#get-started) for the one-line install commands.
 
 **Indexing is slow** — Check that `node_modules` and other large directories are excluded. Use `--quiet` to reduce output overhead.
 
-**MCP hits `database is locked`** — current builds shouldn't: SpecShip bundles its own Node runtime and uses Node's built-in `node:sqlite` in WAL mode, where concurrent reads never block on a writer. If you still see it:
+**MCP hits `database is locked`** — current builds shouldn't: SpecShip uses Node's built-in `node:sqlite` in WAL mode, where concurrent reads never block on a writer. If you still see it:
 
 - **You're on an old (pre-0.9) install.** Reinstall: `npm i -g @specship/specship@latest`.
 

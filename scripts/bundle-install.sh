@@ -2,10 +2,13 @@
 #
 # SpecShip offline / air-gapped installer (bundled into the release archive).
 #
-# Runs from inside an extracted self-contained bundle. Places the launcher on
-# PATH and wires Claude Code using ONLY files already in this bundle: the
-# vendored Node runtime, the compiled app, and the launcher. No package
-# manager, no compiler, no network access.
+# Runs from inside an extracted bundle. Places the launcher on PATH and wires
+# Claude Code using ONLY files already in this bundle (the compiled app and the
+# launcher) plus the machine's own Node. No package manager, no compiler, no
+# network access.
+#
+# Requires Node >= 22.5.0 and < 25.0.0 on PATH — the bundle ships no runtime
+# (REQ-OFFLINE-006).
 #
 # Usage (from the extracted bundle directory):
 #   ./install.sh                 install; asks where to wire Claude Code
@@ -21,6 +24,31 @@ set -eu
 
 # Bundle root = the directory holding this script.
 BUNDLE="$(cd "$(dirname "$0")" && pwd)"
+
+# Resolve the machine's Node and gate its version (REQ-OFFLINE-006). The floor
+# guarantees the built-in node:sqlite (FTS5); the ceiling matches the Node 25
+# hard exit in the CLI. Called before anything is installed or wired, so an
+# unsuitable machine is left untouched.
+resolve_node() {
+  NODE="$(command -v node 2>/dev/null || true)"
+  if [ -z "$NODE" ]; then
+    echo "specship: Node.js is required (>= 22.5.0, < 25.0.0) but no 'node' was found on PATH." >&2
+    echo "specship: install it from https://nodejs.org" >&2
+    exit 1
+  fi
+  NODE_VER="$("$NODE" -v 2>/dev/null || true)"   # vMAJOR.MINOR.PATCH
+  _v="${NODE_VER#v}"
+  _maj="${_v%%.*}"
+  _rest="${_v#*.}"
+  _min="${_rest%%.*}"
+  case "$_maj" in ''|*[!0-9]*) _maj=0 ;; esac
+  case "$_min" in ''|*[!0-9]*) _min=0 ;; esac
+  if [ "$_maj" -lt 22 ] || { [ "$_maj" -eq 22 ] && [ "$_min" -lt 5 ]; } || [ "$_maj" -ge 25 ]; then
+    echo "specship: Node.js >= 22.5.0 and < 25.0.0 is required (found ${NODE_VER:-unknown} at $NODE)." >&2
+    echo "specship: install a supported version from https://nodejs.org" >&2
+    exit 1
+  fi
+}
 
 INSTALL_DIR="${SPECSHIP_INSTALL_DIR:-$HOME/.specship}"
 BIN_DIR="${SPECSHIP_BIN_DIR:-$HOME/.local/bin}"
@@ -52,6 +80,10 @@ if [ "$UNINSTALL" -eq 1 ]; then
   exit 0
 fi
 
+# Gate on the machine's Node before touching anything (REQ-OFFLINE-006.A3):
+# an unsupported machine gets no install dir, no symlink, and no wiring.
+resolve_node
+
 # 1. Relocate the bundle into a stable install dir (overwritten on upgrade),
 #    unless this script is already running from that location.
 if [ "$BUNDLE" != "$DEST" ]; then
@@ -61,14 +93,14 @@ if [ "$BUNDLE" != "$DEST" ]; then
 fi
 
 # 2. Symlink the launcher onto PATH. The launcher resolves this symlink back to
-#    the bundle and execs the vendored Node by relative path.
+#    the bundle and execs the machine's Node against the bundled app.
 mkdir -p "$BIN_DIR"
 ln -sf "$DEST/bin/specship" "$BIN_DIR/specship"
 
 echo "Installed to $DEST"
 echo "Linked     $BIN_DIR/specship"
 
-# 3. Wire Claude Code via the VENDORED Node (no system Node, no network).
+# 3. Wire Claude Code via the machine's resolved Node (no npm, no network).
 #    REQ-OFFLINE-005: the wiring target is asked, never assumed — a blind
 #    project-local install from here would land in the bundle directory.
 if [ "$SKIP_CLAUDE" -eq 0 ]; then
@@ -104,10 +136,10 @@ if [ "$SKIP_CLAUDE" -eq 0 ]; then
       exit 1
     fi
     echo "Wiring Claude Code for $WIRE_PATH ..."
-    ( cd "$WIRE_PATH" && "$DEST/node" --liftoff-only "$DEST/lib/dist/bin/specship.js" install --target claude -y --location local )
+    ( cd "$WIRE_PATH" && "$NODE" --liftoff-only "$DEST/lib/dist/bin/specship.js" install --target claude -y --location local )
   else
     echo "Wiring Claude Code globally..."
-    "$DEST/node" --liftoff-only "$DEST/lib/dist/bin/specship.js" install --target claude -y --location global --skip-index
+    "$NODE" --liftoff-only "$DEST/lib/dist/bin/specship.js" install --target claude -y --location global --skip-index
   fi
 fi
 

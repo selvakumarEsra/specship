@@ -2,9 +2,9 @@
 #
 # SpecShip standalone installer.
 #
-# Downloads a self-contained bundle (a vendored Node runtime + the app) from
-# GitHub Releases. No Node.js, no build tools, no npm required — ideal for a
-# fresh Linux VPS over SSH.
+# Downloads a prebuilt bundle (the app, run by the machine's own Node) from
+# GitHub Releases. No build tools and no npm required — just Node >= 22.5 < 25
+# already installed — ideal for a fresh Linux VPS over SSH.
 #
 #   curl -fsSL https://raw.githubusercontent.com/selvakumarEsra/specship/main/install.sh | sh
 #

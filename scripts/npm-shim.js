@@ -3,13 +3,13 @@
 //
 // npm thin-installer launcher for SpecShip.
 //
-// The heavy artifact (a vendored Node runtime + the app) ships as a per-platform
-// optionalDependency: @specship/specship-<platform>-<arch>. npm installs
-// only the one matching the host, via each package's `os`/`cpu` fields (the
-// esbuild pattern). This shim — run by the user's OWN Node — locates that bundle
-// and execs its launcher, so the real work always runs on the bundled Node 24
-// (with node:sqlite), regardless of the user's Node version. The user's Node is
-// only ever a launcher; even an ancient version can run this file.
+// The heavy artifact (the compiled app + its deps — no bundled runtime as of
+// REQ-OFFLINE-006) ships as a per-platform optionalDependency:
+// @specship/specship-<platform>-<arch>. npm installs only the one matching the
+// host, via each package's `os`/`cpu` fields (the esbuild pattern). This shim —
+// run by the user's OWN Node — locates that bundle and runs it on the machine's
+// Node: >= 22.5.0 (built-in node:sqlite with FTS5) and < 25.0.0 (the Node 25
+// hard exit). Out-of-range Nodes get a clear message, never a broken install.
 //
 // Self-heal (issue #303): some registries — notably the npmmirror/cnpm mirrors,
 // and some corporate proxies — don't reliably mirror the per-platform
@@ -59,11 +59,11 @@ function resolveInstalledBundle() {
   try {
     if (isWindows) {
       // Modern Node refuses to spawn the bundle's .cmd directly (EINVAL, the
-      // CVE-2024-27980 hardening on Node 24), so invoke the bundled node.exe
+      // CVE-2024-27980 hardening on Node 24), so invoke this same Node
       // against the app entry point and pass --liftoff-only here.
-      var nodeExe = require.resolve(pkg + '/node.exe');
       var entry = require.resolve(pkg + '/lib/dist/bin/specship.js');
-      return { command: nodeExe, args: liftoff(entry) };
+      assertRuntimeVersion();
+      return { command: process.execPath, args: liftoff(entry) };
     }
     return { command: require.resolve(pkg + '/bin/specship'), args: process.argv.slice(2) };
   } catch (e) {
@@ -71,15 +71,30 @@ function resolveInstalledBundle() {
   }
 }
 
+// REQ-OFFLINE-006: when this shim's own Node is what will run the app (the
+// Windows paths — unix goes through bin/specship, which gates the PATH node
+// itself), enforce the supported range before launching.
+function assertRuntimeVersion() {
+  var v = process.versions.node.split('.').map(Number);
+  var ok = (v[0] > 22 || (v[0] === 22 && v[1] >= 5)) && v[0] < 25;
+  if (!ok) {
+    process.stderr.write(
+      'specship: Node.js >= 22.5.0 and < 25.0.0 is required (found v' + process.versions.node + ').\n' +
+      'specship: install a supported Node from https://nodejs.org and retry.\n'
+    );
+    process.exit(1);
+  }
+}
+
 // Locate the launcher inside an extracted GitHub bundle directory (same
-// node/lib/bin layout as the npm platform package). Returns {command, args} or
+// lib/bin layout as the npm platform package). Returns {command, args} or
 // null when the directory doesn't hold a usable bundle yet.
 function launcherIn(dir) {
   if (isWindows) {
-    var nodeExe = path.join(dir, 'node.exe');
     var entry = path.join(dir, 'lib', 'dist', 'bin', 'specship.js');
-    if (fs.existsSync(nodeExe) && fs.existsSync(entry)) {
-      return { command: nodeExe, args: liftoff(entry) };
+    if (fs.existsSync(entry)) {
+      assertRuntimeVersion();
+      return { command: process.execPath, args: liftoff(entry) };
     }
   } else {
     var launcher = path.join(dir, 'bin', 'specship');
@@ -90,7 +105,7 @@ function launcherIn(dir) {
 
 // --liftoff-only keeps tree-sitter's WASM grammars off V8's turboshaft tier to
 // avoid the Zone OOM on Node >= 22 (issues #293/#298). The unix bin/specship
-// launcher already passes it; on Windows we invoke node.exe directly so add it.
+// launcher already passes it; on Windows we invoke node directly so add it.
 function liftoff(entry) {
   return ['--liftoff-only', entry].concat(process.argv.slice(2));
 }

@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 #
-# Offline / air-gapped install of SpecShip from a PRE-BUILT self-contained
-# bundle. No npm, no compiler, no network — the bundle vendors its own Node
-# runtime, so nothing is built on the target machine.
+# Offline / air-gapped install of SpecShip from a PRE-BUILT bundle. No npm, no
+# compiler, no network — nothing is built on the target machine. The target
+# must already have Node >= 22.5 < 25 on PATH; the bundle ships no runtime.
 #
 # This is NOT a build-from-source flow. Point it at a release bundle for the
 # target's platform — an extracted `specship-<target>/` directory, or a
 # `specship-<target>.tar.gz` / `.zip` archive — and it delegates to the
 # installer baked inside that bundle (which symlinks the launcher onto PATH and
-# wires Claude Code via the vendored Node).
+# wires Claude Code via the machine's Node).
 #
 # Get a bundle from the GitHub Releases page on a connected machine, or build
 # one with scripts/build-bundle.sh. To install from a source checkout instead

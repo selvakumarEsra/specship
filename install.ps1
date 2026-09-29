@@ -1,7 +1,7 @@
 # SpecShip standalone installer for Windows (PowerShell).
 #
-# Downloads a self-contained bundle (a vendored Node runtime + the app) from
-# GitHub Releases. No Node.js, no build tools required.
+# Downloads a prebuilt bundle (the app, run by the machine's own Node) from
+# GitHub Releases. No build tools required — just Node >= 22.5 < 25 installed.
 #
 #   irm https://raw.githubusercontent.com/selvakumarEsra/specship/main/install.ps1 | iex
 #
