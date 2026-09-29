@@ -9,10 +9,12 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+
+## [0.26.0] - 2026-09-29
+
 ### New Features
 
 - Downloadable bundles are far smaller and faster to install: they no longer ship a copy of Node.js and instead run on the Node.js already installed on your machine. **Node.js 22.5 or newer (below 25) is now required** to install and run SpecShip from a bundle, including on offline and air-gapped machines. If a suitable Node.js isn't found, the installer and the `specship` command stop with a clear message naming the supported range and pointing to nodejs.org, instead of leaving a half-working install. The npm install (`npm i -g @specship/specship`) follows the same rule: the published packages no longer carry a runtime and declare the supported Node.js range, so an unsupported Node.js is caught at install time rather than at first run.
-
 
 ## [0.25.0] - 2026-09-27
 
@@ -824,3 +826,4 @@ Thanks @andreinknv for the substantive draft this release was based on.
 [0.23.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.23.0
 [0.24.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.24.0
 [0.25.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.25.0
+[0.26.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.26.0
