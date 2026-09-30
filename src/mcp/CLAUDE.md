@@ -24,6 +24,18 @@ The MCP server Claude Code talks to: tool definitions + handlers
     smaller tier.** (The regression that motivated this: the `<5000` tier's
     2500 was below the `<500` tier's 3800, so on a god-file repo one explore
     returned <1% of the file and forced a Read.)
+  - **Model-tier overlays sit on top of the size tier, never replace it**
+    (`getExploreOutputBudget(fileCount, tier)`). An overlay may only *raise*
+    `maxCharsPerFile` and only *lower* `defaultMaxFiles` (depth over breadth),
+    must leave `maxOutputChars` and `includeRelationships` at the size tier's
+    values — the output can never exceed the ~24K inline tool-result cap, or
+    the host externalizes the payload to a file the agent Reads back — and may
+    flip only the trailing meta-flags (additional-files, budget-note off;
+    completeness signal on; low-value files excluded). A caller-supplied
+    `maxFiles` may narrow but never widen the lite breadth cut (the handler
+    clamps it to the overlay's `defaultMaxFiles`). `full`/`standard` stay
+    pass-through so their output is byte-identical to shipped
+    (REQ-LOWEND-004).
 - Explore output must **never tell the agent to "use Read"** — steer to
   another `specship_explore` and "treat returned source as already Read."
 - Tool *schemas* never vary by model tier (clients cache them; prompt caches
