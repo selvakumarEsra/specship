@@ -229,3 +229,66 @@ implementations:
 - The existing Claude-driven eval path is unchanged and still passes.
   verifies:
     - __tests__/lowend-eval-harness.test.ts:claudeRunnerRendersAByteIdenticalBlock
+
+<!-- id: REQ-LOWEND-006 -->
+## A requirement's work state MUST be re-fetchable in one call
+
+A Flash-class model loses key task information (decisions made, files
+already touched, which criterion is next) across a long task — its context
+window cannot carry it. SpecShip MUST externalize that state on the spec
+itself: `specship_spec` with a `spec_id` MUST return, alongside the existing
+contract/links panes, a **work-state pane** — per acceptance criterion: its
+verdict (untested / tested / verified / broken), the linked implementing
+files, and recorded decisions — so an agent that lost context recovers the
+full "where am I" with ONE existing call. No new tool is added to the lite
+surface.
+
+Decisions are recorded explicitly (an append-only note attached to the
+requirement, written through an existing write path), never inferred from
+transcripts. [needs review: exact write path — extend `specship_link_assert`
+metadata vs. a `note` argument on `specship_spec`.]
+
+implementations:
+  - src/mcp/spec-tools.ts:handleSpecshipSpec
+
+## Acceptance
+<!-- id: REQ-LOWEND-006.A1 -->
+- `specship_spec` with a `spec_id` returns the work-state pane: per-criterion
+  verdict, linked files, and any recorded decisions, in the same single
+  response.
+<!-- id: REQ-LOWEND-006.A2 -->
+- A fresh session with no prior context can name the next unmet criterion of
+  an in-progress requirement from that one call's output alone.
+<!-- id: REQ-LOWEND-006.A3 -->
+- A requirement with no recorded state renders an empty pane cleanly — no
+  error, no fabricated state.
+
+<!-- id: REQ-LOWEND-007 -->
+## Big tasks MUST be splittable into per-criterion work items with one-call context packs
+
+A weak model cannot sustain one long orchestrated run. The `spec-implement`
+workflow MUST offer a **lite mode** that decomposes a requirement into one
+work item per acceptance criterion, sequenced deterministically by the
+workflow engine (not by the driving model). Each work item receives a
+**context pack** — the criterion text, the parent requirement's contract,
+the linked code, and the relevant source — sized within the lite explore
+budget (REQ-LOWEND-004), so completing it needs no additional retrieval
+calls.
+
+The engine holds all cross-item state (REQ-LOWEND-006's pane is updated as
+items complete); an item's completion is judged by its criterion's test
+evidence, not by the model's self-report.
+
+## Acceptance
+<!-- id: REQ-LOWEND-007.A1 -->
+- Running the lite mode on a multi-criterion requirement produces one work
+  item per `.A<N>`, executed in engine-defined order.
+<!-- id: REQ-LOWEND-007.A2 -->
+- Each work item's prompt (context pack) fits within the lite explore output
+  cap and contains the criterion, contract, and linked source.
+<!-- id: REQ-LOWEND-007.A3 -->
+- An item only reads as complete when its criterion's `tests`-kind link is
+  verified; a failing item halts the sequence with the failure named,
+  leaving completed items' state recorded.
+<!-- id: REQ-LOWEND-007.A4 -->
+- The default (non-lite) `spec-implement` flow is unchanged.
