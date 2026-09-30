@@ -159,19 +159,25 @@ acceptance below may be met by adding calls or latency.
 
 implementations:
   - src/mcp/tools.ts:getExploreOutputBudget
-  - src/mcp/tools.ts:applyLiteTierTrim
+  - src/mcp/tools.ts:applyLiteExploreBudget
 
 ## Acceptance
 <!-- id: REQ-LOWEND-004.A1 -->
 - On lite tier, the probe sweep shows the top-ranked file's relevant symbols
   returned with untrimmed bodies on the corpus repos, within the lite output
   cap.
+  verifies:
+    - __tests__/explore-output-budget.test.ts:liteReturnsFullerBodiesAcrossFewerFiles
 <!-- id: REQ-LOWEND-004.A2 -->
 - On lite tier the trailing meta-sections (additional-files list, budget
   note) are absent; the completeness signal is present.
+  verifies:
+    - __tests__/explore-output-budget.test.ts:liteSuppressesTrailingMetaSectionsButKeepsCompleteness
 <!-- id: REQ-LOWEND-004.A3 -->
 - Full-tier probe-sweep output across the corpus is byte-identical before and
   after the change.
+  verifies:
+    - __tests__/explore-output-budget.test.ts:fullAndStandardTierBudgetsAreByteIdentical
 <!-- id: REQ-LOWEND-004.A4 -->
 - Median explore latency on the corpus does not increase.
 
