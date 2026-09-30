@@ -17,7 +17,8 @@ import * as path from 'path';
 import * as os from 'os';
 import { SpecShip } from '../src';
 import { tools } from '../src/mcp/tools';
-import { SERVER_INSTRUCTIONS } from '../src/mcp/server-instructions';
+import { SERVER_INSTRUCTIONS, LITE_SERVER_INSTRUCTIONS } from '../src/mcp/server-instructions';
+import { recordSessionModel } from '../src/mcp/model-context';
 
 const BIN = path.resolve(__dirname, '../dist/bin/specship.js');
 
@@ -216,4 +217,42 @@ describe('MCP initialize handshake (issue #172)', () => {
     expect(prompts.error).toBeUndefined();
     expect(prompts.result.prompts).toEqual([]);
   }, 15000);
+
+  it('serves the full instructions to a frontier-model session (REQ-LOWEND-003.A3)', async () => {
+    const cg = await SpecShip.init(tempDir);
+    cg.close();
+    recordSessionModel(tempDir, 'claude-fable-5');
+
+    child = spawnServer(tempDir);
+    const events = tagStreams(child);
+    sendInitialize(child, tempDir);
+    const response = await waitFor(events, (e) => e.stream === 'stdout', 10000);
+    expect(JSON.parse(response.text).result.instructions).toBe(SERVER_INSTRUCTIONS);
+  }, 20000);
+
+  it('serves the compact instructions to a lite-tier session (REQ-LOWEND-003.A1)', async () => {
+    const cg = await SpecShip.init(tempDir);
+    cg.close();
+    recordSessionModel(tempDir, 'claude-haiku-4-5');
+
+    child = spawnServer(tempDir);
+    const events = tagStreams(child);
+    sendInitialize(child, tempDir);
+    const response = await waitFor(events, (e) => e.stream === 'stdout', 10000);
+    const instructions = JSON.parse(response.text).result.instructions;
+    expect(instructions).toBe(LITE_SERVER_INSTRUCTIONS);
+    expect(instructions).not.toMatch(/jira/i);
+  }, 20000);
+});
+
+describe('REQ-LOWEND-003 — the proxy handshake resolves instructions the same way', () => {
+  // The daemon-mode handshake replies before any engine exists, so it uses the
+  // same marker-file-only resolution as its neighboring `getStaticTools(deps.root)`
+  // call. Guarded at the source level: spawning a real daemon here would leak a
+  // detached process (see the SPECSHIP_NO_DAEMON note above).
+  it('proxy.ts initialize reply calls resolveServerInstructions(deps.root)', () => {
+    const src = fs.readFileSync(path.resolve(__dirname, '../src/mcp/proxy.ts'), 'utf-8');
+    expect(src).toContain('instructions: resolveServerInstructions(deps.root)');
+    expect(src).not.toContain('instructions: SERVER_INSTRUCTIONS');
+  });
 });

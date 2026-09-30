@@ -13,7 +13,15 @@
  * Keep it tight. The agent reads this every session — long instructions
  * burn tokens. Reference only tools that exist on `main`; gate any
  * conditional tools behind feature checks if/when they ship.
+ *
+ * Two variants live here and nowhere else (REQ-LOWEND-003): the full
+ * `SERVER_INSTRUCTIONS` below, and the compact `LITE_SERVER_INSTRUCTIONS`
+ * served to `lite`-tier sessions. Pick between them with
+ * `serverInstructionsFor(tier)` / `resolveServerInstructions(hint)`.
  */
+import { findNearestSpecShipRoot } from '../directory';
+import { detectModelTier, type ModelTier } from './model-context';
+
 export const SERVER_INSTRUCTIONS = `# Specship — code intelligence over an indexed knowledge graph
 
 Specship is a SQLite knowledge graph of every symbol, edge, and file
@@ -90,3 +98,61 @@ Any request about the user's JIRA issues/tasks/tickets goes to these tools by de
 - Cross-file resolution is best-effort name matching; ambiguous calls may return multiple candidates.
 - No live correctness validation — that's still the TypeScript compiler / test suite / linter's job. Specship supplements those with structural context they don't have.
 `;
+
+/**
+ * Compact variant served when the resolved model tier is `lite`
+ * (REQ-LOWEND-003). Short imperative contract: explore-first, the core
+ * tools that survive `applyLiteTierTrim`, and the anti-patterns that stop a
+ * grep fallback. No JIRA section, and no tool the lite menu trimmed away.
+ */
+export const LITE_SERVER_INSTRUCTIONS = `# Specship — the code index for this workspace
+
+Specship is a pre-built index of every symbol, file, and call edge here.
+Reads are instant; the index lags file writes by about a second.
+
+## Rule 1 — explore first, answer yourself
+
+Any question about how the code works, where something lives, how X reaches
+Y, or what an area does: make ONE \`specship_explore\` call, then answer from
+it. \`specship_explore\` takes a plain question or a list of symbol/file
+names and returns the verbatim source of the matching symbols grouped by
+file — it is Read-equivalent, so treat what it returns as already Read.
+Do NOT hand the lookup to a sub-agent or sub-task. Do NOT start a
+Grep/Glob/Read sweep. One call is usually the whole answer.
+
+## Rule 2 — tools
+
+- Anything about how the code works, where it is, or a flow → \`specship_explore\` (FIRST, and usually the only call). For a flow, name both ends: \`specship_explore\` with \`mutateElement renderScene\`.
+- Just the location of a name → \`specship_search\`.
+- The full body of one named symbol, including every overload of an ambiguous name → \`specship_node\` with \`includeCode\`.
+- Is the index ready / which specship is running → \`specship_status\`.
+- The user names a spec or requirement (e.g. REQ-AUTH-005) → \`specship_spec\`.
+- After you edit code for a spec → \`specship_link_assert\` before reporting done.
+
+## Rule 3 — anti-patterns
+
+- Don't Grep/Glob/Read to find code. Ask \`specship_explore\` instead.
+- Don't re-run \`specship_explore\` for something a previous call already returned — re-read your earlier result.
+- Don't verify a specship answer with grep. It comes from a full parse.
+- Don't chain \`specship_search\` + \`specship_node\` to understand an area — one \`specship_explore\` covers it.
+- If a response opens with a ⚠️ staleness banner, Read only the files it lists; everything else is fresh.
+- If a tool says the project isn't initialized, offer to run \`specship init -i\`.
+`;
+
+/** Instruction text for a resolved tier (REQ-LOWEND-003.A3: non-lite is unchanged). */
+export function serverInstructionsFor(tier: ModelTier): string {
+  return tier === 'lite' ? LITE_SERVER_INSTRUCTIONS : SERVER_INSTRUCTIONS;
+}
+
+/**
+ * Resolve the instructions for a project-root hint, mirroring
+ * `applyLiteTierTrim`'s resolution exactly so the menu trim and the
+ * instruction trim always agree. Marker-file only — no DB open. A null or
+ * unresolvable hint gets the full text (never compact blind).
+ */
+export function resolveServerInstructions(hint: string | null): string {
+  if (!hint) return SERVER_INSTRUCTIONS;
+  const root = findNearestSpecShipRoot(hint);
+  if (!root) return SERVER_INSTRUCTIONS;
+  return serverInstructionsFor(detectModelTier(root));
+}

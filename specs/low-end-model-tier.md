@@ -131,16 +131,25 @@ duplicated prose elsewhere.
 
 implementations:
   - src/mcp/server-instructions.ts:SERVER_INSTRUCTIONS
+  - src/mcp/server-instructions.ts:LITE_SERVER_INSTRUCTIONS
+  - src/mcp/server-instructions.ts:serverInstructionsFor
+  - src/mcp/server-instructions.ts:resolveServerInstructions
 
 ## Acceptance
 <!-- id: REQ-LOWEND-003.A1 -->
 - On a lite-tier session the served instructions contain no JIRA tool
   guidance and reference only tools present after the lite tool-list trim.
+  verifies:
+    - __tests__/mcp-lite-instructions.test.ts:liteNamesOnlyPostTrimToolsAndNoJira
 <!-- id: REQ-LOWEND-003.A2 -->
 - The lite instruction variant is at most one third the size of the full
   variant.
+  verifies:
+    - __tests__/mcp-lite-instructions.test.ts:liteIsAtMostOneThirdOfFull
 <!-- id: REQ-LOWEND-003.A3 -->
 - Standard- and full-tier sessions receive today's instructions unchanged.
+  verifies:
+    - __tests__/mcp-lite-instructions.test.ts:nonLiteTiersGetTodaysInstructions
 
 <!-- id: REQ-LOWEND-004 -->
 ## The lite explore budget MUST favor one-call completeness over breadth
