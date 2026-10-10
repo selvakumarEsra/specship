@@ -107,12 +107,21 @@ an OpenAPI-driven fuzz run (Schemathesis) covers documented examples,
 boundaries, and stateful sequences with zero hand-written tests.
 
 When a spec in the behaviour flow has an `implements` link to a `route` node
-and the project exposes an OpenAPI schema [needs user confirmation: schema
-discovery convention — explicit config path vs auto-detect], the flow SHOULD
-offer a contract-fuzz leg: a runnable Schemathesis invocation scoped to the
-linked routes. Outcomes feed `specship_link_verify` as pass/fail with the
-fuzz report as evidence; they do not mint `tests`-kind links (REQ-REVINT-005
-holds).
+and the project exposes an OpenAPI schema (the emitted command carries a
+schema placeholder the behaviour flow fills in — no auto-detection in v1),
+the flow SHOULD offer a contract-fuzz leg: a runnable Schemathesis invocation
+scoped to the linked routes. Outcomes feed `specship_link_verify` as pass/fail
+with the fuzz report as evidence; they do not mint `tests`-kind links
+(REQ-REVINT-005 holds).
+
+implementations:
+  - src/behaviour/behaviour-surface.ts:renderContractFuzzCommand
+  - src/behaviour/behaviour-surface.ts:renderBehaviourSurface
+
+verifies:
+  - __tests__/behaviour-surface.test.ts:surfaceMarksRouteBackedSpecsEligible
+  - __tests__/behaviour-surface.test.ts:fuzzCommandScopedToLinkedRoutes
+  - __tests__/behaviour-surface.test.ts:renderedSurfaceEmitsReviewableFuzzLeg
 
 ## Acceptance
 <!-- id: REQ-QGATE-003.A1 -->

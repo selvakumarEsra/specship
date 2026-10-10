@@ -250,3 +250,68 @@ describe('property lane (REQ-QGATE-001)', () => {
   it('picks the property framework from linked-node language (A2)', pickFrameworkFromLanguage);
   it('is unchanged when no criteria are supplied', backCompatWithoutCriteria);
 });
+
+// ---- contract-fuzz leg for route-backed criteria (REQ-QGATE-003) ----
+
+import { renderContractFuzzCommand } from '../src/behaviour/behaviour-surface';
+
+function surfaceMarksRouteBackedSpecsEligible(): void {
+  const s = computeBehaviourSurface({
+    requirementId: 'REQ-R',
+    requirementExists: true,
+    linkedNodes: [
+      node('src/api/users.py', 'GET /api/users', 'route'),
+      node('src/api/users.py', 'create_user', 'function'),
+    ],
+    neighbourNodes: [node('src/api/other.py', 'GET /api/other', 'route')],
+  });
+  // Only DIRECTLY linked routes make the spec eligible (A1) — neighbours don't.
+  expect(s.contractFuzz.eligible).toBe(true);
+  expect(s.contractFuzz.routes.map((r) => r.name)).toEqual(['GET /api/users']);
+
+  const none = computeBehaviourSurface({
+    requirementId: 'REQ-N',
+    requirementExists: true,
+    linkedNodes: [node('src/api/users.py', 'create_user', 'function')],
+    neighbourNodes: [node('src/api/other.py', 'GET /api/other', 'route')],
+  });
+  expect(none.contractFuzz.eligible).toBe(false);
+  expect(renderBehaviourSurface(none)).not.toContain('Contract-fuzz');
+}
+
+function fuzzCommandScopedToLinkedRoutes(): void {
+  const cmd = renderContractFuzzCommand(
+    [
+      { name: 'GET /api/users', kind: 'route', filePath: 'src/api/users.py', startLine: 1, linkedDirectly: true },
+      { name: 'POST /api/users/{id}', kind: 'route', filePath: 'src/api/users.py', startLine: 9, linkedDirectly: true },
+    ],
+    'openapi.json',
+  );
+  expect(cmd).toContain('st run');
+  expect(cmd).toContain('openapi.json');
+  // Scoped to the linked routes only (A2), not the whole API.
+  expect(cmd).toContain('/api/users');
+  expect(cmd).toContain('--include-path-regex');
+  expect(cmd).not.toContain('--include-path-regex \'\'');
+}
+
+function renderedSurfaceEmitsReviewableFuzzLeg(): void {
+  const s = computeBehaviourSurface({
+    requirementId: 'REQ-R',
+    requirementExists: true,
+    linkedNodes: [node('src/api/users.py', 'GET /api/users', 'route')],
+    neighbourNodes: [],
+  });
+  const md = renderBehaviourSurface(s);
+  expect(md).toContain('Contract-fuzz leg');
+  expect(md).toContain('st run');
+  expect(md).toContain('GET /api/users');
+  // Emitted for review, never executed silently (A2).
+  expect(md.toLowerCase()).toContain('review');
+}
+
+describe('contract-fuzz leg (REQ-QGATE-003)', () => {
+  it('marks specs with directly-linked routes eligible and names them (A1)', surfaceMarksRouteBackedSpecsEligible);
+  it('emits a fuzz command scoped to the linked routes (A2)', fuzzCommandScopedToLinkedRoutes);
+  it('renders the fuzz leg as a reviewable command (A2)', renderedSurfaceEmitsReviewableFuzzLeg);
+});
