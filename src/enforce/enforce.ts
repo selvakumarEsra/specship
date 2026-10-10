@@ -21,8 +21,9 @@ import { SpecLink } from './../types';
 import { FitnessReport } from '../fitness/fitness';
 import { MaintainabilityReport, highPrecisionClean } from '../graph/maintainability';
 import { SuppressionFinding, formatSuppressionFinding } from './suppressions';
+import { MutationConfig, MutationDeps } from './mutation';
 
-export type CheckName = 'drift' | 'fitness' | 'maintainability' | 'behaviour' | 'suppressions';
+export type CheckName = 'drift' | 'fitness' | 'maintainability' | 'behaviour' | 'suppressions' | 'mutation';
 
 /**
  * Project-relative, forward-slashed, no `./` prefix. Link target paths, spec
@@ -40,12 +41,19 @@ export interface GateConfig {
   maintainability?: boolean;
   behaviour?: boolean;
   suppressions?: boolean;
+  mutation?: boolean;
 }
 
 export interface EnforceConfig {
   gate?: GateConfig;
   /** Requirement IDs explicitly out of behaviour-gating scope (REQ-ENFORCE-003.A4). */
   behaviour?: { exclude?: string[] };
+  /**
+   * Mutation-score gate config (REQ-QGATE-002) — the check exists only when
+   * this key (or `gate.mutation`) is present; the default gate output is
+   * byte-identical without it (A1).
+   */
+  mutation?: MutationConfig;
 }
 
 /** Tests-link summary for one requirement (its own + its acceptance criteria's). */
@@ -72,6 +80,8 @@ export interface EnforceDeps {
    * no diff) and the check is omitted entirely — never reported as passed.
    */
   suppressions?: SuppressionFinding[];
+  /** Mutation-score snapshot (REQ-QGATE-002); absent → check omitted (A1). */
+  mutation?: MutationDeps;
 }
 
 /**
@@ -97,6 +107,12 @@ export interface CheckOutcome {
    * repo-global analyses and always run unscoped (REQ-AUTHG-006).
    */
   scoped?: boolean;
+  /**
+   * True when the check's input was unavailable (e.g. no mutation report):
+   * presented as skipped, never as pass or fail, and never gates
+   * (REQ-QGATE-002.A3).
+   */
+  skipped?: boolean;
 }
 
 export interface EnforceReport {
@@ -198,7 +214,48 @@ export function evaluateEnforcement(
     });
   }
 
-  const gatedFailures = checks.filter((c) => c.gating && !c.passed).map((c) => c.check);
+  // --- mutation score (REQ-QGATE-002) ---
+  // Present only when configured (A1). Per spec: aggregate mutant kill rates
+  // over the requirement's linked files that appear in the report; below the
+  // threshold → the spec's test evidence is weak. Report unavailable →
+  // skipped, which never fails and is never rendered as pass (A3).
+  if (deps.mutation !== undefined) {
+    const mu = deps.mutation;
+    if (mu.stats === null) {
+      checks.push({
+        check: 'mutation',
+        gating: gate.mutation === true,
+        passed: false,
+        skipped: true,
+        findings: [`mutation gate: skipped — ${mu.reason ?? 'no report'}`],
+      });
+    } else {
+      const findings: string[] = [];
+      const pct = (n: number): string => `${Math.round(n * 100)}%`;
+      for (const req of deps.requirements) {
+        if (changed && !touches(req.sourcePath) && !(req.linkedFiles ?? []).some(touches)) continue;
+        for (const file of new Set((req.linkedFiles ?? []).map(normalizePath))) {
+          const s = mu.stats.get(file);
+          if (!s || s.total === 0) continue;
+          const rate = s.killed / s.total;
+          if (rate < mu.threshold) {
+            findings.push(
+              `${req.id}: weak test evidence — ${file} mutant kill rate ${pct(rate)} < ${pct(mu.threshold)} threshold (${s.killed}/${s.total} killed)`,
+            );
+          }
+        }
+      }
+      checks.push({
+        check: 'mutation',
+        gating: gate.mutation === true,
+        passed: findings.length === 0,
+        findings,
+        ...(changed ? { scoped: true } : {}),
+      });
+    }
+  }
+
+  const gatedFailures = checks.filter((c) => c.gating && !c.passed && !c.skipped).map((c) => c.check);
   return { checks, gatedFailures, passed: gatedFailures.length === 0 };
 }
 
@@ -221,14 +278,14 @@ export function loadEnforceConfig(projectRoot: string): EnforceConfig {
 }
 
 /** All check names, for `--strict` / `--enable-gate` validation. */
-export const ALL_CHECKS: CheckName[] = ['drift', 'fitness', 'maintainability', 'behaviour', 'suppressions'];
+export const ALL_CHECKS: CheckName[] = ['drift', 'fitness', 'maintainability', 'behaviour', 'suppressions', 'mutation'];
 
 /**
  * The `--strict` override (REQ-ENFORCE-004.A2): every check gates for this
  * run only. Nothing is read from or written to the project config.
  */
 export function strictEnforceConfig(): EnforceConfig {
-  return { gate: { drift: true, fitness: true, maintainability: true, behaviour: true, suppressions: true } };
+  return { gate: { drift: true, fitness: true, maintainability: true, behaviour: true, suppressions: true, mutation: true } };
 }
 
 /**

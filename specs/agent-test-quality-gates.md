@@ -16,6 +16,12 @@ line coverage but only ~57% mutation kill rate; property-based + example tests
 combined catch ~81% of injected bugs vs ~69% alone; agents silence lint rules
 with disable comments instead of fixing code.
 
+Non-goals: running mutation or fuzz tools inside SpecShip itself; changing the
+spec format, link kinds, or promotion rules; model-tier routing (already
+shipped as `spec-implement-mixed`, MIXMODEL-DOC); auto-detecting OpenAPI
+schemas; cleaning up pre-existing suppression comments (the scan is a ratchet
+on new ones only).
+
 Scope guards (removal-lane discipline): every gate here is **opt-in** and
 scales with change size — a trivial change keeps the fast path. Nothing in this
 document changes the spec format or the existing evidence rules
@@ -74,16 +80,29 @@ verifies:
 A `tests` link currently counts as verification evidence if the test exists and
 the suite passes — nothing measures whether the test would notice the
 implementation breaking. An opt-in mutation gate closes that: when enabled, the
-check gate runs a diff-scoped mutation tool (mutmut for Python, Stryker for
-TypeScript/JavaScript [needs user confirmation: tool choices]) against the
-implementations linked to the specs in scope, and reports the kill rate per
-spec. Links whose tests kill below the configured threshold are reported as
-weak evidence; the gate fails only when the project config says so.
+check gate consumes a mutation report in the cross-tool
+mutation-testing-report-schema JSON (produced by the project's own mutation
+tool in CI — Stryker natively; mutmut ecosystems via conversion) and evaluates,
+per spec, the mutant kill rate of its linked implementation files. Links whose
+tests kill below the configured threshold are reported as weak evidence; the
+gate fails only when the project config says so. SpecShip never executes the
+mutation tool itself — `specship check` stays deterministic and fast.
 
-Opt-in lives in project config (e.g. `.specship/` config alongside the
-enforcement config read by `loadEnforceConfig`); default is OFF. Silent beats
-wrong: when the mutation tool is not installed or the project has no supported
-toolchain, the gate reports `skipped` explicitly — never `passed`.
+Opt-in lives in `specship.config.json` → `enforce.mutation`
+(`{ report, threshold }`, read by `loadEnforceConfig`); default is OFF. Silent
+beats wrong: when the configured report is missing or unreadable, the gate
+reports `skipped` explicitly — never `passed`.
+
+implementations:
+  - src/enforce/mutation.ts:parseMutationReport
+  - src/enforce/mutation.ts:loadMutationDeps
+  - src/enforce/enforce.ts:evaluateEnforcement
+
+verifies:
+  - __tests__/mutation-gate.test.ts:checkAbsentWhenNotConfigured
+  - __tests__/mutation-gate.test.ts:weakEvidenceNamesSpecLinkRateThreshold
+  - __tests__/mutation-gate.test.ts:skippedReportNeverFailsOrPasses
+  - __tests__/mutation-gate.test.ts:loadsReportFromDiskAndScopesToConfig
 
 ## Acceptance
 <!-- id: REQ-QGATE-002.A1 -->

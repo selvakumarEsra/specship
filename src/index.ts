@@ -103,6 +103,7 @@ import {
   RequirementVerification,
 } from './enforce/enforce';
 import { scanDisableComments, SuppressionFinding } from './enforce/suppressions';
+import { loadMutationDeps } from './enforce/mutation';
 import { workingTreeDiffText } from './enforce/changed-files';
 import { computeBehaviourSurface, BehaviourSurface } from './behaviour/behaviour-surface';
 import {
@@ -207,6 +208,9 @@ export { changedFilesSince, InvalidRefError, workingTreeDiffText } from './enfor
 // Suppression-comment scan (REQ-QGATE-004).
 export { scanDisableComments, formatSuppressionFinding } from './enforce/suppressions';
 export type { SuppressionFinding } from './enforce/suppressions';
+// Mutation-score gate (REQ-QGATE-002).
+export { parseMutationReport, loadMutationDeps, DEFAULT_MUTATION_THRESHOLD, DEFAULT_MUTATION_REPORT } from './enforce/mutation';
+export type { MutationConfig, MutationDeps, MutationFileStats } from './enforce/mutation';
 // Behaviour surface (BEHAVIOUR-DOC / REQ-BEHAVIOUR-001).
 export { computeBehaviourSurface, renderBehaviourSurface, isUiNode, classifyCriterionShape, propertyFramework } from './behaviour/behaviour-surface';
 export type { BehaviourSurface, BehaviourFlowElement, BehaviourSurfaceDeps } from './behaviour/behaviour-surface';
@@ -479,8 +483,13 @@ export class SpecShip {
     } catch {
       suppressions = undefined;
     }
+    // Mutation gate (REQ-QGATE-002): strictly opt-in — deps attach only when
+    // the project configured it, so the default report is unchanged (A1).
+    const mutation = cfg.mutation !== undefined || cfg.gate?.mutation === true
+      ? loadMutationDeps(this.projectRoot, cfg.mutation)
+      : undefined;
     return evaluateEnforcement(
-      { drift, fitness: this.getFitness(), maintainability: this.getMaintainability(), requirements, suppressions },
+      { drift, fitness: this.getFitness(), maintainability: this.getMaintainability(), requirements, suppressions, mutation },
       cfg,
       scope,
     );

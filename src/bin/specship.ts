@@ -2148,9 +2148,12 @@ program
       }
       for (const c of r.checks) {
         const tag = c.gating ? chalk.dim('[gating]') : chalk.dim('[advisory]');
-        const mark = c.passed ? chalk.green('✓') : (c.gating ? chalk.red('✗') : chalk.yellow('•'));
+        // A skipped check's input was unavailable — presented as skipped,
+        // never as pass or fail (REQ-QGATE-002.A3).
+        const mark = c.skipped ? chalk.yellow('○') : c.passed ? chalk.green('✓') : (c.gating ? chalk.red('✗') : chalk.yellow('•'));
         const reach = scope ? chalk.dim(c.scoped ? ' [since]' : ' [repo-wide]') : '';
-        console.log(`  ${mark} ${c.check.padEnd(16)} ${tag}${reach} ${c.passed ? 'pass' : `${c.findings.length} finding(s)`}`);
+        const status = c.skipped ? 'skipped' : c.passed ? 'pass' : `${c.findings.length} finding(s)`;
+        console.log(`  ${mark} ${c.check.padEnd(16)} ${tag}${reach} ${status}`);
         if (!c.passed) for (const f of c.findings.slice(0, 8)) console.log(chalk.dim(`        ${f}`));
         if (!c.passed && c.findings.length > 8) console.log(chalk.dim(`        …and ${c.findings.length - 8} more`));
       }
@@ -2161,7 +2164,7 @@ program
           : 'Pass (no gating checks failed).');
         // The advisory sell (REQ-ENFORCE-004.A1): findings that would fail
         // a gated run end the report with the exact opt-in command.
-        const wouldGate = r.checks.filter((c) => !c.gating && !c.passed).map((c) => c.check);
+        const wouldGate = r.checks.filter((c) => !c.gating && !c.passed && !c.skipped).map((c) => c.check);
         if (wouldGate.length) {
           const total = r.checks
             .filter((c) => wouldGate.includes(c.check))

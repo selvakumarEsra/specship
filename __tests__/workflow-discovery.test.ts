@@ -357,7 +357,15 @@ describe('bundled implement workflows — pipeline quality gates (REQ-AUTHG-004/
     const wf = load(name);
     const diff = nodeOf(wf, 'diff');
     expect(diff.kind).toBe('bash');
-    expect(diff.depends_on).toContain('quality_recheck');
+    // The suppression gate (REQ-QGATE-004.A3) sits between the quality
+    // recheck and the diff artifact.
+    expect(diff.depends_on).toContain('suppression_gate');
+    const suppression = nodeOf(wf, 'suppression_gate');
+    expect(suppression.kind).toBe('bash');
+    expect(suppression.depends_on).toContain('quality_recheck');
+    expect(suppression.bash).toContain('suppressions');
+    expect(suppression.bash).toContain('SUPPRESSION_GATE=skipped');
+    expect(nodeOf(wf, 'final_review').message).toContain('$suppression_gate.output');
     expect(diff.bash).toContain('git --no-pager diff HEAD');
     // Untracked new files must appear in the artifact too.
     expect(diff.bash).toContain('git add -A -N');
