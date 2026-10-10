@@ -41,6 +41,18 @@ link to their criterion through the existing file-derived evidence chain
 (`verifies:` block or `@verifies` comment) — this lane adds no new link kind
 and no new promotion path.
 
+implementations:
+  - src/behaviour/behaviour-surface.ts:classifyCriterionShape
+  - src/behaviour/behaviour-surface.ts:propertyFramework
+  - src/behaviour/behaviour-surface.ts:computeBehaviourSurface
+  - commands/specship/spec.md
+
+verifies:
+  - __tests__/behaviour-surface.test.ts:classifiesInvariantPhrasing
+  - __tests__/behaviour-surface.test.ts:classifiesExamplePhrasing
+  - __tests__/behaviour-surface.test.ts:surfaceCarriesCriteriaWithShape
+  - __tests__/behaviour-surface.test.ts:pickFrameworkFromLanguage
+
 ## Acceptance
 <!-- id: REQ-QGATE-001.A1 -->
 - `computeBehaviourSurface` output marks each acceptance criterion with

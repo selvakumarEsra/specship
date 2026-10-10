@@ -208,7 +208,7 @@ export { changedFilesSince, InvalidRefError, workingTreeDiffText } from './enfor
 export { scanDisableComments, formatSuppressionFinding } from './enforce/suppressions';
 export type { SuppressionFinding } from './enforce/suppressions';
 // Behaviour surface (BEHAVIOUR-DOC / REQ-BEHAVIOUR-001).
-export { computeBehaviourSurface, renderBehaviourSurface, isUiNode } from './behaviour/behaviour-surface';
+export { computeBehaviourSurface, renderBehaviourSurface, isUiNode, classifyCriterionShape, propertyFramework } from './behaviour/behaviour-surface';
 export type { BehaviourSurface, BehaviourFlowElement, BehaviourSurfaceDeps } from './behaviour/behaviour-surface';
 export type {
   EnforceConfig,
@@ -507,11 +507,19 @@ export class SpecShip {
     }
     const linkedNodes = this.getLinkedNodesForReq(req.id);
     const neighbourNodes = this.getNeighbourNodes(linkedNodes.map((n) => n.id));
+    // Acceptance criteria ride along for test-shape classification
+    // (REQ-QGATE-001.A1) — invariant-phrased bullets get a property-test
+    // directive in the rendered surface.
+    const criteria = this.specQueries
+      .getSpecsByParent(req.id)
+      .filter((c) => c.kind === 'acceptance')
+      .map((c) => ({ id: c.id, text: (c.body ?? c.title ?? '').trim() }));
     return computeBehaviourSurface({
       requirementId: req.id,
       requirementExists: true,
       linkedNodes,
       neighbourNodes,
+      criteria,
     });
   }
 

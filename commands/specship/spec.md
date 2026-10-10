@@ -432,6 +432,12 @@ Pull the requirement's acceptance criteria and its behaviour surface
 (`specship_spec` with `spec_id` + `behaviour_surface: true` → UI tier / backend
 tier). For **each** acceptance criterion, author a Playwright test when a UI
 exists and/or a backend test, mirroring the repo's existing test conventions.
+**Honour the surface's test-shape classification (REQ-QGATE-001):** a criterion
+marked `[invariant]` is authored as a **property-based test** with the framework
+the surface names — Hypothesis (`@given` + strategies) on a Python backend,
+fast-check on TypeScript/JavaScript — generating inputs and asserting the
+stated property, never a single hard-coded example. Criteria marked
+`[example]` stay concrete example tests.
 **Preview the files → confirm → write**, then `specship_link_assert … kind:tests`
 at the `.A<N>`, run the suite, and `specship_link_verify` each (pass→verified,
 fail→broken; a suite that can't run is reported unrun, never marked broken).
