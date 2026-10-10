@@ -22,7 +22,7 @@ import {
   upsertMarkedSection,
   writeJsonFile,
 } from '../installer/targets/shared';
-import { learningMarkers, memoryNoteMarker } from './targets';
+import { domainFactMarker, learningMarkers, memoryNoteMarker } from './targets';
 import { ApplyOutcome, PreviewResult, Proposal, UndoOutcome } from './types';
 
 function readFileSafe(p: string): { exists: boolean; content: string } {
@@ -82,10 +82,26 @@ export function previewProposal(p: Proposal): PreviewResult {
   const { payload, targetPath, targetKind } = p;
   const cur = readFileSafe(targetPath);
 
-  if (payload.kind === 'claude_md') {
+  if (payload.kind === 'claude_md' || payload.kind === 'conventions') {
     const { start, end } = learningMarkers(payload.markerId);
     const after = previewMarkedUpsert(cur.content, start, end, payload.block);
     return { targetPath, targetKind, exists: cur.exists, before: cur.content, after, diff: lineDiff(cur.content, after) };
+  }
+
+  if (payload.kind === 'domain_fact') {
+    // REQ-ALEARN-003.A2: an engine-written draft is recognizable by its
+    // frontmatter marker; anything else at the path is a human's file — refuse.
+    const conflict = cur.exists && !cur.content.includes(domainFactMarker(payload.slug));
+    const after = conflict ? cur.content : payload.content;
+    return {
+      targetPath,
+      targetKind,
+      exists: cur.exists,
+      before: cur.content,
+      after,
+      diff: conflict ? '(conflict: a non-SpecShip domain fact already exists here)' : lineDiff(cur.content, after),
+      conflict,
+    };
   }
 
   if (payload.kind === 'memory_note') {
@@ -130,10 +146,18 @@ export function previewProposal(p: Proposal): PreviewResult {
 export function applyProposal(p: Proposal, homeDir: string): ApplyOutcome {
   const { payload, targetPath } = p;
 
-  if (payload.kind === 'claude_md') {
+  if (payload.kind === 'claude_md' || payload.kind === 'conventions') {
     const { start, end } = learningMarkers(payload.markerId);
     const res = upsertMarkedSection(targetPath, start, end, payload.block);
     return res === 'unchanged' ? 'unchanged' : 'applied';
+  }
+
+  if (payload.kind === 'domain_fact') {
+    const cur = readFileSafe(targetPath);
+    if (cur.exists && !cur.content.includes(domainFactMarker(payload.slug))) return 'conflict';
+    if (cur.exists && cur.content === payload.content) return 'unchanged';
+    atomicWriteFileSync(targetPath, payload.content);
+    return 'applied';
   }
 
   if (payload.kind === 'memory_note') {
@@ -168,9 +192,17 @@ export function applyProposal(p: Proposal, homeDir: string): ApplyOutcome {
 export function undoProposal(p: Proposal, homeDir: string): UndoOutcome {
   const { payload, targetPath } = p;
 
-  if (payload.kind === 'claude_md') {
+  if (payload.kind === 'claude_md' || payload.kind === 'conventions') {
     const { start, end } = learningMarkers(payload.markerId);
     return removeMarkedSection(targetPath, start, end) === 'removed' ? 'undone' : 'noop';
+  }
+
+  if (payload.kind === 'domain_fact') {
+    const cur = readFileSafe(targetPath);
+    if (cur.exists && cur.content.includes(domainFactMarker(payload.slug))) {
+      try { fs.unlinkSync(targetPath); return 'undone'; } catch { /* ignore */ }
+    }
+    return 'noop';
   }
 
   if (payload.kind === 'memory_note') {
