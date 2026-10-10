@@ -127,12 +127,24 @@ flags lint/type-suppression markers (`noqa`, `eslint-disable`,
 before). Pre-existing suppressions are out of scope — this is a ratchet, not a
 cleanup mandate.
 
-The scan runs in the spec-implement workflows' quality gate (failing the gate
-routes to the existing fix/recheck loop) and is available to `specship check`
-for the working tree. A suppression accompanied by a justification on the same
-line (e.g. `eslint-disable-next-line foo -- reason`) is still flagged but
-labeled as justified [needs user confirmation: should justified suppressions
-pass the gate?].
+The scan runs in the spec-implement workflows' quality gate (a finding halts
+the run with a named cause) and in `specship check` as a `suppressions` check
+(advisory by default, gateable). A suppression with an inline justification
+(e.g. `eslint-disable-next-line foo -- reason`) is still flagged, labeled
+justified — the label triages, it does not wave the finding through. Precision
+rules: a marker counts only in a file type its linter reads, only in comment
+position (not string literals or prose), and only when the directive starts
+the comment.
+
+implementations:
+  - src/enforce/suppressions.ts:scanDisableComments
+  - src/enforce/changed-files.ts:workingTreeDiffText
+
+verifies:
+  - __tests__/suppression-scan.test.ts:flagsAddedNoqaWithFileLineMarker
+  - __tests__/suppression-scan.test.ts:ignoresMentionsOutsideLintableContext
+  - __tests__/suppression-scan.test.ts:suppressionsCheckReportsFindings
+  - __tests__/suppression-scan.test.ts:scansWorkingTreeIncludingUntracked
 
 ## Acceptance
 <!-- id: REQ-QGATE-004.A1 -->

@@ -102,6 +102,8 @@ import {
   EnforceScope,
   RequirementVerification,
 } from './enforce/enforce';
+import { scanDisableComments, SuppressionFinding } from './enforce/suppressions';
+import { workingTreeDiffText } from './enforce/changed-files';
 import { computeBehaviourSurface, BehaviourSurface } from './behaviour/behaviour-surface';
 import {
   generateFlowDiagram,
@@ -201,7 +203,10 @@ export { evaluateFitness, loadFitnessRules, FITNESS_CONFIG_FILE } from './fitnes
 // Enforcement mode (ENFORCE-DOC / REQ-ENFORCE-001…003).
 export { evaluateEnforcement, loadEnforceConfig, ENFORCE_CONFIG_FILE, normalizePath } from './enforce/enforce';
 // Change-scoped gating (REQ-AUTHG-006) — `specship check --since <ref>`.
-export { changedFilesSince, InvalidRefError } from './enforce/changed-files';
+export { changedFilesSince, InvalidRefError, workingTreeDiffText } from './enforce/changed-files';
+// Suppression-comment scan (REQ-QGATE-004).
+export { scanDisableComments, formatSuppressionFinding } from './enforce/suppressions';
+export type { SuppressionFinding } from './enforce/suppressions';
 // Behaviour surface (BEHAVIOUR-DOC / REQ-BEHAVIOUR-001).
 export { computeBehaviourSurface, renderBehaviourSurface, isUiNode } from './behaviour/behaviour-surface';
 export type { BehaviourSurface, BehaviourFlowElement, BehaviourSurfaceDeps } from './behaviour/behaviour-surface';
@@ -465,8 +470,17 @@ export class SpecShip {
       }
       return { id: req.id, title: req.title, testsLinks, sourcePath: req.sourcePath, linkedFiles };
     });
+    // Suppression scan (REQ-QGATE-004): markers introduced by the working
+    // tree (or since the scope ref). Scan unavailable (no git) → undefined,
+    // and the check is omitted rather than reported as passed.
+    let suppressions: SuppressionFinding[] | undefined;
+    try {
+      suppressions = scanDisableComments(workingTreeDiffText(this.projectRoot, scope?.since ?? 'HEAD'));
+    } catch {
+      suppressions = undefined;
+    }
     return evaluateEnforcement(
-      { drift, fitness: this.getFitness(), maintainability: this.getMaintainability(), requirements },
+      { drift, fitness: this.getFitness(), maintainability: this.getMaintainability(), requirements, suppressions },
       cfg,
       scope,
     );

@@ -24,6 +24,7 @@ description: Every SpecShip command and the flags it accepts.
 | `specship verify` | Ingest a test report (vitest JSON) and promote/demote spec test links from it |
 | `specship fitness [path]` | Check architecture-fitness rules against the code graph (CI gate; exits non-zero on violation) |
 | `specship check [path]` | Run the enforcement gate (drift + fitness + maintainability + behaviour); exits non-zero on a gating failure |
+| `specship suppressions [path]` | Scan the change under review for newly introduced lint/type suppression comments (noqa, eslint-disable, @ts-ignore, …… |
 | `specship serve` | Start SpecShip as an MCP server for AI assistants (stdio transport) |
 | `specship desktop` | Start the SpecShip Desktop dashboard + HTTP API (binds 127.0.0.1) |
 | `specship unlock [path]` | Remove a stale lock file that is blocking indexing |

@@ -20,8 +20,9 @@ import * as path from 'path';
 import { SpecLink } from './../types';
 import { FitnessReport } from '../fitness/fitness';
 import { MaintainabilityReport, highPrecisionClean } from '../graph/maintainability';
+import { SuppressionFinding, formatSuppressionFinding } from './suppressions';
 
-export type CheckName = 'drift' | 'fitness' | 'maintainability' | 'behaviour';
+export type CheckName = 'drift' | 'fitness' | 'maintainability' | 'behaviour' | 'suppressions';
 
 /**
  * Project-relative, forward-slashed, no `./` prefix. Link target paths, spec
@@ -38,6 +39,7 @@ export interface GateConfig {
   fitness?: boolean;
   maintainability?: boolean;
   behaviour?: boolean;
+  suppressions?: boolean;
 }
 
 export interface EnforceConfig {
@@ -64,6 +66,12 @@ export interface EnforceDeps {
   fitness: FitnessReport;
   maintainability: MaintainabilityReport;
   requirements: RequirementVerification[];
+  /**
+   * Suppression markers introduced by the change under review
+   * (REQ-QGATE-004). Absent/undefined → the diff scan did not run (no git,
+   * no diff) and the check is omitted entirely — never reported as passed.
+   */
+  suppressions?: SuppressionFinding[];
 }
 
 /**
@@ -176,6 +184,20 @@ export function evaluateEnforcement(
     });
   }
 
+  // --- suppressions (REQ-QGATE-004) ---
+  // Only when a diff scan actually ran: an absent scan is unknown, and an
+  // unknown result is never rendered as a pass (same doctrine as
+  // VERIFY_RESULT=skipped).
+  if (deps.suppressions !== undefined) {
+    const findings = deps.suppressions.map(formatSuppressionFinding);
+    checks.push({
+      check: 'suppressions',
+      gating: gate.suppressions === true,
+      passed: findings.length === 0,
+      findings,
+    });
+  }
+
   const gatedFailures = checks.filter((c) => c.gating && !c.passed).map((c) => c.check);
   return { checks, gatedFailures, passed: gatedFailures.length === 0 };
 }
@@ -199,14 +221,14 @@ export function loadEnforceConfig(projectRoot: string): EnforceConfig {
 }
 
 /** All check names, for `--strict` / `--enable-gate` validation. */
-export const ALL_CHECKS: CheckName[] = ['drift', 'fitness', 'maintainability', 'behaviour'];
+export const ALL_CHECKS: CheckName[] = ['drift', 'fitness', 'maintainability', 'behaviour', 'suppressions'];
 
 /**
  * The `--strict` override (REQ-ENFORCE-004.A2): every check gates for this
  * run only. Nothing is read from or written to the project config.
  */
 export function strictEnforceConfig(): EnforceConfig {
-  return { gate: { drift: true, fitness: true, maintainability: true, behaviour: true } };
+  return { gate: { drift: true, fitness: true, maintainability: true, behaviour: true, suppressions: true } };
 }
 
 /**

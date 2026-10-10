@@ -2308,6 +2308,38 @@ async function runDesktop(options: DesktopOptions): Promise<void> {
 }
 
 program
+  .command('suppressions [path]')
+  .description('Scan the change under review for newly introduced lint/type suppression comments (noqa, eslint-disable, @ts-ignore, …); exits non-zero when any were added')
+  .option('--since <ref>', 'Diff base (default HEAD): scan lines added since this ref')
+  .option('-j, --json', 'Output findings as JSON')
+  .action(async (pathArg: string | undefined, options: { since?: string; json?: boolean }) => {
+    const projectPath = resolveProjectPath(pathArg);
+    // The SUPPRESSION_GATE marker is the machine-readable contract the
+    // spec-implement workflows route on (REQ-QGATE-004.A3) — same doctrine as
+    // VERIFY_RESULT: a scan that could not run is `skipped`, never `clean`.
+    try {
+      const { workingTreeDiffText } = await import('../enforce/changed-files');
+      const { scanDisableComments, formatSuppressionFinding } = await import('../enforce/suppressions');
+      const findings = scanDisableComments(workingTreeDiffText(projectPath, options.since ?? 'HEAD'));
+      if (options.json) {
+        console.log(JSON.stringify({ gate: findings.length === 0 ? 'clean' : 'failed', findings }, null, 2));
+        process.exit(findings.length === 0 ? 0 : 1);
+      }
+      if (findings.length === 0) {
+        console.log('SUPPRESSION_GATE=clean');
+        return;
+      }
+      console.log('SUPPRESSION_GATE=failed');
+      for (const f of findings) console.log(`  ${formatSuppressionFinding(f)}`);
+      console.log('Fix the code instead of silencing the rule (REQ-QGATE-004).');
+      process.exit(1);
+    } catch (err) {
+      console.log('SUPPRESSION_GATE=skipped');
+      console.log(`SUPPRESSION_REASON=${err instanceof Error ? err.message.split('\n')[0] : String(err)}`);
+    }
+  });
+
+program
   .command('serve')
   .description('Start SpecShip as an MCP server for AI assistants (stdio transport)')
   .option('-p, --path <path>', 'Project path (optional for MCP mode, uses rootUri from client)')
