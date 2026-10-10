@@ -71,24 +71,49 @@ export function sweep(
 export function capture(
   db: SqliteDatabase,
   ctx: ReflectContext,
-  input: { title: string; content: string },
+  input: { title: string; content: string; lane?: 'skill' | 'style' | 'domain' },
   now: () => number = () => Date.now(),
 ): Proposal {
   const store = new ReflectStore(db, now);
   const title = input.title.trim();
-  const proposal = buildProposal(ctx, {
-    type: 'skill',
-    severity: 'info',
-    nameSeed: `learn-${title}`,
-    title: `Captured routine: ${title}`,
-    body: 'Explicitly captured via /specship:learn — a distilled routine from a real session, awaiting your review.',
-    content: input.content.trim(),
-    evidence: {
-      sessions: [],
-      prompts: [],
-      detail: 'explicitly captured (/specship:learn)',
-    },
-  });
+  const lane = input.lane ?? 'skill';
+  // Lane routing (ALEARN-DOC): 'style' stages a conventions rule
+  // (REQ-ALEARN-001), 'domain' a draft domain fact (REQ-ALEARN-003) — same
+  // store, same human gate as the default skill lane.
+  const proposal =
+    lane === 'style'
+      ? buildProposal(ctx, {
+          type: 'style_rule',
+          severity: 'info',
+          nameSeed: `style-${title}`,
+          title: `Convention: ${title}`,
+          body: 'Explicitly captured via /specship:learn style — a project convention from a real session, awaiting your review.',
+          content: input.content.trim(),
+          evidence: { sessions: [], prompts: [], detail: 'explicitly captured (/specship:learn style)' },
+        })
+      : lane === 'domain'
+        ? buildProposal(ctx, {
+            type: 'domain_fact',
+            severity: 'info',
+            nameSeed: title,
+            title: `Draft domain fact: ${title}`,
+            body: 'Explicitly captured via /specship:learn domain — business/product knowledge from a real session. Review/edit the draft; applying lands it under specs/domain/.',
+            content: renderCapturedDomainFact(title, input.content.trim()),
+            evidence: { sessions: [], prompts: [], detail: 'explicitly captured (/specship:learn domain)' },
+          })
+        : buildProposal(ctx, {
+            type: 'skill',
+            severity: 'info',
+            nameSeed: `learn-${title}`,
+            title: `Captured routine: ${title}`,
+            body: 'Explicitly captured via /specship:learn — a distilled routine from a real session, awaiting your review.',
+            content: input.content.trim(),
+            evidence: {
+              sessions: [],
+              prompts: [],
+              detail: 'explicitly captured (/specship:learn)',
+            },
+          });
   store.upsertMined([proposal]);
   // Return the stored row (state may differ if it already existed).
   return store.list().find((p) => p.contentHash === proposal.contentHash) ?? proposal;
@@ -129,4 +154,30 @@ export function captureLesson(
   });
   store.upsertMined([proposal]);
   return store.list().find((p) => p.contentHash === proposal.contentHash) ?? proposal;
+}
+
+/** A captured domain fact rendered as a complete draft fact file. */
+function renderCapturedDomainFact(title: string, content: string): string {
+  const slug = title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '')
+    .slice(0, 48) || 'fact';
+  const domId = `DOM-${slug.toUpperCase().replace(/-/g, '')}-001`.slice(0, 40);
+  return [
+    '---',
+    `id: ${domId}`,
+    `title: ${title}`,
+    'type: term',
+    `specship_proposal: ${slug}`,
+    '---',
+    '',
+    `# ${title}`,
+    '',
+    content,
+    '',
+    '_Link this fact to its requirement spec(s) via `depends_on:` — domain facts',
+    'attach at the spec tier (DOM-SPECSHIP-002)._',
+    '',
+  ].join('\n');
 }

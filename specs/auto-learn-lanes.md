@@ -52,6 +52,18 @@ MUST support a `style_rule` proposal type with a `conventions` target:
   idempotent and undo removes exactly the applied block, like every other
   reflect target. CLAUDE.md and user files are never touched.
 
+implementations:
+  - src/reflect/miner.ts:ruleStyleCorrection
+  - src/reflect/targets.ts:buildProposal
+  - src/reflect/apply.ts:applyProposal
+  - src/reflect/sweep.ts:capture
+
+verifies:
+  - __tests__/auto-learn.test.ts:minesRecurringStyleCorrectionAcrossSessions
+  - __tests__/auto-learn.test.ts:silentBelowRecurrenceOrWithoutStyleVocab
+  - __tests__/auto-learn.test.ts:conventionsApplyIsIdempotentAndUndoRestores
+  - __tests__/auto-learn.test.ts:styleLaneNeverTargetsClaudeMd
+
 ## Acceptance
 <!-- id: REQ-ALEARN-001.A1 -->
 - A transcript corpus with the same style correction recurring in 2+ sessions
@@ -81,6 +93,15 @@ default), oldest truncated last with an explicit "+N more — see
 and the cheatsheet is byte-identical to today. `SPECSHIP_NO_CHEATSHEET`
 suppresses it along with the rest of the cheatsheet.
 
+implementations:
+  - src/activation/cheatsheet.ts:renderConventionsSection
+  - src/activation/cheatsheet.ts:buildCheatsheetPayload
+
+verifies:
+  - __tests__/auto-learn.test.ts:cheatsheetUnchangedWithoutConventions
+  - __tests__/auto-learn.test.ts:cheatsheetListsConventionRules
+  - __tests__/auto-learn.test.ts:conventionsSectionIsBudgetBounded
+
 ## Acceptance
 <!-- id: REQ-ALEARN-002.A1 -->
 - With `.specship/conventions.md` present, the cheatsheet output contains a
@@ -108,6 +129,18 @@ queue. This lane wires the two together with a `domain_fact` proposal type:
   `specs/domain/` and triggers a spec sync — apply IS the DOM-SPECSHIP-003
   confirmation. No code path lands a domain fact without it. Undo removes the
   file.
+
+implementations:
+  - src/reflect/miner.ts:ruleDomainFactDraft
+  - src/reflect/apply.ts:applyProposal
+  - src/reflect/apply.ts:undoProposal
+  - src/reflect/sweep.ts:renderCapturedDomainFact
+
+verifies:
+  - __tests__/auto-learn.test.ts:minesDomainFactForGapEntityRecurringInPrompts
+  - __tests__/auto-learn.test.ts:domainLaneSilentWithoutSeedOrRecurrence
+  - __tests__/auto-learn.test.ts:domainFactApplyWritesFileUndoRemoves
+  - __tests__/auto-learn.test.ts:capturesStyleAndDomainLanes
 
 ## Acceptance
 <!-- id: REQ-ALEARN-003.A1 -->
@@ -137,6 +170,16 @@ When open learned proposals exist, the session-start cheatsheet MUST say so in
 one line ("N learned proposals awaiting review — specship reflect / dashboard
 Improvements") so the queue is discovered without the dashboard open. Zero
 open proposals → no line.
+
+implementations:
+  - src/reflect/auto-sweep.ts:shouldAutoSweep
+  - src/reflect/auto-sweep.ts:recordAutoSweep
+  - src/reflect/auto-sweep.ts:loadReflectConfig
+
+verifies:
+  - __tests__/auto-learn.test.ts:cooldownGatesTheSweep
+  - __tests__/auto-learn.test.ts:reflectConfigReadsProjectFile
+  - __tests__/auto-learn.test.ts:cheatsheetShowsOpenProposalCount
 
 ## Acceptance
 <!-- id: REQ-ALEARN-004.A1 -->

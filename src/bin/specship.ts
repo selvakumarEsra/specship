@@ -931,12 +931,30 @@ program
         }
       };
 
+      // Guarded auto-learn sweep (REQ-ALEARN-004): cooldown-bounded, opt-out
+      // via reflect.autoSweep=false, and NEVER allowed to fail the sync (A3).
+      const runAutoSweep = async (instance: { reflectSweep(): { notify: Array<{ title: string }> } }) => {
+        try {
+          const { loadReflectConfig, shouldAutoSweep, recordAutoSweep } = await import('../reflect/auto-sweep');
+          const cfg = loadReflectConfig(projectPath);
+          if (!shouldAutoSweep(projectPath, Date.now(), cfg)) return;
+          recordAutoSweep(projectPath, Date.now());
+          const { notify } = instance.reflectSweep();
+          for (const p of notify) {
+            console.log(`🧠 learned: ${p.title} — review with \`specship reflect\` or the dashboard.`);
+          }
+        } catch {
+          /* a sweep failure never blocks a sync (REQ-ALEARN-004.A3) */
+        }
+      };
+
       if (options.quiet) {
         const result = await cg.sync();
         pushDriftNotices(result);
         await pushJiraDriftComments(cg, result);
         await pushJiraAutoPublish(result);
         pushDriftSummary(cg);
+        await runAutoSweep(cg);
         cg.destroy();
         return;
       }
@@ -981,6 +999,7 @@ program
       await pushJiraDriftComments(cg, result);
       await pushJiraAutoPublish(result);
       pushDriftSummary(cg);
+      await runAutoSweep(cg);
       clack.outro('Done');
       cg.destroy();
     } catch (err) {
@@ -1459,7 +1478,8 @@ program
   .option('-j, --json', 'Output as JSON')
   .option('--capture', 'Capture a routine as a skill proposal: --title required, content on stdin (LEARN-DOC)')
   .option('--title <title>', 'Title for --capture')
-  .action(async (pathArg: string | undefined, options: { json?: boolean; capture?: boolean; title?: string }) => {
+  .option('--lane <lane>', 'Capture lane: skill (default), style (project convention → .specship/conventions.md), or domain (draft fact → specs/domain/) (ALEARN-DOC)')
+  .action(async (pathArg: string | undefined, options: { json?: boolean; capture?: boolean; title?: string; lane?: string }) => {
     const projectPath = resolveProjectPath(pathArg);
     try {
       if (!isInitialized(projectPath)) {
@@ -1484,7 +1504,12 @@ program
           error('--capture expects the routine content on stdin (pipe or heredoc)');
           process.exit(1);
         }
-        const p = cg.reflectCapture({ title: options.title, content });
+        const lane = options.lane as 'skill' | 'style' | 'domain' | undefined;
+        if (lane && !['skill', 'style', 'domain'].includes(lane)) {
+          error(`Unknown --lane: ${lane}. Valid: skill, style, domain`);
+          process.exit(1);
+        }
+        const p = cg.reflectCapture({ title: options.title, content, lane });
         if (options.json) {
           console.log(JSON.stringify(p, null, 2));
         } else {
@@ -3133,7 +3158,32 @@ program
       }
     }
     const { buildCheatsheetPayload } = await import('../activation/cheatsheet');
-    const payload = buildCheatsheetPayload();
+    // Learned-state extras (REQ-ALEARN-002 / REQ-ALEARN-004.A2) — both
+    // best-effort: an unreadable file or DB silently yields the base
+    // cheatsheet, never an error in the SessionStart hook.
+    const projectPath = resolveProjectPath(undefined);
+    let conventions: string | null = null;
+    try {
+      conventions = (await import('fs')).readFileSync(
+        (await import('path')).join(projectPath, '.specship', 'conventions.md'),
+        'utf-8',
+      );
+    } catch { /* no conventions file */ }
+    let openProposals = 0;
+    try {
+      const { DatabaseConnection, DATABASE_FILENAME } = await import('../db');
+      const { ReflectStore } = await import('../reflect');
+      const dbPath = (await import('path')).join(projectPath, '.specship', DATABASE_FILENAME);
+      if ((await import('fs')).existsSync(dbPath)) {
+        const conn = DatabaseConnection.initialize(dbPath);
+        try {
+          openProposals = new ReflectStore(conn.getDb()).list('open').length;
+        } finally {
+          conn.close();
+        }
+      }
+    } catch { /* store unavailable → omit the line */ }
+    const payload = buildCheatsheetPayload(process.env, { conventions, openProposals });
     if (payload) process.stdout.write(JSON.stringify(payload) + '\n');
     process.exit(0);
   });

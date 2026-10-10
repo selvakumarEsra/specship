@@ -192,3 +192,116 @@ describe('domain-fact draft lane (REQ-ALEARN-003)', () => {
   it('stays silent without the gap seed or recurrence (A1)', domainLaneSilentWithoutSeedOrRecurrence);
   it('apply writes specs/domain, undo removes, conflicts refused (A2, A3)', domainFactApplyWritesFileUndoRemoves);
 });
+
+// ---- REQ-ALEARN-002: conventions injected at session start ----
+
+import { buildCheatsheetPayload, renderConventionsSection } from '../src/activation/cheatsheet';
+
+function cheatsheetUnchangedWithoutConventions(): void {
+  const base = buildCheatsheetPayload({})!.systemMessage;
+  expect(buildCheatsheetPayload({}, {})!.systemMessage).toBe(base);
+  expect(buildCheatsheetPayload({}, { conventions: null })!.systemMessage).toBe(base);
+  expect(buildCheatsheetPayload({}, { conventions: '' })!.systemMessage).toBe(base);
+}
+
+function cheatsheetListsConventionRules(): void {
+  const file = [
+    '<!-- SPECSHIP_LEARNING:abc -->',
+    '## Convention: use named exports',
+    '',
+    'always use named exports, never default exports',
+    '<!-- /SPECSHIP_LEARNING:abc -->',
+    '',
+    '<!-- SPECSHIP_LEARNING:def -->',
+    '## Convention: use our logger',
+    '',
+    "don't use console.log, use our logger",
+    '<!-- /SPECSHIP_LEARNING:def -->',
+  ].join('\n');
+  const msg = buildCheatsheetPayload({}, { conventions: file })!.systemMessage;
+  expect(msg).toContain('named exports');
+  expect(msg).toContain('logger');
+  expect(msg).toContain('Project conventions');
+}
+
+function conventionsSectionIsBudgetBounded(): void {
+  const blocks: string[] = [];
+  for (let i = 0; i < 30; i++) {
+    blocks.push(`<!-- SPECSHIP_LEARNING:x${i} -->`, `## Convention rule number ${i}`, '', `rule body ${i}`, `<!-- /SPECSHIP_LEARNING:x${i} -->`);
+  }
+  const section = renderConventionsSection(blocks.join('\n'), 8);
+  const lines = section.split('\n').filter((l) => l.startsWith('•'));
+  expect(lines.length).toBeLessThanOrEqual(8);
+  expect(section).toContain('more — see .specship/conventions.md');
+}
+
+describe('conventions at session start (REQ-ALEARN-002)', () => {
+  it('output is byte-identical without conventions (A1)', cheatsheetUnchangedWithoutConventions);
+  it('lists each confirmed rule (A1)', cheatsheetListsConventionRules);
+  it('is budget-bounded with a +N more pointer (A2)', conventionsSectionIsBudgetBounded);
+});
+
+// ---- REQ-ALEARN-004: guarded auto-sweep + awaiting-review line ----
+
+import { shouldAutoSweep, recordAutoSweep, loadReflectConfig } from '../src/reflect/auto-sweep';
+
+function cooldownGatesTheSweep(): void {
+  const proj = path.join(dir, 'proj');
+  const t0 = 1_000_000_000_000;
+  expect(shouldAutoSweep(proj, t0, {})).toBe(true);
+  recordAutoSweep(proj, t0);
+  // Inside the window → gated (A1).
+  expect(shouldAutoSweep(proj, t0 + 60_000, {})).toBe(false);
+  // Past the default 6 h window → due again.
+  expect(shouldAutoSweep(proj, t0 + 7 * 60 * 60_000, {})).toBe(true);
+  // Opt-out wins regardless of time (A1).
+  expect(shouldAutoSweep(proj, t0 + 7 * 60 * 60_000, { autoSweep: false })).toBe(false);
+}
+
+function reflectConfigReadsProjectFile(): void {
+  const proj = path.join(dir, 'proj');
+  expect(loadReflectConfig(proj)).toEqual({});
+  fs.writeFileSync(path.join(proj, 'specship.config.json'), JSON.stringify({ reflect: { autoSweep: false } }));
+  expect(loadReflectConfig(proj)).toEqual({ autoSweep: false });
+  fs.writeFileSync(path.join(proj, 'specship.config.json'), '{not json');
+  expect(loadReflectConfig(proj)).toEqual({});
+}
+
+function cheatsheetShowsOpenProposalCount(): void {
+  const base = buildCheatsheetPayload({})!.systemMessage;
+  expect(buildCheatsheetPayload({}, { openProposals: 0 })!.systemMessage).toBe(base);
+  const withCount = buildCheatsheetPayload({}, { openProposals: 3 })!.systemMessage;
+  expect(withCount).toContain('3 learned proposal');
+  expect(withCount).toContain('awaiting review');
+}
+
+describe('guarded auto-sweep (REQ-ALEARN-004)', () => {
+  it('cooldown + opt-out gate the sweep (A1)', cooldownGatesTheSweep);
+  it('reflect config loads from specship.config.json', reflectConfigReadsProjectFile);
+  it('cheatsheet shows the awaiting-review line only when count > 0 (A2)', cheatsheetShowsOpenProposalCount);
+});
+
+// ---- explicit capture verbs (REQ-ALEARN-001 / REQ-ALEARN-003: "Captured") ----
+
+import { capture } from '../src/reflect';
+
+function capturesStyleAndDomainLanes(): void {
+  const style = capture(db, ctx, { title: 'no default exports', content: 'Always use named exports.', lane: 'style' });
+  expect(style.type).toBe('style_rule');
+  expect(style.targetPath).toContain(path.join('.specship', 'conventions.md'));
+
+  const domain = capture(db, ctx, { title: 'Cost basis', content: 'Cost basis is the volume-weighted entry price per lot.', lane: 'domain' });
+  expect(domain.type).toBe('domain_fact');
+  expect(domain.targetPath).toContain(path.join('specs', 'domain'));
+  const payload = domain.payload as { kind: string; content: string };
+  expect(payload.content).toContain('id: DOM-');
+  expect(payload.content).toContain('Cost basis is the volume-weighted entry price per lot.');
+
+  // Default lane unchanged.
+  const skill = capture(db, ctx, { title: 'release flow', content: 'steps…' });
+  expect(skill.type).toBe('skill');
+}
+
+describe('explicit capture lanes (/specship:learn style|domain)', () => {
+  it('stages style_rule and domain_fact proposals on demand', capturesStyleAndDomainLanes);
+});

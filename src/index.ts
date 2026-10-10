@@ -74,6 +74,7 @@ import {
   PreviewResult,
   ApplyOutcome,
   UndoOutcome,
+  ReflectContext,
 } from './reflect';
 import { estimateRunEta as estimateRunEtaImpl, RunEta } from './workflows/eta';
 export type { RunEta, RunEtaAvailable, RunEtaUnavailable } from './workflows/eta';
@@ -577,8 +578,19 @@ export class SpecShip {
   // (no runtime package import) and the CLI calls them directly.
   // ===========================================================================
 
-  private reflectContext() {
-    return { projectRoot: this.projectRoot, homeDir: os.homedir() };
+  private reflectContext(): ReflectContext {
+    // Domain-gap entities feed the domain-fact lane (REQ-ALEARN-003.A1) — the
+    // miner has no graph access, so the seed rides in on the context. Capped
+    // and wrapped: a gap-seed failure must never take reflection down with it.
+    let domainGapEntities: ReflectContext['domainGapEntities'];
+    try {
+      domainGapEntities = this.getDomainGapSeed()
+        .entities.slice(0, 50)
+        .map((e) => ({ name: e.name, kind: e.kind }));
+    } catch {
+      domainGapEntities = undefined;
+    }
+    return { projectRoot: this.projectRoot, homeDir: os.homedir(), domainGapEntities };
   }
 
   /**
@@ -600,7 +612,7 @@ export class SpecShip {
    * (LEARN-DOC, REQ-LEARN-002). Same lifecycle as mined proposals —
    * nothing lands on disk until the user applies it.
    */
-  reflectCapture(input: { title: string; content: string }): Proposal {
+  reflectCapture(input: { title: string; content: string; lane?: 'skill' | 'style' | 'domain' }): Proposal {
     return reflectCaptureImpl(this.db.getDb(), this.reflectContext(), input);
   }
 
