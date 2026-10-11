@@ -21,8 +21,12 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - On a cheap/fast model, exploring the code now returns fewer files with their source complete instead of more files partially — the same response size, concentrated where the answer is, with the "this source is complete, don't re-read it" reminder always included so a small model stops searching and answers. Sessions on frontier and mid-tier models get exactly the output they got before.
 - Sessions on a cheap/fast model now receive a short, imperative version of SpecShip's guidance to the assistant — under a third the length of the standard one, covering only the tools such a session actually sees, with the integration-specific sections dropped. Small models follow a short contract far more reliably, so they reach for SpecShip instead of falling back to searching files by hand. Sessions on frontier and mid-tier models receive today's guidance, unchanged.
 - Sessions on Gemini CLI now get output sized to the model they are actually running. SpecShip reads the model from Gemini CLI's own configuration — the `GEMINI_MODEL` environment variable, or `model` in your project's `.gemini/settings.json` (falling back to `~/.gemini/settings.json`) — so a Flash session receives the compact, tighter output it needs instead of the full-size output meant for a frontier model. Nothing is written to those files, and an unreadable or malformed settings file is simply ignored. You can also set the tier yourself: `SPECSHIP_MODEL` now accepts a plain tier name (`lite`, `standard`, or `full`) as well as a model id, and it always wins over auto-detection. When no model can be identified anywhere, output is unchanged from before — SpecShip never trims for a model it can't identify.
-- Downloadable bundles are far smaller and faster to install: they no longer ship a copy of Node.js and instead run on the Node.js already installed on your machine. **Node.js 22.5 or newer (below 25) is now required** to install and run SpecShip from a bundle, including on offline and air-gapped machines. If a suitable Node.js isn't found, the installer and the `specship` command stop with a clear message naming the supported range and pointing to nodejs.org, instead of leaving a half-working install. The npm install (`npm i -g @specship/specship`) follows the same rule: the published packages no longer carry a runtime and declare the supported Node.js range, so an unsupported Node.js is caught at install time rather than at first run.
 
+## [0.26.0] - 2026-09-29
+
+### New Features
+
+- Downloadable bundles are far smaller and faster to install: they no longer ship a copy of Node.js and instead run on the Node.js already installed on your machine. **Node.js 22.5 or newer (below 25) is now required** to install and run SpecShip from a bundle, including on offline and air-gapped machines. If a suitable Node.js isn't found, the installer and the `specship` command stop with a clear message naming the supported range and pointing to nodejs.org, instead of leaving a half-working install. The npm install (`npm i -g @specship/specship`) follows the same rule: the published packages no longer carry a runtime and declare the supported Node.js range, so an unsupported Node.js is caught at install time rather than at first run.
 
 ## [0.25.0] - 2026-09-27
 
@@ -834,3 +838,4 @@ Thanks @andreinknv for the substantive draft this release was based on.
 [0.23.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.23.0
 [0.24.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.24.0
 [0.25.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.25.0
+[0.26.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.26.0
