@@ -1,60 +1,41 @@
 ---
 title: Your first workflow
-description: Twelve minutes from zero to a passing workflow run — install, init, run spec-implement against a real spec, watch the timeline, approve the diff.
+description: From zero to a reviewed spec-implement run — install, index, write a spec, run the workflow, approve the plan and the result, then merge the branch yourself.
 ---
 
-This walkthrough takes you from a fresh install to a passing `spec-implement` run against a real Markdown spec. Twelve minutes if you don't get distracted.
+This walkthrough takes you from a fresh install to a reviewed `spec-implement` run against a real Markdown spec.
 
 ## 0. Prerequisites
 
-- Node.js ≥ 22.5 (Node 24 recommended — its bundled SQLite has FTS5).
-- Claude Code installed and authenticated.
-- A git repo to run against (an existing project is fine; an empty one works too).
+- Node.js **22.5 or newer, below 25** (Node 24 recommended — its built-in SQLite includes FTS5).
+- Claude Code installed and authenticated — the workflow's agent steps run through it.
+- A git repo to run against (an existing project is fine).
 
 ## 1. Install SpecShip
 
 ```bash
 npm i -g @specship/specship
-```
-
-Verify:
-
-```bash
 specship --version
-# specship 0.5.0
 ```
 
-## 2. Wire up Claude Code
+## 2. Wire up Claude Code and index the project
+
+From inside the repo:
 
 ```bash
+cd your-repo
 specship install --yes
 ```
 
-The `--yes` flag picks the non-interactive defaults: global location, auto-allow on. The command writes the MCP server entry, the auto-allow list, and the slash commands.
+`--yes` skips the one question and installs **project-local** (`./.mcp.json` + `./.claude/settings.json`) with the auto-allow list, the status line, and the spec-driven layer — and indexes the project. It ends with an install check; run `specship doctor` any time to repeat it. Restart Claude Code (or run `/mcp`) so the new MCP server loads.
 
-Verify Claude Code sees the new MCP server:
+Already installed elsewhere? `specship init` in the repo builds its index.
 
-```bash
-claude mcp list
-# specship  running  ./node_modules/.bin/specship serve --mcp
-```
-
-## 3. Index a project
-
-`cd` into any git repo and run:
-
-```bash
-specship init -i
-```
-
-`init -i` does two things: creates `.specship/` with the SQLite schema, then runs the initial graph build. For a 20k-file repo this takes ~60s on a fast Mac.
-
-## 4. Add one spec
+## 3. Add one spec
 
 Create `specs/welcome.md`:
 
 ```markdown
-<!-- specs/welcome.md -->
 ---
 id: WELCOME-DOC
 title: Welcome
@@ -65,103 +46,97 @@ title: Welcome
 
 Add a function `greetUser(name: string)` that returns
 `"Hello, <name>! Welcome to SpecShip."`.
+
+## Acceptance
+
+<!-- id: AC-WELCOME-001-1 -->
+- `greetUser("Ada")` returns `"Hello, Ada! Welcome to SpecShip."`.
 ```
 
-Tell SpecShip to pick it up:
+Tell SpecShip to pick it up and check it:
 
 ```bash
 specship sync
+specship lint specs/welcome.md
+specship spec REQ-WELCOME-001
 ```
 
-`sync` reconciles new files. The graph now has one `spec` node — `REQ-WELCOME-001`.
+`sync` indexes the new spec, `lint` checks it for structural errors (it will also warn about quality gaps such as a missing test plan), and `spec` shows its detail. (In Claude Code, `/specship:spec new` walks you through authoring a spec with the `spec-author` checklist instead of writing it by hand.)
 
-## 5. Run your first workflow
+## 4. Run your first workflow
 
 ```bash
 specship workflow run spec-implement --input SPEC_ID=REQ-WELCOME-001
 ```
 
-Watch the timeline stream:
+The run creates an isolated git worktree under `~/.specship/worktrees/` on a branch named `specship/wf-spec-implement-<runId>` — your working tree is never touched. It reads the spec (`specship_spec`), drafts an implementation plan, and **pauses for you to approve the plan**:
 
 ```
-runId   c8a4f3b2
-✓ plan         (24s · $0.34)
-✓ implement    (38s · $1.21)
-✓ affected     (0.2s)
-✓ test         (8s)
-⠦ review       paused — awaiting approval
+Run <runId> → paused
 ```
 
-The agent has:
+Approve it (add `--comment` to pass feedback along), then resume:
 
-1. **Planned** the implementation against the spec.
-2. **Edited** files in the isolated worktree to add `greetUser`.
-3. **Computed affected tests** (`specship affected`).
-4. **Run the affected tests** — and (assuming there's a test for `greetUser`) seen them pass.
-5. **Paused at the review gate** waiting for you.
+```bash
+specship workflow approve <runId>
+specship workflow resume <runId>
+```
 
-## 6. Open the desktop UI
+Rejecting instead (`specship workflow reject <runId> --comment "…"`) parks the run with its worktree intact; resuming feeds your comment back so the agent revises the plan.
 
-In another terminal:
+## 5. What runs after approval
+
+1. **implement** — the agent edits files in the worktree.
+2. **quality gate** — your project's own lint/typecheck, with one automated fix round if it fails.
+3. **suppression scan** — halts if the change *introduces* a lint/type suppression (`eslint-disable`, `@ts-ignore`, `noqa`, …) instead of fixing the code.
+4. **diff** — the real `git diff`, captured from git rather than from the agent's summary.
+5. **verify** — installs dependencies, builds, and runs your test suite. A broken install or build is reported as an environment failure, not a test failure.
+6. **link** — asserts the spec link from `REQ-WELCOME-001` to the code that implements it.
+7. **coverage** — counts how many acceptance criteria have test evidence.
+8. **adversarial review** — a read-only reviewer grades each acceptance criterion as satisfied, partial, or unaddressed, from the diff.
+9. **final review** — pauses again with the diff stat, quality and suppression results, links, coverage, and the review.
+
+Follow along in the dashboard:
 
 ```bash
 specship desktop
 ```
 
-Your browser opens at `http://127.0.0.1:4242/runs/c8a4f3b2`. The page shows the run's DAG (lit green for completed nodes, amber for the paused gate), the live event timeline, and the artifact tabs.
+Open `http://127.0.0.1:4242` and go to the run — it shows the run's DAG, the live event timeline, each step's output, and **Approve** / reject controls for the gate. `specship workflow runs` lists runs from the terminal.
 
-Click the **Artifacts** tab. You'll see:
+## 6. Finish the run and merge
 
-- `plan.md` — the agent's implementation plan.
-- `diff.md` — the changes it made.
-- `test_results.md` — the test output.
-
-Read them. If the diff looks right, click **Approve** at the top of the page.
-
-## 7. Watch it merge
-
-The workflow resumes:
-
-```
-✓ review       approved
-✓ link         (3s)         ← asserts REQ-WELCOME-001 → greetUser
-✓ merge        (0.4s)
-✓ run complete (90s total · $1.55)
-```
-
-Back in your terminal, `git log` shows a new commit on `main` — the agent's diff, fast-forwarded from the worktree. The `.specship/wt/c8a4f3b2/` directory is gone (cleaned up on successful merge).
-
-## 8. Verify the spec link
+Approve the final review and resume. The run completes and **leaves the worktree branch for you** — SpecShip never merges on its own. Inspect it, then merge it like any branch:
 
 ```bash
-specship spec REQ-WELCOME-001
+git merge specship/wf-spec-implement-<runId>
+specship workflow purge <runId>     # delete the worktree when you're done with it
 ```
 
-```
-REQ-WELCOME-001  · state: implemented
-  title:  Greet the user
-  links:
-    - implements  src/welcome.ts:greetUser  (verified)
-    - tests       test/welcome.test.ts:greetUser  (passed)
+## 7. Prove it's tested
+
+After the run, the link is `implemented` — but a requirement only reaches **`verified`** when a test linked to it as evidence has passed. Declare the proving test in the spec with a `verifies:` block (`- <test-file>:<test-name>`), put an `@verifies REQ-WELCOME-001` comment on the test, or mention the requirement ID in the test's title — then feed a real test run back in:
+
+```bash
+npx vitest run --reporter=json --outputFile=report.json
+specship verify --report report.json
+specship coverage REQ-WELCOME-001
 ```
 
-You've gone from spec → tested code → verified link, with one command and one human approval.
+`verify` promotes (or demotes) the test links from the report and records the run as evidence; `coverage` shows which requirements and criteria now have it.
 
 ## What just happened
 
-Five things, in order:
+- The `spec-implement` workflow opened a worktree, planned against the spec and the graph, and waited for your approval before writing code.
+- Deterministic `bash` steps — not the model — produced the diff, ran lint, the suppression scan and the tests, and computed coverage.
+- Two `approval` gates kept you in the loop; the branch is yours to merge.
 
-1. The `spec-implement` workflow opened a worktree.
-2. An `agent` step read the spec via `specship_spec`, planned, and wrote `plan.md`.
-3. A second `agent` step read the plan, edited files, wrote `diff.md`.
-4. A `bash` step ran the affected tests and captured `test_results.md`.
-5. An `approval` step paused for you. On approval, the workflow asserted the spec link, merged the worktree, and ended.
-
-The whole thing is one YAML file. You could edit it, customize it, share it. Or write a different one for code review, dependency bumps, security audits.
+The whole thing is one YAML file. You can copy it into `.specship/workflows/` and customize it, or write a different one — `specship workflow list` shows every workflow available to the project.
 
 ## Next
 
 - [Workflows — Overview](/workflows/overview/) — the engine's full feature set.
+- [Bundled workflows](/workflows/bundled/) — `spec-implement`, `spec-implement-mixed`, `spec-fix`, `spec-verify`, `spec-relink`, and more.
 - [YAML schema](/workflows/yaml-schema/) — every field you can set.
-- [Writing custom workflows](/workflows/custom/) — a worked example of a code-review workflow from scratch.
-- [Why specs](/specs/why-specs/) — what specs buy you beyond "shared brief".
+- [Writing custom workflows](/workflows/custom/) — a worked example from scratch.
+- [Links & Drift](/specs/links-and-drift/) — how link states and test evidence work.

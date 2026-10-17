@@ -1,92 +1,62 @@
 ---
 title: Introduction
-description: SpecShip is a workflow engine for AI coding agents — define multi-step development workflows in YAML, run them in isolated worktrees against a knowledge graph of your code and specs.
+description: SpecShip is a local-first code-intelligence graph, spec layer, and workflow engine for Claude Code — your agent answers structural questions in a few calls instead of re-reading the codebase.
 ---
 
-SpecShip is a **workflow engine for AI coding agents**. You describe a multi-step development task in YAML — plan, implement, lint, test, review, merge — and SpecShip runs it for you, in an isolated git worktree, with one command.
+SpecShip **stops your agent re-reading the codebase.** It parses your project with tree-sitter into a local SQLite knowledge graph and exposes it to **Claude Code** over MCP, so structural and flow questions — "how does X reach Y", "what calls this", "what breaks if I change it" — resolve in a few fast tool calls instead of a grep-and-Read crawl. On top of the graph sit ID-stable specs with test-evidenced links to code, and a YAML workflow engine that implements a spec in an isolated git worktree.
 
-> _Define multi-step development workflows in YAML — code review, bug fixes, feature implementation, testing — and run them with a single command._
+SpecShip is built for **Claude Code**. Gemini CLI is supported as an opt-in, MCP-only target (`specship install --target gemini`) — see [Installation](/getting-started/installation/#gemini-cli-opt-in).
 
-Under the hood it ships four things that work together:
+## What it ships
 
 | Surface | What it does |
 |---|---|
-| **Workflows** | A YAML DAG runner. Bundled `spec-implement`, `spec-fix`, `spec-verify`, `spec-relink` plus anything you write. |
-| **Specs** | Requirements as ID-stable Markdown nodes. The agent links the code it writes back to the requirement, with state. |
-| **Graph** | Tree-sitter parsing across 20+ languages → SQLite knowledge graph. The agent answers structural questions in 1-3 calls instead of grepping files. |
-| **Claude Code analytics** | Live ingest of `~/.claude/projects/*.jsonl` → sessions, memory, file/tool/subagent heatmaps, cost rollups, a rule-based tips engine. |
+| **Graph** | Tree-sitter parsing across 20+ languages → SQLite (FTS5) knowledge graph of symbols, call edges, framework routes. Extraction is deterministic — derived from the AST, never LLM-summarized. `specship_explore` returns the verbatim source of the relevant symbols in one call. |
+| **Specs** | Requirements as ID-stable Markdown nodes (`REQ-AUTH-005`). Code links carry state — `implemented`, `verified`, `drifted`, `broken`, `orphaned` — and **`verified` means a linked test actually passed**. |
+| **Quality gates** | `specship check` gates drift, behaviour (test evidence), architecture fitness, maintainability, newly added lint suppressions, and (opt-in) mutation score. `specship lint` checks spec files; `specship coverage` shows which requirements and criteria have test evidence. |
+| **Workflows** | A YAML DAG runner. Bundled `spec-implement`, `spec-implement-mixed`, `spec-fix`, `spec-verify`, `spec-relink`, and more — plus anything you write. Runs in an isolated git worktree with approval gates. |
+| **Learning** | Human-gated learning from your real sessions: repeated code-style corrections become project conventions, undocumented domain terms become drafted fact files, and `/specship:learn` captures either on demand. Nothing is written without your approval. |
+| **Dashboard** | `specship desktop` — a loopback web UI over the same database: specs and traceability, the drift queue, workflow runs, and Claude Code session analytics ingested from `~/.claude/projects/*.jsonl`. |
 
-All four read and write the same local SQLite. There's no external service, no API key, no telemetry — SpecShip is 100% local.
+Everything reads and writes the same local SQLite under `.specship/`. The core makes no network calls and has no API key and no telemetry. The two integrations that do talk to a service — **JIRA** (your Atlassian instance) and **Designer** (claude.ai, experimental) — are strictly opt-in (`--with-jira`, `--with-designer`).
 
-## Four properties of the workflow engine
+## Why a graph
 
-| | |
-|---|---|
-| **Repeatable** | Package your best AI coding patterns as shareable YAML workflows. Check them into git; share them across your team. |
-| **Isolated** | Each workflow runs in its own git worktree — no conflicts, no mess. Half-finished agent runs never touch your working tree. |
-| **Portable** | Run from the CLI, the desktop web UI, or your GitHub Actions runners. Same YAML, three surfaces. |
-| **Composable** | Chain nodes into DAGs with `depends_on:`, loops, conditional branches, and approval gates. Real control flow, not just scripts. |
+Most agent-with-codebase setups burn time on **discovery** — `grep`, `glob`, and `Read` just to find which files to look at. SpecShip pre-indexes that discovery: every symbol, call edge, framework route, and cross-language bridge is in the graph before the agent asks. The target is a flow question answered in one SpecShip call on a small repo (three to five on a large one) with zero file reads. Measured, dated benchmark results live in the project [README](https://github.com/selvakumarEsra/specship#readme).
 
-## A 30-second example
+### Works on small models too
 
-```yaml
-name: spec-implement
-inputs:
-  - { name: SPEC_ID, required: true }
-isolation: worktree
-steps:
-  - { id: plan,      runner: agent,    output: plan.md }
-  - { id: implement, runner: agent,    depends_on: [plan],      output: diff.md }
-  - { id: test,      runner: bash,     depends_on: [implement], command: pnpm test --filter affected }
-  - { id: review,    runner: approval, depends_on: [test],      message: "Approve?" }
-  - { id: merge,     runner: shell,    depends_on: [review],    command: git merge --ff-only $WORKTREE }
-```
+SpecShip sizes its output to the model running the session. On a lightweight model (Claude Haiku, Gemini Flash) it returns fewer files with complete source, sends a short imperative version of its guidance, and trims the tool menu to the core tools — so a small model stops searching and answers. Frontier and mid-tier sessions get the full output, and a model SpecShip can't identify is never trimmed. Override with `SPECSHIP_MODEL=lite|standard|full` or turn it off with `SPECSHIP_COMPACT=0` — see [Configuration](/getting-started/configuration/#how-the-model-tier-is-detected).
+
+## Why specs
+
+The spec is the **anchor for repeatable AI work**. Without a written, ID-stable requirement you're stuck with conversational briefs that drift each time, can't be verified after the fact, and can't be handed off.
+
+A spec gives you:
+
+- A **stable id** (`REQ-AUTH-005`) that survives rewrites.
+- **Links to code** (`implementations:`) and **proving tests** (`verifies:`), each with state — and a requirement can only reach `verified` when a linked test has passed (`specship verify --report <vitest-json>` records a real run).
+- A **brief the agent can read** (`specship_spec`) without you re-describing the goal every turn.
+
+→ [Why specs](/specs/why-specs/) for the longer version.
+
+## A workflow, in one command
 
 ```bash
 specship workflow run spec-implement --input SPEC_ID=REQ-AUTH-005
 ```
 
-That command opens a worktree, plans the implementation against your specs and code graph, writes code, runs only the affected tests, pauses for your approval, and merges.
-
-## Why specs
-
-The spec is the **anchor for repeatable AI work**. Without a written, ID-stable requirement, you're stuck with conversational briefs that drift each time, can't be verified after the fact, and can't be handed off.
-
-A spec gives you:
-
-- A **stable id** (`REQ-AUTH-005`) that survives rewrites.
-- A **link to code** with state — `verified`, `drifted`, `broken`, `orphaned`.
-- A **brief the agent can read** without you re-describing the goal every turn.
-
-→ [Why specs](/specs/why-specs/) for the longer version.
-
-## Why a graph
-
-Most agent-with-codebase setups burn tokens on **discovery** — `grep`, `glob`, and `Read` to find which files to even look at. SpecShip pre-indexes that discovery: every symbol, every call edge, every framework route, every cross-language bridge is in the graph before the agent asks.
-
-Real numbers on a recent benchmark (median of 4 runs across 7 repos, Claude Code Opus 4.7):
-
-- **35% cheaper**
-- **57% fewer tokens**
-- **46% faster**
-- **71% fewer tool calls**
-
-The gains scale with codebase size — large repos see zero file reads.
-
-## Why ingest Claude Code transcripts
-
-Claude Code writes a JSONL audit trail to `~/.claude/projects/<project>/<sessionId>.jsonl` for every session. That trail has per-prompt cost, per-tool-call result size, cache hit/miss, and subagent attribution.
-
-SpecShip ingests it, surfaces it in the desktop UI, and runs a rule-based tips engine over it. You discover that you read `auth.ts` 17 times yesterday, that `Bash(grep)` cost you $4 last week, that your evening sessions have a 91% cache miss rate — and a one-click fix for each.
+That run opens a git worktree, reads the spec and the graph, drafts a plan and **pauses for your approval**, implements, runs your project's lint/typecheck (with one automated fix round) and a scan for newly added lint suppressions, runs the tests, asserts spec links, computes acceptance-criteria coverage, has a read-only adversarial reviewer grade each criterion, and pauses again for your final review. The worktree branch is left for you to inspect and merge. → [Your first workflow](/getting-started/your-first-workflow/).
 
 ## 100% local
 
-No data leaves your machine. No API keys, no external services. Everything lives in `.specship/` per project. Delete the directory; it's gone.
+The core never leaves your machine. Per-project data lives in `.specship/`; delete the directory and it's gone. User-level state (worktrees, saved JIRA credentials if you opted in) lives in `~/.specship/`.
 
 ## What to read next
 
-- **[Quickstart](/getting-started/quickstart/)** — the 30-second install + first command.
-- **[Your first workflow](/getting-started/your-first-workflow/)** — the 12-minute walkthrough: install, init, run `spec-implement` against a real spec, watch the timeline, approve the diff.
+- **[Quickstart](/getting-started/quickstart/)** — install + first command.
+- **[Installation](/getting-started/installation/)** — every install option, offline bundles, Gemini CLI.
+- **[Your first graph](/getting-started/your-first-graph/)** — index a project and query it.
+- **[Your first workflow](/getting-started/your-first-workflow/)** — run `spec-implement` against a real spec.
 - **[Workflows — Overview](/workflows/overview/)** — the engine's full feature set.
-- **[Why specs](/specs/why-specs/)** — what specs buy you beyond "shared brief".
-- **[Claude Code — Overview](/claude-code/overview/)** — the desktop UI's analytics surfaces.
+- **[Claude Code — Overview](/claude-code/overview/)** — the dashboard's analytics surfaces.

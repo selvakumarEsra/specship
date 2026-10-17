@@ -15,9 +15,10 @@ specship affected src/auth.ts --filter "e2e/*"      # custom test-file pattern
 
 | Option | Description | Default |
 |---|---|---|
-| `--stdin` | Read the file list from stdin | `false` |
+| `-p, --path <path>` | Project path | current directory |
+| `--stdin` | Read the file list from stdin, one per line | `false` |
 | `-d, --depth <n>` | Max dependency traversal depth | `5` |
-| `-f, --filter <glob>` | Custom glob to identify test files | auto-detect |
+| `-f, --filter <glob>` | Custom glob to identify test files | auto-detect (`*.test.*`, `*.spec.*`, and files under `__tests__/`, `test/`, `tests/`, `spec/`, `e2e/`) |
 | `-j, --json` | Output as JSON | `false` |
 | `-q, --quiet` | Output file paths only | `false` |
 
@@ -30,3 +31,5 @@ if [ -n "$AFFECTED" ]; then
   npx vitest run $AFFECTED
 fi
 ```
+
+`affected` picks which tests to *run*. To check that a change keeps its specs, tests and architecture rules intact, pair it with [`specship check --since`](/specs/quality-gates/) in the same pipeline.

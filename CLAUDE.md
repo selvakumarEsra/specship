@@ -28,7 +28,7 @@ npx vitest run __tests__/extraction.test.ts -t "TypeScript"
 
 `copy-assets` (called from `build`) copies `src/db/schema.sql` and all `src/extraction/wasm/*.wasm` files into `dist/`. **Any new SQL or grammar wasm must be copied or it won't ship.**
 
-Node engines: `>=18.0.0 <25.0.0`. There is a hard exit on Node 25.x (see `src/bin/node-version-check.ts`).
+Node engines: `>=22.5.0 <25.0.0` everywhere (workspace, npm shim, published packages). The CLI blocks below 22.5 and hard-exits on Node 25.x (see `src/bin/node-version-check.ts`). Run tests on Node 24 — Node 22's built-in SQLite lacks FTS5.
 
 ## Architecture
 
@@ -49,7 +49,7 @@ The public API surface is `src/index.ts` — the `SpecShip` class wires all the 
 ### Where things live
 
 - `src/index.ts` — `SpecShip` class: `init`/`open`/`close`, `indexAll`, `sync`, `searchNodes`, `getCallers`/`getCallees`, `getImpactRadius`, `buildContext`, `watch`/`unwatch`.
-- `src/db/` — `DatabaseConnection`, `QueryBuilder`, `schema.sql`. `better-sqlite3` (native) with transparent `node-sqlite3-wasm` fallback; `specship status` surfaces which backend is live.
+- `src/db/` — `DatabaseConnection`, `QueryBuilder`, `schema.sql`. `better-sqlite3` (native, optional) with transparent fallback to Node's built-in `node:sqlite` (Node 22.5+); `specship status` surfaces which backend is live.
 - `src/extraction/` — `ExtractionOrchestrator`, tree-sitter wrappers, per-language extractors under `languages/`, standalone extractors (svelte/vue/liquid/dfm), `parse-worker.ts`.
 - `src/resolution/` — resolver + framework patterns + dynamic-dispatch synthesizers → see `src/resolution/CLAUDE.md`.
 - `src/graph/` — `GraphTraverser` (BFS/DFS, impact radius, path finding) and `GraphQueryManager`.
@@ -57,7 +57,7 @@ The public API surface is `src/index.ts` — the `SpecShip` class wires all the 
 - `src/mcp/` — the MCP server → see `src/mcp/CLAUDE.md`.
 - `src/installer/` — `specship install` → see `src/installer/CLAUDE.md`.
 - `src/claudemd/` — the CLAUDE.md governance audit (CLAUDEMD-DOC).
-- `src/bin/specship.ts` — CLI (commander). Subcommands: `install`, `init`, `uninit`, `index`, `sync`, `status`, `query`, `files`, `context`, `affected`, `serve --mcp`.
+- `src/bin/specship.ts` — CLI (commander). Subcommands include `install`/`uninstall`/`update`/`doctor`, `init`/`uninit`, `index`/`sync`/`status`, `query`/`files`/`affected`/`diagram`, the spec layer (`spec`, `drifted`, `coverage`, `verify`, `lint`, `check`, `suppressions`), health (`fitness`, `maintainability`), `workflow`, `jira …`, `reflect`, `desktop`, and `serve --mcp` — the full list is generated into `site/src/content/docs/reference/cli.md`.
 
 ### NodeKind / EdgeKind
 

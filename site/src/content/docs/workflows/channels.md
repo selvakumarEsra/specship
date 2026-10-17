@@ -1,15 +1,15 @@
 ---
-title: Channels — CLI, Web UI, GitHub Actions
-description: Where you can run workflows. The same YAML, three surfaces — terminal, desktop web UI, and CI.
+title: Channels — CLI, dashboard, CI
+description: Where you can run workflows. The same YAML, three surfaces — the terminal, the desktop dashboard, and CI.
 ---
 
-A workflow is just a file. **Where** it runs is the user's choice. SpecShip ships three channels today; the YAML is the same on all three.
+A workflow is just a file. **Where** it runs is the user's choice. The YAML is the same everywhere, and every surface reads and writes the same SQLite, so a run started in one place can be approved and inspected in another.
 
 | Channel | Surface | Best for |
 |---|---|---|
-| **CLI** | terminal | day-to-day; what most users use most of the time |
-| **Web UI** | desktop app at `:4242` | review-heavy runs; live timeline + artifact viewer |
-| **GitHub Actions** | CI | nightly runs; PR-triggered runs; team-wide automation |
+| **CLI** | terminal (and the `/specship:*` slash commands) | day-to-day; what most users use most of the time |
+| **Dashboard** | `specship desktop` at `http://127.0.0.1:4242` | review-heavy runs; live timeline, artifacts, one-click gate actions, drift-queue repairs |
+| **CI** | any CI runner, via the CLI | deterministic checks on every PR |
 
 ## CLI
 
@@ -17,60 +17,63 @@ A workflow is just a file. **Where** it runs is the user's choice. SpecShip ship
 specship workflow run <name> --input KEY=VAL [--input KEY=VAL ...]
 ```
 
-Outputs a run id and starts streaming events:
+`run` executes the workflow in the foreground until it **completes, fails, or pauses at an approval gate**, then prints the result:
 
 ```
 $ specship workflow run spec-implement --input SPEC_ID=REQ-AUTH-005
-[runId] 9f3a2b1c
-✓ plan        (28s · $0.41)
-✓ implement   (52s · $1.88)
-✓ test        (15s)
-⠦ review      paused — awaiting approval
+Run 9f3a2b1c-4d… → paused
+Worktree: /Users/you/.specship/worktrees/3a7f09c2e4b1/spec-implement-9f3a2b1c
 ```
 
-While paused, in another terminal:
+At a gate, read the step outputs (`.specship/artifacts/runs/<runId>/nodes/`, or the dashboard's run page), then decide:
 
 ```bash
-specship workflow approve 9f3a2b1c --comment "looks good"
+specship workflow approve 9f3a2b1c-… --comment "looks good"   # record the approval
+specship workflow resume  9f3a2b1c-…                          # carry the run past the gate
 ```
 
-The original terminal picks up the resume and continues. Or:
+The full set of actions:
 
-```bash
-specship workflow reject 9f3a2b1c --reason "missing error case for expired refresh token"
-specship workflow cancel 9f3a2b1c
-specship workflow resume 9f3a2b1c
-specship workflow status 9f3a2b1c
-specship workflow list                  # all your recent runs
-```
+| Command | What it does |
+|---|---|
+| `specship workflow list` | Discovered workflows with their tier and node count, plus any files that failed validation. |
+| `specship workflow run <name> -i KEY=VAL` | Start a run. |
+| `specship workflow runs` | The 50 most recent runs with status and duration. |
+| `specship workflow approve <runId> [--comment "…"]` | Approve the paused gate. Follow with `resume`. |
+| `specship workflow reject <runId> --reason "…"` | Park the run as `rejected`, worktree and artifacts intact. |
+| `specship workflow resume <runId>` | Continue an approved run, or revise a rejected one (runs the gate's `on_reject` prompt with your reason, then pauses for re-review). |
+| `specship workflow cancel <runId> [--reason "…"]` | Stop a run. The worktree is kept. |
+| `specship workflow purge <runId>` | Remove a finished run's worktree and branch — the only way anything is deleted. Artifacts and the run record are kept. |
 
-The CLI is a thin client over SpecShip's runner; an approval issued via CLI and an approval issued from the Web UI hit the same endpoint and have the same effect.
+`--json` gives machine-readable output for `list`, `run` and `runs`; `--path <projectRoot>` targets another project. Commands that take a `<runId>` need the full id — copy it from the `run` output, the dashboard, or `specship workflow runs --json`.
 
-## Desktop dashboard
+You'll rarely type `workflow run` for the bundled workflows: `/specship:spec implement <SPEC_ID>` launches `spec-implement`, `/specship:spec design <url>` launches `claude-design-implement`, and `/specship:check fix <SPEC_ID>` launches `spec-fix`.
 
-`specship desktop` boots a single-process Fastify server that renders the dashboard **server-side** on `http://127.0.0.1:4242`. The dashboard is **read-only** — you launch and approve workflows from the CLI (`specship workflow run`) or the `/specship:*` slash commands, and watch the results here:
+## Dashboard
 
-- **Runs** lists every discovered run; open one for its persisted event timeline — `step_started`, `tool_called`, `artifact_created`, `approval_requested` — with timestamps.
-- Per-step artifacts (`plan.md`, `diff.md`, `test_results.md`) render inline.
+`specship desktop` starts a local server on `http://127.0.0.1:4242` (change it with `--port` / `--host`) that serves the dashboard and its HTTP API. For workflows it gives you:
 
-Because every event and artifact is persisted in SpecShip's SQLite, you can replay the timeline of a run from a week ago and see exactly what happened.
+- **Workflows** — every discovered workflow with its inputs. **Launch** opens a form generated from the workflow's `inputs:` (required fields enforced, defaults pre-filled) and takes you to the new run.
+- **Runs** — every run, filterable by status (`running`, `paused`, `rejected`, `completed`, `failed`, `cancelled`), with duration, cost and model. Open one for its live event timeline — `step_started`, `tool_called`, `agent_message`, `step_completed`, `approval_requested` — per-step cost and duration, and each step's artifact rendered inline.
+- **Gate actions on the run page** — **Approve** (records the approval and resumes in one click), **Reject** with a reason, **Cancel**, and on a rejected run **Resume & revise** or **Purge worktree**.
+- **Drift queue repairs** — each drifted, broken or orphaned link has a button that launches the matching workflow: **Fix** → `spec-fix`, **Re-verify** → `spec-verify`, **Re-attach** → `spec-relink`.
 
-→ Read the full UI walkthrough at [Claude Code — Overview](/claude-code/overview/) (the dashboard) and [the README's Dashboard section](https://github.com/selvakumarEsra/specship#dashboard).
+Because every event and artifact is persisted, you can open a run from a week ago and see exactly what happened. For the rest of the dashboard, see [Claude Code — Overview](/claude-code/overview/).
 
-## GitHub Actions
+## CI
 
-Run a workflow from CI by checking out the repo, installing SpecShip, and invoking it like the CLI:
+There's no dedicated GitHub Action — run SpecShip's CLI in a job like any other tool. What works well headlessly is the **deterministic** part of SpecShip:
 
 ```yaml
-# .github/workflows/spec-verify-on-pr.yml
-name: Verify spec links
+# .github/workflows/specship-gate.yml
+name: SpecShip gate
 
 on:
   pull_request:
     branches: [main]
 
 jobs:
-  verify:
+  gate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -78,49 +81,26 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: '22' }
       - run: npm i -g @specship/specship
-      - run: specship init -i           # build the graph on the clean clone
-      - name: Run spec-verify
-        run: specship workflow run spec-verify --background
-      - name: Wait for completion
-        run: specship workflow wait $(specship workflow list --limit 1 --json | jq -r '.[0].id')
+      - run: specship init                            # build the graph on the clean clone
+      - run: npx vitest run --reporter=json --outputFile=vitest.json || true
+      - run: specship verify --report vitest.json     # promote/demote links from real test results
+      - run: specship check --since origin/main       # drift + behaviour gate for the touched specs
+      - run: specship suppressions --since origin/main
 ```
 
-What this CI run does:
+- `specship verify --report` maps a vitest JSON report onto declared test-evidence links and moves link state itself — no model involved.
+- `specship check` fails only on the checks you've configured to gate; see the [CLI reference](/reference/cli/).
+- `specship suppressions` exits non-zero when the change adds lint/type suppression comments.
 
-1. Checks out the repo (full history so the graph can index everything).
-2. Installs Node, installs SpecShip globally.
-3. Runs `specship init -i` to build the knowledge graph fresh on the CI runner.
-4. Runs the `spec-verify` workflow in the background, then `--wait`s for it.
-5. The workflow's exit code becomes the job's exit code — fails the PR if any spec is `drifted` or `broken`.
-
-For workflows that need approval gates in CI, use a **GitHub Environment** with required reviewers. The job's pause maps cleanly to the environment's "waiting for approval" state.
-
-### Posting events back as PR comments
-
-A separate `specship gh-comment <runId>` command turns a finished run's event timeline into a Markdown comment and `gh pr comment`s it onto the PR. Drop it as the last step of your job:
-
-```yaml
-      - name: Post run summary to PR
-        if: always()
-        run: specship gh-comment $(specship workflow list --limit 1 --json | jq -r '.[0].id')
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-```
-
-The comment renders the per-step timing, cost, artifact list, and (for failed runs) the error message + a link to download `plan.md` / `diff.md` from the run artifacts.
+Running a whole **workflow** in CI is possible (`specship workflow run spec-verify`), but every `prompt` node runs Claude Code headless, so the runner needs the `claude` CLI installed and authenticated, and a run that reaches an approval gate stops there with status `paused` — CI can't approve it. Keep workflows with gates for the CLI and the dashboard.
 
 ## What's the right channel for what?
-
-A loose rule of thumb:
 
 | If… | Use… |
 |---|---|
 | You're iterating fast and want to see output immediately | **CLI** |
-| You need to review a diff or read an agent's plan carefully | **Web UI** |
-| You want automated runs on every PR | **GitHub Actions** |
-| You're sharing a workflow with non-coding teammates | **Web UI** (no terminal required) |
-| You want audit trail of every prod-bound change | **GitHub Actions** with approvals |
-
-All three read and write the same SQLite, so a run started on the CLI can be approved in the Web UI and inspected later from CI.
+| You need to review a diff or read an agent's plan carefully | **Dashboard** |
+| You're triaging the drift queue | **Dashboard** (one click per repair) |
+| You want automated checks on every PR | **CI**, with the deterministic commands |
 
 → Back to [Workflows — Overview](/workflows/overview/).
