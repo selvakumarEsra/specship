@@ -9,13 +9,15 @@
  *   1. `better-sqlite3` — present only when the host has installed it (a
  *      devDependency in this repo, optional in user installs). Ships its
  *      own SQLite compiled with FTS5, so it's the only path that works on
- *      dev machines whose system Node was built without FTS5. Production
- *      bundle ships Node 24 with FTS5 in `node:sqlite`, so it skips this.
- *   2. `node:sqlite` — Node's built-in module (Node 22.5+). Used by the
- *      shipped Node 24 bundle which is compiled with FTS5.
+ *      dev machines whose system Node was built without FTS5.
+ *   2. `node:sqlite` — Node's built-in module (Node 22.5+, the supported
+ *      floor). Published packages bundle no runtime — they run on the
+ *      user's installed Node (>=22.5 <25) — and `node:sqlite` only ships
+ *      FTS5 on Node 24, so Node 22/23 users without better-sqlite3 lack FTS5.
  *
  * Tests, dev runs from source, and contributors get FTS5 via better-sqlite3.
- * End users on the published binary get FTS5 via the bundled Node 24.
+ * End users get FTS5 via better-sqlite3 (optional dependency) or Node 24's
+ * `node:sqlite`.
  */
 
 export interface SqliteStatement {
@@ -247,10 +249,10 @@ export function createDatabase(dbPath: string): { db: SqliteDatabase; backend: S
     throw new Error(
       'Failed to open SQLite.\n' +
       'SpecShip tries better-sqlite3 first (when installed), then falls back to\n' +
-      "Node's built-in node:sqlite (Node 22.5+). The production install bundles a\n" +
-      'compatible Node 24 with FTS5. For dev / running from source, install\n' +
-      'better-sqlite3 (`npm install --save-dev better-sqlite3`) so FTS5 works on\n' +
-      'hosts whose system Node was built without it.\n' +
+      "Node's built-in node:sqlite (Node 22.5+; FTS5 ships in node:sqlite only on\n" +
+      'Node 24). Run on Node 24, or install better-sqlite3\n' +
+      '(`npm install --save-dev better-sqlite3`) so FTS5 works on hosts whose\n' +
+      'Node was built without it.\n' +
       `Backend errors:\n${errors.map((e) => `  - ${e}`).join('\n')}`
     );
   }

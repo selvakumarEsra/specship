@@ -31,14 +31,29 @@ export function cliCommandsBlock(root = ROOT) {
   // Capture the registration receiver so sub-commands render under their
   // group (`const jira = program.command('jira')` → `jira.command('test')`
   // becomes `specship jira test`, not a fictional top-level `specship test`).
-  const re = /(?:const (\w+) = )?\b(\w+)\s*[\r\n]+\s*\.command\('([^']+)'\)\s*[\r\n]+\s*\.description\('((?:[^'\\]|\\.)*)'/g;
+  //
+  // Tolerated between `.command(...)` and `.description(...)`: any number of
+  // `.alias(...)` calls (`maintainability` → `.alias('maint')`). Both string
+  // literals may be single- or double-quoted, with backslash escapes, and the
+  // description may sit on its own line(s) (`.description(\n  '...',\n)`).
+  // (REQ-AUDFIX-008.A1)
+  const str = (g) => `(?:'(?<${g}S>(?:[^'\\\\]|\\\\.)*)'|"(?<${g}D>(?:[^"\\\\]|\\\\.)*)")`;
+  const alias = `(?:\\s*\\.alias\\(\\s*(?:'(?:[^'\\\\]|\\\\.)*'|"(?:[^"\\\\]|\\\\.)*")\\s*\\))*`;
+  const re = new RegExp(
+    `(?:const (\\w+) = )?\\b(\\w+)\\s*[\\r\\n]+\\s*\\.command\\(\\s*${str('name')}\\s*\\)` +
+      `${alias}\\s*\\.description\\(\\s*${str('desc')}`,
+    'g',
+  );
+  const unescape = (raw) => raw.replace(/\\(.)/g, (_, c) => (c === 'n' ? ' ' : c));
   const groups = new Map(); // const-name → command name (e.g. jira → 'jira')
   let m;
   while ((m = re.exec(src)) !== null) {
-    const [, constName, receiver, name, rawDesc] = m;
+    const [, constName, receiver] = m;
+    const name = unescape(m.groups.nameS ?? m.groups.nameD);
+    const rawDesc = m.groups.descS ?? m.groups.descD;
     if (constName) groups.set(constName, name.split(' ')[0]);
     const prefix = receiver && groups.has(receiver) ? `${groups.get(receiver)} ` : '';
-    let desc = rawDesc.replace(/\\'/g, "'");
+    let desc = unescape(rawDesc);
     // Internal hook plumbing isn't user-facing surface.
     if (desc.startsWith('Internal hook')) continue;
     if (desc.length > 120) desc = desc.slice(0, 117) + '…';

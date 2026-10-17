@@ -71,10 +71,15 @@ nodes:
       to proceed with implementation, or reject with feedback to revise.
     capture_response: true
     on_reject:
+      # The reviewer's rejection reason is appended to this prompt
+      # automatically; the revision replaces $plan.output downstream.
       prompt: |
-        The plan was rejected with this feedback. Revise:
+        The plan was rejected (feedback follows). Revise the plan to
+        address it and output the full revised plan.
 
-        $approve_plan.output
+        Current plan:
+        $plan.output
+      revises: plan
       max_attempts: 3
 
   - id: implement

@@ -67,7 +67,7 @@ export function buildCheatsheetPayload(
   if (extras.openProposals && extras.openProposals > 0) {
     parts.push(
       '',
-      `🧠 ${extras.openProposals} learned proposal(s) awaiting review — \`specship reflect\` or the dashboard's Improvements page.`,
+      `🧠 ${extras.openProposals} learned proposal(s) awaiting review — run \`specship reflect\` to review them.`,
     );
   }
   return { systemMessage: parts.join('\n') };

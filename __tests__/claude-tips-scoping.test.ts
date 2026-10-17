@@ -120,3 +120,53 @@ describe('model-escalation tip (MIXMODEL-DOC, REQ-MIX-002)', () => {
     expect(tips.filter((t) => t.id.startsWith('model_escalation:'))).toEqual([]);
   });
 });
+
+describe('tip copy honesty (REQ-AUDFIX-006)', () => {
+  type Tip = { id: string; title: string; fix: string; saving: string; evidence: { detail: string } };
+
+  async function seedAllRules(): Promise<Tip[]> {
+    seedSession('own-all', OWN_ROOT);
+    // Rule 1: same file Read ≥10×.
+    seedWastefulReads('own-all', 'src/deep/index.ts');
+    // Rule 2: one oversized tool result (200k characters).
+    db.prepare(`INSERT INTO claude_tool_calls (prompt_id, session_id, assistant_uuid, tool_name, input_summary, result_length, ts)
+                VALUES ('p-own-all', 'own-all', 'a-heavy', 'Bash', 'grep -r foo', 200000, 1600)`).run();
+    // Rule 3: a 12-prompt session with a 10% cache read rate.
+    db.prepare(`UPDATE claude_sessions SET prompt_count = 12, total_input_tokens = 900000,
+                total_cache_creation_tokens = 0, total_cache_read_tokens = 100000 WHERE id = 'own-all'`).run();
+    const res = await app.inject({ method: 'GET', url: '/api/claude/tips' });
+    return (res.json() as { tips: Tip[] }).tips;
+  }
+
+  it('REQ-AUDFIX-006.A1: no tip renders a literal placeholder saving', async () => {
+    const tips = await seedAllRules();
+    expect(tips.some((t) => t.id.startsWith('low_cache:'))).toBe(true);
+    for (const t of tips) {
+      expect(t.saving).not.toMatch(/\$X|X\.XX/);
+      expect(JSON.stringify(t)).not.toMatch(/\$X\.XX/);
+    }
+  });
+
+  it('REQ-AUDFIX-006.A2: the large-result tip labels characters as characters and derives $ from the token estimate', async () => {
+    const tips = await seedAllRules();
+    const heavy = tips.find((t) => t.id.startsWith('heavy_result:'))!;
+    expect(heavy).toBeDefined();
+    expect(heavy.title).toContain('200k chars');
+    expect(heavy.title).toContain('~50k tokens est.');
+    expect(heavy.title).not.toMatch(/200k tokens/);
+    expect(heavy.evidence.detail).toContain('200000 chars');
+    expect(heavy.evidence.detail).not.toMatch(/200000 tokens/);
+    // 200000 chars / 4 = 50000 est. tokens × $15/M = $0.75 (not $3.00 from raw chars).
+    expect(heavy.saving).toBe('~$0.75 est. on this call');
+  });
+
+  it('REQ-AUDFIX-006.A3: every fix names a real invocation (no specship_explore --symbol)', async () => {
+    const tips = await seedAllRules();
+    const wasteful = tips.find((t) => t.id.startsWith('wasteful_reads:'))!;
+    expect(wasteful.fix).toBe('specship_explore "index.ts"');
+    for (const t of tips) {
+      expect(t.fix).not.toContain('--symbol');
+      expect(t.fix).toMatch(/^(specship_(explore|search) |specship |Pin a stable)/);
+    }
+  });
+});

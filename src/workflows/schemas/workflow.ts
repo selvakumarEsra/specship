@@ -146,6 +146,13 @@ export interface ApprovalNode extends BaseNode {
   on_reject?: {
     prompt: string;
     max_attempts?: number;
+    /**
+     * Node whose output the revision replaces (REQ-AUDFIX-003.A2). When set,
+     * a successful revision's output is stored under this node id, so every
+     * downstream `$<revises>.output` reference reads the revision. Must name
+     * a node in the workflow (validated).
+     */
+    revises?: string;
   };
 }
 
@@ -338,6 +345,16 @@ export function validateWorkflow(input: unknown): ValidationResult {
             message: `node "${node.id}" cannot depend on itself`,
           });
         }
+      }
+    }
+    // on_reject.revises must name a node in the workflow (REQ-AUDFIX-003.A1).
+    if (node.kind === 'approval') {
+      const revises = (node as ApprovalNode).on_reject?.revises;
+      if (revises !== undefined && !seenIds.has(revises)) {
+        errors.push({
+          path: `nodes[${i}].on_reject.revises`,
+          message: `references unknown node id "${revises}"`,
+        });
       }
     }
   }
@@ -609,12 +626,19 @@ function validateNode(
           if (!isString(oj.prompt) || oj.prompt.length === 0) {
             errors.push({ path: `${path}.on_reject.prompt`, message: 'required when on_reject is set' });
           } else {
-            const r: { prompt: string; max_attempts?: number } = { prompt: oj.prompt };
+            const r: { prompt: string; max_attempts?: number; revises?: string } = { prompt: oj.prompt };
             if (oj.max_attempts !== undefined) {
               if (typeof oj.max_attempts !== 'number' || oj.max_attempts < 1) {
                 errors.push({ path: `${path}.on_reject.max_attempts`, message: 'must be a positive number' });
               } else {
                 r.max_attempts = oj.max_attempts;
+              }
+            }
+            if (oj.revises !== undefined) {
+              if (!isString(oj.revises) || oj.revises.length === 0) {
+                errors.push({ path: `${path}.on_reject.revises`, message: 'must be a non-empty node id' });
+              } else {
+                r.revises = oj.revises;
               }
             }
             node.on_reject = r;

@@ -3,7 +3,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore — plain-ESM script module shared with the generator CLI.
-import { BLOCKS, currentBlock } from '../scripts/generate-reference-docs.mjs';
+import { BLOCKS, currentBlock, cliCommandsBlock } from '../scripts/generate-reference-docs.mjs';
+import * as os from 'os';
 
 /**
  * DOCS-DRIFT-DOC (specs/docs-drift-gating.md) — reference docs are generated,
@@ -66,5 +67,76 @@ describe('narrative pages with spec frontmatter reference real specs (REQ-DOCSD-
     };
     walk(path.join(ROOT, 'site', 'src', 'content', 'docs'));
     expect(offenders).toEqual([]);
+  });
+});
+
+describe('CLI reference lists every user-facing command (REQ-AUDFIX-008)', () => {
+  const FIXTURE = [
+    "const memory = program",
+    "  .command('memory')",
+    "  .description('Manage memory rules');",
+    "memory",
+    "  .command('edit <id>')",
+    '  .description("Replace a memory rule\'s body with \\"new\\" content.")',
+    "  .action(() => {});",
+    "program",
+    "  .command('maintainability [path]')",
+    "  .alias('maint')",
+    "  .description('Report maintainability signals')",
+    "  .action(() => {});",
+    "const jira = program",
+    "  .command(\"jira\")",
+    "  .description('JIRA integration');",
+    "jira",
+    "  .command('transition <key> [state]')",
+    "  .description(",
+    "    'Transition a JIRA issue to <state>, or list it\\'s transitions.',",
+    "  )",
+    "  .action(() => {});",
+    "program",
+    "  .command('hook-session-start')",
+    "  .description(\"Internal hook: SessionStart\")",
+    "  .action(() => {});",
+    "program",
+    "  .command('hook-other')",
+    "  .alias('ho')",
+    "  .description(",
+    "    'Internal hook: other',",
+    "  )",
+    "  .action(() => {});",
+  ].join('\n');
+
+  function renderFixture(): string {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cli-ref-'));
+    try {
+      fs.mkdirSync(path.join(root, 'src', 'bin'), { recursive: true });
+      fs.writeFileSync(path.join(root, 'src', 'bin', 'specship.ts'), FIXTURE);
+      return cliCommandsBlock(root);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  }
+
+  it('REQ-AUDFIX-008.A1: alias-before-description, double-quoted and own-line descriptions are all captured', () => {
+    const out = renderFixture();
+    expect(out).toContain('| `specship maintainability [path]` | Report maintainability signals |');
+    expect(out).toContain('| `specship memory edit <id>` | Replace a memory rule\'s body with "new" content. |');
+    expect(out).toContain("| `specship jira transition <key> [state]` | Transition a JIRA issue to <state>, or list it's transitions. |");
+    expect(out).toContain('| `specship jira` | JIRA integration |');
+  });
+
+  it('REQ-AUDFIX-008.A1: the real CLI source yields maintainability, memory edit and jira transition', () => {
+    const out = cliCommandsBlock(ROOT);
+    expect(out).toMatch(/\| `specship maintainability \[path\]` \|/);
+    expect(out).toMatch(/\| `specship memory edit <id>` \|/);
+    expect(out).toMatch(/\| `specship jira transition <key> \[state\]` \|/);
+  });
+
+  it('REQ-AUDFIX-008.A2: internal hook commands stay excluded in every registration shape', () => {
+    const out = renderFixture();
+    expect(out).not.toContain('Internal hook');
+    expect(out).not.toContain('hook-session-start');
+    expect(out).not.toContain('hook-other');
+    expect(cliCommandsBlock(ROOT)).not.toContain('Internal hook');
   });
 });

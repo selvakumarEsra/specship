@@ -259,6 +259,12 @@ export class WorkflowExecutor {
       lastActivityAt: now,
       errorMessage: undefined,
     };
+    // Retry-on-resume (REQ-AUDFIX-004): a `failed` run's failed nodes go back
+    // to pending, as do nodes skipped downstream of them, so driveExecution
+    // re-runs / re-evaluates them. Completed nodes keep their state + output.
+    if (existing.status === 'failed') {
+      refreshed.metadata = resetFailedNodes(workflow, refreshed.metadata);
+    }
     this.specQueries.updateWorkflowRun(refreshed);
     this.syncActiveRunMarker(refreshed.status, refreshed.inputs, refreshed.id);
     this.event(runId, 'run_started', { resumed: true });
@@ -286,40 +292,12 @@ export class WorkflowExecutor {
           throw new Error(msg);
         }
 
-        const outputs: Map<string, NodeOutput> = new Map(
-          Object.entries((meta.outputs as Record<string, NodeOutput>) ?? {})
-        );
         const reviseId = `${rejection.nodeId}__revise_${rejection.attempts}`;
-        const rawRevise: PromptNode = {
-          id: reviseId,
-          kind: 'prompt',
-          prompt:
-            `${onReject.prompt}\n\nReviewer feedback (rejection reason):\n` +
-            `${rejection.reason ?? '(no reason given)'}`,
-        };
-        // Resolve $nodeId.output refs in the on_reject prompt against the
-        // run's accumulated outputs, same as any other node.
-        const revise = this.resolveNodeRefs(rawRevise, outputs, opts.inputs, opts.variables) as PromptNode;
-
-        this.event(runId, 'step_started', { stepId: reviseId, kind: 'prompt', revision: true });
-        const runner = this.runners.get('prompt');
-        const result = runner
-          ? await runner.run(revise, {
-              cwd,
-              artifactsDir,
-              logsDir,
-              runId,
-              inputs: opts.inputs,
-              variables: opts.variables,
-              outputs,
-              verbose: opts.verbose,
-              emitEvent: (type, data) =>
-                this.event(runId, type, { stepId: reviseId, stepKind: 'prompt', ...data }),
-            })
-          : ({ status: 'failed', error: 'no runner for kind prompt' } as NodeRunResult);
-
-        if (result.status !== 'completed') {
-          const err = result.status === 'failed' ? result.error : `revise step ${result.status}`;
+        // Every failure while preparing OR running the revision (an
+        // unresolvable $ref, a runner throw, a failed result) parks the run
+        // back at `rejected` with the error — never stuck in `running`
+        // (REQ-AUDFIX-003.A3).
+        const failRevision = (err: string): Error => {
           this.event(runId, 'step_failed', { stepId: reviseId, error: err });
           this.specQueries.updateWorkflowRun({
             ...refreshed,
@@ -327,7 +305,55 @@ export class WorkflowExecutor {
             errorMessage: `revision failed: ${err}`,
           });
           this.syncActiveRunMarker('rejected', refreshed.inputs, refreshed.id);
-          throw new Error(`Run ${runId}: on_reject revision failed: ${err}`);
+          return new Error(`Run ${runId}: on_reject revision failed: ${err}`);
+        };
+
+        const outputs: Map<string, NodeOutput> = new Map(
+          Object.entries((meta.outputs as Record<string, NodeOutput>) ?? {})
+        );
+        const rawRevise: PromptNode = {
+          id: reviseId,
+          kind: 'prompt',
+          prompt:
+            `${onReject.prompt}\n\nReviewer feedback (rejection reason):\n` +
+            `${rejection.reason ?? '(no reason given)'}`,
+        };
+
+        let result: NodeRunResult;
+        try {
+          // Resolve $nodeId.output refs in the on_reject prompt against the
+          // run's accumulated outputs, same as any other node; workflow-level
+          // model/systemPromptAppend apply too (REQ-AUDFIX-005.A2).
+          const revise = this.resolveNodeRefs(
+            rawRevise,
+            outputs,
+            opts.inputs,
+            opts.variables,
+            workflow
+          ) as PromptNode;
+
+          this.event(runId, 'step_started', { stepId: reviseId, kind: 'prompt', revision: true });
+          const runner = this.runners.get('prompt');
+          result = runner
+            ? await runner.run(revise, {
+                cwd,
+                artifactsDir,
+                logsDir,
+                runId,
+                inputs: opts.inputs,
+                variables: opts.variables,
+                outputs,
+                verbose: opts.verbose,
+                emitEvent: (type, data) =>
+                  this.event(runId, type, { stepId: reviseId, stepKind: 'prompt', ...data }),
+              })
+            : ({ status: 'failed', error: 'no runner for kind prompt' } as NodeRunResult);
+        } catch (err) {
+          throw failRevision(err instanceof Error ? err.message : String(err));
+        }
+
+        if (result.status !== 'completed') {
+          throw failRevision(result.status === 'failed' ? result.error : `revise step ${result.status}`);
         }
 
         this.event(runId, 'step_completed', {
@@ -338,8 +364,11 @@ export class WorkflowExecutor {
         await this.writeArtifact(artifactsDir, rawRevise, result.output);
 
         // Persist the revise output + clear the pending rejection so the next
-        // reject starts a fresh attempt count from this one.
+        // reject starts a fresh attempt count from this one. With `revises`,
+        // the revision also REPLACES the revised node's output so every
+        // downstream `$<revises>.output` reads it (REQ-AUDFIX-003.A2).
         outputs.set(reviseId, result.output);
+        if (onReject.revises) outputs.set(onReject.revises, result.output);
         const newMeta = {
           ...meta,
           outputs: Object.fromEntries(outputs),
@@ -561,7 +590,7 @@ export class WorkflowExecutor {
       // Run the node. Resolve any $refs in node fields first.
       let processed: DagNode;
       try {
-        processed = this.resolveNodeRefs(node, outputs, opts.inputs, opts.variables);
+        processed = this.resolveNodeRefs(node, outputs, opts.inputs, opts.variables, workflow);
       } catch (err) {
         if (err instanceof OutputRefError) {
           nodeStates.set(nodeId, 'failed');
@@ -705,22 +734,33 @@ export class WorkflowExecutor {
    * For bash/script nodes we substitute `bash` / `script` (with bash-safe
    * shell escaping). For approval nodes we substitute `message`.
    * cancel: substitute `cancel` reason.
+   *
+   * Prompt nodes also inherit the workflow-level defaults (REQ-AUDFIX-005):
+   * `model` applies when the node sets none (node wins); `systemPromptAppend`
+   * is the workflow value followed by the node value, joined by a blank line.
    */
   private resolveNodeRefs(
     node: DagNode,
     outputs: Map<string, NodeOutput>,
     inputs?: Record<string, string>,
-    variables?: Record<string, string>
+    variables?: Record<string, string>,
+    workflow?: Pick<WorkflowDefinition, 'model' | 'systemPromptAppend'>
   ): DagNode {
     const ctx = this.makeSubstitutionContext(outputs, inputs, variables);
     switch (node.kind) {
       case 'prompt': {
         const p = node as PromptNode;
+        const model = p.model ?? workflow?.model;
+        const appendParts = [workflow?.systemPromptAppend, p.systemPromptAppend].filter(
+          (v): v is string => typeof v === 'string' && v.length > 0
+        );
+        const systemPromptAppend = appendParts.length > 0 ? appendParts.join('\n\n') : undefined;
         return {
           ...p,
+          ...(model !== undefined ? { model } : {}),
           prompt: substituteRefs(p.prompt, ctx, { forBash: false, nodeId: p.id }),
-          systemPromptAppend: p.systemPromptAppend
-            ? substituteRefs(p.systemPromptAppend, ctx, { forBash: false, nodeId: p.id })
+          systemPromptAppend: systemPromptAppend
+            ? substituteRefs(systemPromptAppend, ctx, { forBash: false, nodeId: p.id })
             : undefined,
         };
       }
@@ -951,6 +991,51 @@ export function topoSort(nodes: DagNode[]): string[] {
     throw new Error('Workflow DAG contains a cycle — refusing to execute');
   }
   return out;
+}
+
+/**
+ * REQ-AUDFIX-004: prepare a `failed` run's metadata for a retrying resume.
+ * Failed nodes reset to `pending`, and so does every `skipped` node that is
+ * (transitively) downstream of a failed node — it was skipped only because of
+ * the failure, so it must be re-evaluated. Completed nodes are untouched, so
+ * they are not re-run. Pure — returns a new metadata object.
+ */
+export function resetFailedNodes(
+  workflow: WorkflowDefinition,
+  metadata: unknown
+): Record<string, unknown> {
+  const meta = { ...((metadata as Record<string, unknown> | undefined) ?? {}) };
+  const states = { ...((meta.nodeStates as Record<string, WorkflowNodeState>) ?? {}) };
+  const failed = Object.keys(states).filter((id) => states[id] === 'failed');
+  if (failed.length === 0) return meta;
+
+  // Dependents adjacency: id → nodes that depend on it.
+  const dependents = new Map<string, string[]>();
+  for (const n of workflow.nodes) {
+    for (const dep of n.depends_on ?? []) {
+      const list = dependents.get(dep) ?? [];
+      list.push(n.id);
+      dependents.set(dep, list);
+    }
+  }
+  const downstream = new Set<string>();
+  const queue = [...failed];
+  while (queue.length > 0) {
+    const id = queue.shift()!;
+    for (const next of dependents.get(id) ?? []) {
+      if (!downstream.has(next)) {
+        downstream.add(next);
+        queue.push(next);
+      }
+    }
+  }
+
+  for (const id of failed) states[id] = 'pending';
+  for (const id of downstream) {
+    if (states[id] === 'skipped') states[id] = 'pending';
+  }
+  meta.nodeStates = states;
+  return meta;
 }
 
 function sanitizeFilename(s: string): string {

@@ -14,7 +14,7 @@
     "@specship/specship": "0.27.0"
   },
   "engines": {
-    "node": ">=20.0.0 <25.0.0"
+    "node": ">=22.5.0 <25.0.0"
   },
   "keywords": [
     "specship",

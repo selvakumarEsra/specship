@@ -872,6 +872,14 @@ const CODE_GRAPH_GROUP = new Set([
   'specship_files',
   'specship_health',
 ]);
+/**
+ * Spec-layer tools that survive the tiny-repo trim when the project has ≥1
+ * indexed spec (REQ-AUDFIX-009). `specship_jira_*` tools join them by prefix,
+ * but only when the JIRA integration is enabled.
+ */
+const SPEC_LAYER_TOOLS = new Set([
+  'specship_spec', 'specship_link_assert', 'specship_link_verify', 'specship_drifted',
+]);
 export function applyLiteTierTrim(list: ToolDefinition[], hint: string | null): ToolDefinition[] {
   if (!hint) return list;
   const root = findNearestSpecShipRoot(hint);
@@ -986,6 +994,22 @@ export class ToolHandler {
   }
 
   /**
+   * Whether the default project has at least one indexed spec. One
+   * `LIMIT 1` probe on the `specs` primary key — cheap enough for every
+   * ListTools call. Any failure (pre-spec schema, closed DB) reads as "no
+   * specs", which keeps the tiny-repo list unchanged.
+   */
+  private hasIndexedSpecs(): boolean {
+    if (!this.cg) return false;
+    try {
+      return this.cg.getSpecQueries().getRawDb()
+        .prepare('SELECT 1 FROM specs LIMIT 1').get() != null;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
    * Get tool definitions with dynamic descriptions based on project size.
    * The specship_explore tool description includes a budget recommendation
    * scaled to the number of indexed files. Honors the SPECSHIP_MCP_TOOLS
@@ -1039,8 +1063,15 @@ export class ToolHandler {
       if (stats.fileCount < TINY_REPO_FILE_THRESHOLD) {
         // Designer tools are not code-graph tools — the tiny-repo flow-question
         // economics that justify trimming don't apply, so they always survive.
+        // Neither is the spec layer: when the project has ≥1 indexed spec, the
+        // spec/link/drift tools (and JIRA tools, only if already enabled —
+        // `visible` is post-integration-filter) survive too (REQ-AUDFIX-009).
+        // With no specs the list is exactly today's trim (A2).
+        const keepSpecLayer = this.hasIndexedSpecs();
         visible = visible.filter(
-          t => TINY_REPO_CORE_TOOLS.has(t.name) || t.name.startsWith('designer_')
+          t => TINY_REPO_CORE_TOOLS.has(t.name)
+            || t.name.startsWith('designer_')
+            || (keepSpecLayer && (SPEC_LAYER_TOOLS.has(t.name) || t.name.startsWith('specship_jira_')))
         );
       }
 
