@@ -52,7 +52,61 @@ export const CHEATSHEET_TEXT = [
  */
 export function buildCheatsheetPayload(
   env: NodeJS.ProcessEnv = process.env,
+  extras: CheatsheetExtras = {},
 ): { systemMessage: string } | null {
   if (env.SPECSHIP_NO_CHEATSHEET) return null;
-  return { systemMessage: CHEATSHEET_TEXT };
+  const parts = [CHEATSHEET_TEXT];
+  // Learned project conventions (REQ-ALEARN-002): absent/empty file → output
+  // is byte-identical to the base cheatsheet (A1).
+  if (extras.conventions) {
+    const section = renderConventionsSection(extras.conventions, CONVENTIONS_BUDGET_LINES);
+    if (section) parts.push('', section);
+  }
+  // Open learned proposals awaiting review (REQ-ALEARN-004.A2): one line,
+  // only when the count is positive.
+  if (extras.openProposals && extras.openProposals > 0) {
+    parts.push(
+      '',
+      `🧠 ${extras.openProposals} learned proposal(s) awaiting review — run \`specship reflect\` to review them.`,
+    );
+  }
+  return { systemMessage: parts.join('\n') };
+}
+
+/** Optional learned-state extras the CLI resolves before rendering. */
+export interface CheatsheetExtras {
+  /** Raw content of .specship/conventions.md (null/empty → no section). */
+  conventions?: string | null;
+  /** Count of open reflection proposals (0/undefined → no line). */
+  openProposals?: number;
+}
+
+/** Max convention bullets injected per session (REQ-ALEARN-002.A2). */
+export const CONVENTIONS_BUDGET_LINES = 8;
+
+/**
+ * Render the confirmed conventions as a budget-bounded cheatsheet section
+ * (REQ-ALEARN-002). Rules are the `## <title>` lines of the SpecShip-written
+ * marker blocks plus their first body line; over budget, the rest collapse
+ * into a "+N more" pointer. No blocks → empty string (nothing injected).
+ */
+export function renderConventionsSection(content: string, budget: number): string {
+  const rules: string[] = [];
+  const re = /<!-- SPECSHIP_LEARNING:[^>]+ -->\n## ([^\n]+)\n+([^\n<]*)/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(content)) !== null) {
+    const title = (m[1] ?? '').replace(/^Convention:\s*/i, '').trim();
+    const body = (m[2] ?? '').trim();
+    // The body line is the rule; the title is a summary of it. Prefer the
+    // body (the user's own words), fall back to the title.
+    rules.push(body || title);
+  }
+  if (rules.length === 0) return '';
+  const shown = rules.slice(0, budget);
+  const lines = ['Project conventions (learned — .specship/conventions.md):'];
+  for (const r of shown) lines.push(`• ${r.length > 100 ? r.slice(0, 97) + '…' : r}`);
+  if (rules.length > shown.length) {
+    lines.push(`  +${rules.length - shown.length} more — see .specship/conventions.md`);
+  }
+  return lines.join('\n');
 }

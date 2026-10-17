@@ -142,6 +142,69 @@ describe('getExploreOutputBudget', () => {
 });
 
 /**
+ * Lite-tier explore budget (REQ-LOWEND-004).
+ *
+ * A low-end model abandons the tool chain the instant an answer looks
+ * partial, so on `lite` the budget trades breadth for depth: fewer files,
+ * fuller bodies, the completeness signal always on, and the trailing
+ * meta-sections off. The transform is an OVERLAY on the size tier — it may
+ * only raise `maxCharsPerFile` and only lower `defaultMaxFiles`, and it never
+ * enlarges `maxOutputChars` (that ceiling is what keeps the result inline).
+ */
+describe('lite tier explore budget', () => {
+  const tierPoints = [50, 149, 150, 499, 500, 4999, 5000, 14999, 15000, 24999, 25000, 40000];
+
+  function liteReturnsFullerBodiesAcrossFewerFiles() {
+    for (const n of tierPoints) {
+      const full = getExploreOutputBudget(n);
+      const lite = getExploreOutputBudget(n, 'lite');
+      expect(lite.maxCharsPerFile, `maxCharsPerFile at ${n} files`).toBeGreaterThanOrEqual(full.maxCharsPerFile);
+      expect(lite.defaultMaxFiles, `defaultMaxFiles at ${n} files`).toBeLessThanOrEqual(full.defaultMaxFiles);
+      expect(lite.defaultMaxFiles, `defaultMaxFiles at ${n} files`).toBeGreaterThanOrEqual(1);
+      // The overlay concentrates the SAME budget — it must not push the
+      // response past the host's inline tool-result ceiling.
+      expect(lite.maxOutputChars, `maxOutputChars at ${n} files`).toBeLessThanOrEqual(24000);
+      expect(lite.maxOutputChars, `maxOutputChars at ${n} files`).toBe(full.maxOutputChars);
+    }
+  }
+  it('returns fuller bodies across fewer files at every size tier', liteReturnsFullerBodiesAcrossFewerFiles);
+
+  function liteSuppressesTrailingMetaSectionsButKeepsCompleteness() {
+    for (const n of tierPoints) {
+      const lite = getExploreOutputBudget(n, 'lite');
+      expect(lite.includeAdditionalFiles, `additional-files at ${n}`).toBe(false);
+      expect(lite.includeBudgetNote, `budget note at ${n}`).toBe(false);
+      expect(lite.includeCompletenessSignal, `completeness signal at ${n}`).toBe(true);
+      // Relationships are NOT a trailing meta-section — the overlay leaves
+      // the size tier's value alone (cheapest structural signal doctrine).
+      expect(lite.includeRelationships, `relationships at ${n}`).toBe(
+        getExploreOutputBudget(n).includeRelationships
+      );
+      expect(lite.excludeLowValueFiles, `low-value exclude at ${n}`).toBe(true);
+    }
+  }
+  it('drops the trailing meta-sections but always keeps the completeness signal', liteSuppressesTrailingMetaSectionsButKeepsCompleteness);
+
+  function fullAndStandardTierBudgetsAreByteIdentical() {
+    for (const n of tierPoints) {
+      const implicit = getExploreOutputBudget(n);
+      expect(getExploreOutputBudget(n, 'full'), `full at ${n} files`).toEqual(implicit);
+      expect(getExploreOutputBudget(n, 'standard'), `standard at ${n} files`).toEqual(implicit);
+    }
+    // Monotonicity across size tiers holds within each tier overlay too.
+    for (const tier of ['full', 'standard', 'lite'] as const) {
+      for (let i = 1; i < tierPoints.length; i++) {
+        const lo = getExploreOutputBudget(tierPoints[i - 1], tier);
+        const hi = getExploreOutputBudget(tierPoints[i], tier);
+        expect(hi.maxCharsPerFile, `${tier} maxCharsPerFile at ${tierPoints[i]}`).toBeGreaterThanOrEqual(lo.maxCharsPerFile);
+        expect(hi.maxOutputChars, `${tier} maxOutputChars at ${tierPoints[i]}`).toBeGreaterThanOrEqual(lo.maxOutputChars);
+      }
+    }
+  }
+  it('leaves full and standard tier budgets byte-identical to today', fullAndStandardTierBudgetsAreByteIdentical);
+});
+
+/**
  * End-to-end check that the budget is actually applied by handleExplore.
  *
  * Builds a tiny synthetic project (<500 files, so the small tier), indexes
@@ -215,6 +278,37 @@ describe('specship_explore output respects the adaptive budget', () => {
     expect(text).not.toContain('### Additional relevant files');
     expect(text).not.toContain('Complete source code is included above');
     expect(text).not.toContain('Explore budget:');
+  });
+
+  it('serves the completeness signal and no trailing meta-sections on a lite-tier session (REQ-LOWEND-004.A2)', async () => {
+    process.env.SPECSHIP_MODEL = 'lite';
+    try {
+      const result = await handler.execute('specship_explore', { query: 'Session method helper' });
+      const text = result.content?.[0]?.text ?? '';
+      expect(text).toMatch(/Complete source for \d+ files is included above/);
+      expect(text).not.toContain('### Not shown above');
+      expect(text).not.toContain('**Explore budget:');
+    } finally {
+      delete process.env.SPECSHIP_MODEL;
+    }
+  });
+
+  it('clamps a caller-supplied maxFiles to the lite breadth cut (adversarial regression, REQ-LOWEND-004.A1)', async () => {
+    // The schema advertises maxFiles default 12; on lite it must narrow, never
+    // widen — otherwise lite gets depth AND breadth: more output than full.
+    process.env.SPECSHIP_MODEL = 'lite';
+    try {
+      const wide = await handler.execute('specship_explore', {
+        query: 'Session method helper',
+        maxFiles: 20,
+      });
+      const text = wide.content?.[0]?.text ?? '';
+      const fileSections = (text.match(/^#### /gm) ?? []).length;
+      const liteBudget = getExploreOutputBudget(400, 'lite'); // fixture is small-tier
+      expect(fileSections).toBeLessThanOrEqual(liteBudget.defaultMaxFiles);
+    } finally {
+      delete process.env.SPECSHIP_MODEL;
+    }
   });
 
   it('still includes the Relationships section — it is the cheapest structural signal', async () => {

@@ -94,3 +94,31 @@ export function describeInstallDefaults(input: InstallDefaultsSummaryInput): str
 
   return lines;
 }
+
+/**
+ * The command that builds a project's index after an install that skipped it.
+ * `specship init` indexes by default (its `-i` flag is a deprecated no-op).
+ */
+export const INDEX_LATER_COMMAND = 'specship init';
+
+/**
+ * Lines naming the decisions the USER made explicitly that changed what the
+ * install did (REQ-AUDFIX-001.A2). Kept apart from `describeInstallDefaults`
+ * on purpose: a `--skip-index` is the user's choice, not a default, so it must
+ * never appear under the "Applied by default" heading.
+ */
+export function describeInstallChoices(input: { indexSkippedByUser: boolean }): string[] {
+  const lines: string[] = [];
+  if (input.indexSkippedByUser) {
+    lines.push('initial indexing: skipped — your choice (--skip-index); no .specship/ index was created');
+  }
+  return lines;
+}
+
+/**
+ * The closing hint shown after an install that left the project un-indexed
+ * at the user's request (REQ-AUDFIX-001.A2): how to build the index later.
+ */
+export function describeIndexLaterHint(): string {
+  return `Index this project when you're ready: cd into it and run \`${INDEX_LATER_COMMAND}\``;
+}

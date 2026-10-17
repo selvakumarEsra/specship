@@ -1,49 +1,77 @@
 ---
 title: Bundled workflows
-description: spec-implement, spec-fix, spec-verify, spec-relink — what each one does, step by step.
+description: spec-implement, spec-implement-mixed, spec-fix, spec-verify, spec-relink, spec-author and claude-design-implement — what each one does, node by node.
 ---
 
 SpecShip ships these workflows out of the box. They're stored in the npm package and discovered automatically — no config required.
 
 ```bash
 specship workflow list
-# NAME                     TIER     DESC
-# spec-implement           bundled  Plan → implement → test → review → merge
-# spec-implement-mixed     bundled  Sonnet plans, Haiku executes, tests + gates verify
-# spec-fix                 bundled  Diagnose a drifted/broken link → fix → re-verify
-# spec-verify              bundled  Re-run tests, promote implemented → verified
-# spec-relink              bundled  Re-attach an orphan after a refactor
-# claude-design-implement  bundled  Snapshot a design → draft a spec → hand off to implement
+#   [bundled] claude-design-implement (5 nodes) — Import a Claude Design … ready to hand off to /specship:spec implement.
+#   [bundled] spec-author (7 nodes) — Author a new spec. Draft → gap-fill review → quality review → final approval → write file.
+#   [bundled] spec-fix (7 nodes) — Fix a bug surfaced as a drifted/broken spec link. …
+#   [bundled] spec-implement (16 nodes) — Implement an unimplemented spec. …
+#   [bundled] spec-implement-mixed (16 nodes) — Implement a spec with mixed models — sonnet plans, haiku executes, …
+#   [bundled] spec-relink (4 nodes) — Re-attach an orphaned spec link after a refactor. …
+#   [bundled] spec-verify (3 nodes) — Run verification across all 'implemented' spec links. …
 ```
 
-The four spec workflows take a `SPEC_ID` and run inside a worktree by default; `claude-design-implement` takes a design URL or handoff bundle and is covered in [Design-to-code](/workflows/design-to-code/). Override any of them by dropping your own `<name>.yaml` under `.specship/workflows/` — project tier always wins.
+`spec-implement`, `spec-implement-mixed`, `spec-fix`, `spec-author` and `claude-design-implement` run in their own [worktree](/workflows/isolation/); `spec-verify` and `spec-relink` run in your checkout. `claude-design-implement` is covered in [Design-to-code](/workflows/design-to-code/). Override any of them by dropping your own `<name>.yaml` under `.specship/workflows/` — the project tier always wins.
+
+## The verify contract
+
+Every workflow that runs tests follows the same rule: **a test step reports what actually happened, and code — not a model — decides what that means for link state.** The test node prints one marker line:
+
+| `VERIFY_RESULT=` | Meaning |
+|---|---|
+| `ran-and-passed` | The suite ran and passed. |
+| `ran-and-failed` | The suite ran and failed. |
+| `skipped` | No recognised test framework — tests did **not** run. Never treated as a pass. |
+| `env-failed` | Dependency install failed (or `pytest` is missing). An environment problem, not a test failure. |
+| `build-failed` | The build broke before tests could run. Also not a test failure. |
+
+A `route_verify` bash node parses that marker and emits the `LINK_ACTION` the link-writing step must obey. `env-failed`, `build-failed` and a missing marker **halt the run** with a `HALT_CAUSE=` line naming the cause, before any link changes state. Test detection covers npm (`npm ci`/`npm install` when `node_modules/` is missing, then `npm run build --if-present`, then `npm test`), Cargo (`cargo build`, `cargo test`) and Python (`pytest`).
+
+Workflows never mint their own test evidence: a link step may only assert implementation links, never `tests`-kind links. Test evidence comes from the spec's `verifies:` block or an `@verifies` comment on the test — see [Links & drift](/specs/links-and-drift/).
 
 ## `spec-implement`
 
-The most-used workflow. End-to-end "take this requirement, ship code for it" pipeline.
+The most-used workflow — the one `/specship:spec implement <SPEC_ID>` launches. End-to-end "take this requirement, ship code for it", with the agent's output checked before a human sees it.
 
-**Inputs**: `SPEC_ID` (required), `BRANCH` (defaults to `feat/$SPEC_ID`).
+**Inputs**: `SPEC_ID` (required).
 
-**Steps:**
+**Nodes:**
 
-1. **plan** — `agent`. The agent reads the spec via `specship_spec`, explores existing code with `specship_explore` to identify anchors, and writes a structured implementation plan as `plan.md`.
-2. **implement** — `agent`. Reads `plan.md`, edits files, writes a diff summary as `diff.md`.
-3. **affected** — `bash`. Runs `specship affected --since main` to compute which tests are affected by the diff.
-4. **test** — `bash`. Runs only the affected tests. Captures `test_results.md`.
-5. **review** — `approval`. Pauses for human approval. The UI shows `plan.md`, `diff.md`, `test_results.md` side-by-side.
-6. **link** — `agent`. Asserts a spec link from `SPEC_ID` to each new/modified symbol via `specship_link_assert`. Writes `link_summary.md`.
-7. **merge** — `shell`. On approval, fast-forwards `BRANCH` onto `main`, removes the worktree.
+1. **fetch_spec** — `prompt`. Reads the spec with `specship_spec` and locates the relevant code with `specship_explore`.
+2. **plan** — `prompt`. Writes a concrete implementation plan (files, symbols, tests, order). No edits.
+3. **approve_plan** — `approval`. **Gate 1.** Approve (optionally with a comment the implementer will read) or reject with feedback; resuming a rejected run revises the plan (up to 3 times).
+4. **implement** — `prompt`. Edits code following the approved plan.
+5. **quality_gate** — `bash`. Runs the project's own lint or typecheck in the worktree: `npm run lint` if there's a lint script, else `tsc --noEmit` when there's a `tsconfig.json`, `cargo clippy` for Rust, `ruff check` for Python. Prints `QUALITY_GATE=passed|failed|skipped` — a project with no lint or typecheck says `skipped`, never "clean".
+6. **fix_quality** — `prompt`. **One automated fix round**: if the gate failed, fix every reported error — the code, never the lint config, and never by silencing a rule.
+7. **quality_recheck** — `bash`. Re-runs the same command. Still failing → the run **halts**; failing lint/typecheck never reaches the tests, the links, or you.
+8. **suppression_gate** — `bash`. Runs `specship suppressions`. If the change *introduces* lint/type suppression comments (`noqa`, `eslint-disable`, `@ts-ignore`, `@ts-expect-error`, `# type: ignore`, `biome-ignore`), the run **halts** — fix the code instead of silencing the rule. Existing or moved suppressions don't count.
+9. **diff** — `bash`. Captures the full `git diff` (including new files) as an artifact. The reviewer and the final gate read this, not the agent's description of its change.
+10. **diff_stat** — `bash`. `git diff --stat` — the measured file and line counts shown at the final gate.
+11. **verify** — `bash`. Installs dependencies if needed, builds, runs the tests, prints `VERIFY_RESULT=` (see [the verify contract](#the-verify-contract)).
+12. **route_verify** — `bash`. Turns the marker into `LINK_ACTION=assert-and-verify-pass | assert-and-verify-fail | assert-only`, or halts on an environment/build failure.
+13. **link** — `prompt`. Asserts implementation links with `specship_link_assert`, then acts on `LINK_ACTION`: records a pass or fail with `specship_link_verify`, or leaves links `implemented` when tests didn't run.
+14. **coverage** — `bash`. `specship coverage <SPEC_ID> --line`: the acceptance-criteria coverage count, read from the same data the MCP tool and dashboard use. When not every criterion has test evidence, it points you at `/specship:spec behaviour <SPEC_ID>`.
+15. **adversarial_review** — `prompt`, **read-only** (no Edit, Write or Bash). A reviewer that isn't the implementer reads the spec and the git diff and reports every acceptance criterion as **satisfied**, **partial** or **unaddressed**, lists untested new code paths, and names the most serious gap.
+16. **final_review** — `approval`. **Gate 2.** Shows the `git diff --stat`, the lint/typecheck result, the suppression scan, the asserted links, the coverage line and the adversarial review. Approve to finish — the worktree is left for you to inspect and merge.
 
-**Failure modes:**
+**When things go wrong:**
 
-- Tests fail at step 4 → workflow stops with `status: failed`. Worktree preserved. You inspect, fix, re-run with `--resume <runId>` to skip back to a specific step.
-- Reviewer rejects at step 5 → the run **parks** with `status: rejected`, worktree and artifacts intact. `specship workflow resume <runId>` drives the gate's revise prompt with your rejection comment, then pauses again for re-review. Rejection is feedback, never lost work.
-- Anything else fails → worktree preserved, error stored in `workflow_runs.errorMessage`.
-- Worktrees are only ever deleted by an explicit `specship workflow purge <runId>` — no status transition destroys work as a side effect.
+- Lint still fails after the fix round, or a new suppression comment appears → the run halts with `HALT_CAUSE=…`. The worktree is kept, so you can finish the change there by hand or start a fresh run. (If the `specship` CLI can't be found inside the worktree, the suppression scan reports `SUPPRESSION_GATE=skipped` rather than pretending it passed.)
+- Dependency install or build fails → reported as an environment failure, not as failing tests, and no link is touched.
+- Tests fail → the `verify` node fails and the run stops before linking. The worktree is kept.
+- You reject a gate → the run **parks** as `rejected` with its worktree and artifacts intact. `specship workflow resume <runId>` runs the gate's revise step with your rejection reason, then pauses for re-review. Rejection is feedback, never lost work.
+- Worktrees are only deleted by an explicit `specship workflow purge <runId>` — no status change destroys work as a side effect.
+
+On a JIRA-tracked run (started from a JIRA issue), completion also raises a pull request with `gh`; see the [JIRA guide](/guides/jira/).
 
 ## `spec-implement-mixed`
 
-The same steps and gates as `spec-implement`, with per-node models chosen for what each step actually needs: **`plan` runs on Sonnet** (the judgment-heavy step), while `fetch_spec`, `implement`, `link`, and `coverage` **run on Haiku** (mechanical: summarize, type the planned code, assert links, count). The bash `verify` step and both approval gates are identical — correctness comes from the tests and the reviewer, never from the executor's self-assessment. That's the small-model sweet spot: fresh context per step, cheap tokens for the typing, external verification catching mistakes.
+The same 16 nodes and gates as `spec-implement`, with per-node models chosen for what each step needs: **`plan` and `adversarial_review` run on Sonnet** (the judgment-heavy steps), while `fetch_spec`, `implement`, `fix_quality` and `link` **run on Haiku** (summarize, type the planned code, fix lint, assert links). Every check — lint, suppressions, diff, tests, routing, coverage — is a deterministic bash node, and both approval gates are identical. Correctness comes from the machinery and the reviewer, never from the executor's self-assessment.
 
 ```bash
 specship workflow run spec-implement-mixed -i SPEC_ID=REQ-AUTH-005
@@ -53,68 +81,73 @@ Use it when token cost matters and the plan is the hard part; use plain `spec-im
 
 ## `spec-fix`
 
-Drift queue triage. Use when a spec is showing as `drifted` or `broken` and you need to either update the code or restore the link.
+Drift-queue repair, launched by `/specship:check fix <SPEC_ID>` or the dashboard drift queue's **Fix** button. Use it when a spec's link is `drifted` or `broken`.
 
 **Inputs**: `SPEC_ID` (required).
 
-**Steps:**
+**Nodes:**
 
-1. **diagnose** — `agent`. Reads the spec + current code at the linked target. Decides whether the spec is right and code needs to catch up, or the code is right and the spec needs editing. Writes `diagnosis.md`.
-2. **fix** — `agent`. Conditional on the diagnosis:
-   - `when: $diagnose.outcome == "code-drift"` → edit code to match spec.
-   - `when: $diagnose.outcome == "spec-drift"` → edit `specs/*.md` to match code (rare; requires explicit human approval).
-3. **verify** — `bash`. Runs the tests associated with the spec link.
-4. **relink** — `agent`. Calls `specship_link_verify` to promote the link from `drifted`/`broken` back to `verified`. Writes `link_summary.md`.
-5. **review** — `approval`. Surface the diff for a human.
-6. **merge** — `shell`. On approval, merge.
-
-The conditional `fix` step is the interesting bit — it's a tiny example of the YAML schema's `when:` expressions making one workflow handle two different drift causes without two separate files.
+1. **diagnose** — `prompt`. Inspects the spec's links and their drift axis (spec changed vs. code changed) and proposes a fix.
+2. **approve_fix** — `approval`. Approve the proposed fix, optionally with guidance.
+3. **apply** — `prompt`. Applies the fix.
+4. **verify** — `bash`. Same bootstrap and `VERIFY_RESULT` marker as `spec-implement`.
+5. **route_verify** — `bash`. Emits `LINK_ACTION=verify-pass | verify-fail | no-verify`, or halts on an environment/build failure.
+6. **approve_links** — `approval`. **No link changes state until you approve here.** Shows the files changed, the routing decision and the test output; reject to leave every link exactly as it is.
+7. **link_verify** — `prompt`. Acts on `LINK_ACTION`. `no-verify` means no test ran, so nothing is promoted. Orphaned links whose symbol moved are re-asserted at the new location; `tests`-kind links are never minted.
 
 ## `spec-verify`
 
-The cheap one. No editing, no merging — just re-runs the tests associated with a spec and updates link states.
+The cheap one. No editing, no worktree — runs the suite in your checkout and moves link states on evidence. The drift queue's **Re-verify** button launches it.
 
-**Inputs**: `SPEC_ID` (optional — defaults to all `implemented` links).
+**Inputs**: none — it covers every `implemented` link.
 
-**Steps:**
+**Nodes:**
 
-1. **collect** — `script`. Queries SpecShip's spec-link table for all `implemented` links (optionally filtered by `SPEC_ID`).
-2. **test** — `bash`. Builds the tree if needed, then runs the suite. Captures per-link pass/fail.
-3. **promote** — `agent`. Promotion is **evidence-based**: a spec moves to `verified` only when a test linked to it as evidence (a `verifies:` block in the spec, or an `@verifies REQ-X` comment on the test) passed. Specs with no linked evidence stay `implemented` and are reported as *unevidenced* — a green suite alone never blanket-promotes. A failing evidenced test demotes only the specs it evidences.
+1. **run_tests** — `bash`. Builds if needed, runs the suite, prints `VERIFY_RESULT=`.
+2. **route_verify** — `bash`. Emits `LINK_ACTION=verify-evidenced | verify-fail | no-verify`, or halts.
+3. **summarize** — `prompt`. Promotion is **evidence-based**: a spec moves to `verified` only when a test linked to it as evidence (a `verifies:` block, an `@verifies REQ-X` comment, or a spec id in a test title) passed. Specs with no evidence stay `implemented` and are listed as *unevidenced* — a green suite alone never blanket-promotes. A failing test demotes only the specs it evidences. When no tests ran, no link state changes.
 
-**Use this in CI.** Drop it into a GitHub Action that runs on every PR to `main`, and your verified-link surface keeps current automatically.
+For a fully deterministic alternative — no model involved — run `specship verify --report <vitest-json>`, which maps reported test cases to `tests` links and moves the state itself.
 
 ## `spec-relink`
 
-Re-attach an `orphaned` link. Orphans happen when a target file or symbol was renamed/moved/deleted and the link's resolver can't find it anymore.
+Re-attach an `orphaned` link — one whose target file or symbol was renamed, moved or deleted. Launched by the drift queue's **Re-attach** button. Runs in your checkout and never edits code.
 
 **Inputs**: `SPEC_ID` (required).
 
-**Steps:**
+**Nodes:**
 
-1. **search** — `agent`. Reads the original spec + the orphan's `target_qualified_name`. Uses `specship_search` to look for the most likely new home (rename, move, split). Writes `candidates.md` with up to 5 ranked candidates.
-2. **propose** — `agent`. Picks the top candidate and writes a proposed `link_update.md`.
-3. **review** — `approval`. Surface the candidates list + the chosen update.
-4. **relink** — `agent`. On approval, calls `specship_link_assert` with the new target. Old orphan is closed.
+1. **present_orphan** — `prompt`. Lists the orphaned link(s) and what the spec asks for.
+2. **search_candidates** — `prompt`. Uses `specship_search` and `specship_explore` to find likely new homes and outputs a numbered candidate list.
+3. **approve_relink** — `approval`. Approve with the number of the correct candidate as your comment (`--comment 2`), or `none` to leave the link orphaned.
+4. **assert_link** — `prompt`. Calls `specship_link_assert` on the chosen candidate.
 
-**Failure mode:** if no candidate scores above a threshold, step 2 writes "no confident match — human triage required" and the approval gate becomes informational rather than confirmatory.
+## `spec-author`
+
+A gated, workflow-driven version of spec authoring. (The `/specship:spec new` and `/specship:spec fast` slash commands author interactively instead; this workflow is for when you want the same discipline as a recorded run.)
+
+**Inputs**: `DESCRIPTION` (required), `PARENT_DOC`, `OWNER`, `PRIORITY` (optional).
+
+**Nodes:** **ground** (find where the feature would live) → **draft** (a full spec with `<!-- id: -->` markers, RFC 2119 keywords and `.A<N>` acceptance criteria; unknowns marked rather than invented) → **gap_review** (`approval` — answer the gap-fill questions in your comment) → **incorporate** → **quality_review** (structural / quality / hygiene findings) → **finalize** (`approval`) → **write_file**.
 
 ## Customizing a bundled workflow
 
 You can override any bundled workflow by writing a file with the same name in your project's `.specship/workflows/`:
 
 ```bash
-cp $(npm root -g)/@specship/specship/dist/workflows/defaults/spec-implement.yaml \
+mkdir -p .specship/workflows
+cp "$(npm root -g)/@specship/specship/dist/workflows/defaults/spec-implement.yaml" \
    .specship/workflows/spec-implement.yaml
-# edit to taste; project tier always wins
+# edit to taste; the project tier always wins
 ```
 
-The bundled YAMLs are intentionally close to the minimum useful version. Most teams that customize end up:
+Common customizations:
 
-- Adding a `lint` step in parallel with `test`.
-- Adding a `types` step (`tsc --noEmit`).
-- Adding a second `approval` step before `merge` for high-risk repos.
-- Changing the `branch:` pattern.
-- Restricting the agent's allowed tools at the `agent` step.
+- Pointing `quality_gate` or `verify` at your own commands (`pnpm lint`, `make test`, a filtered test run).
+- Adding another `approval` gate for high-risk areas.
+- Pinning `model:` on prompt nodes.
+- Tightening `allowed_tools` on a prompt node.
+
+Keep the `VERIFY_RESULT` / `LINK_ACTION` markers if you change the test steps — the link step relies on them to never report untested code as verified.
 
 → Next: [Writing custom workflows](/workflows/custom/) for a worked example from scratch.

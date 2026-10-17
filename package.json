@@ -1,6 +1,6 @@
 {
   "name": "@specship/specship",
-  "version": "0.26.0",
+  "version": "0.27.0",
   "description": "Supercharge Claude Code with semantic code intelligence. 94% fewer tool calls • 77% faster exploration • 100% local.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -77,6 +77,6 @@
     "rollup": "4.60.1"
   },
   "engines": {
-    "node": ">=20.0.0 <25.0.0"
+    "node": ">=22.5.0 <25.0.0"
   }
 }

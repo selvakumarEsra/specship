@@ -3,7 +3,9 @@ title: Installation
 description: Install SpecShip and wire it into Claude Code.
 ---
 
-SpecShip is **Claude Code only** — the installer configures one agent on purpose, so the surface stays small and easy to keep correct. If you need MCP integration with another agent that speaks the protocol, point it at `specship serve --mcp` by hand (see [MCP & Claude Code wiring](/reference/integrations/)).
+SpecShip is built for **Claude Code** — the installer wires one agent by default, so the surface stays small and easy to keep correct. The one exception is **Gemini CLI**, an opt-in, MCP-only target (see [Gemini CLI (opt-in)](#gemini-cli-opt-in)).
+
+**Requirement:** Node.js **22.5 or newer, below 25** — on every install route (npm, the one-line installer, and the offline bundle). SpecShip ships no runtime of its own; it runs on yours. An unsupported Node is caught up front with a message naming the supported range: the npm package declares the range at install time, and the `specship` command refuses to start on Node 25 (a V8 bug crashes grammar compilation there).
 
 ## 1. Get the CLI
 
@@ -23,12 +25,17 @@ specship install
 
 `specship install` is **wiring-only** — it never installs or updates the binary (and never touches npm). It:
 
-- Asks whether to wire SpecShip into **just this project** (the default) or **all projects** (global). Pass `--path <repo>` to target a specific repo from anywhere.
+- Asks **one question**: wire SpecShip into **just this project** (the default) or **all projects** (global). Pass `--path <repo>` to target a specific repo from anywhere, or `--yes` to skip the question.
 - Writes the MCP server entry so Claude Code launches `specship serve --mcp`.
-- Adds the read-only `specship_*` tools to Claude Code's auto-allow list, so you aren't prompted on every query.
-- Installs the slash commands and the `specship-explorer` subagent.
-- Adds the auto-sync hooks (re-index after the agent edits files; catch up on session start), the per-prompt steering nudge, and a session-start cheat-sheet of SpecShip's commands (`SPECSHIP_NO_CHEATSHEET=1` to silence).
-- For a project-local install, initializes the target repo's `.specship/` and builds its index.
+- Adds the read-only `specship_*` tools to Claude Code's auto-allow list, so you aren't prompted on every query (`--no-permissions` to skip).
+- Adds the SpecShip **status-line segment** by default — an existing status line is never overwritten (`--skip-statusline` to skip).
+- Installs the `/specship:explore` command and the `specship-explorer` subagent — plus, with the spec-driven layer (the default), the `/specship:spec`, `/specship:check`, `/specship:learn`, and `/specship:day` commands and the `spec-author` skill.
+- Adds the auto-sync hooks (re-index after the agent edits files; catch up on session start), the per-prompt steering nudge, a one-time reminder when the agent reaches for a raw file search without consulting the index, and a session-start cheat-sheet of SpecShip's commands (`SPECSHIP_NO_CHEATSHEET=1` to silence).
+- **Indexes the project** you're installing into by default (`--skip-index` to skip).
+- On an interactive, project-local install with the spec-driven layer, offers to gate `specship check` on drift & behaviour (recommended; declining keeps every check advisory — enable later with `specship check --enable-gate drift behaviour`).
+- Finishes with an **install check** (runtime, FTS5, MCP server boot, index) and a **restart reminder**.
+
+Every defaulted decision is named in the closing summary together with the flag that opts out of it — nothing happens invisibly.
 
 If the `specship` command isn't on your PATH yet, the installer warns (Claude Code launches it by name) and points at both acquisition routes — it never runs them for you.
 
@@ -62,7 +69,8 @@ specship install --print-config               # print the MCP snippet, no file w
 | `--with-jira` | (boolean) enable the optional JIRA integration (talks to your Atlassian instance; never auto-allowed — Claude prompts per call) | off (core stays 100% local) |
 | `--with-designer` | (boolean) enable the optional Designer integration (**experimental** — drives claude.ai/design via a debug Chrome session) | off |
 | `--no-permissions` | (boolean) skip the auto-allow list | permissions on |
-| `--print-config` | print the MCP snippet and exit | — |
+| `--target <ids>` | `claude`, `gemini`, `claude,gemini` | `claude` |
+| `--print-config` | print the MCP snippet and exit (Claude Code; `--target gemini` prints the Gemini CLI snippet) | — |
 
 > Integrations are remembered: a later plain `specship install` preserves an earlier `--with-*` opt-in — it never silently disables one.
 
@@ -72,11 +80,20 @@ The default install also wires a tiny per-prompt nudge that steers Claude Code t
 
 ## 3. Restart Claude Code
 
-Restart Claude Code so it picks up the new MCP server entry and loads the `specship_*` tools.
+An MCP server added to the config is **not visible to a session that's already open**. Restart Claude Code (or run `/mcp`) so it loads the `specship_*` tools.
+
+The install check that ends `specship install` is advisory — it never fails the install. To diagnose an install at any time, run:
+
+```bash
+specship doctor          # human-readable
+specship doctor --json   # for scripts
+```
+
+`doctor` is read-only and runs the same four checks — the runtime and SQLite backend, FTS5 full-text search, MCP server boot, and whether the project index answers a query — and **exits non-zero on a usage-blocking failure**, so it can gate a provisioning script or CI step. See [Troubleshooting](/troubleshooting/) for fixes.
 
 ## 4. Initialize more projects
 
-A project-local install already indexed the current project. For any other project:
+The install already indexed the project you ran it in. For any other project:
 
 ```bash
 cd your-project
@@ -84,6 +101,22 @@ specship init
 ```
 
 `specship init` builds the per-project knowledge graph index (indexing runs by default — the old `-i`/`--index` flag is accepted but no longer needed). A global install then works in every project you open.
+
+## Gemini CLI (opt-in)
+
+Gemini CLI can use the same SpecShip MCP server. It is **never installed by default** — a plain `specship install` sets up Claude Code alone.
+
+```bash
+specship install --target gemini              # Gemini CLI only
+specship install --target claude,gemini       # both
+specship install --print-config --target gemini   # print the snippet, write nothing
+```
+
+`--target gemini` writes the `specship` entry into Gemini CLI's `mcpServers` block — `~/.gemini/settings.json` for all projects, or `./.gemini/settings.json` for just this one — leaving any other servers and settings untouched. Re-running it changes nothing, and an integration you enabled earlier stays enabled. `--print-config --target gemini` prints the same entry for you to paste by hand (global unless you add `--location local`).
+
+The entry sets `SPECSHIP_HOST=gemini`, which lets SpecShip read the session's model from Gemini CLI's own settings and size its output for it (Flash gets the compact output) — keep it if you paste the snippet by hand.
+
+**What Gemini gets:** the SpecShip MCP tools and the server's built-in guidance — nothing else. Slash commands, auto-sync and steering hooks, the `specship-explorer` subagent, the status line, and the auto-allow list are Claude Code features with no Gemini equivalent; the installer prints a note saying so. Remove the Gemini wiring alone with `specship uninstall --target gemini --keep-data`.
 
 ## Supported platforms
 
@@ -97,7 +130,7 @@ Every release ships a prebuilt bundle (nothing to compile; runs on your machine'
 
 ## Offline / air-gapped install
 
-Every release is a **prebuilt bundle** — the app with zero native addons to compile — so it installs on a machine with **no npm, no compiler, and no internet**. The one prerequisite is **Node.js 22.5 or newer (below 25)** already installed on that machine; the bundle ships no runtime of its own and runs on yours. Download the bundle on a connected machine, copy it across, and run the installer baked inside it.
+Every release is a **prebuilt bundle** — the app with zero native addons to compile — so it installs on a machine with **no npm, no compiler, and no internet**. The larger parser grammars ship compressed and decompress transparently on first use, so everything still works fully offline. The one prerequisite is **Node.js 22.5 or newer (below 25)** already installed on that machine; the bundle ships no runtime of its own and runs on yours. Download the bundle on a connected machine, copy it across, and run the installer baked inside it.
 
 **1. On a machine with internet**, grab the archive matching the *offline* machine's platform from the [Releases page](https://github.com/selvakumarEsra/specship/releases) — `specship-<target>.tar.gz` (or `.zip` on Windows), where `<target>` is one of `darwin-arm64`, `darwin-x64`, `linux-x64`, `linux-arm64`, `win32-x64`, `win32-arm64`.
 
@@ -132,4 +165,11 @@ If the offline machine has no `node` on its `PATH` — or one outside 22.5–24.
 specship uninstall
 ```
 
-This reverses the installer — stripping SpecShip's MCP server entry, the auto-allow permissions, the slash commands, the auto-sync hooks, and the spec-driven-development steering from Claude Code. It defaults to the same location as install (project-local), so an `--yes` install/uninstall pair stays symmetric; pass `--location global` to remove a global install. Your project indexes (`.specship/`) are left untouched — remove those per-project with `specship uninit`.
+This is a **complete removal**: it unwires SpecShip from Claude Code at both locations (MCP entry, auto-allow permissions, slash commands, hooks, steering, status line), removes a Gemini CLI entry if one exists, deletes the current project's `.specship/` index and the user-level `~/.specship/` directory (including worktrees and any saved JIRA credentials), and removes the `specship` program itself. It first lists exactly what will be deleted and asks for confirmation (`--yes` / `--force` skips the prompt). Indexes in *other* projects aren't discovered automatically — remove those per-project with `specship uninit`.
+
+To only unwire and keep your data and the binary:
+
+```bash
+specship uninstall --keep-data                     # project-local wiring
+specship uninstall --keep-data --location global   # global wiring
+```

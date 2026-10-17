@@ -69,10 +69,15 @@ nodes:
       to proceed with implementation, or reject with feedback to revise.
     capture_response: true
     on_reject:
+      # The reviewer's rejection reason is appended to this prompt
+      # automatically; the revision replaces $plan.output downstream.
       prompt: |
-        The plan was rejected with this feedback. Revise:
+        The plan was rejected (feedback follows). Revise the plan to
+        address it and output the full revised plan.
 
-        $approve_plan.output
+        Current plan:
+        $plan.output
+      revises: plan
       max_attempts: 3
 
   - id: implement
@@ -201,9 +206,36 @@ nodes:
       echo "HALT_CAUSE=lint/typecheck still fails after the fix attempt — the change is not reviewable yet"
       exit 1
 
-  - id: diff
+  - id: suppression_gate
     kind: bash
     depends_on: [quality_recheck]
+    output_type: suppression_report
+    bash: |
+      # REQ-QGATE-004.A3 — deterministic scan for lint/type suppression
+      # comments the change introduces (noqa, eslint-disable, @ts-ignore, …).
+      # The fix_quality prompt forbids silencing rules; this node enforces it
+      # in code. SUPPRESSION_GATE is the marker contract: a scan that could
+      # not run is `skipped`, never `clean`.
+      if command -v specship >/dev/null 2>&1; then SS=specship
+      elif [ -x node_modules/.bin/specship ]; then SS=node_modules/.bin/specship
+      elif [ -x dist/bin/specship.js ]; then SS="node dist/bin/specship.js"
+      else SS=""; fi
+      if [ -z "$SS" ]; then
+        echo "SUPPRESSION_GATE=skipped"
+        echo "SUPPRESSION_REASON=specship CLI not found — suppression scan did NOT run"
+        exit 0
+      fi
+      if OUT=$($SS suppressions 2>&1); then
+        printf '%s\n' "$OUT"
+      else
+        printf '%s\n' "$OUT"
+        echo "HALT_CAUSE=the change introduces lint/type suppression comments — fix the code instead of silencing the rule"
+        exit 1
+      fi
+
+  - id: diff
+    kind: bash
+    depends_on: [suppression_gate]
     output_type: diff
     bash: |
       # REQ-AUTHG-004.A1 — the full diff, from git, into a run artifact. The
@@ -426,6 +458,9 @@ nodes:
 
       Lint / typecheck:
       $quality_recheck.output
+
+      Suppression scan (new noqa / eslint-disable / @ts-ignore):
+      $suppression_gate.output
 
       Links asserted:
       $link.output

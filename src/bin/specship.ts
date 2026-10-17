@@ -31,7 +31,7 @@ import { detectWorktreeIndexMismatch, worktreeMismatchWarning } from '../sync/wo
 import { createShimmerProgress } from '../ui/shimmer-progress';
 import { getGlyphs } from '../ui/glyphs';
 
-import { buildNode25BlockBanner, buildNodeTooOldBanner, MIN_NODE_MAJOR } from './node-version-check';
+import { buildNode25BlockBanner, buildNodeTooOldBanner, nodeFloorDecision } from './node-version-check';
 import { runUpdate, detectInstallMethod, type InstallMethod } from '../update/updater';
 import { resolveLatestVersion } from '../update/resolve-latest';
 import { runInstaller } from '../update/run-installer';
@@ -234,9 +234,10 @@ if (nodeMajor >= 25) {
 // Enforce the supported Node floor. `engines` in package.json only *warns* on
 // install (unless engine-strict), so hard-block here to actually keep users off
 // unsupported versions. Mirrors the 25+ block above. See package.json `engines`.
-if (nodeMajor < MIN_NODE_MAJOR) {
+const nodeFloor = nodeFloorDecision(nodeVersion);
+if (nodeFloor !== 'ok') {
   process.stderr.write(buildNodeTooOldBanner(nodeVersion) + '\n');
-  if (!process.env.SPECSHIP_ALLOW_UNSAFE_NODE) {
+  if (nodeFloor === 'block') {
     process.exit(1);
   }
   // Override active — banner shown for visibility, continuing.
@@ -931,12 +932,31 @@ program
         }
       };
 
+      // Guarded auto-learn sweep (REQ-ALEARN-004): cooldown-bounded, opt-out
+      // via reflect.autoSweep=false, and NEVER allowed to fail the sync (A3).
+      const runAutoSweep = async (instance: { reflectSweep(): { notify: Array<{ title: string }> } }) => {
+        try {
+          const { loadReflectConfig, shouldAutoSweep, recordAutoSweep } = await import('../reflect/auto-sweep');
+          const cfg = loadReflectConfig(projectPath);
+          if (!shouldAutoSweep(projectPath, Date.now(), cfg)) return;
+          recordAutoSweep(projectPath, Date.now());
+          const { notify } = instance.reflectSweep();
+          const { learnedNotice } = await import('../reflect/cli');
+          for (const p of notify) {
+            console.log(learnedNotice(p.title));
+          }
+        } catch {
+          /* a sweep failure never blocks a sync (REQ-ALEARN-004.A3) */
+        }
+      };
+
       if (options.quiet) {
         const result = await cg.sync();
         pushDriftNotices(result);
         await pushJiraDriftComments(cg, result);
         await pushJiraAutoPublish(result);
         pushDriftSummary(cg);
+        await runAutoSweep(cg);
         cg.destroy();
         return;
       }
@@ -981,6 +1001,7 @@ program
       await pushJiraDriftComments(cg, result);
       await pushJiraAutoPublish(result);
       pushDriftSummary(cg);
+      await runAutoSweep(cg);
       clack.outro('Done');
       cg.destroy();
     } catch (err) {
@@ -1452,15 +1473,34 @@ function printFileTree(
  * Run a reflection pass over the ingested Claude Code transcripts and print the
  * self-improvement proposals it surfaces (REQ-REFLECT-006.A1). Headless — no
  * dashboard required. With no usable transcript history, prints an empty state.
+ *
+ * Review verbs (REQ-AUDFIX-002): `specship reflect apply <hash> [--yes]`,
+ * `specship reflect undo <hash>`, `specship reflect dismiss <hash>`. The first
+ * positional is a verb when it is exactly apply/undo/dismiss, otherwise the
+ * project path (so `specship reflect` and `specship reflect <path>` are
+ * unchanged); verb mode takes its project from --path (default: cwd).
  */
 program
-  .command('reflect [path]')
-  .description('Mine ingested transcripts for self-improvement proposals (memory rules, skills, hooks)')
+  .command('reflect [path-or-verb] [hash]')
+  .description('Mine ingested transcripts for self-improvement proposals; review them with apply <hash> [--yes] / undo <hash> / dismiss <hash>')
   .option('-j, --json', 'Output as JSON')
+  .option('-p, --path <path>', 'Project path (for apply/undo/dismiss; default: cwd)')
+  .option('-y, --yes', 'With apply: write the change (without it, apply only previews)')
   .option('--capture', 'Capture a routine as a skill proposal: --title required, content on stdin (LEARN-DOC)')
   .option('--title <title>', 'Title for --capture')
-  .action(async (pathArg: string | undefined, options: { json?: boolean; capture?: boolean; title?: string }) => {
-    const projectPath = resolveProjectPath(pathArg);
+  .option('--lane <lane>', 'Capture lane: skill (default), style (project convention → .specship/conventions.md), or domain (draft fact → specs/domain/) (ALEARN-DOC)')
+  .action(async (
+    firstArg: string | undefined,
+    hashArg: string | undefined,
+    options: { json?: boolean; path?: string; yes?: boolean; capture?: boolean; title?: string; lane?: string },
+  ) => {
+    const { isReflectVerb, runReflectVerb, REFLECT_VERBS, REFLECT_REVIEW_HINT, DISPLAY_HASH_LEN } = await import('../reflect/cli');
+    const verb = isReflectVerb(firstArg) ? firstArg : undefined;
+    if (!verb && hashArg !== undefined) {
+      error(`Unknown reflect action: ${firstArg}. Valid: ${REFLECT_VERBS.join(', ')} (or a project path with no further arguments)`);
+      process.exit(1);
+    }
+    const projectPath = resolveProjectPath(verb ? options.path : (firstArg ?? options.path));
     try {
       if (!isInitialized(projectPath)) {
         error(`SpecShip not initialized in ${projectPath}`);
@@ -1468,6 +1508,17 @@ program
       }
       const { default: SpecShip } = await loadSpecShip();
       const cg = await SpecShip.open(projectPath);
+
+      // Review verbs (REQ-AUDFIX-002): apply / undo / dismiss by hash prefix.
+      if (verb) {
+        const code = runReflectVerb(cg, verb, hashArg, { yes: options.yes, json: options.json }, {
+          log: (m) => console.log(m),
+          error: (m) => error(m),
+        });
+        cg.destroy();
+        if (code !== 0) process.exit(code);
+        return;
+      }
 
       // Explicit capture door (LEARN-DOC, REQ-LEARN-002): crystallize a
       // distilled routine into a human-gated skill proposal. Content on
@@ -1484,12 +1535,17 @@ program
           error('--capture expects the routine content on stdin (pipe or heredoc)');
           process.exit(1);
         }
-        const p = cg.reflectCapture({ title: options.title, content });
+        const lane = options.lane as 'skill' | 'style' | 'domain' | undefined;
+        if (lane && !['skill', 'style', 'domain'].includes(lane)) {
+          error(`Unknown --lane: ${lane}. Valid: skill, style, domain`);
+          process.exit(1);
+        }
+        const p = cg.reflectCapture({ title: options.title, content, lane });
         if (options.json) {
           console.log(JSON.stringify(p, null, 2));
         } else {
           info(`Captured as proposal ${p.contentHash.slice(0, 12)} (${p.state}): ${p.title}`);
-          info('Review the open proposals with `specship reflect` — nothing lands until you apply it.');
+          info(`Review the open proposals with \`specship reflect\`; apply this one with \`specship reflect apply ${p.contentHash.slice(0, DISPLAY_HASH_LEN)}\` — nothing lands until you apply it.`);
         }
         cg.destroy();
         return;
@@ -1503,7 +1559,9 @@ program
         return;
       }
 
-      if (result.empty || result.open.length === 0) {
+      // Stored open proposals (incl. explicit captures) list even when this
+      // pass mined nothing new — they are what apply/dismiss act on.
+      if (result.open.length === 0) {
         info('No proposals yet — not enough signal in the ingested transcripts.');
         info('Tip: run the dashboard with `specship desktop --ingest` to build transcript history.');
         cg.destroy();
@@ -1523,13 +1581,14 @@ program
       console.log(chalk.bold(`\nReflection proposals (${result.open.length}):\n`));
       for (const p of result.open) {
         const sev = (sevColor[p.severity] ?? chalk.white)(p.severity.toUpperCase().padEnd(5));
-        console.log(`${sev} ${chalk.bold(p.title)}`);
+        console.log(`${sev} ${chalk.bold(p.title)}  ${chalk.cyan(p.contentHash.slice(0, DISPLAY_HASH_LEN))}`);
         console.log(chalk.dim(`      ${typeLabel[p.type] ?? p.type} → ${p.targetPath}`));
         console.log(chalk.dim(`      ${p.evidence.detail}`));
         console.log(chalk.dim(`      ${p.body}`));
         console.log();
       }
       info('These are proposals only — nothing is written until you apply one.');
+      info(REFLECT_REVIEW_HINT);
       cg.destroy();
     } catch (err) {
       error(`reflect failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -2148,9 +2207,12 @@ program
       }
       for (const c of r.checks) {
         const tag = c.gating ? chalk.dim('[gating]') : chalk.dim('[advisory]');
-        const mark = c.passed ? chalk.green('✓') : (c.gating ? chalk.red('✗') : chalk.yellow('•'));
+        // A skipped check's input was unavailable — presented as skipped,
+        // never as pass or fail (REQ-QGATE-002.A3).
+        const mark = c.skipped ? chalk.yellow('○') : c.passed ? chalk.green('✓') : (c.gating ? chalk.red('✗') : chalk.yellow('•'));
         const reach = scope ? chalk.dim(c.scoped ? ' [since]' : ' [repo-wide]') : '';
-        console.log(`  ${mark} ${c.check.padEnd(16)} ${tag}${reach} ${c.passed ? 'pass' : `${c.findings.length} finding(s)`}`);
+        const status = c.skipped ? 'skipped' : c.passed ? 'pass' : `${c.findings.length} finding(s)`;
+        console.log(`  ${mark} ${c.check.padEnd(16)} ${tag}${reach} ${status}`);
         if (!c.passed) for (const f of c.findings.slice(0, 8)) console.log(chalk.dim(`        ${f}`));
         if (!c.passed && c.findings.length > 8) console.log(chalk.dim(`        …and ${c.findings.length - 8} more`));
       }
@@ -2161,7 +2223,7 @@ program
           : 'Pass (no gating checks failed).');
         // The advisory sell (REQ-ENFORCE-004.A1): findings that would fail
         // a gated run end the report with the exact opt-in command.
-        const wouldGate = r.checks.filter((c) => !c.gating && !c.passed).map((c) => c.check);
+        const wouldGate = r.checks.filter((c) => !c.gating && !c.passed && !c.skipped).map((c) => c.check);
         if (wouldGate.length) {
           const total = r.checks
             .filter((c) => wouldGate.includes(c.check))
@@ -2306,6 +2368,38 @@ async function runDesktop(options: DesktopOptions): Promise<void> {
     process.exit(1);
   }
 }
+
+program
+  .command('suppressions [path]')
+  .description('Scan the change under review for newly introduced lint/type suppression comments (noqa, eslint-disable, @ts-ignore, …); exits non-zero when any were added')
+  .option('--since <ref>', 'Diff base (default HEAD): scan lines added since this ref')
+  .option('-j, --json', 'Output findings as JSON')
+  .action(async (pathArg: string | undefined, options: { since?: string; json?: boolean }) => {
+    const projectPath = resolveProjectPath(pathArg);
+    // The SUPPRESSION_GATE marker is the machine-readable contract the
+    // spec-implement workflows route on (REQ-QGATE-004.A3) — same doctrine as
+    // VERIFY_RESULT: a scan that could not run is `skipped`, never `clean`.
+    try {
+      const { workingTreeDiffText } = await import('../enforce/changed-files');
+      const { scanDisableComments, formatSuppressionFinding } = await import('../enforce/suppressions');
+      const findings = scanDisableComments(workingTreeDiffText(projectPath, options.since ?? 'HEAD'));
+      if (options.json) {
+        console.log(JSON.stringify({ gate: findings.length === 0 ? 'clean' : 'failed', findings }, null, 2));
+        process.exit(findings.length === 0 ? 0 : 1);
+      }
+      if (findings.length === 0) {
+        console.log('SUPPRESSION_GATE=clean');
+        return;
+      }
+      console.log('SUPPRESSION_GATE=failed');
+      for (const f of findings) console.log(`  ${formatSuppressionFinding(f)}`);
+      console.log('Fix the code instead of silencing the rule (REQ-QGATE-004).');
+      process.exit(1);
+    } catch (err) {
+      console.log('SUPPRESSION_GATE=skipped');
+      console.log(`SUPPRESSION_REASON=${err instanceof Error ? err.message.split('\n')[0] : String(err)}`);
+    }
+  });
 
 program
   .command('serve')
@@ -2923,6 +3017,8 @@ program
         withJira: opts.withJira === true ? true : undefined,
         withDesigner: opts.withDesigner === true ? true : undefined,
         statusLine,
+        // REQ-AUDFIX-001: a local install must honor --skip-index too.
+        skipIndex: opts.skipIndex === true,
         yes: opts.yes,
       });
 
@@ -3098,7 +3194,32 @@ program
       }
     }
     const { buildCheatsheetPayload } = await import('../activation/cheatsheet');
-    const payload = buildCheatsheetPayload();
+    // Learned-state extras (REQ-ALEARN-002 / REQ-ALEARN-004.A2) — both
+    // best-effort: an unreadable file or DB silently yields the base
+    // cheatsheet, never an error in the SessionStart hook.
+    const projectPath = resolveProjectPath(undefined);
+    let conventions: string | null = null;
+    try {
+      conventions = (await import('fs')).readFileSync(
+        (await import('path')).join(projectPath, '.specship', 'conventions.md'),
+        'utf-8',
+      );
+    } catch { /* no conventions file */ }
+    let openProposals = 0;
+    try {
+      const { DatabaseConnection, DATABASE_FILENAME } = await import('../db');
+      const { ReflectStore } = await import('../reflect');
+      const dbPath = (await import('path')).join(projectPath, '.specship', DATABASE_FILENAME);
+      if ((await import('fs')).existsSync(dbPath)) {
+        const conn = DatabaseConnection.initialize(dbPath);
+        try {
+          openProposals = new ReflectStore(conn.getDb()).list('open').length;
+        } finally {
+          conn.close();
+        }
+      }
+    } catch { /* store unavailable → omit the line */ }
+    const payload = buildCheatsheetPayload(process.env, { conventions, openProposals });
     if (payload) process.stdout.write(JSON.stringify(payload) + '\n');
     process.exit(0);
   });

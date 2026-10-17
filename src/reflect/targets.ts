@@ -95,6 +95,22 @@ export function buildProposal(
       // re-render once hashed (below) so the block carries its own id.
       payload = { kind: 'claude_md', markerId: '', block: '' };
     }
+  } else if (input.type === 'style_rule') {
+    // REQ-ALEARN-001: conventions land in the SpecShip-owned file, never
+    // CLAUDE.md (A3). Marker-block write, same idempotency/undo contract as
+    // claude_md.
+    targetKind = 'conventions';
+    targetPath = path.join(ctx.projectRoot, '.specship', 'conventions.md');
+    payload = { kind: 'conventions', markerId: '', block: '' };
+  } else if (input.type === 'domain_fact') {
+    // REQ-ALEARN-003: a DRAFT fact file under specs/domain/. The content is
+    // supplied fully-formed by the miner/capture; the `specship_proposal:`
+    // frontmatter marker is what apply uses to tell its own file from a
+    // human's (conflict refusal).
+    const slug = slugify(input.nameSeed);
+    targetKind = 'domain_fact';
+    targetPath = path.join(ctx.projectRoot, 'specs', 'domain', `${slug}.md`);
+    payload = { kind: 'domain_fact', slug, content: input.content };
   } else if (input.type === 'skill') {
     const name = slugify(input.nameSeed).replace(/^ss-/, '');
     targetKind = 'command';
@@ -121,6 +137,11 @@ export function buildProposal(
     const { start, end } = learningMarkers(contentHash);
     const block = `${start}\n${renderClaudeRule(input.title, input.content)}\n${end}`;
     payload = { kind: 'claude_md', markerId: contentHash, block };
+    contentHash = proposalHash({ type: input.type, targetKind, targetPath, payload });
+  } else if (payload.kind === 'conventions') {
+    const { start, end } = learningMarkers(contentHash);
+    const block = `${start}\n${renderConventionRule(input.title, input.content)}\n${end}`;
+    payload = { kind: 'conventions', markerId: contentHash, block };
     contentHash = proposalHash({ type: input.type, targetKind, targetPath, payload });
   } else if (payload.kind === 'command') {
     const content = renderCommand(contentHash, payload.name, input.title, input.content);
@@ -153,6 +174,16 @@ function firstSentence(s: string): string {
 /** The rule body written inside a CLAUDE.md marked block. */
 function renderClaudeRule(title: string, content: string): string {
   return `## ${title}\n\n${content}\n\n_(Added by SpecShip reflection — edit or remove freely.)_`;
+}
+
+/** A convention entry in .specship/conventions.md (REQ-ALEARN-001). */
+function renderConventionRule(title: string, content: string): string {
+  return `## ${title}\n\n${content}`;
+}
+
+/** Frontmatter marker stamped into an engine-created domain-fact draft. */
+export function domainFactMarker(slug: string): string {
+  return `specship_proposal: ${slug}`;
 }
 
 /** A self-contained memory note matching the user's memory-file convention. */

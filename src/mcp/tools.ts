@@ -278,7 +278,70 @@ export function resolveNamedFilePaths(
   return out;
 }
 
-export function getExploreOutputBudget(fileCount: number): ExploreOutputBudget {
+/** Breadth ceiling on the lite tier — depth over breadth (REQ-LOWEND-004). */
+const LITE_MAX_FILES = 3;
+
+/**
+ * Floor on the lite tier's per-file body cap. Sized so the top-ranked file's
+ * relevant clusters come back whole (~200 lines) instead of tail-trimmed,
+ * which is what sends a low-end model to Read (REQ-LOWEND-004.A1).
+ */
+const LITE_MIN_CHARS_PER_FILE = 8000;
+
+/**
+ * Lite-tier overlay on a size-tier budget (REQ-LOWEND-004).
+ *
+ * A low-end model abandons a tool chain the instant an answer looks partial,
+ * so it needs the top cluster COMPLETE far more than it needs a wide survey.
+ * The overlay therefore concentrates the tier's existing budget rather than
+ * enlarging it: `maxOutputChars` is untouched (it is the ~24K inline
+ * tool-result ceiling — exceeding it makes the host externalize the payload
+ * to a file the agent Reads back, re-introducing the very read this exists to
+ * prevent), while `maxCharsPerFile` rises and `defaultMaxFiles` falls so the
+ * same bytes land as fuller bodies on fewer files. `maxCharsPerFile` is a
+ * `max()` and `defaultMaxFiles` a `min()`, so the overlay can never shrink a
+ * body below what its size tier already returns (the monotonicity invariant
+ * in `src/mcp/CLAUDE.md`).
+ *
+ * The meta-text flags are the INVERSE of the small-repo tiers, hence explicit
+ * overrides rather than reuse: the trailing lists (additional files, budget
+ * note) are breadth pointers a lite model won't productively follow, but the
+ * completeness signal — "this source is complete, do NOT re-read" — is the one
+ * line that stops the Read fallback, so it is always on regardless of size.
+ */
+export function applyLiteExploreBudget(base: ExploreOutputBudget): ExploreOutputBudget {
+  return {
+    ...base,
+    // Breadth down, depth up — same byte ceiling, concentrated.
+    defaultMaxFiles: Math.max(1, Math.min(base.defaultMaxFiles, LITE_MAX_FILES)),
+    maxCharsPerFile: Math.max(base.maxCharsPerFile, LITE_MIN_CHARS_PER_FILE),
+    maxOutputChars: base.maxOutputChars,
+    gapThreshold: base.gapThreshold,
+    // Breadth pointers off, stop-reading signal on. Relationships stay AT
+    // THE BASE VALUE: the section is the cheapest structural signal (see the
+    // explore doctrine test) and is not one of the trailing meta-sections
+    // REQ-LOWEND-004.A2 suppresses.
+    includeRelationships: base.includeRelationships,
+    includeAdditionalFiles: false,
+    includeBudgetNote: false,
+    includeCompletenessSignal: true,
+    excludeLowValueFiles: true,
+  };
+}
+
+/**
+ * Output budget for one `specship_explore` call: the project-size tier,
+ * optionally overlaid by the session's model tier.
+ *
+ * `tier` defaults to `full`, and `standard` is a pass-through, so full- and
+ * standard-tier output stays byte-identical to today (REQ-LOWEND-004.A3).
+ */
+export function getExploreOutputBudget(fileCount: number, tier: ModelTier = 'full'): ExploreOutputBudget {
+  const base = baseExploreOutputBudget(fileCount);
+  return tier === 'lite' ? applyLiteExploreBudget(base) : base;
+}
+
+function baseExploreOutputBudget(fileCount: number): ExploreOutputBudget {
   // Tiered budget, scaled to project size. The budget is a CEILING (relevance
   // still gates WHAT is included), and it MUST stay under the agent's INLINE
   // tool-result cap (~25K chars). Above that, the host externalizes the result
@@ -809,6 +872,14 @@ const CODE_GRAPH_GROUP = new Set([
   'specship_files',
   'specship_health',
 ]);
+/**
+ * Spec-layer tools that survive the tiny-repo trim when the project has ≥1
+ * indexed spec (REQ-AUDFIX-009). `specship_jira_*` tools join them by prefix,
+ * but only when the JIRA integration is enabled.
+ */
+const SPEC_LAYER_TOOLS = new Set([
+  'specship_spec', 'specship_link_assert', 'specship_link_verify', 'specship_drifted',
+]);
 export function applyLiteTierTrim(list: ToolDefinition[], hint: string | null): ToolDefinition[] {
   if (!hint) return list;
   const root = findNearestSpecShipRoot(hint);
@@ -923,6 +994,22 @@ export class ToolHandler {
   }
 
   /**
+   * Whether the default project has at least one indexed spec. One
+   * `LIMIT 1` probe on the `specs` primary key — cheap enough for every
+   * ListTools call. Any failure (pre-spec schema, closed DB) reads as "no
+   * specs", which keeps the tiny-repo list unchanged.
+   */
+  private hasIndexedSpecs(): boolean {
+    if (!this.cg) return false;
+    try {
+      return this.cg.getSpecQueries().getRawDb()
+        .prepare('SELECT 1 FROM specs LIMIT 1').get() != null;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
    * Get tool definitions with dynamic descriptions based on project size.
    * The specship_explore tool description includes a budget recommendation
    * scaled to the number of indexed files. Honors the SPECSHIP_MCP_TOOLS
@@ -976,8 +1063,15 @@ export class ToolHandler {
       if (stats.fileCount < TINY_REPO_FILE_THRESHOLD) {
         // Designer tools are not code-graph tools — the tiny-repo flow-question
         // economics that justify trimming don't apply, so they always survive.
+        // Neither is the spec layer: when the project has ≥1 indexed spec, the
+        // spec/link/drift tools (and JIRA tools, only if already enabled —
+        // `visible` is post-integration-filter) survive too (REQ-AUDFIX-009).
+        // With no specs the list is exactly today's trim (A2).
+        const keepSpecLayer = this.hasIndexedSpecs();
         visible = visible.filter(
-          t => TINY_REPO_CORE_TOOLS.has(t.name) || t.name.startsWith('designer_')
+          t => TINY_REPO_CORE_TOOLS.has(t.name)
+            || t.name.startsWith('designer_')
+            || (keepSpecLayer && (SPEC_LAYER_TOOLS.has(t.name) || t.name.startsWith('specship_jira_')))
         );
       }
 
@@ -2242,16 +2336,28 @@ export class ToolHandler {
     const cg = this.getSpecShip(args.projectPath as string | undefined);
     const projectRoot = cg.getProjectRoot();
 
-    // Resolve adaptive output budget from project size. Falls back to the
+    // Resolve the session's model tier ONCE and reuse it for both the output
+    // budget and the flow spine below — detection is a couple of cheap file
+    // reads, but calling it twice would add latency for nothing
+    // (REQ-LOWEND-004.A4).
+    const modelTier = detectModelTier(projectRoot);
+
+    // Resolve adaptive output budget from project size, overlaid by the model
+    // tier (lite trades breadth for depth — REQ-LOWEND-004). Falls back to the
     // largest-tier defaults if stats aren't available, which preserves
     // pre-#185 behavior for callers that hit the rare stats failure.
     let budget: ExploreOutputBudget;
     try {
-      budget = getExploreOutputBudget(cg.getStats().fileCount);
+      budget = getExploreOutputBudget(cg.getStats().fileCount, modelTier);
     } catch {
-      budget = getExploreOutputBudget(Infinity);
+      budget = getExploreOutputBudget(Infinity, modelTier);
     }
-    const maxFiles = clamp((args.maxFiles as number) || budget.defaultMaxFiles, 1, 20);
+    // On lite tier a caller-supplied maxFiles may narrow but never widen the
+    // overlay's breadth cut — otherwise the schema's advertised default (12)
+    // hands the weakest model MORE output than full tier gets, inverting
+    // REQ-LOWEND-004 (adversarial-review finding).
+    const maxFilesCeiling = modelTier === 'lite' ? budget.defaultMaxFiles : 20;
+    const maxFiles = clamp((args.maxFiles as number) || budget.defaultMaxFiles, 1, maxFilesCeiling);
 
     // Step 1: Find relevant context with generous parameters.
     // Use a large maxNodes budget — explore has its own 35k char output limit
@@ -2695,7 +2801,7 @@ export class ToolHandler {
     // Compute the flow spine once — used both to prepend the Flow section (below)
     // and to gate adaptive source sizing: files on the spine get full source,
     // off-spine peers skeletonize.
-    const flow = this.buildFlowFromNamedSymbols(cg, query, detectModelTier(cg.getProjectRoot()));
+    const flow = this.buildFlowFromNamedSymbols(cg, query, modelTier);
 
     // Polymorphic-sibling detector for adaptive sizing. A class that implements/
     // extends a supertype shared by >= MIN_SIBLINGS classes is one of many
@@ -3234,7 +3340,14 @@ export class ToolHandler {
     if (budget.includeCompletenessSignal) {
       lines.push('');
       lines.push('---');
-      lines.push(`> **Complete source for ${filesIncluded} files is included above — do NOT re-read them.** If your question also needs files/symbols listed under "Not shown above" (or any area this call didn't cover), make ANOTHER specship_explore targeting those names — it returns the same source with line numbers and is cheaper and more complete than reading. Reserve Read for a single specific line range explore can't surface.`);
+      if (budget.includeAdditionalFiles) {
+        lines.push(`> **Complete source for ${filesIncluded} files is included above — do NOT re-read them.** If your question also needs files/symbols listed under "Not shown above" (or any area this call didn't cover), make ANOTHER specship_explore targeting those names — it returns the same source with line numbers and is cheaper and more complete than reading. Reserve Read for a single specific line range explore can't surface.`);
+      } else {
+        // Lite tier keeps the signal but renders no "Not shown above" list
+        // (REQ-LOWEND-004.A2), so the clause pointing at it would name a
+        // section that isn't there. Same one-line shape, no dangling reference.
+        lines.push(`> **Complete source for ${filesIncluded} files is included above — do NOT re-read them.** If your question needs an area this call didn't cover, make ANOTHER specship_explore naming those symbols or files — it returns the same source with line numbers and is cheaper and more complete than reading. Reserve Read for a single specific line range explore can't surface.`);
+      }
     } else if (anyFileTrimmed) {
       lines.push('');
       lines.push(`> Some file sections were trimmed for size. For a specific symbol you still need, run another \`specship_explore\` (or \`specship_node\`) with its exact name — line-numbered source, cheaper and more complete than Read.`);

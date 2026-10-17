@@ -7,10 +7,10 @@ description: Full index, incremental sync, and the file watcher.
 
 ```bash
 cd your-project
-specship init -i      # initialize + full index
+specship init         # initialize + full index
 ```
 
-`init` creates `.specship/`; `-i`/`--index` builds the index immediately. To initialize without indexing, drop the flag and run `specship index` later.
+`init` creates `.specship/` and builds the index in one step. (The old `-i`/`--index` flag is still accepted, but indexing now always runs.) `specship install` also indexes the current project by default, so after an install there's usually nothing left to do.
 
 ## Full vs. incremental
 
@@ -21,6 +21,14 @@ specship sync            # incremental — only changed files
 ```
 
 `sync` is fast because it only reparses what changed. Use it after a branch switch or a batch of edits.
+
+Every `sync` (and `index`) also does a few other cheap, best-effort tasks. None of them can fail the sync:
+
+- **Specs**: changed files under `specs/` are re-parsed and their links re-checked, so drift shows up at sync time.
+- **Flow diagram**: if you've generated one with [`specship diagram`](/guides/flow-diagrams/), it's refreshed when code changed.
+- **CLAUDE.md audit**: your root and nested `CLAUDE.md` files are checked for bloat, duplication and dead paths. Findings appear in `/specship:check claudemd`, and SpecShip never edits these files itself.
+- **JIRA**: on a repo with a committed JIRA binding, new and changed specs are published. An unbound repo makes no JIRA calls.
+- **Learning**: a background reflection pass runs at most once every six hours (turn it off with `"reflect": { "autoSweep": false }` in `specship.config.json`).
 
 ## Stay fresh automatically
 
@@ -38,7 +46,7 @@ agent writes src/Widget.ts
   → next agent query sees it
 ```
 
-**Tunable**: `SPECSHIP_WATCH_DEBOUNCE_MS` overrides the default 2000ms, clamped to `[100ms, 60s]`. Useful when a build step or formatter writes many files in a tight burst — bump it to `5000` or `10000` so the watcher coalesces them into one sync.
+**Tunable**: `SPECSHIP_WATCH_DEBOUNCE_MS` overrides the default 2000ms. Values must be whole milliseconds between 100 and 60000; anything outside that range is ignored and the default applies. Useful when a build step or formatter writes many files in a tight burst — bump it to `5000` or `10000` so the watcher coalesces them into one sync.
 
 ### 2. Per-file staleness banner — covers the debounce window
 
@@ -81,7 +89,7 @@ If `### Pending sync:` isn't in the response, nothing is in flight.
 
 Almost never. The edge cases:
 
-- **The watcher is disabled.** Sandboxes that block local fs watchers, or you've set `SPECSHIP_NO_DAEMON=1` to opt out of the shared daemon. In those cases `specship sync` is the manual fallback.
+- **The watcher is disabled.** You've set `SPECSHIP_NO_WATCH=1` (or run `specship serve --no-watch`), the sandbox blocks local file watchers, or the project sits on a WSL2 `/mnt/` drive, where SpecShip turns watching off automatically because recursive watching is too slow there (`SPECSHIP_FORCE_WATCH=1` overrides that). In those cases `specship sync` is the manual fallback. The `SessionStart` hook still syncs once at the start of each Claude Code session.
 - **Pre-flight before a CI run.** If you're scripting against the index outside an agent session, a single `specship sync` at the start of the script guarantees the index reflects the current working tree.
 
 Otherwise: just use it. The watcher + banner + connect-sync covers the AI-assisted workflow end-to-end. If you're seeing files genuinely missed after the debounce window has passed, that's a bug — please file an issue with a reproduction.
@@ -94,7 +102,7 @@ Otherwise: just use it. The watcher + banner + connect-sync covers the AI-assist
 specship status
 ```
 
-Reports node/edge/file counts, the active SQLite backend, and the journal mode. In an agent session, the MCP-side `specship_status` additionally surfaces the `### Pending sync:` block described above.
+Reports node/edge/file counts, the active SQLite backend, and the journal mode. In an agent session, the MCP-side `specship_status` also shows the `### Pending sync:` block described above, and which SpecShip version and install is answering. If something looks wrong with the install itself — no FTS5, the MCP server won't start, the index can't be queried — run `specship doctor`.
 
 ## What gets indexed
 

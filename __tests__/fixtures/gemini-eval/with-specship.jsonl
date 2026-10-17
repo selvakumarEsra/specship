@@ -1,0 +1,8 @@
+{"type":"init","timestamp":"2026-09-29T10:00:00.000Z","session_id":"s-1","model":"gemini-3.5-flash"}
+{"type":"message","timestamp":"2026-09-29T10:00:01.000Z","role":"assistant","content":"Looking up the flow."}
+{"type":"tool_use","timestamp":"2026-09-29T10:00:02.000Z","tool_name":"specship_explore","tool_id":"t1","parameters":{"query":"mutateElement renderScene"}}
+{"type":"tool_result","timestamp":"2026-09-29T10:00:05.000Z","tool_id":"t1","status":"success"}
+{"type":"tool_use","timestamp":"2026-09-29T10:00:06.000Z","tool_name":"specship__specship_node","tool_id":"t2","parameters":{"symbol":"renderScene"}}
+{"type":"tool_result","timestamp":"2026-09-29T10:00:07.000Z","tool_id":"t2","status":"success"}
+{"type":"message","timestamp":"2026-09-29T10:00:09.000Z","role":"assistant","content":"Updating an element marks the scene dirty, which schedules renderScene through the observer callback."}
+{"type":"result","timestamp":"2026-09-29T10:00:09.500Z","status":"success","stats":{"total_tokens":19400,"input_tokens":18400,"output_tokens":1000,"cached":4000,"input":14400,"duration_ms":41200,"tool_calls":2}}

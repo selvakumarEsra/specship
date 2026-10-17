@@ -1,56 +1,56 @@
 ---
 title: MCP servers
-description: See every Model Context Protocol server your agent can reach — grouped by scope, with each server's tools, status, and configuration.
+description: See every Model Context Protocol server Claude Code is configured to load — grouped by scope, with live status, real usage from your transcripts, and enable/disable/add controls.
 ---
 
-The **MCP servers** page is a single place to see every [Model Context Protocol](https://modelcontextprotocol.io) server configured for your agent — the ones that hand Claude Code its tools. It answers "what can my agent actually call, and is any of it broken?" without you grepping through `~/.claude.json` and a pile of `.mcp.json` files.
+The **MCP** page is a single place to see every [Model Context Protocol](https://modelcontextprotocol.io) server configured for Claude Code — the ones that hand the agent its tools. It answers "what can my agent actually call, is any of it broken, and what does it really use?" without grepping through `~/.claude.json` and a pile of `.mcp.json` files.
+
+Everything on it comes from three real sources: your Claude Code config files, a liveness probe, and the tool calls recorded in your ingested transcripts. Nothing is a placeholder.
 
 ## The list view
 
-The page opens on a list of every configured server, split into two groups by where it's declared:
+Servers are grouped by where they're declared:
 
 | Scope | Source file | Meaning |
 |---|---|---|
 | **Global** | `~/.claude.json` | Available in every project. |
 | **Project** | `.mcp.json` | Scoped to this repo. |
+| **Usage only** | — | Seen in your transcripts but not in any config file — likely removed, or from another machine's setup. |
 
-A summary strip up top rolls up the fleet: total **servers**, how many are **running**, total **tools** exposed across all of them, and a **needs-attention** count (servers in a failed state). Each server row shows its avatar with a live status dot, its name, a scope pill, its launch command, how many tools it exposes, and a state pill:
+A summary strip rolls up the fleet: **Servers**, **Connected** (how many are answering now), **Tools** (seen in transcripts), and **Needs attention** (failed servers, named). Each server row shows its scope, transport, total calls, last use, tool count, and a state pill:
 
-- **Running** — connected; the dot pulses.
-- **Failed** — the connection errored (e.g. an expired token). Surfaced in the needs-attention count.
-- **Disabled** — declared but switched off; its tools are listed but not exposed.
+| State | Meaning |
+|---|---|
+| **Active** | Called in the last 24 hours. |
+| **Connected** | Answered the liveness probe, no recent calls. |
+| **Idle** | Configured, but neither recently used nor answering the probe. |
+| **Failed** | The probe was refused — surfaced in Needs attention. |
+| **Disabled** | Switched off in config. |
 
-Click any row to open that server's detail.
+The probe spawns stdio servers and asks them to answer an MCP `initialize`; URL servers get a request. Results are cached for about 30 seconds — use **Reload** to refresh.
+
+**Add server** registers a new server — name, scope (global or project), and either a stdio command or an HTTP URL — by writing it into the owning config file.
 
 ## The detail view
 
-Per server, the detail page leads with a **status banner** that adapts to the run state:
+Click a server for its detail. Tiles show **Tools** (seen in transcripts), **Calls** (all time), **Result bytes** returned to context, and **Last used**.
 
-- a **failed** server shows its error and a **Re-authenticate** action;
-- a **disabled** server shows an **Enable** action and a note that its tools aren't currently exposed;
-- a **running** server shows uptime and a pulsing indicator.
+- **Tools** — every tool the server was called with, each with its call count and average result size per call (flagged when heavy). A server with no recorded calls says so instead of showing a blank list.
+- **Example call** — the latest real input recorded for this server. When no arguments were ever recorded, a shape built from the most-called tool is shown and clearly marked **synthesized**, so it can't be mistaken for a call that happened.
+- **Configuration** — the server's JSON config, copyable, with the file it lives in.
+- **Enable / Disable** — behind a confirm dialog. Disabling uses Claude Code's own mechanism for `.mcp.json` servers and parks `~/.claude.json` servers in SpecShip's disabled map; enabling restores them.
 
-The banner always carries the transport, uptime, protocol revision, tool count, and the copyable launch command. Below it, summary tiles show tools exposed, calls this week, result tokens returned to context, and how many clients use the server.
+## Safe writes
 
-### Tools
+Enable, disable, and add all edit your **live** Claude Code config. Every write is atomic, keeps unrelated keys, key order, indentation, and trailing newline byte-for-byte, and a config file that doesn't parse is never overwritten — the edit errors instead.
 
-The server's tools are listed as an accordion. Each row shows the tool's name, a one-line description, its weekly call count, and average tokens-per-call (a cold tool — zero calls — is dimmed). Expand a tool to see:
+## SpecShip's own server
 
-- its **input schema** — every parameter with its type and a required/optional marker (plus any default);
-- a copyable **example call**;
-- a **View usage in heatmap** shortcut for tools that track usage.
+The `specship` server is one entry in this list. Its tools are the code-graph tools (`specship_explore`, `specship_search`, `specship_node`, `specship_callers`, `specship_callees`, `specship_impact`, `specship_files`), code health (`specship_health` — maintainability and architecture fitness in one tool), the spec and link tools, `specship_status` (index stats plus which SpecShip build is answering — it replaced `specship_version`), and the opt-in JIRA and Designer groups. Cached clients still calling the retired tool names get answers. The full, generated list is in the [MCP server reference](/reference/mcp-server/).
 
-Only one tool is expanded at a time. A server exposing no tools shows an empty state rather than a blank list.
+A few behaviors worth knowing:
 
-### Used by &amp; configuration
-
-Two panels round out the page:
-
-- **Used by** — the clients referencing this server (Claude Code, Claude Desktop, …) with each one's connection state and last-seen time.
-- **Configuration** — the server's JSON config in a copyable block, alongside the config-file hint (`~/.claude.json` or `.mcp.json`) so you know where it lives.
-
-## A note on the data
-
-Configuration-level facts — which servers exist, their scope, command, and config — come from your own config files. The richer **runtime** telemetry the detail view shows (uptime, per-tool call counts, "used by" clients) needs a live introspection source that isn't wired yet, so today the page renders a **representative sample** for those fields rather than inventing numbers. The shape is final; the live data lands when the introspection layer does. (SpecShip would rather show a clearly-illustrative sample than fake a precise figure — the same stance the [SpecShip Impact](/claude-code/specship-impact/) page takes with its `est.` markers.)
+- **Naming files in an explore pins them.** Up to four files you name in a `specship_explore` query are returned ahead of everything else, and if a named file can't be included the answer says so instead of dropping it silently.
+- **Lightweight models see a smaller menu.** On Haiku or Gemini Flash the code-graph group trims to explore, search, and node — see [Low-end models](/claude-code/low-end-models/).
 
 → Next: [Memory](/claude-code/memory/) — the CLAUDE.md hierarchy.

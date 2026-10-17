@@ -19,6 +19,8 @@ import {
   resolveStatusLine,
   resolveAutoAllow,
   describeInstallDefaults,
+  describeInstallChoices,
+  describeIndexLaterHint,
   type StatusLineOutcome,
 } from './install-defaults';
 import { ALL_TARGETS, getTarget, listTargetIds } from './targets/registry';
@@ -106,6 +108,13 @@ export interface RunInstallerOptions {
    */
   statusLine?: boolean;
   /**
+   * `--skip-index` (REQ-AUDFIX-001): a project-local install builds no index
+   * and creates no `.specship/` database. The summary names the skip as the
+   * user's choice and the closing hint says how to index later. Undefined /
+   * false ⇒ a local install indexes the project, as before.
+   */
+  skipIndex?: boolean;
+  /**
    * Skip every confirm and use defaults: location=local,
    * autoAllow=true. For scripting / CI.
    */
@@ -179,8 +188,13 @@ export async function runInstaller(): Promise<InstallRunOutcome | undefined> {
 
 export async function runInstallerWithOptions(
   opts: RunInstallerOptions,
+  /**
+   * Test seam: a pre-loaded `@clack/prompts` module. The production loader
+   * (`importESM`) bypasses the CJS transform, which a test runner can't follow.
+   */
+  deps: { clack?: Awaited<ReturnType<typeof importESM>> } = {},
 ): Promise<InstallRunOutcome | undefined> {
-  const clack = await importESM('@clack/prompts');
+  const clack = deps.clack ?? await importESM('@clack/prompts');
 
   clack.intro(`SpecShip v${getVersion()}`);
 
@@ -335,8 +349,12 @@ export async function runInstallerWithOptions(
   }
 
   // Step 5: for local install, initialize the project.
+  // `--skip-index` (REQ-AUDFIX-001.A1) means no index and no .specship/
+  // database at all — the watch-fallback offer is skipped too, since it only
+  // matters for an index that exists.
   let indexed = false;
-  if (location === 'local') {
+  const indexSkippedByUser = location === 'local' && opts.skipIndex === true;
+  if (location === 'local' && !indexSkippedByUser) {
     indexed = (await initializeLocalProject(clack, useDefaults)) === 'indexed';
   }
 
@@ -368,6 +386,15 @@ export async function runInstallerWithOptions(
   });
   if (summary.length > 0) {
     clack.note(summary.join('\n'), 'Applied by default');
+  }
+  // A decision the user made with a flag is named apart from the defaults
+  // (REQ-AUDFIX-001.A2), followed by how to undo it.
+  const choices = describeInstallChoices({ indexSkippedByUser });
+  if (choices.length > 0) {
+    clack.note(choices.join('\n'), 'Your choices');
+  }
+  if (indexSkippedByUser) {
+    clack.log.info(describeIndexLaterHint());
   }
 
   clack.outro(

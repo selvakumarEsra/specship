@@ -257,18 +257,17 @@ nodes:
       $draft_spec.output
     capture_response: true
     on_reject:
+      # The reviewer's rejection reason is appended automatically.
       prompt: |
-        The draft was rejected with this feedback. Revise the spec
+        The draft was rejected (feedback follows). Revise the spec
         per the feedback; keep ALL existing REQ IDs stable so any
         downstream tracking survives the rewrite.
-
-        Feedback:
-        $gap_review.output
 
         Current draft:
         $draft_spec.output
 
         Output the revised draft.
+      revises: draft_spec
       max_attempts: 3
 
   - id: write_spec

@@ -12,7 +12,9 @@
  *
  * Detection rides the status line: Claude Code pipes the model into every
  * status-line render, and `recordSessionModel` persists it to
- * `.specship/session/model.json`; the MCP server reads it per call.
+ * `.specship/session/model.json`; the MCP server reads it per call. On a
+ * Gemini CLI session none of the Claude channels exist, so detection reads
+ * Gemini CLI's own surface in-server (`./gemini-session`, REQ-LOWEND-001).
  * Unknown model → `full` tier → identity (never compact blind).
  *
  * Tiers are capability names (`lite` / `standard` / `full`), not model-family
@@ -24,6 +26,7 @@ import * as fs from 'fs';
 import { modelMarkerPath, writeJsonAtomic, readJsonSafe } from '../statusline/paths';
 import { findNearestSpecShipRoot } from '../directory';
 import { resolveSetting } from '../config/runtime-settings';
+import { readGeminiSessionModel } from './gemini-session';
 
 export type ModelTier = 'lite' | 'standard' | 'full';
 
@@ -138,10 +141,18 @@ const TIER_RULES: Array<{ match: RegExp; tier: ModelTier }> = [
   { match: /opus|fable/, tier: 'full' },
 ];
 
-/** Map a model id / display name to a compaction tier. */
+/** The tier names themselves, accepted as override values. */
+const TIER_NAMES: ReadonlySet<string> = new Set<ModelTier>(['lite', 'standard', 'full']);
+
+/**
+ * Map a model id / display name to a compaction tier. A bare tier name
+ * (`lite` / `standard` / `full`) is also accepted, so the documented override
+ * can name a tier directly instead of a model id (REQ-LOWEND-001.A2).
+ */
 export function modelTier(model: string | null | undefined): ModelTier {
   if (!model) return 'full';
   const m = model.toLowerCase();
+  if (TIER_NAMES.has(m)) return m as ModelTier;
   for (const rule of TIER_RULES) {
     if (rule.match.test(m)) return rule.tier;
   }
@@ -149,17 +160,24 @@ export function modelTier(model: string | null | undefined): ModelTier {
 }
 
 /**
- * Resolve the active tier for a project (REQ-MODCTX-001, RUNSET-DOC):
- * `SPECSHIP_COMPACT=0` disables outright; `SPECSHIP_MODEL` overrides;
- * else the session model marker; else `full`. Both switches resolve
+ * Resolve the active tier for a project (REQ-MODCTX-001, REQ-LOWEND-001,
+ * RUNSET-DOC), in order:
+ *
+ *   SPECSHIP_COMPACT=0 → SPECSHIP_MODEL → Claude marker → Gemini settings/env → full
+ *
+ * `SPECSHIP_COMPACT=0` disables compaction outright; `SPECSHIP_MODEL` is the
+ * single documented override and names either a tier or a model id, so it wins
+ * over every auto-detect channel (REQ-LOWEND-001.A2). Both switches resolve
  * through the settings chain (env > project `.specship/settings.json` >
  * `~/.specship/settings.json`), so a repo can pin its behavior.
  *
  * The session model marker is a **Claude-only channel** (status line /
- * SessionStart hook / transcript tail). A Gemini CLI session writes no
- * marker, so detection there falls through to `SPECSHIP_MODEL`/settings —
- * which accepts Gemini ids — and otherwise resolves `full`. No Claude
- * channel is ever misread on a non-Claude host (REQ-GEMINI-007.A4).
+ * SessionStart hook / transcript tail). A Gemini CLI session writes no marker,
+ * so detection there reads Gemini CLI's own surface instead —
+ * `GEMINI_MODEL` / `.gemini/settings.json` (REQ-LOWEND-001.A1). No Claude
+ * channel is ever misread on a non-Claude host (REQ-GEMINI-007.A4), and with
+ * nothing detected anywhere the tier is `full` — never compact blind
+ * (REQ-LOWEND-001.A3).
  */
 export function detectModelTier(
   projectRoot: string | null,
@@ -169,9 +187,13 @@ export function detectModelTier(
   if (resolveSetting('SPECSHIP_COMPACT', projectRoot, env, homedir) === '0') return 'full';
   const forced = resolveSetting('SPECSHIP_MODEL', projectRoot, env, homedir);
   if (forced) return modelTier(forced);
-  if (!projectRoot) return 'full';
-  const marker = readJsonSafe<ModelMarker>(modelMarkerPath(projectRoot));
-  return modelTier(marker?.model);
+  if (projectRoot) {
+    const marker = readJsonSafe<ModelMarker>(modelMarkerPath(projectRoot));
+    if (marker?.model) return modelTier(marker.model);
+  }
+  // Gemini CLI leg: the workspace may not be an initialized SpecShip project,
+  // so fall back to the process cwd for the project-level settings lookup.
+  return modelTier(readGeminiSessionModel(projectRoot ?? process.cwd(), env, homedir));
 }
 
 /**

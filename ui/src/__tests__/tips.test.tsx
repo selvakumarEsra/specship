@@ -17,7 +17,7 @@ const TIP: ClaudeTip = {
   title: 'You read index.ts 17× in one session — specship_explore covers it',
   why: 'Re-reading burns tokens.',
   evidence: { session: 's1', detail: 'Read(src/index.ts) × 17' },
-  fix: 'specship_explore --symbol index',
+  fix: 'specship_explore "index.ts"',
   saving: '≈$0.10/read avoided',
 };
 

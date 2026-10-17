@@ -13,6 +13,8 @@
  */
 
 import { execFileSync } from 'child_process';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import { normalizePath } from './enforce';
 
 /** Thrown when `<ref>` is not a commit-ish this repository knows. */
@@ -69,4 +71,43 @@ export function changedFilesSince(projectRoot: string, ref: string): string[] {
   collect(git(projectRoot, ['diff', '--name-only', ref, '--']));
   collect(git(projectRoot, ['ls-files', '--others', '--exclude-standard']));
   return [...out].sort();
+}
+
+/**
+ * Unified diff text of the change under review (REQ-QGATE-004): tracked
+ * changes since `ref` (default HEAD), plus every untracked file rendered as a
+ * pseudo-diff of all-added lines — a brand-new file's suppressions are exactly
+ * as introduced as an edit's. Feed the result to `scanDisableComments`.
+ *
+ * Throws when the directory is not a git repository (callers decide whether
+ * an unavailable scan is skipped or fatal); binary/unreadable untracked files
+ * are silently omitted.
+ */
+export function workingTreeDiffText(projectRoot: string, ref = 'HEAD'): string {
+  const parts: string[] = [git(projectRoot, ['diff', '--no-color', ref, '--'])];
+  const untracked = git(projectRoot, ['ls-files', '--others', '--exclude-standard'])
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean);
+  for (const file of untracked) {
+    try {
+      const content = readFileSync(join(projectRoot, file), 'utf-8');
+      if (content.includes('\u0000')) continue; // binary
+      const lines = content.split('\n');
+      if (lines[lines.length - 1] === '') lines.pop();
+      parts.push(
+        [
+          `diff --git a/${file} b/${file}`,
+          '--- /dev/null',
+          `+++ b/${file}`,
+          `@@ -0,0 +1,${lines.length} @@`,
+          ...lines.map((l) => `+${l}`),
+          '',
+        ].join('\n'),
+      );
+    } catch {
+      // unreadable → skip
+    }
+  }
+  return parts.join('\n');
 }

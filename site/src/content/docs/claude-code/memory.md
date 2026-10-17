@@ -53,30 +53,33 @@ Default view. Left rail shows the four levels as groups; click any row to see th
 Each detail panel shows:
 
 - **Type pill** — Instructions / Notes / Imports
-- **Level pill** — Managed / User / Project / Directory / Notes
+- **Level pill** — Managed / User / Project / Directory / Notes, plus a **read-only** marker on managed policy files
 - **Path** — absolute filesystem path (with copy button)
-- **Stats** — tokens, lines, scope, modified time, session id (for notes)
+- **Stats** — tokens, lines, scope, modified time
+- **Session** — for notes, the session that saved it (click through to that session)
 - **Tags** — `#auth #REQ-AUTH-005` style tags for notes
 - **Rendered body** — Markdown rendered inline
-- **Imports** — for project/subdir files, the resolved `@import` paths each as a clickable row
-- **Actions** — Edit (opens in your editor), Copy contents, Forget (notes only)
+- **Imports** — for project/subdir files, the resolved `@import` files
+- **Copy contents** — copies the file body
 
 A type filter chip strip at the top (All / Instructions / Notes / Imports) narrows the view.
 
 ## The Effective view
 
-The other view. Shows the **merged memory** the agent will actually load — every instruction file concatenated in precedence order, then every note appended.
+The other view. Shows the **merged memory** the agent will actually load — every instruction file composed in load order, then every note appended.
 
-Each block carries:
+Instructions compose in **load order** — later files layer onto earlier ones, and `@import`s load with the file that references them. **Copy all** copies the composed result. Each block carries:
 
-- A **precedence number** (1, 2, 3, …) showing where it falls in the merge order.
+- A **position number** (1, 2, 3, …) showing where it falls in the load order.
 - A **level pill** matching its source.
 - The **source path** (mono).
 - The **rendered body**.
 
 Managed policy blocks have a lock icon — they're authoritative and override later blocks for the same topic.
 
-A separator splits the Instructions section (precedence-ranked) from the Notes section (retrieved facts, not precedence-ranked — they're appended whole).
+A separator splits the Instructions section from the Notes section (retrieved facts, not precedence-ranked — they're appended whole).
+
+The page reads from disk on load; **Reload** re-reads it after you edit a file. With no memory files at all, it says so instead of showing an empty layout.
 
 ## Why this matters
 
@@ -90,19 +93,25 @@ The Memory page is the **debugging UI for the agent's persistent state**.
 
 ## CLI
 
+The dashboard page is read-only. On the command line, `specship memory` manages the **memory rules SpecShip writes for you** — lessons you capture so a mistake isn't repeated. Each is a human-gated [reflection](/claude-code/improvements/) proposal, written either as a portable `~/.claude` memory note or as a marked block in your project `CLAUDE.md`:
+
 ```bash
-specship memory                            # show effective memory (default)
-specship memory --sources                  # show by source level
-specship memory --notes                    # show only notes
-specship memory --json                     # machine-readable
-specship memory edit ~/.claude/CLAUDE.md   # opens in your editor
-specship memory forget <note-id>           # delete a note
+# capture a lesson (the mistake + the rule to avoid it) on stdin
+specship memory capture --title "Run migrations before seeding" <<'LESSON'
+Seeding before migrations failed twice. Always run the migration step first.
+LESSON
+
+specship memory capture --target claude-md --title "…"   # target the project CLAUDE.md instead
+
+specship memory list                 # memory rules SpecShip has applied
+specship memory edit <id> --yes      # replace a rule's body (new body on stdin)
+specship memory remove <id> --yes    # take a rule down
 ```
+
+`capture` only stages a proposal — nothing is written until it's applied. `edit` and `remove` show a before/after preview and change nothing until you pass `--yes`. These commands only touch rules SpecShip wrote; your own `CLAUDE.md` content and notes are never edited.
 
 ## Editing safely
 
-When you edit a `CLAUDE.md`, the change takes effect on the **next Claude Code session start** — Claude Code reads memory once at session boot. Run `specship memory --effective` after an edit to verify the new merged content is what you want.
-
-For notes (`~/.claude/memory/*.md`), Claude Code re-reads on every turn — so changes apply immediately.
+When you edit a `CLAUDE.md`, the change takes effect on the **next Claude Code session start** — Claude Code reads memory once at session boot. Reload the Memory page's **Effective** view after an edit to check the composed result is what you want.
 
 → Next: [Heatmap](/claude-code/heatmap/) — the file/tool/subagent drill-down.

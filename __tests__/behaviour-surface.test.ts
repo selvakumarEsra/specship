@@ -173,3 +173,145 @@ describe('specship_spec behaviour_surface mode (REQ-BEHAVIOUR-001 integration)',
     expect(textOf(result)).toContain('not found');
   });
 });
+
+// ---- property lane: criterion test-shape classification (REQ-QGATE-001) ----
+
+import { classifyCriterionShape, propertyFramework, renderBehaviourSurface } from '../src/behaviour/behaviour-surface';
+
+function classifiesInvariantPhrasing(): void {
+  const invariants = [
+    'For all inputs, the parser MUST return a result or a typed error.',
+    'A skipped scan is never reported as passing.',
+    'The counter always resets after a successful login.',
+    'The encoder MUST NOT emit duplicate ids for any input.',
+    'Round-trip: decode(encode(x)) equals x for every x.',
+    'The operation is idempotent regardless of retry count.',
+  ];
+  for (const text of invariants) {
+    expect(classifyCriterionShape(text), text).toBe('invariant');
+  }
+}
+
+function classifiesExamplePhrasing(): void {
+  const examples = [
+    'A 6th failed attempt within 60 s returns 429 with Retry-After.',
+    'Clicking Save shows a toast and persists the draft.',
+    'The report names the spec ID, the link, and the kill rate.',
+  ];
+  for (const text of examples) {
+    expect(classifyCriterionShape(text), text).toBe('example');
+  }
+}
+
+function surfaceCarriesCriteriaWithShape(): void {
+  const s = computeBehaviourSurface({
+    requirementId: 'REQ-X',
+    requirementExists: true,
+    linkedNodes: [node('src/api/handler.py', 'handle', 'function')],
+    neighbourNodes: [],
+    criteria: [
+      { id: 'REQ-X.A1', text: 'Submitting the form persists the record.' },
+      { id: 'REQ-X.A2', text: 'Duplicate submissions are never persisted twice.' },
+    ],
+  });
+  expect(s.criteria).toEqual([
+    { id: 'REQ-X.A1', text: 'Submitting the form persists the record.', testShape: 'example' },
+    { id: 'REQ-X.A2', text: 'Duplicate submissions are never persisted twice.', testShape: 'invariant' },
+  ]);
+  // Rendered surface shows the classification and the property-test directive
+  // with the language-appropriate framework (A1, A2).
+  const md = renderBehaviourSurface(s);
+  expect(md).toContain('REQ-X.A2');
+  expect(md).toContain('invariant');
+  expect(md).toContain('Hypothesis');
+}
+
+function pickFrameworkFromLanguage(): void {
+  expect(propertyFramework([node('src/a.py', 'f', 'function')])).toBe('Hypothesis (@given)');
+  expect(propertyFramework([node('src/a.ts', 'f', 'function')])).toBe('fast-check');
+  expect(propertyFramework([])).toBe('fast-check');
+}
+
+function backCompatWithoutCriteria(): void {
+  const s = computeBehaviourSurface({
+    requirementId: 'REQ-X',
+    requirementExists: true,
+    linkedNodes: [],
+    neighbourNodes: [],
+  });
+  expect(s.criteria).toEqual([]);
+  expect(renderBehaviourSurface(s)).not.toContain('invariant');
+}
+
+describe('property lane (REQ-QGATE-001)', () => {
+  it('classifies invariant-phrased criteria (A1)', classifiesInvariantPhrasing);
+  it('classifies example-phrased criteria (A1)', classifiesExamplePhrasing);
+  it('carries criteria with testShape through the surface and render (A1, A2)', surfaceCarriesCriteriaWithShape);
+  it('picks the property framework from linked-node language (A2)', pickFrameworkFromLanguage);
+  it('is unchanged when no criteria are supplied', backCompatWithoutCriteria);
+});
+
+// ---- contract-fuzz leg for route-backed criteria (REQ-QGATE-003) ----
+
+import { renderContractFuzzCommand } from '../src/behaviour/behaviour-surface';
+
+function surfaceMarksRouteBackedSpecsEligible(): void {
+  const s = computeBehaviourSurface({
+    requirementId: 'REQ-R',
+    requirementExists: true,
+    linkedNodes: [
+      node('src/api/users.py', 'GET /api/users', 'route'),
+      node('src/api/users.py', 'create_user', 'function'),
+    ],
+    neighbourNodes: [node('src/api/other.py', 'GET /api/other', 'route')],
+  });
+  // Only DIRECTLY linked routes make the spec eligible (A1) — neighbours don't.
+  expect(s.contractFuzz.eligible).toBe(true);
+  expect(s.contractFuzz.routes.map((r) => r.name)).toEqual(['GET /api/users']);
+
+  const none = computeBehaviourSurface({
+    requirementId: 'REQ-N',
+    requirementExists: true,
+    linkedNodes: [node('src/api/users.py', 'create_user', 'function')],
+    neighbourNodes: [node('src/api/other.py', 'GET /api/other', 'route')],
+  });
+  expect(none.contractFuzz.eligible).toBe(false);
+  expect(renderBehaviourSurface(none)).not.toContain('Contract-fuzz');
+}
+
+function fuzzCommandScopedToLinkedRoutes(): void {
+  const cmd = renderContractFuzzCommand(
+    [
+      { name: 'GET /api/users', kind: 'route', filePath: 'src/api/users.py', startLine: 1, linkedDirectly: true },
+      { name: 'POST /api/users/{id}', kind: 'route', filePath: 'src/api/users.py', startLine: 9, linkedDirectly: true },
+    ],
+    'openapi.json',
+  );
+  expect(cmd).toContain('st run');
+  expect(cmd).toContain('openapi.json');
+  // Scoped to the linked routes only (A2), not the whole API.
+  expect(cmd).toContain('/api/users');
+  expect(cmd).toContain('--include-path-regex');
+  expect(cmd).not.toContain('--include-path-regex \'\'');
+}
+
+function renderedSurfaceEmitsReviewableFuzzLeg(): void {
+  const s = computeBehaviourSurface({
+    requirementId: 'REQ-R',
+    requirementExists: true,
+    linkedNodes: [node('src/api/users.py', 'GET /api/users', 'route')],
+    neighbourNodes: [],
+  });
+  const md = renderBehaviourSurface(s);
+  expect(md).toContain('Contract-fuzz leg');
+  expect(md).toContain('st run');
+  expect(md).toContain('GET /api/users');
+  // Emitted for review, never executed silently (A2).
+  expect(md.toLowerCase()).toContain('review');
+}
+
+describe('contract-fuzz leg (REQ-QGATE-003)', () => {
+  it('marks specs with directly-linked routes eligible and names them (A1)', surfaceMarksRouteBackedSpecsEligible);
+  it('emits a fuzz command scoped to the linked routes (A2)', fuzzCommandScopedToLinkedRoutes);
+  it('renders the fuzz leg as a reviewable command (A2)', renderedSurfaceEmitsReviewableFuzzLeg);
+});

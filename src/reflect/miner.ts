@@ -98,6 +98,9 @@ export function mineProposals(db: SqliteDatabase, ctx: ReflectContext): Proposal
   // WORKED, not only what wasted. Same human-gated proposal pipeline.
   out.push(...ruleCompletedRunRecipe(db, ctx));
   out.push(...ruleErrorWorkaround(db, ctx, forms));
+  // Auto-learn lanes (ALEARN-DOC).
+  out.push(...ruleStyleCorrection(db, ctx, forms));
+  out.push(...ruleDomainFactDraft(db, ctx, forms));
   return out;
 }
 
@@ -684,4 +687,128 @@ function ruleReferenceDoc(db: SqliteDatabase, ctx: ReflectContext, forms: PathFo
 function truncate(s: string, n: number): string {
   const t = s.replace(/\s+/g, ' ').trim();
   return t.length > n ? t.slice(0, n) + '…' : t;
+}
+
+// --- Auto-learn lanes (ALEARN-DOC) ---
+
+/**
+ * Style vocabulary (REQ-ALEARN-001.A1): a correction only enters the style
+ * lane when it names a code-style concern — naming, imports, formatting,
+ * logging, comments, typing. Everything else stays with the generic
+ * recurring-correction rule.
+ */
+const STYLE_CUE =
+  /\b(nam(e|ed|ing)|rename|camel\s*case|camelcase|snake_case|kebab|pascal\s*case|imports?|exports?|format(ting)?|prettier|eslint|ruff|lint|comments?|docstring|jsdoc|console\.log|logger|logging|print statement|indent(ation)?|semicolons?|quotes?|typing|type annotation|style|conventions?|idiom)\b/i;
+
+/**
+ * ALEARN-1 → style_rule (.specship/conventions.md): the same style-flavored
+ * correction given in 2+ DISTINCT sessions is a durable project convention
+ * (REQ-ALEARN-001). Session distinctness is the recurrence bar — one session
+ * repeating itself is emphasis, two sessions is a convention nobody recorded.
+ */
+function ruleStyleCorrection(db: SqliteDatabase, ctx: ReflectContext, forms: PathForms): Proposal[] {
+  const rows = db
+    .prepare(
+      `SELECT id, session_id, text FROM claude_prompts
+       WHERE text IS NOT NULL AND length(text) BETWEEN 12 AND 200
+         AND text NOT LIKE '<%' AND text NOT LIKE '%<command-name>%'
+         AND is_sidechain = 0
+         AND ${IN_PROJECT}
+       ORDER BY session_id, ts ASC
+       LIMIT 4000`,
+    )
+    .all(...forms) as Array<{ id: string; session_id: string; text: string }>;
+  const groups = new Map<string, { sessions: Set<string>; prompts: string[]; sample: string }>();
+  for (const r of rows) {
+    const trimmed = r.text.trim();
+    if (!CORRECTION_CUE.test(trimmed) || !STYLE_CUE.test(trimmed)) continue;
+    const key = trimmed.replace(/\s+/g, ' ').toLowerCase();
+    const g = groups.get(key) ?? { sessions: new Set<string>(), prompts: [], sample: trimmed };
+    g.sessions.add(r.session_id);
+    if (g.prompts.length < 8) g.prompts.push(r.id);
+    groups.set(key, g);
+  }
+  const recurring = [...groups.values()]
+    .filter((g) => g.sessions.size >= 2)
+    .sort((a, b) => b.sessions.size - a.sessions.size)
+    .slice(0, PER_RULE_LIMIT);
+  return recurring.map((g) =>
+    buildProposal(ctx, {
+      type: 'style_rule',
+      severity: 'warn',
+      nameSeed: `style-${g.sample}`,
+      title: `Convention: ${truncate(g.sample, 64)}`,
+      body: `This style correction was given in ${g.sessions.size} separate sessions. Recorded as a project convention, every future session starts already following it.`,
+      content: g.sample,
+      evidence: {
+        sessions: [...g.sessions],
+        prompts: g.prompts,
+        detail: `Style correction repeated across ${g.sessions.size} sessions`,
+      },
+    }),
+  );
+}
+
+/**
+ * ALEARN-2 → domain_fact (specs/domain/<slug>.md): an entity the domain gap
+ * seed marks undocumented, whose name ALSO recurs in this project's prompts
+ * across 2+ sessions, is business/product knowledge worth drafting
+ * (REQ-ALEARN-003). The proposal's content is a complete draft fact file; the
+ * human's preview→apply is the DOM-SPECSHIP-003 confirmation — nothing here
+ * writes under specs/domain/.
+ */
+function ruleDomainFactDraft(db: SqliteDatabase, ctx: ReflectContext, forms: PathForms): Proposal[] {
+  const entities = (ctx.domainGapEntities ?? []).filter((e) => e.name.length >= 4);
+  if (entities.length === 0) return [];
+  const out: Proposal[] = [];
+  for (const entity of entities.slice(0, 50)) {
+    const rows = db
+      .prepare(
+        `SELECT id, session_id FROM claude_prompts
+         WHERE text LIKE ? AND is_sidechain = 0 AND ${IN_PROJECT}
+         LIMIT 50`,
+      )
+      .all(`%${entity.name}%`, ...forms) as Array<{ id: string; session_id: string }>;
+    const sessions = new Set(rows.map((r) => r.session_id));
+    if (sessions.size < 2) continue;
+    const slug = entity.name
+      .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)/g, '');
+    const domId = `DOM-${slug.toUpperCase().replace(/-/g, '')}-001`.slice(0, 40);
+    const content = [
+      '---',
+      `id: ${domId}`,
+      `title: ${entity.name}`,
+      'type: term',
+      `specship_proposal: ${slug}`,
+      '---',
+      '',
+      `# ${entity.name}`,
+      '',
+      `_DRAFT mined from ${sessions.size} sessions — replace this paragraph with what`,
+      `\`${entity.name}\` (${entity.kind}) means in the business/product, then link it to its`,
+      'requirement spec(s) via `depends_on:` (domain facts attach at the spec tier,',
+      'DOM-SPECSHIP-002)._',
+      '',
+    ].join('\n');
+    out.push(
+      buildProposal(ctx, {
+        type: 'domain_fact',
+        severity: 'info',
+        nameSeed: slug,
+        title: `Draft domain fact: ${entity.name}`,
+        body: `\`${entity.name}\` is undocumented in the domain layer but discussed in ${sessions.size} sessions. Review and edit the draft, then apply to land it under specs/domain/.`,
+        content,
+        evidence: {
+          sessions: [...sessions],
+          prompts: rows.slice(0, 8).map((r) => r.id),
+          detail: `Undocumented ${entity.kind} mentioned across ${sessions.size} sessions`,
+        },
+      }),
+    );
+    if (out.length >= PER_RULE_LIMIT) break;
+  }
+  return out;
 }

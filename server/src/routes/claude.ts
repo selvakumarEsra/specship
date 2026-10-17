@@ -974,12 +974,17 @@ export async function registerClaudeRoutes(app: FastifyInstance): Promise<void> 
         title: `You read ${r.file.split('/').pop()} ${r.n}× in one session — specship_explore covers it`,
         why: 'Re-reading the same file burns input tokens every turn. A single structural query returns callers, callees, and linked specs at once.',
         evidence: { session: r.session_id, detail: `Read(${r.file}) × ${r.n}` },
-        fix: `specship_explore --symbol ${r.file.replace(/\.\w+$/, '').split('/').pop()}`,
+        // specship_explore takes a free-text `query` (no --symbol flag) — name
+        // the file's basename so the call is copy-pasteable (REQ-AUDFIX-006.A3).
+        fix: `specship_explore "${r.file.split('/').pop()}"`,
         saving: '≈$0.10/read avoided',
       });
     }
 
-    // Rule 2: "tool returned X tokens" — any single tool call with result_length > 50000.
+    // Rule 2: oversized tool result — any single tool call with result_length > 50000.
+    // result_length is a CHARACTER count; any token figure is a labeled
+    // estimate (~4 chars/token) and the $ figure derives from that estimate,
+    // never from the raw char count (REQ-AUDFIX-006.A2).
     const heavyResults = db.prepare(`
       SELECT id, session_id, tool_name, input_summary, result_length
       FROM claude_tool_calls
@@ -988,15 +993,16 @@ export async function registerClaudeRoutes(app: FastifyInstance): Promise<void> 
       LIMIT 5
     `).all(realRoot, mangledRoot) as Array<{ id: number; session_id: string; tool_name: string; input_summary: string; result_length: number }>;
     for (const r of heavyResults) {
+      const estTokens = Math.round(r.result_length / 4);
       tips.push({
         id: 'heavy_result:' + r.id,
         severity: 'error',
         icon: 'flame',
-        title: `${r.tool_name} returned ${Math.round(r.result_length / 1000)}k tokens — try a structural query`,
+        title: `${r.tool_name} returned ${Math.round(r.result_length / 1000)}k chars (~${Math.round(estTokens / 1000)}k tokens est.) — try a structural query`,
         why: 'Tools that dump raw content into context are the dominant cost driver. A structural query returns just what the agent needs.',
-        evidence: { session: r.session_id, detail: `${r.tool_name}(${r.input_summary.slice(0, 100)}) → ${r.result_length} tokens` },
-        fix: r.tool_name === 'Bash' ? 'specship_search instead of Bash(grep)' : 'specship_explore on the symbol',
-        saving: `~$${((r.result_length / 1_000_000) * 15).toFixed(2)} on this call`,
+        evidence: { session: r.session_id, detail: `${r.tool_name}(${r.input_summary.slice(0, 100)}) → ${r.result_length} chars (~${estTokens} tokens est.)` },
+        fix: r.tool_name === 'Bash' ? 'specship_search "<symbol>" instead of Bash(grep)' : 'specship_explore "<symbol or question>"',
+        saving: `~$${((estTokens / 1_000_000) * 15).toFixed(2)} est. on this call`,
       });
     }
 
@@ -1022,7 +1028,9 @@ export async function registerClaudeRoutes(app: FastifyInstance): Promise<void> 
         why: 'When the prompt prefix changes every turn, the 1h cache gets invalidated. Pinning a stable system-prompt prefix lets the cache absorb most of your input.',
         evidence: { session: r.id, detail: `cache_read=${(r.cr / 1_000_000).toFixed(2)}M / total=${(total / 1_000_000).toFixed(2)}M` },
         fix: 'Pin a stable system-prompt prefix in .claude/settings.json',
-        saving: '~$X.XX / session (model-dependent)',
+        // Not measurable per session without a model price table — state it
+        // qualitatively rather than render a placeholder (REQ-AUDFIX-006.A1).
+        saving: 'cached input bills at a fraction of fresh input',
       });
     }
 

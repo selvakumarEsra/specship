@@ -39,6 +39,15 @@ export interface BehaviourFlowElement {
   linkedDirectly: boolean;
 }
 
+/** How an acceptance criterion is best tested (REQ-QGATE-001). */
+export type CriterionTestShape = 'example' | 'invariant';
+
+export interface ClassifiedCriterion {
+  id: string;
+  text: string;
+  testShape: CriterionTestShape;
+}
+
 export interface BehaviourSurface {
   requirementId: string;
   /** False when the requirement id resolves to no spec (REQ-BEHAVIOUR-001.A4). */
@@ -47,6 +56,15 @@ export interface BehaviourSurface {
   ui: BehaviourFlowElement[];
   /** Backend / batch flows — API / job test targets. */
   backend: BehaviourFlowElement[];
+  /** Acceptance criteria classified example|invariant (REQ-QGATE-001.A1). */
+  criteria: ClassifiedCriterion[];
+  /**
+   * Contract-fuzz eligibility (REQ-QGATE-003.A1): a spec whose DIRECT links
+   * include `route`-kind nodes describes an API contract and can be fuzzed
+   * from the OpenAPI schema. Neighbour routes don't qualify — the fuzz run
+   * must target only what the requirement actually links to (A2).
+   */
+  contractFuzz: { eligible: boolean; routes: BehaviourFlowElement[] };
 }
 
 export interface BehaviourSurfaceDeps {
@@ -57,6 +75,44 @@ export interface BehaviourSurfaceDeps {
   linkedNodes: Node[];
   /** 1-hop caller/callee neighbours of the linked nodes. */
   neighbourNodes: Node[];
+  /** Acceptance criteria (id + bullet text) for shape classification. */
+  criteria?: Array<{ id: string; text: string }>;
+}
+
+/**
+ * Classify a criterion's test shape (REQ-QGATE-001.A1) — deterministic
+ * keyword/shape heuristic, no LLM. Invariant cues are universal quantifiers
+ * and negative universals ("for all", "every", "never", "always", "MUST
+ * NOT"), plus the classic property shapes (round-trip, idempotence,
+ * input-independence). Everything else is an example: a concrete
+ * stimulus→response pair.
+ */
+export function classifyCriterionShape(text: string): CriterionTestShape {
+  const t = text.toLowerCase();
+  const cues: RegExp[] = [
+    /\bfor (all|every|any)\b/,
+    /\b(every|any) (input|request|value|call|x)\b/,
+    /\bnever\b/,
+    /\balways\b/,
+    /\bmust not\b/,
+    /\bround-?trip\b/,
+    /\bidempotent\b/,
+    /\bregardless of\b/,
+    /\bno matter\b/,
+    /\barbitrary\b/,
+  ];
+  return cues.some((re) => re.test(t)) ? 'invariant' : 'example';
+}
+
+/**
+ * The property-testing framework the generated skeleton should use
+ * (REQ-QGATE-001.A2), picked from the linked implementation's file types:
+ * Python → Hypothesis, everything else (this tool's world is JS/TS) →
+ * fast-check.
+ */
+export function propertyFramework(linkedNodes: Node[]): string {
+  const py = linkedNodes.some((n) => /\.pyi?$/i.test(n.filePath));
+  return py ? 'Hypothesis (@given)' : 'fast-check';
 }
 
 /** A node is UI when it's a component or lives in a front-end file. */
@@ -84,7 +140,10 @@ function toElement(node: Node, linkedDirectly: boolean): BehaviourFlowElement {
  */
 export function computeBehaviourSurface(deps: BehaviourSurfaceDeps): BehaviourSurface {
   if (!deps.requirementExists) {
-    return { requirementId: deps.requirementId, found: false, ui: [], backend: [] };
+    return {
+      requirementId: deps.requirementId, found: false, ui: [], backend: [], criteria: [],
+      contractFuzz: { eligible: false, routes: [] },
+    };
   }
 
   const seen = new Set<string>();
@@ -113,7 +172,38 @@ export function computeBehaviourSurface(deps: BehaviourSurfaceDeps): BehaviourSu
   ui.sort(order);
   backend.sort(order);
 
-  return { requirementId: deps.requirementId, found: true, ui, backend };
+  const criteria: ClassifiedCriterion[] = (deps.criteria ?? []).map((c) => ({
+    id: c.id,
+    text: c.text,
+    testShape: classifyCriterionShape(c.text),
+  }));
+
+  const routes = [...ui, ...backend].filter((e) => e.kind === 'route' && e.linkedDirectly);
+  return {
+    requirementId: deps.requirementId, found: true, ui, backend, criteria,
+    contractFuzz: { eligible: routes.length > 0, routes },
+  };
+}
+
+/**
+ * The reviewable Schemathesis invocation for a route-backed spec
+ * (REQ-QGATE-003.A2) — scoped to the linked routes via a path regex, never
+ * the whole API. Emitted as text for a human/agent to review and run; this
+ * module executes nothing.
+ */
+export function renderContractFuzzCommand(routes: BehaviourFlowElement[], schemaRef: string): string {
+  const paths = routes.map((r) => {
+    // Route names carry an optional method prefix ("GET /api/users") —
+    // extract the path and normalize `{id}`/`:id` params to a wildcard
+    // BEFORE regex-escaping the literal segments.
+    const path = (r.name.match(/\/\S*/) ?? [r.name])[0];
+    return path
+      .split(/\{[^}]+\}|:\w+/)
+      .map((seg) => seg.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+      .join('[^/]+');
+  });
+  const regex = `^(${[...new Set(paths)].join('|')})$`;
+  return `st run ${schemaRef} --include-path-regex '${regex}' --checks all`;
 }
 
 /** Render a behaviour surface as markdown for the `specship_spec` response. */
@@ -147,5 +237,48 @@ export function renderBehaviourSurface(surface: BehaviourSurface): string {
 
   section('UI tier (Playwright)', surface.ui, 'No UI surface — author backend/batch tests only.');
   section('Backend / batch tier', surface.backend, 'No backend surface found.');
+
+  // Property lane (REQ-QGATE-001): classified criteria with the directive for
+  // invariant-shaped ones. Rendered only when criteria were supplied, so the
+  // pre-existing surface output is unchanged for callers that don't pass them.
+  if (surface.criteria.length > 0) {
+    const fw = propertyFramework([...surface.backend, ...surface.ui].filter((e) => e.linkedDirectly)
+      .map((e) => ({ filePath: e.filePath }) as Node));
+    lines.push('## Acceptance criteria — test shape');
+    for (const c of surface.criteria) {
+      lines.push(`- ${c.id} [${c.testShape}] — ${c.text}`);
+    }
+    if (surface.criteria.some((c) => c.testShape === 'invariant')) {
+      lines.push('');
+      lines.push(
+        `_Author each **invariant** criterion as a property-based test with ${fw} — ` +
+          'generate inputs, assert the stated property; do not hard-code a single example. ' +
+          'Example-shaped criteria stay concrete example tests._'
+      );
+    }
+    lines.push('');
+  }
+
+  // Contract-fuzz leg (REQ-QGATE-003): emitted as a reviewable command for the
+  // linked routes — review the schema ref and run it yourself; nothing here
+  // executes it.
+  if (surface.contractFuzz.eligible) {
+    lines.push('## Contract-fuzz leg (Schemathesis)');
+    lines.push('This requirement links to API route(s) — its input space is fuzzable from the OpenAPI schema:');
+    for (const r of surface.contractFuzz.routes) {
+      lines.push(`- [route] \`${r.name}\` — ${r.filePath}:${r.startLine}`);
+    }
+    lines.push('');
+    lines.push('```bash');
+    lines.push(renderContractFuzzCommand(surface.contractFuzz.routes, '<openapi-schema (path or URL)>'));
+    lines.push('```');
+    lines.push('');
+    lines.push(
+      '_Review before running (staging only). Record the outcome through link verification: ' +
+        'a failing run → result "fail" with the failing case as reason; a passing run is ' +
+        'evidence under the existing rules — it does not mint tests-kind links._'
+    );
+    lines.push('');
+  }
   return lines.join('\n').trimEnd();
 }

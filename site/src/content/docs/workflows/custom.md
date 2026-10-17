@@ -3,9 +3,9 @@ title: Writing custom workflows
 description: A worked example — building a "code-review" workflow from scratch under .specship/workflows/.
 ---
 
-The bundled `spec-*` workflows are tied to specs. Most teams quickly want workflows that aren't — a code-review pipeline that runs on any PR, a dependency-bump pipeline, a security-audit pipeline. Custom workflows live under `.specship/workflows/` and are first-class.
+The bundled `spec-*` workflows are tied to specs. Most teams quickly want workflows that aren't — a code-review pipeline for any branch, a dependency-bump pipeline, a security-audit pipeline. Custom workflows live under `.specship/workflows/` and are first-class.
 
-Walk-through: a **`code-review`** workflow that takes a target branch, asks an agent to review the diff, runs lint + types in parallel, and posts the verdict.
+Walk-through: a **`code-review`** workflow that takes a target branch, runs lint and typecheck against the change, asks an agent to review the diff, and pauses for you to read the verdict.
 
 ## 1. Scaffold the file
 
@@ -20,22 +20,29 @@ What does the user need to supply?
 
 ```yaml
 name: code-review
-description: Asynchronous code review with parallel lint + types
+description: Review the current branch against a target, with lint + typecheck evidence
 
 inputs:
-  - { name: TARGET_BRANCH, default: main }
-  - { name: REVIEWER_STYLE, choices: [strict, normal, light], default: normal }
+  - name: TARGET_BRANCH
+    description: Branch to diff against
+    default: main
+  - name: REVIEWER_STYLE
+    description: strict, normal or light
+    default: normal
 ```
 
-That's it. SpecShip generates a form from these inputs for the desktop UI's *Run* button and accepts `--input TARGET_BRANCH=main` on the CLI.
+That's it. The dashboard generates a launch form from these inputs, and the CLI accepts `--input TARGET_BRANCH=main`. Defaults apply whenever an input isn't supplied.
 
-## 3. Set isolation
+## 3. Decide on isolation
+
+A review doesn't edit code, so it can run in your checkout — leave `worktree:` out. If you'd rather review a clean checkout of the branch while you keep working, add:
 
 ```yaml
-isolation: worktree
+worktree:
+  enabled: true
 ```
 
-Code review doesn't modify code — but reading the diff in an isolated worktree means concurrent reviews don't trip on each other's `git diff`. Cheap insurance.
+The worktree branches from your current branch, so it sees exactly what you've committed.
 
 ## 4. The plan: a DAG
 
@@ -43,125 +50,136 @@ The shape we want:
 
 ```
         ┌── lint ──┐
-diff ───┤          ├── verdict
+diff ───┤          ├── verdict ── ack
         └── types ─┘
 ```
 
-`diff` first → `lint` and `types` in parallel → `verdict` fans in.
+`diff` first → `lint` and `types` → `verdict` fans in → a human gate. Nodes run one at a time in dependency order; the DAG says what waits for what.
 
-## 5. Write the steps
+## 5. Write the nodes
 
 ```yaml
-steps:
+nodes:
   - id: diff
-    runner: bash
-    command: |
-      git diff $TARGET_BRANCH...HEAD --stat > diff_stat.txt
-      git diff $TARGET_BRANCH...HEAD       > diff.patch
-    output: diff.patch
+    kind: bash
+    bash: |
+      git --no-pager diff $INPUT.TARGET_BRANCH...HEAD --stat
+      echo
+      git --no-pager diff $INPUT.TARGET_BRANCH...HEAD | head -c 200000
 
   - id: lint
-    runner: bash
+    kind: bash
     depends_on: [diff]
-    command: pnpm lint --output-file lint.txt
-    output: lint.txt
+    timeout: 300000
+    bash: npm run lint 2>&1 && echo "LINT=clean" || echo "LINT=failed"
 
   - id: types
-    runner: bash
+    kind: bash
     depends_on: [diff]
-    command: pnpm tsc --noEmit > types.txt 2>&1
-    output: types.txt
+    timeout: 300000
+    bash: npx tsc --noEmit 2>&1 && echo "TYPES=clean" || echo "TYPES=failed"
 
   - id: verdict
-    runner: agent
+    kind: prompt
     depends_on: [lint, types]
+    allowed_tools:
+      - Read
+      - Grep
+      - mcp__specship__specship_explore
+      - mcp__specship__specship_callers
+      - mcp__specship__specship_impact
     prompt: |
-      Review the diff at file://diff.patch.
+      Review this change. Reviewer style: $INPUT.REVIEWER_STYLE
 
-      Reviewer style: $REVIEWER_STYLE
-      Lint output:    file://lint.txt
-      Types output:   file://types.txt
+      The diff:
+      $diff.output
 
-      Use specship_explore to check how the changed symbols are used
-      elsewhere in the codebase.
+      Lint:
+      $lint.output
+
+      Typecheck:
+      $types.output
+
+      Use specship_explore and specship_impact to check how the changed
+      symbols are used elsewhere in the codebase.
 
       Write a structured review with:
       - severity (block / warn / nit) per finding
-      - one-line summary
-      - file:line and a 3-line code excerpt for each issue
+      - file:line and a one-line explanation for each issue
       - an overall verdict (approve / request changes / discuss)
-    output: review.md
+
+  - id: ack
+    kind: approval
+    depends_on: [verdict]
+    message: |
+      Review for HEAD vs $INPUT.TARGET_BRANCH:
+
+      $verdict.output
 ```
+
+A few things worth noticing:
+
+- **Inputs are `$INPUT.<NAME>`**, earlier outputs are **`$<nodeId>.output`**. In a `bash` node, substituted values are shell-quoted for you.
+- The lint and typecheck nodes **always exit 0** and print a marker instead. A failing lint shouldn't stop the review — it's evidence for it. (When you *do* want a failure to stop the run, let the command's exit code through, as the bundled `quality_recheck` node does.)
+- The `verdict` agent has **no Edit, Write or Bash** — `allowed_tools` keeps a reviewer read-only.
 
 ## 6. Try it
 
 ```bash
+specship workflow list            # check it's discovered, with no validation errors
 specship workflow run code-review \
   --input TARGET_BRANCH=main \
   --input REVIEWER_STYLE=strict
 ```
 
-You'll see:
+The command runs until the run finishes or pauses, then prints its status:
 
 ```
-✓ diff       (0.4s)
-✓ lint       (4.2s)     [parallel]
-✓ types      (12.1s)    [parallel]
-⠦ verdict    in progress…
+Run 3f9c2a71-… → paused
 ```
 
-When `verdict` finishes, the worktree contains:
+Every node's output is saved under `.specship/artifacts/runs/<runId>/nodes/` (`diff.md`, `lint.md`, `types.md`, `verdict.md`, `ack.md` once approved). Read `verdict.md` directly, or open the run in the dashboard (`specship desktop` → **Runs**) to read it alongside the event timeline, including each tool call the reviewer made.
 
-```
-.specship/artifacts/runs/<runId>/
-  diff.patch
-  diff_stat.txt
-  lint.txt
-  types.txt
-  review.md          ← the agent's structured review
+## 7. Close the gate
+
+```bash
+specship workflow approve <runId> --comment "agreed, fixing the two blockers"
+specship workflow resume <runId>
 ```
 
-Open `review.md` directly, or open the desktop UI's run-detail page to read it inline with the timeline.
-
-## 7. Add an approval gate (optional)
-
-If you want a human-in-the-loop step before the workflow is considered "done", add an `approval` runner:
+Approval only records the decision; `resume` carries the run past the gate. The dashboard's **Approve** button does both in one click. If you'd rather the agent take another pass, reject with a reason and add an `on_reject` prompt to the gate:
 
 ```yaml
   - id: ack
-    runner: approval
+    kind: approval
     depends_on: [verdict]
-    message: "Read the review?"
-    inspect:
-      - file://review.md
+    message: |
+      $verdict.output
+    on_reject:
+      prompt: Re-review the change, paying particular attention to the reviewer's objection.
+      max_attempts: 2
 ```
 
-CLI: `specship workflow approve <runId>` to resume past it.
+`specship workflow reject <runId> --reason "you missed the SQL injection in users.ts"` parks the run; `specship workflow resume <runId>` runs the `on_reject` prompt with your reason appended, then pauses at the gate again.
 
-## 8. Wire to Git hooks (optional)
-
-To run this automatically on every PR locally:
+## 8. Run it from a Git hook (optional)
 
 ```bash
 # .git/hooks/pre-push
-specship workflow run code-review \
-  --input TARGET_BRANCH=$(git rev-parse --abbrev-ref --symbolic-full-name @{u} | sed 's|.*/||') \
-  --background \
-  --notify-on-complete
+specship workflow run code-review --input TARGET_BRANCH=main
 ```
 
-The `--background` flag returns immediately. `--notify-on-complete` writes the run id to `~/.specship/notifications/` — the desktop UI picks it up and surfaces a toast when the verdict lands.
+`workflow run` blocks until the run finishes or reaches the `ack` gate, so expect the push to wait for the review. Drop the `ack` node if you want the hook to simply record a review you'll read later.
 
 ## Patterns we like
 
-A few patterns we keep coming back to in custom workflows:
-
-| Pattern | Where to use |
+| Pattern | How |
 |---|---|
-| **Parallel safety checks** | Lint + types + secret-scan all branch off the same diff node. |
-| **Conditional approval** | `when:` an approval is required only if the diff touches certain paths (e.g. anything in `src/auth/`). |
-| **Retry on flaky** | `retry: { attempts: 3, on: [exit_nonzero] }` on the test step. |
-| **Agent → script → agent** | An agent produces a structured plan, a `script` step parses + filters it, a second agent acts on the filtered subset. |
-| **Loop until green** | A `loop:` runner that re-runs `fix` + `test` until tests pass or `max_iterations: 3` is hit. |
+| **Safety checks as evidence** | Lint + types + secret-scan nodes that print markers, all feeding one reviewer node. |
+| **Conditional gate** | `when: '$INPUT.AREA == "auth"'` on an approval node, so only sensitive changes wait for a human. |
+| **Retry on flaky** | `retry: { max_attempts: 3, on_error: all }` on a test node. |
+| **Agent → script → agent** | An agent prints JSON, a `script` node filters it, a second agent reads `$filter.output.items`. |
+| **Fix, then prove** | A fix `prompt` node followed by a `bash` node that re-runs the check and exits non-zero if it still fails — the bundled lint gate's shape. There's no loop construct; bounded retries come from `retry:` or an approval gate's `on_reject`. |
+| **Read-only reviewers** | `allowed_tools` without Edit / Write / Bash on any node whose job is to judge, not change. |
 
-→ Next: [Isolation & worktrees](/workflows/isolation/) — what's actually happening under `.specship/wt/`.
+→ Next: [Isolation & worktrees](/workflows/isolation/) — where a run's worktree lives and how it's cleaned up.

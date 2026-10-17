@@ -1,77 +1,58 @@
 ---
 title: Heatmap
-description: Which files do my sessions touch most? Which tools are token-heavy? Which subagents eat the budget? File / Tool / Subagent drill-downs, each with their own detail rail.
+description: Where tool calls land — a file treemap, tools ranked by the tokens they return, and Task calls by subagent type, each with its own drill-down rail.
 ---
 
-The **Heatmap** page is for spotting patterns in your Claude Code activity that you wouldn't notice prompt-by-prompt. It has three lanes:
+The **Heatmap** page is for spotting patterns in your Claude Code activity that you wouldn't notice prompt-by-prompt. It covers your ingested sessions across all projects, and a range selector (Today / This week / This month / All time) at the top filters everything on the page.
 
-| Lane | What |
+## Summary tiles
+
+| Tile | What |
 |---|---|
-| **Files** | A grid of cells, one per file touched in the range, color-intensity by tool-call count. |
-| **Tools** | A horizontal bar chart, one bar per tool, length by total invocations, color by total result tokens. |
-| **Subagents** | Same shape as Tools, but grouped by subagent name (attribution via `is_sidechain`). |
+| **Tool calls** | Total tool calls in the range. |
+| **Result tokens (est.)** | Tokens returned to context by those calls, estimated as characters ÷ 4. |
+| **Busiest file** | The file with the most tool calls. |
+| **Heaviest tool** | The tool that returned the most tokens. |
 
-A range selector (Today / This week / This month / Custom) sits at the top and filters every lane.
+Token figures derive from recorded result sizes, so they're always labeled `est.`.
 
-## Files lane
+## Files
 
-One cell per file, sized roughly by path length so longer paths get more room to render their text. Color intensity is **calls per file** (linear, normalized to the page's max).
+A **treemap** with one cell per file touched in the range. Toggle the metric between **Calls** and **Tokens**; hover a cell for its path, call count, estimated result tokens, and tokens per call.
 
-Hover any cell for the full path + call count. Click for a **detail rail** that slides in on the right with:
+Click a cell for the **file rail**:
 
 | Section | Content |
 |---|---|
-| **Header** | File path (with copy button) + 7-day trend sparkline of calls. |
-| **Heavy-tool callout** | "_`Read` returned 396k tokens here — a structural query would cover it in a fraction._" — surfaces when a single tool on this file dominated the token budget. |
-| **Tool breakdown** | Which tools touched this file, how many times each, total result tokens, with color-flagged bars when a tool's output was disproportionately large. |
-| **Sessions that touched it** | Clickable rows that deep-link to the Sessions page for the specific session. |
-| **Show in graph** | Routes to `/graph?focus=<symbol>` for the most-likely matching symbol in the file. |
-| **Reveal in editor** | Opens the file in your default editor. |
+| **Header** | File path, with a copy button. |
+| **Tool calls** | Total calls, with a 7-day trend sparkline when there's activity. |
+| **Heavy-tool callout** | When one tool returned a large result here — "_`Read` returned an estimated ~40k tokens here. A structural query would cover it in a fraction._" |
+| **Tool breakdown** | Which tools touched the file, how many times each, and their estimated result tokens, color-flagged when large. |
+| **Sessions** | Every session that touched it, with calls, estimated tokens, and model — each links to the session on the [Sessions](/claude-code/sessions/) page. |
 
-The detail rail is where you'd realize that `auth.ts` is being read 17 times per session — and decide to replace those Reads with one `specship_explore`.
+This is where you'd notice `auth.ts` being read over and over — and decide to answer those questions with one `specship_explore`.
 
-## Tools lane
+## Tools
 
-Horizontal bars, one per tool (Read, Grep, Bash, Edit, Write, the `specship_*` family, etc.). The bar length is **invocation count**; the fill color encodes **average result tokens per invocation** — clay/peach for normal, deep red for the heavy ones.
+Every tool ranked by **estimated result tokens**, with its call count, tokens per call, and total. Rows are color-coded by tokens per call — heavy, warm, or lean.
 
-Click any tool bar for a detail rail with:
+Click a tool for the **tool rail**:
 
-- **Per-call stats** — total invocations, total result tokens, average tokens per call (color-flagged when high).
-- **Token-waste tip** — _"`Bash(grep)` dumps whole matching lines; `specship_search` covers it in ~99% fewer tokens."_ — engine-style, with copyable replacement command.
-- **Top files hit by this tool** — bar list. Tells you which targets this tool was used on most.
-- **Sessions where this tool fired** — clickable session rows.
-
-The Tools rail is where you'd realize that 60% of your token budget for the week went to `Bash(grep)` calls that could have been one `specship_search`.
+- **Calls**, **Result tokens (est.)**, and **Sessions**, plus the average tokens per call (flagged when high).
+- **Top inputs** — the inputs this tool was called with most, each with its call count and result size. Tells you exactly which files or patterns a `Read` or `Grep` kept hitting.
+- **Used in** — the sessions where the tool ran, linking to each.
 
 ## Subagents lane
 
-Same shape as the Tools rail, but grouped by **subagent name** rather than tool. SpecShip extracts each subagent's name from the parent prompt's Task call (`subagent_type: ...`) and attributes the sidechain prompts' costs to it.
+Task calls grouped by `subagent_type`. Click a subagent for its rail:
 
-Click any subagent bar for:
+- **Invocations** and **Sessions** counts.
+- **Recent invocations** — each Task's description (or the start of its prompt), linking to the session it ran in.
+- **See related tips** — jumps to the [Tips](/claude-code/tips/) page.
 
-- **Invocations**, total tokens, **total cost in $** for this subagent alone.
-- **Avg per invocation** — useful for spotting subagents that consistently burn budget.
-- **Plan-ref waste tip** when a subagent is heavy: _"Pass a `--plan-ref` so the subagent reads a stable plan from disk instead of re-reading every file every time."_
-- **Sessions** where this subagent ran.
-- **Related tips** — engine-generated suggestions for this subagent specifically.
+## Closing a rail
 
-The Subagents rail is the one that answers "which Task-spawned thing ate $30 of my budget last week?"
-
-## Drill-down composition
-
-All three rails share the same component, so:
-
-- They all support **deep-linking** — every session row in any rail routes to the Sessions deep-dive.
-- They all have a **"Show in graph"** affordance where it makes sense (file → first symbol in file).
-- They all **persist their selection in the URL** — `/heatmap?file=src/auth.ts` is shareable.
-
-Selecting a cell or bar **reflows the main grid** to make room for the detail rail; another click on the same cell closes it.
-
-## Filtering across all lanes
-
-The range selector at the top filters all three. The desktop UI also exposes a project picker — pick a project and the heatmap scopes to its sessions only. Pick nothing and you see all projects merged.
-
-The heatmap lives in the desktop UI — start it with `specship desktop` and open the **Heatmap** page.
+Selecting a cell or bar opens its rail beside the page; clicking the same item again, or the rail's close button, closes it.
 
 ## What you'll do next
 
@@ -79,9 +60,8 @@ The heatmap surfaces the patterns. The fix is usually one of:
 
 | Pattern | Fix |
 |---|---|
-| One file gets Read repeatedly | Add a `// @implements` pragma so the agent finds it via the graph. Or steer prompts to `specship_explore` for that file. |
-| `Bash(grep)` dominates token budget | Replace grep with `specship_search` in your tips/prompts. |
-| One subagent is 70% of the cost | Restructure your workflow to either inline the subagent's job or give it a stable plan reference. |
-| Cache rate < 30% on certain prompts | Pin a stable system-prompt prefix in your project's CLAUDE.md. |
+| One file gets read repeatedly | Ask with `specship_explore` naming the file or its symbols — it returns the verbatim source in one call. |
+| `Grep` / `Bash` grep returns huge results | Use `specship_search` to locate a symbol, or `specship_explore` to read the area. |
+| One subagent type runs constantly | Check whether the work needs delegating at all, or give the subagent a narrower, stable brief. |
 
 → Next: [Costs & cache](/claude-code/costs/) — the financial view.

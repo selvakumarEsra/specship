@@ -10,7 +10,7 @@
  */
 
 /** The kind of durable artifact a proposal produces. */
-export type ProposalType = 'memory_rule' | 'skill' | 'hook';
+export type ProposalType = 'memory_rule' | 'skill' | 'hook' | 'style_rule' | 'domain_fact';
 
 /** Severity, reusing the tips engine's scale. `high` drives sweep notifications. */
 export type ProposalSeverity = 'high' | 'warn' | 'info';
@@ -19,7 +19,7 @@ export type ProposalSeverity = 'high' | 'warn' | 'info';
 export type ProposalState = 'open' | 'applied' | 'undone' | 'dismissed';
 
 /** The concrete file the apply writes. */
-export type TargetKind = 'claude_md' | 'memory_note' | 'command' | 'settings_hook';
+export type TargetKind = 'claude_md' | 'memory_note' | 'command' | 'settings_hook' | 'conventions' | 'domain_fact';
 
 /** What the proposal was derived from, so the user can judge it (REQ-REFLECT-001). */
 export interface ProposalEvidence {
@@ -40,7 +40,12 @@ export type ProposalPayload =
   | { kind: 'claude_md'; markerId: string; block: string }
   | { kind: 'memory_note'; slug: string; note: string; indexLine: string }
   | { kind: 'command'; name: string; content: string }
-  | { kind: 'settings_hook'; event: string; matcher: string; entry: Record<string, unknown> };
+  | { kind: 'settings_hook'; event: string; matcher: string; entry: Record<string, unknown> }
+  // Style-convention block in the SpecShip-owned conventions file (REQ-ALEARN-001).
+  | { kind: 'conventions'; markerId: string; block: string }
+  // Draft domain fact file under specs/domain/ (REQ-ALEARN-003) — the human's
+  // preview→apply is the DOM-SPECSHIP-003 confirmation.
+  | { kind: 'domain_fact'; slug: string; content: string };
 
 /** A single reflection proposal. */
 export interface Proposal {
@@ -89,4 +94,10 @@ export interface ReflectContext {
   projectRoot: string;
   /** Home directory (for ~/.claude/memory notes). */
   homeDir: string;
+  /**
+   * Undocumented domain-worthy entities from the domain gap seed
+   * (REQ-ALEARN-003) — supplied by the caller (the SpecShip instance), since
+   * the miner has no graph access. Absent → the domain-fact lane is silent.
+   */
+  domainGapEntities?: Array<{ name: string; kind: string }>;
 }

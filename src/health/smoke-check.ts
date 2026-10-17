@@ -48,8 +48,8 @@ export interface SmokeProbes {
 }
 
 const FTS5_REMEDIATION =
-  'Use the published bundle (node 24 with FTS5) or, when running from source, ' +
-  '`npm install --save-dev better-sqlite3` so FTS5 works on a host Node built without it.';
+  'Run on Node 24 (its built-in node:sqlite ships FTS5) or install better-sqlite3 ' +
+  '(`npm install --save-dev better-sqlite3`) so FTS5 works on a host Node built without it.';
 
 /** Open a throwaway SQLite db, hand it to `fn`, then clean up the file + WAL/SHM. */
 function withTempDb<T>(fn: (db: ReturnType<typeof createDatabase>) => T): T {

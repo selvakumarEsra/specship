@@ -87,6 +87,10 @@ export default defineConfig({
 						{ label: 'Writing specs', slug: 'specs/writing-specs' },
 						{ label: 'Spec links & drift', slug: 'specs/links-and-drift' },
 						{ label: 'The @implements pragma', slug: 'specs/implements-pragma' },
+						{ label: 'Test evidence & coverage', slug: 'specs/test-evidence' },
+						{ label: 'Quality gates', slug: 'specs/quality-gates' },
+						{ label: 'Ideas, briefs & domain facts', slug: 'specs/ideas-and-domain-facts' },
+						{ label: 'Spec commands', slug: 'specs/spec-commands' },
 					],
 				},
 				{
@@ -98,6 +102,8 @@ export default defineConfig({
 						{ label: 'Framework routes', slug: 'guides/framework-routes' },
 						{ label: 'Affected tests in CI', slug: 'guides/affected-tests' },
 						{ label: 'Indexing a project', slug: 'guides/indexing' },
+						{ label: 'Flow diagrams', slug: 'guides/flow-diagrams' },
+						{ label: 'Architecture & code health', slug: 'guides/code-health' },
 					],
 				},
 				{
@@ -109,8 +115,9 @@ export default defineConfig({
 						{ label: 'Memory', slug: 'claude-code/memory' },
 						{ label: 'Heatmap', slug: 'claude-code/heatmap' },
 						{ label: 'Costs & cache', slug: 'claude-code/costs' },
-						{ label: 'SpecShip Impact', slug: 'claude-code/specship-impact' },
 						{ label: 'Tips engine', slug: 'claude-code/tips' },
+						{ label: 'Steering & session start', slug: 'claude-code/steering' },
+						{ label: 'Low-end models', slug: 'claude-code/low-end-models' },
 						{ label: 'Self-improvement', slug: 'claude-code/improvements' },
 					],
 				},
@@ -118,6 +125,7 @@ export default defineConfig({
 					label: 'Integrations',
 					items: [
 						{ label: 'JIRA', slug: 'guides/jira' },
+						{ label: 'Gemini CLI', slug: 'guides/gemini-cli' },
 					],
 				},
 				{
@@ -127,6 +135,7 @@ export default defineConfig({
 						{ label: 'CLI', slug: 'reference/cli' },
 						{ label: 'Library API', slug: 'reference/api' },
 						{ label: 'Languages', slug: 'reference/languages' },
+						{ label: 'Claude Code integration', slug: 'reference/integrations' },
 						{ label: 'Configuration', slug: 'getting-started/configuration' },
 					],
 				},

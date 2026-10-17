@@ -32,6 +32,28 @@ applies it.
    ROUTINE
    ```
 
+### Lanes (ALEARN-DOC)
+
+The capture has three lanes — pick by what the lesson IS:
+
+- **skill** (default, above) — a reusable multi-step routine.
+- **style** — a code-style convention the user stated or corrected ("always
+  use named exports", "use our logger, not console.log"). Capture with
+  `--lane style`; title = short rule name, stdin = the rule in one or two
+  sentences. On apply it lands in `.specship/conventions.md` and is injected
+  into every future session's cheatsheet.
+- **domain** — business/product knowledge the user explained (what a term
+  means, a rule of the domain, a product decision). Capture with
+  `--lane domain`; title = the term/concept, stdin = the fact in plain
+  sentences. On apply it lands as a draft fact under `specs/domain/`
+  (the apply IS the human confirmation — DOM-SPECSHIP-003).
+
+```bash
+specship reflect --capture --lane style --title "<rule name>" <<'RULE'
+<the convention>
+RULE
+```
+
 4. **Tell the user** the proposal id from the output and that they can review
    the open proposals with `specship reflect` (add `--json` for the full
    bodies). Nothing lands until they apply it. The CLI is the only review

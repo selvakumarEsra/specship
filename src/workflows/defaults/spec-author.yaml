@@ -111,13 +111,15 @@ nodes:
       [the agent fills these in based on the draft above]
     capture_response: true
     on_reject:
+      # The reviewer's rejection reason is appended automatically.
       prompt: |
-        The draft was rejected with this feedback. Revise the draft to
+        The draft was rejected (feedback follows). Revise the draft to
         address it. Keep all existing IDs stable so any pre-existing links
-        survive.
+        survive. Output the full revised draft.
 
-        Feedback:
-        $gap_review.output
+        Current draft:
+        $draft.output
+      revises: draft
       max_attempts: 3
 
   - id: incorporate
@@ -177,15 +179,15 @@ nodes:
       $incorporate.output
     capture_response: true
     on_reject:
+      # The reviewer's rejection reason is appended automatically.
       prompt: |
-        Final approval was rejected. Revise the draft per the feedback,
-        re-run the quality review pass, and produce a new draft.
-
-        Feedback:
-        $finalize.output
+        Final approval was rejected (feedback follows). Revise the draft
+        per the feedback, re-run the quality review pass, and output the
+        full revised draft.
 
         Current draft:
         $incorporate.output
+      revises: incorporate
       max_attempts: 2
 
   - id: write_file

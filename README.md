@@ -41,12 +41,15 @@ That symlinks `specship` onto your `PATH`, then asks where to wire Claude Code �
 
 ```bash
 specship install                                          # full install: retrieval + spec-driven development
-specship install --yes --location local                   # non-interactive, project-local
+specship install --yes                                    # non-interactive (project-local by default)
 specship install --with-jira --with-designer              # also enable the optional integrations
 specship install --no-sdd                                 # retrieval-only (skip the spec-driven layer)
+specship install --skip-statusline --skip-index           # opt out of the defaulted status line / initial index
 ```
 
-<sub>`specship install` is **wiring-only** — it never installs the binary or touches npm (get the CLI via step 1, or the offline bundle). It writes the SpecShip MCP server into `~/.claude.json` (global) or `./.mcp.json` (project-local; `--path <repo>` targets a specific repo), the auto-allow permissions list into Claude's `settings.json`, all slash commands, the spec-driven-development steering (on by default; `--no-sdd` opts out), a per-prompt nudge that steers the agent to the graph before Read/Grep, and a session-start cheat-sheet of SpecShip's commands (`SPECSHIP_NO_CHEATSHEET=1` to silence). The two integrations that talk to an external service — **JIRA** (your Atlassian instance) and **Designer** (claude.ai, experimental) — are strictly opt-in via `--with-jira` / `--with-designer`, and a later plain re-install preserves them.</sub>
+<sub>Interactive install asks one question — **this project or all projects** (`--location local|global`; `--yes` picks local). Everything else is defaulted and named in the install summary with its opt-out flag: the auto-allow permissions list (`--no-permissions`), the status-line segment (`--skip-statusline`; an existing status line is never overwritten), and the initial index of a local install (`--skip-index`). A local spec-driven install also offers to make `specship check` gate on drift and behaviour.</sub>
+
+<sub>`specship install` is **wiring-only** — it never installs the binary or touches npm (get the CLI via step 1, or the offline bundle). It writes the SpecShip MCP server into `~/.claude.json` (global) or `./.mcp.json` (project-local; `--path <repo>` targets a specific repo), the auto-allow permissions list into Claude's `settings.json`, the `/specship:*` slash commands, the spec-author skill, the spec-driven-development steering (on by default; `--no-sdd` opts out), a per-prompt nudge that steers the agent to the graph before Read/Grep, a once-per-session reminder when the agent reaches for a raw file search in an indexed project without consulting the graph (advisory — the search always proceeds), and a session-start cheat-sheet of SpecShip's commands (`SPECSHIP_NO_CHEATSHEET=1` to silence). The two integrations that talk to an external service — **JIRA** (your Atlassian instance) and **Designer** (claude.ai, experimental) — are strictly opt-in via `--with-jira` / `--with-designer`, and a later plain re-install preserves them. Run `specship doctor` any time to check the runtime, FTS5, MCP boot, and index.</sub>
 
 <details>
 <summary><strong>Environment variables — every runtime switch</strong></summary>
@@ -61,11 +64,11 @@ An actual environment variable (shell `export`, or Claude Code's `settings.json`
 
 | Variable | What it does |
 |---|---|
-| `SPECSHIP_NO_STEERING=1` | Turn off the per-prompt "use the graph first" nudge |
+| `SPECSHIP_NO_STEERING=1` | Turn off the per-prompt "use the graph first" nudge and the raw-search reminder |
 | `SPECSHIP_NO_CHEATSHEET=1` | Turn off the session-start cheat-sheet of SpecShip commands |
 | `SPECSHIP_NO_STATUSLINE_TIPS=1` | Turn off the rotating usage tip on the status-line segment |
-| `SPECSHIP_COMPACT=0` | Disable the smaller-model output compaction entirely |
-| `SPECSHIP_MODEL=<model>` | Force the model tier for compaction (normally auto-detected) |
+| `SPECSHIP_COMPACT=0` | Disable the smaller-model tuning entirely (compact output, compact guidance, slimmer tool menu) |
+| `SPECSHIP_MODEL=<tier-or-id>` | Force the model tier — a tier name (`lite`/`standard`/`full`) or a Claude/Gemini model id; always wins over detection. Normally auto-detected: from the Claude Code session model, or on Gemini CLI from `GEMINI_MODEL` / `.gemini/settings.json`. An unrecognized model is never trimmed |
 | `SPECSHIP_INTEGRATIONS` | Written by the installer for `--with-jira`/`--with-designer` — which optional tool groups the MCP server exposes |
 | `SPECSHIP_WATCH_DEBOUNCE_MS` | Auto-sync debounce window (default 2000, clamped 100ms–60s) |
 | `SPECSHIP_NO_DAEMON=1` | Disable the file watcher (sandboxed environments) |
@@ -117,7 +120,7 @@ If the file already exists, merge the `specship` entry into your existing `mcpSe
 
 You still need `specship init -i` in each project (step 3) so there's an index to query.
 
-<sub>Verified against Gemini CLI 0.56.0. This gives Gemini CLI the SpecShip **MCP tools** only — the Claude Code install additionally wires slash commands, auto-sync hooks, the retrieval-steering nudge, the `specship-explorer` subagent, and the status-line segment, none of which have a Gemini equivalent here. Retrieval benchmarks were measured on Claude Code.</sub>
+<sub>Verified against Gemini CLI 0.56.0. This gives Gemini CLI the SpecShip **MCP tools** only — the Claude Code install additionally wires slash commands, auto-sync hooks, the retrieval-steering nudge, the `specship-explorer` subagent, and the status-line segment, none of which have a Gemini equivalent here. Output is sized to the Gemini model you run — read from `GEMINI_MODEL` or `model` in `.gemini/settings.json` (read-only), so a Flash session gets the compact Lite-tier output. Retrieval benchmarks were measured on Claude Code.</sub>
 
 ### 3. Initialize each project
 
@@ -126,7 +129,7 @@ cd your-project
 specship init -i
 ```
 
-<sub>`specship init` creates the local `.specship/` index directory; adding `-i` (`--index`) also builds the initial graph in the same step. Without `-i`, run `specship index` afterwards.</sub>
+<sub>A local `specship install` already does this for its target repo; you need it for every project when you installed globally (or with `--skip-index`). `specship init` creates the local `.specship/` index directory and builds the initial graph in the same step (the old `-i` flag is still accepted but no longer needed).</sub>
 
 ### Uninstall
 
@@ -152,31 +155,57 @@ title: Authentication
 # Login must rate-limit failed attempts
 
 The login endpoint rejects more than 5 failed attempts per IP per minute.
+
+implementations:
+  - src/auth/login.ts:LoginController.handle
+
+verifies:
+  - tests/auth.test.ts:rejectsSixthFailedAttempt
 ```
 
 After `specship init -i`, the agent can:
 
-- `mcp__specship__specship_spec("REQ-AUTH-001")` — fetch spec + linked code + state
-- `mcp__specship__specship_link_assert(...)` — declare a link after implementing
+- `mcp__specship__specship_spec("REQ-AUTH-001")` — fetch spec + linked code + test evidence + state
+- `mcp__specship__specship_link_assert(...)` — declare a link after implementing (written back into the spec's `implementations:` block, so it survives a full re-index)
 - `mcp__specship__specship_drifted` — review queue when spec or code moves
 
-The link layer carries state — `implemented`, `verified`, `drifted`, `broken`, `orphaned` — keyed on logical identity (file + qualified name) so links survive ordinary refactors. Drop `// @implements REQ-AUTH-001` in your code as a backstop when the agent forgets to assert.
+The link layer carries state — `implemented`, `verified`, `drifted`, `broken`, `orphaned` — keyed on logical identity (file + qualified name) so links survive ordinary refactors and spec edits. Drop `// @implements REQ-AUTH-001` on a symbol as a backstop when the agent forgets to assert.
 
 ```bash
 specship drifted                          # review queue
 specship drifted --fail-on=broken,drifted  # CI gate
 ```
 
+### Quality gates & test evidence
+
+A requirement proves it is **tested**, not just implemented. `verified` is earned only when a linked test passes.
+
+- **Declare evidence** with a `verifies:` block (on a requirement or an individual acceptance criterion), an `@verifies REQ-X` comment on a test, or simply by naming the requirement ID in a test title — such tests are linked automatically.
+- **`specship coverage [spec]`** — which requirements and criteria have test evidence, per requirement and per criterion (the MCP spec tool and dashboard read the same numbers).
+- **`specship verify --report <file>`** — ingest a vitest JSON report and promote/demote test-evidence links from the real run, recording the evidence for audit.
+- **`specship lint`** — structural errors (missing/duplicate IDs, orphaned criteria, requirements without criteria) and quality warnings in spec files; needs no index, exits non-zero only on errors.
+- **`specship check`** — the enforcement gate: drift, architecture fitness, maintainability, behaviour, and newly introduced lint/type **suppressions** (`noqa`, `eslint-disable`, `@ts-ignore`, …). `--since <ref>` scopes drift and behaviour to what your change touched; `--enable-gate <checks…>` makes checks blocking. An opt-in **mutation-score** check (`enforce.mutation` in `specship.config.json`, reading a Stryker-compatible report) flags requirements whose tests don't kill enough mutants. `specship suppressions` runs the suppression scan alone for CI.
+- **Behaviour tests** — `/specship:spec behaviour <ID>` authors end-to-end tests for a requirement. Criteria stating an invariant ("for all", "never", round-trips) are steered to property-based tests (Hypothesis / fast-check); route-backed requirements also get a ready-to-review Schemathesis contract-fuzz command — always shown, never run automatically.
+
+See [Links & drift](https://specship.cc/specs/links-and-drift/) and [Writing specs](https://specship.cc/specs/writing-specs/).
+
+### Flow diagram
+
+`specship diagram` renders the project's entry points and the call chains they reach as a Mermaid flowchart in `docs/flow-diagram.md`, viewable on GitHub with no extra tooling. Once the file exists (or `diagram.enabled` is set in `specship.config.json`), every `sync` / `index` keeps it current; output is deterministic, so a flow change is a small reviewable diff. Tune with `--output`, `--max-nodes`, `--depth`.
+
 ### Spec-driven workflows
 
-A YAML workflow engine (`specship workflow run <name>`) drives the agent through deterministic spec → implement → verify → link loops in an isolated git worktree, with approval gates so a non-coding spec author reviews the plan and final diff. Four bundled workflows ship by default:
+A YAML workflow engine (`specship workflow run <name>`) drives the agent through deterministic spec → implement → verify → link loops in an isolated git worktree, with approval gates so a non-coding spec author reviews the plan and final diff. Bundled workflows:
 
-- `spec-implement` — plan → approve → implement → test → link → final review
+- `spec-implement` — plan → approve → implement → lint/typecheck + suppression gate → test → link → adversarial review → final approval (on the real `git diff`)
+- `spec-implement-mixed` — the same steps and gates, with a larger model planning and a smaller one executing
+- `spec-author` — draft → gap-fill review → quality review → approve → write the spec
 - `spec-fix` — diagnose a drifted link → fix code → re-verify
 - `spec-verify` — run tests, promote `implemented` links to `verified`
 - `spec-relink` — re-attach an orphan after a refactor
+- `claude-design-implement` — import a Claude Design into a spec ready for implementation
 
-Customize by dropping your own `<project>/.specship/workflows/<name>.yaml` (project tier overrides bundled defaults). The matching slash commands `/specship:spec`, `/ss-implement`, `/ss-drifted`, `/ss-fix`, `/ss-relink` are installed into Claude Code by `specship install`.
+Customize by dropping your own `<project>/.specship/workflows/<name>.yaml` (project tier overrides bundled defaults). In Claude Code you drive all of this through the slash-command doors `specship install` adds: `/specship:spec` (author, implement, review, behaviour, design…), `/specship:check` (gate, `drifted`, `fix`, `relink`, `health`, `claudemd`), `/specship:explore`, `/specship:learn`, and `/specship:day` (your JIRA sprint board → pick → start).
 
 ---
 
@@ -185,7 +214,8 @@ Customize by dropping your own `<project>/.specship/workflows/<name>.yaml` (proj
 SpecShip observes your Claude Code sessions and gets smarter every time you use it — without ever changing anything behind your back:
 
 - **It crystallizes what worked.** A completed multi-step workflow run becomes a reusable recipe proposal; a command you kept correcting into a working form becomes a "use this form" rule; recurring corrections are captured with the context they followed. Run `/specship:learn` to crystallize the current session's workflow on demand.
-- **Everything is a human-gated proposal.** Each one shows a preview diff of exactly what it would write (a CLAUDE.md rule, a memory note, a slash command, a hook); nothing lands until you apply it, and every apply is undoable. Review from the dashboard's **Improvements** page or `specship reflect`.
+- **It learns your conventions and your domain.** A style correction you've repeated across sessions ("use our logger, not console.log") becomes a proposed project convention, kept in a file SpecShip owns (never your CLAUDE.md) and injected at the start of every session once applied. A term your sessions keep discussing without domain documentation gets a drafted fact file under `specs/domain/`. Capture either on demand with `/specship:learn` (style or domain lane). The background pass piggybacks on sync at most every few hours; turn it off with `reflect.autoSweep: false` in `specship.config.json`.
+- **Everything is a human-gated proposal.** Each one shows a preview diff of exactly what it would write (a CLAUDE.md rule, a memory note, a convention, a domain fact, a slash command, a hook); nothing lands until you apply it, and every apply is undoable. Review open proposals with `specship reflect` and act on them with `specship reflect apply|undo|dismiss <hash>`; the session-start cheat-sheet tells you when learnings are waiting.
 - **It remembers your work.** A four-tier SQLite memory — the code **graph** (deterministic truth), your **specs** (human-confirmed intent), the full **task history** (every session, tool call, cost, outcome), and the **crystallized rules/skills** you approved. `specship_explore` surfaces a "Prior work" section when past sessions edited the files at hand, so the agent starts from what was already done.
 - **Deterministic and local.** Proposals cite the actual sessions that triggered them; recall is a SQL join, never an LLM summary; nothing leaves your machine.
 
@@ -207,8 +237,10 @@ When Claude Code explores a codebase, it spawns **Explore agents** that scan fil
 | **Always Fresh** | File watcher uses native OS events (FSEvents/inotify/ReadDirectoryChangesW) with debounced auto-sync — the graph stays current as you code, zero config |
 | **20+ Languages** | TypeScript, JavaScript, Python, Go, Rust, Java, C#, PHP, Ruby, C, C++, Objective-C, Swift, Kotlin, Dart, Lua, Luau, Svelte, Liquid, Pascal/Delphi |
 | **Framework-aware Routes** | Recognizes web-framework routing files and links URL patterns to their handlers across 14 frameworks |
-| **Desktop UI** | Live dashboard for cost, drift, tool-call heatmap, cache analytics, SpecShip token impact, plus a project picker that auto-discovers every project you've used Claude Code in |
-| **Self-Improving** | Mines your sessions for what worked and what wasted — and proposes rules, skills, and hooks you approve with a preview diff. Prior-work recall built into every explore |
+| **Spec Traceability** | Requirements linked to the code that implements them and the tests that prove them, with drift detection, test-evidence coverage, spec lint, and a CI enforcement gate |
+| **Small-Model Ready** | On a lightweight model (Haiku, Gemini Flash) SpecShip switches to its Lite tier — compact guidance, a slimmer tool menu, and fewer files returned with complete source — so cheap models still answer in one call |
+| **Desktop UI** | Live dashboard for cost, drift, traceability, tool-call heatmap, cache analytics, and MCP servers, plus a project picker that auto-discovers every project you've used Claude Code in |
+| **Self-Improving** | Mines your sessions for what worked, what wasted, your style conventions, and your domain terms — and proposes rules, skills, conventions, and facts you approve with a preview diff. Prior-work recall built into every explore |
 | **100% Local** | The core never leaves your machine — no API keys, no external services, SQLite only. The two optional integrations that do talk to a service (JIRA → your Atlassian instance, Designer → claude.ai, experimental) are strictly opt-in: `specship install --with-jira` / `--with-designer` |
 
 <details>
@@ -241,84 +273,34 @@ The handful of cases where manual `specship sync` makes sense: the watcher is di
 
 ## Dashboard
 
-`specship desktop` boots a single-process Fastify server that renders the dashboard **server-side** on `http://127.0.0.1:4242/`. One port serves both the API and the dashboard. No Electron, no SPA build, no auth — loopback only, and its dependency tree stays lean enough to install behind a locked-down registry.
+`specship desktop` boots a single-process Fastify server on `http://127.0.0.1:4242/` that serves both the HTTP API and the prebuilt dashboard. No Electron, no auth — loopback only (`--port`, `--host`, `--no-web` for API-only, `--mcp` to also run the MCP server in the same process).
 
 ![SpecShip Desktop dashboard — stat tiles, recent neighborhood mini-graph, tips, tool-call heatmap and recent-prompt rollup at a glance](https://raw.githubusercontent.com/selvakumarEsra/specship/main/assets/screenshots/dashboard.png?v=1)
 
-The dashboard is designed to answer four questions in one glance — **what is the structural state of my codebase, what needs attention, what did my last session cost, and what should I do about it.** The zones, top-to-bottom:
+The home page answers four questions in one glance — **what is the structural state of my codebase, what needs attention, what did my last session cost, and what should I do about it**:
 
-#### Status strip · top of every page
+- **Status strip** — node count, edge count, drift count, and index freshness for the selected project, on every page.
+- **Project picker** — auto-discovers every project under `~/.claude/projects/`, flags each as initialized or not, and switches every project-scoped page to it.
+- **Stat tiles** — last session cost, tool calls in the selected range (Today / This week / This month / All time), subagent spend share, and the drift queue size.
+- **Recent neighborhood** — an interactive mini-graph around the files you most recently touched; click a node to open it in the Graph page.
+- **Tips** — rule-based findings over your transcripts (repeated file re-reads, oversized tool results, cache misses), each with a concrete fix, Apply and Dismiss.
+- **Tool-call heatmap, recent prompts by cost, and cache analytics** — where tool calls land, which prompts were expensive, and your cache read rate with an estimated saving.
 
-Project path · backend (`better-sqlite3` / `node:sqlite`) · node count · edge count · drift count · last-index time. Always visible — drift > 0 turns amber, index time pulses red after 30 minutes of staleness.
+Sessions whose model has no pricing row are marked "unpriced" rather than shown as $0.00; figures are measured, estimated-and-labeled, or absent.
 
-#### Project picker · top bar
+#### Beyond the home page
 
-Auto-discovers every project under `~/.claude/projects/`, decodes the slug back to its absolute path, flags each one with `initialized` / `not init` / `missing`, and shows the most-recently-touched first. A live SSE stream pushes new entries the moment you open a project in Claude Code — no refresh. Pick one and every codegraph-scoped surface (status, graph, specs, drift, workflows, memory) switches to that project's data.
-
-#### Stat tiles · 4 across
-
-| Tile | Surfaces |
+| Page | What |
 |---|---|
-| **Last session cost** | Total $ for your most recent Claude Code session, sourced from the JSONL transcripts ingested in the background. Click → Sessions page with that session focused. |
-| **Tool calls · range** | Count of tool calls in the selected time range (Today / This week / This month / All time, picker top-right). Click → Heatmap. |
-| **Subagent spend** | What % of your token spend went to Task-tool subagents. Hot signal: above ~40 % usually means a workflow is over-delegating. Click → Heatmap → Subagents lane. |
-| **Drift queue** | Spec-link rows in `drifted`, `broken`, or `orphaned` state. Click → Drift queue. The sidebar item also carries this badge so it's visible from any page. |
-
-#### Recent neighborhood · interactive mini-graph
-
-A small live `<app-graph-canvas>` panel — pan/zoom, click any node to deep-link into `/graph?focus=<id>`. By default it shows a 15–25 node slice around the file you most recently edited. When the API returns no rows (fresh dev, no project indexed), it falls back to a seed neighborhood with all four node kinds (purple `code` / blue `spec` / green `test` / teal `route`) and a drifted spec, so the visual language is always on screen.
-
-#### Tips panel
-
-Rule-based pattern-matcher over your transcripts. Each tip has a severity bar (`error` / `warn` / `info`), a one-line title, a concrete `Fix` (often a copyable command), and an estimated saving. Examples that show up in real usage:
-
-> _You read `auth.ts` 17 times last session. Same answer via `specship_explore` in 1 call._
->
-> _Bash(grep) returned 82k tokens. `specship_search` covers this in 600._
->
-> _Cache miss rate on your evening sessions is 91%. Could be your system prompt drifts each turn._
-
-`Apply` jumps to the related surface; `Dismiss` snoozes the tip (snooze persistence lands in the next release).
-
-#### Tool-call heatmap strip
-
-One cell per touched file, sized roughly by path length so longer paths get more room. Color intensity tracks tool-call volume in the selected range. Hover for the path + counts; click to drill into the file's tool breakdown with a sessions list and a "heavy tool" callout (e.g. _"`Read` returned 396 k tokens here — a structural query would cover it in a fraction"_).
-
-#### Recent prompts · by cost
-
-Last 8–12 user prompts across your sessions, with a per-prompt cost bar and token rollup. Expensive prompts pop red; cache-hit % shows next to each. Click a row to jump into the Sessions deep-dive scrolled to that prompt — token-split micro-bars, every tool call with its result-token weight, and tagged "heavy tool" rows.
-
-#### Cache analytics card
-
-One big number — your **cache read rate** — plus a 2×2 breakdown: creation tokens (with 1h / 5m split), read tokens (charged at ~10 %), estimated dollars saved this week, week-over-week delta. The single biggest controllable knob for keeping Claude Code cheap, surfaced where you can see it without going hunting.
-
-> **Project & time scope.** Every numeric on this page respects the project picker's active selection and the range selector top-right. Switching projects re-fetches without a page reload.
-
-#### SpecShip Impact · is SpecShip earning its keep?
-
-A dedicated page that puts SpecShip's own token cost next to what it saved, per prompt → session → project → all-projects (the Session Detail page carries the same per-prompt chip and per-session line). Two numbers, deliberately kept apart:
-
-- **Spend — measured.** The exact tokens SpecShip's own tool calls put into the conversation.
-- **Saved — estimated.** For each code-graph query, the size of the files its symbols live in — what a `Read` of them would have cost — deduplicated per prompt.
-
-**"Saved" is a conservative lower bound.** It credits only a single direct read of the named files, *not* the multi-call grep + read exploration (re-reads, dead-ends, extra turns) SpecShip actually replaces — the end-to-end win that the [benchmarks](#why-specship) measure with a with-vs-without comparison. So treat spend as exact and saved as a floor; a fixed per-session tool-definition overhead is shown separately, and every estimate is marked `est.`.
-
-#### Beyond the dashboard
-
-Same shell, same shortcuts, more depth:
-
-| Surface | What |
-|---|---|
-| **Graph** | Full xyflow code explorer — pan/zoom, fuzzy search, kind filters, click-to-recenter, side panel with callers / callees / linked specs / "Reveal in editor". Hierarchical / Force / Spec-anchored layouts. |
-| **Specs** | Doc tree + Markdown spec detail; per-spec linked-code list with state pills and one-click `Implement` / `Verify` / `Edit spec` / `Show in graph` actions. |
-| **Drift queue** | Filterable list of links needing attention. Bulk re-verify, bulk re-attach via the relink workflow. |
-| **Workflows + Runs** | Run any bundled or project-tier workflow, watch its DAG advance live via SSE, approve / reject pause gates, inspect per-step artifacts (plan.md, diff.md, test_results.md). |
-| **Sessions / Heatmap / Costs / Compare / Tips** | The Claude Code analytics suite — sessions deep-dive with per-prompt expand, file/tool/subagent heatmap drilldowns, per-day cost line + by-model donut, cross-project comparison. |
-| **SpecShip Impact** | Measured tokens SpecShip's tools spent vs. an estimated (conservative) count of tokens saved, per prompt / session / project / all-projects, with a spend-vs-saved trend and per-tool breakdown. |
-| **Memory** | The full `CLAUDE.md` hierarchy (managed / user / project / subdir) plus `@import` resolution plus `~/.claude/memory/*.md` agent-written notes. Sources view + Effective (merged-precedence) view. |
-| **Design system** | The visual reference for the entire app — every token, palette swatch, semantic state, button/pill family, and the 4 px node-color legibility test that the graph relies on. |
-
-A live boot splash animates the Wake logomark assembling on first launch each session — then fades into the dashboard. Subsequent reloads within the same session skip straight to the dashboard.
+| **Graph** | The live knowledge-graph canvas — force or hierarchical layout, kind filters, and a selection rail with the node's relationships. |
+| **Specs** | Requirement tree with funnel stat tiles, per-requirement coverage chips, and an Ideas branch; the detail pane separates **Linked code** from **Proving tests** and has a working **Verify** action. |
+| **Traceability** | One row per requirement: code links, test links, criteria met, verdict, and drift age. |
+| **Drift queue** | Every drifted / broken / orphaned link, filterable, with repair buttons that launch the fix / re-verify / re-attach workflows. |
+| **Runs + Workflows** | Launch any bundled or project-tier workflow, follow its run, approve or reject its gates, and inspect per-step artifacts. |
+| **Sessions / Heatmap / Costs / Compare projects** | The Claude Code analytics suite — per-session prompt timelines, file/tool/subagent heatmap drill-downs, daily spend and by-model breakdown, cross-project comparison. |
+| **Memory** | The full `CLAUDE.md` hierarchy plus memory-tool notes, as individual sources and as the composed effective view. |
+| **MCP** | Your configured MCP servers with live status, per-tool call stats, and enable/disable. |
+| **Settings** | Appearance, database backend, transcript-ingest toggle, and the running version. |
 
 ---
 
@@ -349,21 +331,22 @@ SpecShip detects web-framework routing files and emits `route` nodes linked by `
 
 ```bash
 npm i -g @specship/specship@latest
-specship install --yes           # writes ~/.claude.json + ~/.claude/settings.json
-cd your-project && specship init -i
+cd your-project
+specship install --yes           # writes ./.mcp.json + ./.claude/settings.json, then indexes this project
 # restart Claude Code
 ```
 
 The installer:
-- Writes Claude Code's MCP server config (`~/.claude.json` for global, `./.mcp.json` for project-local)
-- Writes the auto-allow permissions list into `~/.claude/settings.json`
-- For local installs, also runs `specship init` against the current directory
+- Writes Claude Code's MCP server config (`./.mcp.json` for project-local, `~/.claude.json` for global)
+- Writes the auto-allow permissions list into Claude's `settings.json`
+- Adds the SpecShip status-line segment (never overwriting an existing one)
+- For local installs, also runs `specship init` and the initial index against the target repo
 
 **Non-interactive (scripting / CI):**
 
 ```bash
-specship install --yes                       # global, auto-allow on
-specship install --location=local --yes      # project-local
+specship install --yes                       # project-local, everything defaulted
+specship install --location=global --yes     # every project (then `specship init -i` per repo)
 specship install --print-config              # print snippet, no file writes
 specship install --print-config --target gemini   # Gemini CLI settings snippet
 specship install --no-permissions            # skip auto-allow list
@@ -371,11 +354,16 @@ specship install --no-permissions            # skip auto-allow list
 
 | Flag | Values | Default |
 |---|---|---|
-| `--location` | `global`, `local` | prompt |
-| `--yes` | (boolean) | prompt every step |
+| `--location` | `global`, `local` | prompt (`local` with `--yes`) |
+| `--yes` | (boolean) | prompt for location |
+| `--path` | repo to wire and initialize | current directory |
 | `--no-permissions` | (boolean) skip Claude auto-allow list | permissions on |
+| `--skip-statusline` | (boolean) don't add the status-line segment | added |
+| `--skip-index` | (boolean) don't index the project | indexed |
+| `--no-sdd` | (boolean) retrieval-only install | spec-driven layer on |
+| `--with-jira` / `--with-designer` | (boolean) enable an optional integration | off |
 | `--print-config` | dump the MCP snippet and exit (no file writes) | — |
-| `--target` | `claude`, `gemini` — which snippet `--print-config` prints | `claude` |
+| `--target` | `claude`, `gemini`, `claude,gemini` — which agents to wire (and which snippet `--print-config` prints) | `claude` |
 
 <details>
 <summary><strong>Manual Setup (Alternative)</strong></summary>
@@ -428,7 +416,7 @@ SpecShip's MCP server delivers its usage guidance to Claude Code **automatically
 - **Trust the results — don't re-verify with grep**, and check the staleness banner after edits.
 - If `.specship/` doesn't exist yet, offer to run `specship init -i`.
 
-The exact text is `src/mcp/server-instructions.ts` — the single source of truth.
+Sessions on a lightweight model (the Lite tier — Haiku, Gemini Flash) receive a short, imperative version of this guidance covering only the tools they see; frontier and mid-tier models get the full text. The exact text is `src/mcp/server-instructions.ts` — the single source of truth.
 
 </details>
 
@@ -470,11 +458,17 @@ The exact text is `src/mcp/server-instructions.ts` — the single source of trut
 ## CLI Reference
 
 ```bash
+# Setup
 specship                         # Run interactive installer
-specship install                 # Run installer (explicit)
+specship install                 # Run installer (explicit; see flags above)
 specship uninstall               # Completely remove SpecShip (wiring + index + ~/.specship + binary; --keep-data to only unwire)
+specship doctor [path]           # Diagnose the install (runtime, FTS5, MCP boot, index)
+specship update                  # Update to the latest release (--check to only report)
 specship init [path]             # Initialize in a project (--index to also index)
 specship uninit [path]           # Remove SpecShip from a project (--force to skip prompt)
+specship unlock [path]           # Remove a stale lock file that is blocking indexing
+
+# Index & query
 specship index [path]            # Full index (--force to re-index, --quiet for less output)
 specship sync [path]             # Incremental update
 specship status [path]           # Show statistics
@@ -484,17 +478,47 @@ specship callers <symbol>        # Find what calls a function/method (--limit, -
 specship callees <symbol>        # Find what a function/method calls (--limit, --json)
 specship impact <symbol>         # Analyze what code is affected by changing a symbol (--depth, --json)
 specship affected [files...]     # Find test files affected by changes (see below)
-specship jira configure          # Connect to JIRA (--base-url, --email/--api-token or --pat, --deployment, --project)
-specship jira test               # Verify the connection + validate configured transition names against your workflow
-specship jira track              # Status of issues SpecShip has picked (--project, --path)
-specship jira transition <key> [state]  # Move an issue to a state, or list its available transitions (--list)
-specship jira release <version>  # Stamp a fixVersion + "shipped in" comment onto issues (--keys, --project)
+specship diagram [path]          # Mermaid flow diagram into docs/flow-diagram.md (--output, --max-nodes, --depth)
+
+# Specs, evidence & gates
+specship spec [id]               # Spec lifecycle funnel, or one spec's detail
+specship drifted [path]          # Links in drifted/broken/orphaned state (--state, --fail-on for CI)
+specship coverage [spec]         # Test-evidence coverage per requirement and criterion (--line, --json)
+specship verify --report <file>  # Promote/demote test-evidence links from a vitest JSON report
+specship lint [paths...]         # Lint spec files (exits non-zero on errors)
+specship check [path]            # Enforcement gate (--since <ref>, --strict, --enable-gate <checks...>)
+specship suppressions [path]     # Newly added lint/type suppression comments (--since <ref>)
+specship fitness [path]          # Architecture-fitness rules (exits non-zero on violation)
+specship maintainability [path]  # Coupling, size, cycles, dead-code signals (--deep, --strict)
+specship workflow <action> [arg] # list | run <name> | resume | approve | reject | cancel | purge <runId> | runs
+specship domain-gaps [path]      # Code entities and specs not yet covered by a domain fact
+
+# Learning & memory
+specship reflect [path]          # Review self-improvement proposals (--capture --lane skill|style|domain --title)
+specship reflect apply <hash>    # Preview a proposal; --yes writes it (also: undo <hash>, dismiss <hash>)
 specship memory capture          # Capture a lesson/anti-pattern as a reviewable memory rule (--title, --target; text on stdin)
 specship memory list             # List the memory rules SpecShip has applied
 specship memory remove <id>      # Remove a memory rule (previewed; --yes to write)
 specship memory edit <id>        # Replace a memory rule's body (previewed; --yes to write)
+
+# JIRA (with --with-jira)
+specship jira configure          # Connect to JIRA (--base-url, --email/--api-token or --pat, --deployment, --project)
+specship jira test               # Verify the connection + validate configured transition names against your workflow
+specship jira bind               # Commit the repo's JIRA binding to specship.config.json (--project, --epic)
+specship jira track              # Status of issues SpecShip has picked (--project, --path)
+specship jira coverage           # Sprint coverage: sprint issues joined to spec truth (--sprint, --post <issue>)
+specship jira reconcile          # Detect JIRA-side edits to published specs and propose spec amendments (--apply)
+specship jira transition <key> [state]  # Move an issue to a state, or list its available transitions (--list)
+specship jira release <version>  # Stamp a fixVersion + "shipped in" comment onto issues (--keys, --project)
+specship jira regression-pack    # Generate/refresh the Regression Pack in the bound project (--dry-run)
+specship jira regression-record  # Record a pack case result (--case, --criterion, --result pass|fail|unexecuted)
+
+# Servers
 specship serve --mcp             # Start MCP server
+specship desktop                 # Start the dashboard + HTTP API on 127.0.0.1:4242
 ```
+
+The full generated reference lives at [specship.cc/reference/cli](https://specship.cc/reference/cli/).
 
 ### `specship affected`
 
@@ -532,7 +556,7 @@ When running as an MCP server, SpecShip exposes these tools to Claude Code:
 
 | Tool | Purpose |
 |------|---------|
-| `specship_explore` | **Primary.** Answer almost any question in one call — "how does X work", a flow ("how does X reach Y"), or surveying an area — returning the relevant symbols' verbatim source grouped by file, plus a relationship map and blast radius. Surfaces dynamic-dispatch hops (callbacks, React re-render, interface→impl) grep can't follow. |
+| `specship_explore` | **Primary.** Answer almost any question in one call — "how does X work", a flow ("how does X reach Y"), or surveying an area — returning the relevant symbols' verbatim source grouped by file, plus a relationship map and blast radius. Surfaces dynamic-dispatch hops (callbacks, React re-render, interface→impl) grep can't follow. Files and symbols you name are pinned into the answer (up to four named files come back first, and any that can't be included are called out). |
 | `specship_search` | Find symbols by name across the codebase |
 | `specship_callers` | Find what calls a function |
 | `specship_callees` | Find what a function calls |
@@ -541,8 +565,11 @@ When running as an MCP server, SpecShip exposes these tools to Claude Code:
 | `specship_files` | Get indexed file structure (faster than filesystem scanning) |
 | `specship_status` | Check index health and statistics, plus server identity — version, install method, where it was loaded from, node version |
 | `specship_health` | Code-health report — maintainability (coupling hotspots, god files, cycles, dead code) and fitness (dependency/layering rules), filterable via `checks` |
+| `specship_spec` | Spec detail (body, parent/siblings, linked code and proving tests with state, inline domain facts), the lifecycle funnel, a free-text search to route a change to its requirement, or a requirement's behaviour-test surface |
+| `specship_link_assert` / `specship_link_verify` | Declare a spec → code/test link after implementing; re-verify a link's state |
+| `specship_drifted` | The review queue of drifted / broken / orphaned links |
 
-The JIRA integration adds fourteen more (`specship_jira_issues`, `_issue`, `_pick`, `_start`, `_track`, `_publish`, `_transition`, `_add_task`, `_anchor`, `_epics`, `_coverage`, `_reconcile`, `_regression_pack`, `_regression_record`) — see below.
+The JIRA integration adds fourteen more (`specship_jira_issues`, `_issue`, `_pick`, `_start`, `_track`, `_publish`, `_transition`, `_add_task`, `_anchor`, `_epics`, `_coverage`, `_reconcile`, `_regression_pack`, `_regression_record`) — see below — and the experimental Designer integration adds the `designer_*` tools. `specship_status` replaced the former `specship_version` tool, and `specship_health` absorbed the separate maintainability and fitness tools; clients still calling the old names get answers.
 
 ---
 
@@ -572,7 +599,8 @@ instead (`SPECSHIP_JIRA_BASE_URL`, `SPECSHIP_JIRA_EMAIL`,
 `SPECSHIP_JIRA_API_TOKEN`, `SPECSHIP_JIRA_PAT`, `SPECSHIP_JIRA_DEPLOYMENT`).
 
 **Then drive it from the agent.** You ask Claude Code in conversation and it
-calls the JIRA MCP tools:
+calls the JIRA MCP tools — or start the day with `/specship:day` to pull your
+active-sprint board, then pick and start an issue:
 
 | Tool | What it does |
 |------|--------------|
@@ -583,6 +611,21 @@ calls the JIRA MCP tools:
 | `specship_jira_track` | A read-only table joining each picked issue's SpecShip work-state with its live JIRA status; flags specs edited in JIRA after publishing. |
 | `specship_jira_publish` | The reverse of pick — publish an authored spec back as a Story whose Sub-tasks mirror its acceptance criteria, key written into the spec. Idempotent. |
 | `specship_jira_transition` | Move an issue to a state its workflow offers, or list the options; an unavailable target is reported, never applied. |
+| `specship_jira_add_task` | File a task you spotted mid-implementation under its epic/story. |
+| `specship_jira_coverage` | Sprint coverage — every issue in the active (or a named) sprint joined to spec truth, unspecced issues included; read-only unless you ask it to post a single in-place comment. |
+| `specship_jira_reconcile` | Detect issues edited in JIRA after publish and propose the exact spec amendment; nothing is written until you confirm the diff. |
+| `specship_jira_regression_pack` / `_regression_record` | Generate the black-box Regression Pack (cases tagged UI vs. backend tier) and record case results back to JIRA and onto the source criterion's link state. |
+| `specship_jira_anchor` / `specship_jira_epics` | Resolve the repo's board-first work anchor and list open epics to anchor new specs under. |
+
+**Team setup.** Commit a shared binding with `specship jira bind --project PROJ
+--epic PROJ-42` — it writes only project identity (key, issue types, default
+epic) into `specship.config.json`, and a credential placed there is rejected.
+On a bound repo, every `specship sync` publishes new specs and refreshes changed
+ones automatically (unchanged specs make no JIRA writes; opt a spec out with
+`jira_publish: false`), new specs are created under an epic, and tracked issues
+carry one in-place comment per lifecycle milestone. Team-managed projects work
+via `jira.storyIssueType` / `jira.subtaskIssueType`. An unbound repo makes zero
+JIRA calls on sync.
 
 When the plan is approved **and** the implementation's tests pass, SpecShip
 raises a pull request with the GitHub CLI — the issue key rides the branch,
@@ -649,9 +692,9 @@ that drive the graph directly: `DatabaseConnection`, `QueryBuilder`,
 
 ## Configuration
 
-There isn't any — SpecShip is zero-config, with **no config file** to write or
-keep in sync. Language support is automatic from the file extension; there's
-nothing to wire up per language.
+Indexing is zero-config — there's no config file to write before SpecShip
+works. Language support is automatic from the file extension; there's nothing
+to wire up per language.
 
 What it skips out of the box:
 
@@ -668,6 +711,22 @@ directory back **in** (say you really do want a vendored dependency indexed),
 add a negation — `!vendor/`. The defaults apply uniformly, so committing a
 dependency or build directory doesn't force it into the graph; the `.gitignore`
 negation is the explicit opt-in.
+
+**Optional project settings.** Features beyond indexing read an optional
+`specship.config.json` at the project root, meant to be committed:
+
+| Key | Controls |
+|---|---|
+| `enforce.gate` | Which `specship check` checks block (e.g. `{"drift": true, "behaviour": true}`; set by `--enable-gate`) |
+| `enforce.mutation` | Opt-in mutation-score check — `report` path and `threshold` |
+| `diagram.*` | Auto-refresh of `docs/flow-diagram.md` (`enabled`, plus output/size knobs) |
+| `reflect.autoSweep` | `false` turns off the background auto-learn pass |
+| `jira.*` | The team JIRA binding (`projectKey`, `epicKey`, issue types) — never credentials |
+
+Behavior switches (steering, cheat-sheet, compaction, model tier) live in
+`.specship/settings.json` / `~/.specship/settings.json` — see [environment
+variables](#2-wire-up-claude-code). Full details:
+[Configuration](https://specship.cc/getting-started/configuration/).
 
 ## Supported Platforms
 
@@ -721,6 +780,9 @@ See [Get Started](#get-started) for the one-line install commands.
 - **You're on an old (pre-0.9) install.** Reinstall: `npm i -g @specship/specship@latest`.
 
 **`specship status` shows `Journal:` other than `wal`** — WAL couldn't be enabled on this filesystem (common on network shares and WSL2 `/mnt`), so reads can block on writes. Move the project (with its `.specship/` folder) onto a local disk.
+
+**Something's off after install** — Run `specship doctor`: it checks the Node runtime, FTS5 support, that the MCP server boots, and the index, and exits non-zero on a usage-blocking failure.
+
 **MCP server not connecting** — Ensure the project is initialized/indexed, verify the path in your MCP config, and check that `specship serve --mcp` works from the command line.
 
 **Missing symbols** — The MCP server auto-syncs on save (wait a couple seconds). Run `specship sync` manually if needed. Check that the file's language is supported and isn't inside a `.gitignore`d or default-excluded directory (e.g. `node_modules`, `dist`).

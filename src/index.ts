@@ -74,6 +74,7 @@ import {
   PreviewResult,
   ApplyOutcome,
   UndoOutcome,
+  ReflectContext,
 } from './reflect';
 import { estimateRunEta as estimateRunEtaImpl, RunEta } from './workflows/eta';
 export type { RunEta, RunEtaAvailable, RunEtaUnavailable } from './workflows/eta';
@@ -102,6 +103,9 @@ import {
   EnforceScope,
   RequirementVerification,
 } from './enforce/enforce';
+import { scanDisableComments, SuppressionFinding } from './enforce/suppressions';
+import { loadMutationDeps } from './enforce/mutation';
+import { workingTreeDiffText } from './enforce/changed-files';
 import { computeBehaviourSurface, BehaviourSurface } from './behaviour/behaviour-surface';
 import {
   generateFlowDiagram,
@@ -201,9 +205,15 @@ export { evaluateFitness, loadFitnessRules, FITNESS_CONFIG_FILE } from './fitnes
 // Enforcement mode (ENFORCE-DOC / REQ-ENFORCE-001…003).
 export { evaluateEnforcement, loadEnforceConfig, ENFORCE_CONFIG_FILE, normalizePath } from './enforce/enforce';
 // Change-scoped gating (REQ-AUTHG-006) — `specship check --since <ref>`.
-export { changedFilesSince, InvalidRefError } from './enforce/changed-files';
+export { changedFilesSince, InvalidRefError, workingTreeDiffText } from './enforce/changed-files';
+// Suppression-comment scan (REQ-QGATE-004).
+export { scanDisableComments, formatSuppressionFinding } from './enforce/suppressions';
+export type { SuppressionFinding } from './enforce/suppressions';
+// Mutation-score gate (REQ-QGATE-002).
+export { parseMutationReport, loadMutationDeps, DEFAULT_MUTATION_THRESHOLD, DEFAULT_MUTATION_REPORT } from './enforce/mutation';
+export type { MutationConfig, MutationDeps, MutationFileStats } from './enforce/mutation';
 // Behaviour surface (BEHAVIOUR-DOC / REQ-BEHAVIOUR-001).
-export { computeBehaviourSurface, renderBehaviourSurface, isUiNode } from './behaviour/behaviour-surface';
+export { computeBehaviourSurface, renderBehaviourSurface, isUiNode, classifyCriterionShape, propertyFramework } from './behaviour/behaviour-surface';
 export type { BehaviourSurface, BehaviourFlowElement, BehaviourSurfaceDeps } from './behaviour/behaviour-surface';
 export type {
   EnforceConfig,
@@ -465,8 +475,22 @@ export class SpecShip {
       }
       return { id: req.id, title: req.title, testsLinks, sourcePath: req.sourcePath, linkedFiles };
     });
+    // Suppression scan (REQ-QGATE-004): markers introduced by the working
+    // tree (or since the scope ref). Scan unavailable (no git) → undefined,
+    // and the check is omitted rather than reported as passed.
+    let suppressions: SuppressionFinding[] | undefined;
+    try {
+      suppressions = scanDisableComments(workingTreeDiffText(this.projectRoot, scope?.since ?? 'HEAD'));
+    } catch {
+      suppressions = undefined;
+    }
+    // Mutation gate (REQ-QGATE-002): strictly opt-in — deps attach only when
+    // the project configured it, so the default report is unchanged (A1).
+    const mutation = cfg.mutation !== undefined || cfg.gate?.mutation === true
+      ? loadMutationDeps(this.projectRoot, cfg.mutation)
+      : undefined;
     return evaluateEnforcement(
-      { drift, fitness: this.getFitness(), maintainability: this.getMaintainability(), requirements },
+      { drift, fitness: this.getFitness(), maintainability: this.getMaintainability(), requirements, suppressions, mutation },
       cfg,
       scope,
     );
@@ -493,11 +517,19 @@ export class SpecShip {
     }
     const linkedNodes = this.getLinkedNodesForReq(req.id);
     const neighbourNodes = this.getNeighbourNodes(linkedNodes.map((n) => n.id));
+    // Acceptance criteria ride along for test-shape classification
+    // (REQ-QGATE-001.A1) — invariant-phrased bullets get a property-test
+    // directive in the rendered surface.
+    const criteria = this.specQueries
+      .getSpecsByParent(req.id)
+      .filter((c) => c.kind === 'acceptance')
+      .map((c) => ({ id: c.id, text: (c.body ?? c.title ?? '').trim() }));
     return computeBehaviourSurface({
       requirementId: req.id,
       requirementExists: true,
       linkedNodes,
       neighbourNodes,
+      criteria,
     });
   }
 
@@ -546,8 +578,19 @@ export class SpecShip {
   // (no runtime package import) and the CLI calls them directly.
   // ===========================================================================
 
-  private reflectContext() {
-    return { projectRoot: this.projectRoot, homeDir: os.homedir() };
+  private reflectContext(): ReflectContext {
+    // Domain-gap entities feed the domain-fact lane (REQ-ALEARN-003.A1) — the
+    // miner has no graph access, so the seed rides in on the context. Capped
+    // and wrapped: a gap-seed failure must never take reflection down with it.
+    let domainGapEntities: ReflectContext['domainGapEntities'];
+    try {
+      domainGapEntities = this.getDomainGapSeed()
+        .entities.slice(0, 50)
+        .map((e) => ({ name: e.name, kind: e.kind }));
+    } catch {
+      domainGapEntities = undefined;
+    }
+    return { projectRoot: this.projectRoot, homeDir: os.homedir(), domainGapEntities };
   }
 
   /**
@@ -569,7 +612,7 @@ export class SpecShip {
    * (LEARN-DOC, REQ-LEARN-002). Same lifecycle as mined proposals —
    * nothing lands on disk until the user applies it.
    */
-  reflectCapture(input: { title: string; content: string }): Proposal {
+  reflectCapture(input: { title: string; content: string; lane?: 'skill' | 'style' | 'domain' }): Proposal {
     return reflectCaptureImpl(this.db.getDb(), this.reflectContext(), input);
   }
 
