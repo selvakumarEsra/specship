@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SpecShip — Build the right thing, and prove it's done</title>
+<style>
+  :root {
+    --bg: #f6f5f2;
+    --surface: #fcfcfb;
+    --ink: #0b0b0b;
+    --ink-2: #52514e;
+    --ink-3: #8a8984;
+    --line: #e4e2dc;
+    --with: #2a78d6;      /* categorical slot 1 — "with SpecShip" */
+    --without: #eb6834;   /* categorical slot 2 — "without SpecShip" */
+    --accent: #2a78d6;
+    --accent-soft: #e6f0fb;
+    --good: #0ca30c;
+    --warn: #c98500;
+    --bad: #d03b3b;
+    --muted-bg: #efeee9;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; background: #2b2b29; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+  }
+  .deck { position: relative; width: 100vw; height: 100vh; overflow: hidden; }
+  .slide {
+    position: absolute; top: 50%; left: 50%;
+    width: 1280px; height: 720px;
+    transform-origin: center center;
+    background: var(--surface);
+    padding: 64px 80px 56px;
+    display: none; flex-direction: column;
+    box-shadow: 0 20px 60px rgba(0,0,0,.35);
+  }
+  .slide.active { display: flex; }
+  .kicker { font-size: 15px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); margin-bottom: 14px; }
+  h1 { font-size: 64px; line-height: 1.05; letter-spacing: -0.02em; font-weight: 750; }
+  h2 { font-size: 42px; line-height: 1.12; letter-spacing: -0.015em; font-weight: 720; margin-bottom: 26px; max-width: 1080px; }
+  h3 { font-size: 22px; font-weight: 680; margin-bottom: 8px; }
+  p, li { font-size: 21px; line-height: 1.45; color: var(--ink-2); }
+  .lead { font-size: 26px; line-height: 1.45; color: var(--ink-2); max-width: 980px; }
+  strong { color: var(--ink); font-weight: 650; }
+  .footer {
+    position: absolute; left: 80px; right: 80px; bottom: 24px;
+    display: flex; justify-content: space-between; font-size: 13px; color: var(--ink-3);
+  }
+  .grid { display: grid; gap: 22px; }
+  .g2 { grid-template-columns: 1fr 1fr; }
+  .g3 { grid-template-columns: 1fr 1fr 1fr; }
+  .g4 { grid-template-columns: repeat(4, 1fr); }
+  .card { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 22px 24px; }
+  .card p, .card li { font-size: 18px; }
+  .card .icon { font-size: 30px; margin-bottom: 10px; }
+  .card.accent { border-color: #b7d3f6; background: var(--accent-soft); }
+  .tag { display: inline-block; font-size: 13px; font-weight: 650; padding: 3px 10px; border-radius: 999px; background: var(--muted-bg); color: var(--ink-2); margin-bottom: 10px; letter-spacing: .02em; }
+  .tag.blue { background: var(--accent-soft); color: #1c5cab; }
+  ul.clean { list-style: none; }
+  ul.clean li { padding-left: 28px; position: relative; margin-bottom: 10px; }
+  ul.clean li::before { content: "→"; position: absolute; left: 0; color: var(--accent); font-weight: 700; }
+  .quote { font-size: 30px; line-height: 1.35; font-weight: 600; color: var(--ink); border-left: 5px solid var(--accent); padding-left: 26px; max-width: 1000px; }
+  .note { font-size: 14px; color: var(--ink-3); line-height: 1.45; }
+  .pill-row { display: flex; gap: 10px; flex-wrap: wrap; }
+  .state { display: inline-flex; align-items: center; gap: 8px; font-weight: 650; font-size: 17px; padding: 6px 14px; border-radius: 999px; border: 1px solid var(--line); background: #fff; color: var(--ink); }
+  .dot { width: 11px; height: 11px; border-radius: 50%; display: inline-block; }
+  .flow { display: flex; align-items: stretch; gap: 0; }
+  .flow .step { flex: 1; background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 16px 16px; position: relative; }
+  .flow .arrow { width: 34px; display: flex; align-items: center; justify-content: center; color: var(--ink-3); font-size: 24px; }
+  .flow .step .n { font-size: 13px; font-weight: 700; color: var(--accent); letter-spacing: .08em; }
+  .flow .step h3 { font-size: 19px; margin: 4px 0 6px; }
+  .flow .step p { font-size: 15px; line-height: 1.4; }
+  .flow .step.gate { border: 2px dashed #c98500; background: #fffaf0; }
+  .flow .step.gate .n { color: #a86f00; }
+  table.plain { border-collapse: collapse; width: 100%; font-size: 18px; }
+  table.plain th, table.plain td { text-align: left; padding: 11px 14px; border-bottom: 1px solid var(--line); vertical-align: top; color: var(--ink-2); }
+  table.plain th { font-size: 14px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); font-weight: 650; }
+  table.plain td:first-child { color: var(--ink); font-weight: 620; white-space: nowrap; }
+  .big-num { font-size: 76px; font-weight: 760; letter-spacing: -0.03em; line-height: 1; color: var(--ink); }
+  .spec-sample {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    background: #fff; border: 1px solid var(--line); border-radius: 12px;
+    padding: 20px 22px; font-size: 16px; line-height: 1.6; color: #2f2e2b; white-space: pre-wrap;
+  }
+  .spec-sample .h { color: var(--ink); font-weight: 700; }
+  .spec-sample .c { color: var(--ink-3); }
+  .spec-sample .k { color: #1c5cab; font-weight: 650; }
+  .center { align-items: center; justify-content: center; text-align: center; }
+  .title-slide { background: linear-gradient(135deg, #0d366b 0%, #1c5cab 55%, #2a78d6 100%); color: #fff; }
+  .title-slide h1 { color: #fff; font-size: 76px; }
+  .title-slide .lead { color: #dbe8f8; }
+  .title-slide .kicker { color: #b7d3f6; }
+  .title-slide .footer { color: #9ec5f4; }
+  .section-slide { background: #0d366b; color: #fff; justify-content: flex-start; padding-top: 250px; }
+  .section-slide h1 { color: #fff; }
+  .section-slide .kicker { color: #9ec5f4; }
+  .section-slide p { color: #cde2fb; font-size: 24px; max-width: 900px; margin-top: 18px; }
+  .section-slide .footer { color: #86b6ef; }
+  .legend { display: flex; gap: 22px; font-size: 16px; color: var(--ink-2); margin-bottom: 8px; }
+  .legend span { display: inline-flex; align-items: center; gap: 8px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; display: inline-block; }
+  .chart-panel { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px 10px; }
+  .chart-panel h3 { font-size: 17px; margin-bottom: 2px; }
+  .chart-panel .sub { font-size: 13px; color: var(--ink-3); margin-bottom: 8px; }
+  svg text { font-family: inherit; }
+  .bar:hover { opacity: .85; }
+  .shot { width: 100%; border-radius: 10px; border: 1px solid var(--line); display: block; }
+  .nav-hint { position: fixed; bottom: 12px; right: 18px; color: #a9a8a2; font-size: 12px; font-family: inherit; }
+  .progress { position: fixed; left: 0; bottom: 0; height: 3px; background: var(--accent); transition: width .2s; }
+
+
+  .ico { width: 40px; height: 40px; border-radius: 12px; background: var(--accent-soft); display: inline-flex; align-items: center; justify-content: center; margin-bottom: 12px; }
+  .ico svg { width: 24px; height: 24px; stroke: #1c5cab; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .card-h { display:flex; align-items:center; gap:12px; margin-bottom:8px; }
+  .card-h .ico { margin-bottom:0; flex:none; }
+  .card-h h3 { margin:0; }
+  table.tight td, table.tight th { padding: 8px 14px; }
+  table.big.roomy td, table.big.roomy th { padding-top: 19px; padding-bottom: 19px; }
+  .takeaway { margin-top: auto; padding-top: 18px; border-top: 1px solid var(--line); font-size: 21px; color: var(--ink); font-weight: 600; }
+  .takeaway span { color: var(--accent); }
+  .badge-id { display:inline-block; font-size:13px; font-weight:700; letter-spacing:.04em; padding:3px 10px; border-radius:6px; background:#0d366b; color:#fff; margin-right:8px; }
+  table.big td, table.big th { font-size: 20px; padding: 13px 14px; }
+  table.big th { font-size: 14px; }
+  .mock { background:#fff; border:1px solid var(--line); border-radius:12px; overflow:hidden; }
+  .mock .bar-top { background:#f1f0ec; padding:9px 14px; font-size:13px; color:var(--ink-3); display:flex; justify-content:space-between; }
+  .mock table { width:100%; border-collapse:collapse; }
+  .mock th, .mock td { font-size:15px; padding:10px 14px; border-bottom:1px solid var(--line); text-align:left; color:var(--ink-2); }
+  .mock th { font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-3); }
+  .mock td.req { color:var(--ink); font-weight:600; }
+  .timeline { display:grid; grid-template-columns: repeat(5, 1fr); gap: 14px; }
+  .timeline .t { background:#fff; border:1px solid var(--line); border-radius:12px; padding:16px; border-top:4px solid var(--accent); }
+  .timeline .t .day { font-size:13px; font-weight:700; letter-spacing:.08em; color:var(--accent); text-transform:uppercase; }
+  .timeline .t h3 { font-size:18px; margin:6px 0; }
+  .timeline .t p { font-size:15px; line-height:1.42; }
+  .timeline .t.warn { border-top-color: var(--warn); }
+  .timeline .t.good { border-top-color: var(--good); }
+
+  @media print {
+    @page { size: 1280px 720px; margin: 0; }
+    html, body { background: #fff; }
+    .deck { width: auto; height: auto; overflow: visible; }
+    .slide { display: flex !important; position: relative; top: 0; left: 0; transform: none !important; box-shadow: none; page-break-after: always; break-after: page; }
+    .nav-hint, .progress { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="deck" id="deck">
+
+<!-- 1 -->
+<section class="slide title-slide center">
+  <div class="kicker">SpecShip · for product owners &amp; delivery leads</div>
+  <h1>Build the right thing —<br>and prove it's done.</h1>
+  <p class="lead" style="margin-top:28px">How SpecShip turns AI coding assistants from fast-but-forgetful helpers into a delivery system you can trust.</p>
+  <div class="footer"><span>SpecShip v0.27</span><span>1</span></div>
+</section>
+
+<!-- 2 -->
+<section class="slide">
+  <div class="kicker">The new reality</div>
+  <h2>AI assistants now write much of the code. That moved the bottleneck.</h2>
+  <div class="grid g3" style="margin-top:6px">
+    <div class="card"><div class="ico"><svg viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg></div><h3>Typing is no longer slow</h3><p>An assistant such as Claude Code can draft a feature in minutes.</p></div>
+    <div class="card"><div class="ico"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2 5-5 2 2-5z"/></svg></div><h3>Understanding still is</h3><p>Before it can change code safely, the assistant has to work out how today's system fits together — every single session.</p></div>
+    <div class="card"><div class="ico"><svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 0 1 14-5.3L20 8"/><path d="M20 3v5h-5"/><path d="M20 12a8 8 0 0 1-14 5.3L4 16"/><path d="M4 21v-5h5"/></svg></div><h3>Rework is the new cost</h3><p>Fast code that misses the intent, or quietly breaks something nearby, comes back as bugs, review rounds and re-work.</p></div>
+  </div>
+  <p class="quote" style="margin-top:40px">The question is no longer “how fast can we write code?” but “how fast can we ship the <em>right</em> code — and know it?”</p>
+  <div class="footer"><span>SpecShip</span><span>2</span></div>
+</section>
+
+<!-- 3 -->
+<section class="slide">
+  <div class="kicker">The product owner's problem</div>
+  <h2>Your intent leaks out between the ticket and the code.</h2>
+  <div class="grid g2">
+    <div>
+      <ul class="clean">
+        <li><strong>“Done” is a status, not a fact.</strong> A ticket says done; nothing shows which acceptance criteria are actually proven.</li>
+        <li><strong>Requirements drift silently.</strong> Code changes next month and nobody notices it no longer matches what you agreed.</li>
+        <li><strong>Traceability is manual.</strong> “Which code implements this requirement — and is it tested?” takes a developer's afternoon to answer.</li>
+        <li><strong>AI speed amplifies all three.</strong> More code, faster, with the same blind spots.</li>
+      </ul>
+    </div>
+    <div class="card accent" style="align-self:start">
+      <span class="tag blue">What you actually want</span>
+      <p style="font-size:20px; color:var(--ink)">For every requirement, at a glance:</p>
+      <ul class="clean" style="margin-top:10px">
+        <li>Is it built?</li>
+        <li>Is it <strong>proven</strong> by a passing test?</li>
+        <li>Has anything changed since we agreed it?</li>
+      </ul>
+    </div>
+  </div>
+  <p class="takeaway">SpecShip answers those three questions <span>for every requirement written as a spec</span> — and flags the moment the code moves away from them.</p>
+  <div class="footer"><span>SpecShip</span><span>3</span></div>
+</section>
+
+<!-- 4 -->
+<section class="slide">
+  <div class="kicker">The developer's problem</div>
+  <h2>Every session, the assistant re-reads the codebase from scratch.</h2>
+  <div class="grid g2" style="align-items:start">
+    <div>
+      <p class="lead" style="font-size:22px">Ask “what happens when a user checks out?” and an assistant without a map searches files, opens them, searches again, opens more — many steps (on a large codebase, dozens) — just to find where to look.</p>
+      <ul class="clean" style="margin-top:22px">
+        <li>Slow: time spent searching before any real work.</li>
+        <li>Fragile: it can miss a connection between files and break something it never saw.</li>
+        <li>Wasteful: the same discovery is repeated tomorrow, and by every teammate.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <span class="tag">Analogy</span>
+      <h3 style="font-size:24px">A brilliant new hire with amnesia</h3>
+      <p>Imagine a contractor who is excellent — but forgets the building's floor plan every morning and has to walk every corridor again before fixing a single tap.</p>
+      <p style="margin-top:12px"><strong>SpecShip hands them the floor plan.</strong></p>
+    </div>
+  </div>
+  <p class="takeaway">Every search the assistant repeats is <span>time your developer waits for</span> — and a connection it can still miss.</p>
+  <div class="footer"><span>SpecShip</span><span>4</span></div>
+</section>
+
+<!-- 5 -->
+<section class="slide">
+  <div class="kicker">What SpecShip is</div>
+  <h2>One tool, three layers: a map, a contract, and proof.</h2>
+  <div class="grid g3">
+    <div class="card accent" style="padding:30px 28px; min-height:360px"><div class="ico"><svg viewBox="0 0 24 24"><path d="m9 4-6 2v14l6-2 6 2 6-2V4l-6 2z"/><path d="M9 4v14M15 6v14"/></svg></div><span class="tag blue">Layer 1 · The map</span><h3 style="font-size:28px; margin:6px 0 12px">Knows your code</h3><p style="font-size:22px; line-height:1.5">A precise, always-current index of how every part of the system connects. The assistant asks the map instead of re-reading files.</p><p class="note" style="margin-top:22px; font-size:17px"><strong>Lives in:</strong> Inside Claude Code</p></div>
+    <div class="card accent" style="padding:30px 28px; min-height:360px"><div class="ico"><svg viewBox="0 0 24 24"><path d="M14 3H6v18h12V7z"/><path d="M14 3v4h4M9 12h6M9 16h6"/></svg></div><span class="tag blue">Layer 2 · The contract</span><h3 style="font-size:28px; margin:6px 0 12px">Knows your intent</h3><p style="font-size:22px; line-height:1.5">Requirements written as plain-language specs with acceptance criteria — each one linked to the exact code that delivers it.</p><p class="note" style="margin-top:22px; font-size:17px"><strong>Lives in:</strong> Spec files in your repo — mirrored to JIRA</p></div>
+    <div class="card accent" style="padding:30px 28px; min-height:360px"><div class="ico"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg></div><span class="tag blue">Layer 3 · The proof</span><h3 style="font-size:28px; margin:6px 0 12px">Knows it's done</h3><p style="font-size:22px; line-height:1.5">Tests prove each criterion; quality gates can block what isn't proven; drift alerts fire when code moves away from the agreement.</p><p class="note" style="margin-top:22px; font-size:17px"><strong>Lives in:</strong> Dashboard, JIRA and CI</p></div>
+  </div>
+  <p class="takeaway">Plugs into <span>Claude Code</span>, runs <span>entirely on your machine</span>, and can be adopted one layer at a time.</p>
+  <div class="footer"><span>SpecShip</span><span>5</span></div>
+</section>
+
+<!-- 6 -->
+<section class="slide section-slide">
+  <div class="kicker">Layer 1</div>
+  <h1>The map</h1>
+  <p>How SpecShip stops the assistant re-reading your codebase — and why that makes it faster and safer.</p>
+  <div class="footer"><span>SpecShip</span><span>6</span></div>
+</section>
+
+<!-- 7 -->
+<section class="slide">
+  <div class="kicker">Layer 1 · The map</div>
+  <h2>A GPS for your codebase, instead of asking for directions at every corner.</h2>
+  <div class="grid g2" style="align-items:start">
+    <div>
+      <ul class="clean">
+        <li><strong>Built automatically</strong> from the code itself — every function, every “who calls whom”, and the web routes of common frameworks. Nothing hand-maintained.</li>
+        <li><strong>Exact, not guessed.</strong> The map is derived mechanically from the code's structure, never summarised by an AI — so it doesn't hallucinate.</li>
+        <li><strong>Always current.</strong> It refreshes itself within seconds of a code change.</li>
+        <li><strong>20 programming languages</strong>, across web, mobile and back-end stacks.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <span class="tag">In practice</span>
+      <p style="color:var(--ink); font-size:19px"><strong>Question:</strong> “How does a failed payment reach the customer email?”</p>
+      <p style="margin-top:14px"><strong>Without the map:</strong> search → open → search → open … until the trail is found (or missed).</p>
+      <p style="margin-top:10px"><strong>With the map:</strong> one lookup returns the whole path, with the relevant code, in one go.</p>
+      <p style="margin-top:10px"><strong>Bonus:</strong> “what would changing this break?” is answered before anyone edits a line.</p>
+    </div>
+  </div>
+  <p class="takeaway">The result: the assistant spends its time <span>on your change</span>, not on finding its way around.</p>
+  <div class="footer"><span>SpecShip</span><span>7</span></div>
+</section>
+
+<!-- 8 -->
+<section class="slide">
+  <div class="kicker">Measured, not promised</div>
+  <h2 style="margin-bottom:14px">Same assistant, same question — with and without SpecShip.</h2>
+  <div class="legend"><span><i class="swatch" style="background:var(--with)"></i>With SpecShip</span><span><i class="swatch" style="background:var(--without)"></i>Without SpecShip</span></div>
+  <div class="grid g4" style="gap:16px">
+    <div class="chart-panel">
+      <h3>Files opened</h3><div class="sub">total across 37 projects</div>
+      <svg viewBox="0 0 240 190" width="100%" role="img" aria-label="Files opened: 38 with SpecShip, 159 without">
+        <rect class="bar" x="30" y="128" width="70" height="38" rx="4" fill="var(--with)"><title>With SpecShip: 38</title></rect>
+        <rect class="bar" x="140" y="8" width="70" height="158" rx="4" fill="var(--without)"><title>Without SpecShip: 159</title></rect>
+        <line x1="20" y1="166" x2="220" y2="166" stroke="#c9c7c0" stroke-width="1"/>
+        <text x="65" y="152" text-anchor="middle" font-size="18" font-weight="700" fill="#fff">38</text>
+        <text x="175" y="32" text-anchor="middle" font-size="18" font-weight="700" fill="#fff">159</text>
+        <text x="65" y="184" text-anchor="middle" font-size="13" fill="#52514e">with</text>
+        <text x="175" y="184" text-anchor="middle" font-size="13" fill="#52514e">without</text>
+      </svg>
+      <div class="big-num" style="font-size:32px; margin-top:4px">−76%</div>
+    </div>
+    <div class="chart-panel">
+      <h3>Steps taken</h3><div class="sub">total across 37 projects</div>
+      <svg viewBox="0 0 240 190" width="100%" role="img" aria-label="Steps taken: 189 with SpecShip, 321 without">
+        <rect class="bar" x="30" y="73" width="70" height="93" rx="4" fill="var(--with)"><title>With SpecShip: 189</title></rect>
+        <rect class="bar" x="140" y="8" width="70" height="158" rx="4" fill="var(--without)"><title>Without SpecShip: 321</title></rect>
+        <line x1="20" y1="166" x2="220" y2="166" stroke="#c9c7c0" stroke-width="1"/>
+        <text x="65" y="97" text-anchor="middle" font-size="18" font-weight="700" fill="#fff">189</text>
+        <text x="175" y="32" text-anchor="middle" font-size="18" font-weight="700" fill="#fff">321</text>
+        <text x="65" y="184" text-anchor="middle" font-size="13" fill="#52514e">with</text>
+        <text x="175" y="184" text-anchor="middle" font-size="13" fill="#52514e">without</text>
+      </svg>
+      <div class="big-num" style="font-size:32px; margin-top:4px">−41%</div>
+    </div>
+    <div class="chart-panel">
+      <h3>Time to answer</h3><div class="sub">average per question</div>
+      <svg viewBox="0 0 240 190" width="100%" role="img" aria-label="Average time: 38 seconds with SpecShip, 48 without">
+        <rect class="bar" x="30" y="41" width="70" height="125" rx="4" fill="var(--with)"><title>With SpecShip: 38s</title></rect>
+        <rect class="bar" x="140" y="8" width="70" height="158" rx="4" fill="var(--without)"><title>Without SpecShip: 48s</title></rect>
+        <line x1="20" y1="166" x2="220" y2="166" stroke="#c9c7c0" stroke-width="1"/>
+        <text x="65" y="65" text-anchor="middle" font-size="18" font-weight="700" fill="#fff">38s</text>
+        <text x="175" y="32" text-anchor="middle" font-size="18" font-weight="700" fill="#fff">48s</text>
+        <text x="65" y="184" text-anchor="middle" font-size="13" fill="#52514e">with</text>
+        <text x="175" y="184" text-anchor="middle" font-size="13" fill="#52514e">without</text>
+      </svg>
+      <div class="big-num" style="font-size:32px; margin-top:4px">−21%</div>
+    </div>
+    <div class="chart-panel">
+      <h3>Best single case</h3><div class="sub">biggest gain · ~2,000-file app</div>
+      <svg viewBox="0 0 240 190" width="100%" role="img" aria-label="Largest project: 51 seconds with SpecShip, 212 without">
+        <rect class="bar" x="30" y="128" width="70" height="38" rx="4" fill="var(--with)"><title>With SpecShip: 51s</title></rect>
+        <rect class="bar" x="140" y="8" width="70" height="158" rx="4" fill="var(--without)"><title>Without SpecShip: 212s</title></rect>
+        <line x1="20" y1="166" x2="220" y2="166" stroke="#c9c7c0" stroke-width="1"/>
+        <text x="65" y="152" text-anchor="middle" font-size="18" font-weight="700" fill="#fff">51s</text>
+        <text x="175" y="32" text-anchor="middle" font-size="18" font-weight="700" fill="#fff">212s</text>
+        <text x="65" y="184" text-anchor="middle" font-size="13" fill="#52514e">with</text>
+        <text x="175" y="184" text-anchor="middle" font-size="13" fill="#52514e">without</text>
+      </svg>
+      <div class="big-num" style="font-size:32px; margin-top:4px">4.2× <span style="font-size:18px; font-weight:600; color:var(--ink-2)">faster (one project)</span></div>
+    </div>
+  </div>
+  <p class="note" style="margin-top:14px">Source: SpecShip A/B benchmark, 2026-05-24, run on v0.9.4 (this deck describes v0.27) — 37 open-source projects in 16 languages, one code-flow question each, same AI model and prompt; SpecShip was the only difference. One run per project, so treat small differences as noise. Gains grow with codebase size; on tiny projects the two are even, and SpecShip is occasionally a few seconds slower. Cost per question was slightly higher (about 12%) on these short questions — the win is speed and fewer steps.</p>
+  <div class="footer"><span>SpecShip</span><span>8</span></div>
+</section>
+
+<!-- 9 -->
+<section class="slide section-slide">
+  <div class="kicker">Layer 2</div>
+  <h1>The contract</h1>
+  <p>Your requirements become living specs — written in plain language, owned by the team, and wired to the code.</p>
+  <div class="footer"><span>SpecShip</span><span>9</span></div>
+</section>
+
+<!-- 10 -->
+<section class="slide">
+  <div class="kicker">Layer 2 · The contract</div>
+  <h2>A spec is a requirement you can check — not a document that gathers dust.</h2>
+  <div class="grid g2" style="align-items:start">
+    <div>
+      <div class="spec-sample"><span class="badge-id">REQ-AUTH-001</span><span class="h">Failed logins MUST be rate-limited</span>
+
+The login page rejects more than 5 failed
+attempts per minute from the same place.
+
+<span class="h">Acceptance</span>
+<span class="k">A1</span> · The 6th failed attempt within 60 s is
+     refused and says when to retry.
+<span class="k">A2</span> · A successful login resets the count.
+
+<span class="k">implemented by</span> → login code
+<span class="k">proven by</span>      → rate-limit test</div>
+      <p class="note" style="margin-top:8px">Simplified for the slide — real specs point at exact code and test names.</p>
+    </div>
+    <div>
+      <ul class="clean">
+        <li><strong>Plain language.</strong> Readable by a product owner; precise enough for an engineer and an AI assistant.</li>
+        <li><strong>Every requirement and criterion has a permanent ID</strong> (REQ-AUTH-001, A1, A2) — so it can be tracked, linked and reported on.</li>
+        <li><strong>Linked both ways:</strong> to the code that delivers it and to the test that proves it.</li>
+        <li><strong>Lives with the code</strong>, so it is versioned and reviewed like everything else — and can be mirrored to JIRA.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="footer"><span>SpecShip</span><span>10</span></div>
+</section>
+
+<!-- 11 -->
+<section class="slide">
+  <div class="kicker">Layer 2 · Writing specs</div>
+  <h2>You describe the feature. SpecShip helps turn it into a solid spec.</h2>
+  <div class="flow" style="margin-top:4px">
+    <div class="step"><div class="n">1 · IDEA</div><h3>Capture</h3><p>Jot down an idea or a brief. It's tracked as an idea, so nothing gets lost.</p></div>
+    <div class="arrow">›</div>
+    <div class="step"><div class="n">2 · DRAFT</div><h3>Draft from the code</h3><p>The assistant drafts the spec using the map, so it points at the real parts of the system.</p></div>
+    <div class="arrow">›</div>
+    <div class="step"><div class="n">3 · GAPS</div><h3>Ask what's missing</h3><p>A few questions on edge cases, failure paths and ownership — only the ones not already answered.</p></div>
+    <div class="arrow">›</div>
+    <div class="step"><div class="n">4 · CHECK</div><h3>Quality review</h3><p>Every criterion must be testable; a spec checker flags missing IDs, criteria and test plans.</p></div>
+  </div>
+  <div class="grid g3" style="margin-top:26px">
+    <div class="card"><div class="ico"><svg viewBox="0 0 24 24"><path d="M4 4h6a2 2 0 0 1 2 2v14a2 2 0 0 0-2-2H4zM20 4h-6a2 2 0 0 0-2 2v14a2 2 0 0 1 2-2h6z"/></svg></div><h3>Your business language</h3><p>Domain terms (“settlement”, “active member”) are captured as confirmed facts the AI then uses consistently.</p></div>
+    <div class="card"><div class="ico"><svg viewBox="0 0 24 24"><path d="M12 5a3 3 0 0 0-6 1 3 3 0 0 0-1 5 3 3 0 0 0 2 5 3 3 0 0 0 5 2zM12 5a3 3 0 0 1 6 1 3 3 0 0 1 1 5 3 3 0 0 1-2 5 3 3 0 0 1-5 2z"/></svg></div><h3>Learns your conventions</h3><p>Corrected the assistant the same way in two separate sessions? SpecShip proposes it as a team rule for the next session.</p></div>
+    <div class="card"><div class="ico"><svg viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 6 0l3-3a4 4 0 0 0-6-6l-1 1"/><path d="M14 10a4 4 0 0 0-6 0l-3 3a4 4 0 0 0 6 6l1-1"/></svg></div><h3>Already in JIRA?</h3><p>Specs publish as stories and sub-tasks; edits made in JIRA are proposed back to the spec for approval.</p></div>
+  </div>
+  <div class="footer"><span>SpecShip</span><span>11</span></div>
+</section>
+
+<!-- 12 -->
+<section class="slide section-slide">
+  <div class="kicker">Layer 3</div>
+  <h1>The proof</h1>
+  <p>From “the ticket says done” to “here is the passing test for every acceptance criterion.”</p>
+  <div class="footer"><span>SpecShip</span><span>12</span></div>
+</section>
+
+<!-- 13 -->
+<section class="slide">
+  <div class="kicker">Layer 3 · The proof</div>
+  <h2>Every requirement carries an honest, live status.</h2>
+  <table class="plain big roomy" style="margin-top:4px">
+    <tr><th style="width:24%">Status</th><th>What it means for you</th></tr>
+    <tr><td><span class="state"><i class="dot" style="background:#8a8984"></i>Implemented</span></td><td>Code exists that claims to deliver this requirement. <strong>Not yet proven.</strong></td></tr>
+    <tr><td><span class="state"><i class="dot" style="background:var(--good)"></i>Verified ✓</span></td><td>A linked test <strong>actually ran and passed</strong>. This is the only status that means “done”.</td></tr>
+    <tr><td><span class="state"><i class="dot" style="background:var(--warn)"></i>Drifted ⚠</span></td><td>The code (or the spec) changed after it was linked. Someone should re-check it still matches.</td></tr>
+    <tr><td><span class="state"><i class="dot" style="background:var(--bad)"></i>Broken ✕</span></td><td>Verification ran and <strong>failed</strong>. The requirement is not met today.</td></tr>
+    <tr><td><span class="state"><i class="dot" style="background:#52514e"></i>Orphaned ?</span></td><td>The code it pointed to was removed or renamed. The link needs re-attaching.</td></tr>
+  </table>
+  <p class="takeaway"><span>“Verified” cannot be self-awarded</span> — without real test evidence, SpecShip refuses to promote it.</p>
+  <div class="footer"><span>SpecShip</span><span>13</span></div>
+</section>
+
+<!-- 14 -->
+<section class="slide">
+  <div class="kicker">Layer 3 · Drift</div>
+  <h2>Drift: the smoke alarm for “it used to match the requirement.”</h2>
+  <div class="grid g2" style="align-items:start">
+    <div>
+      <p class="lead" style="font-size:22px">When the code behind a requirement changes, SpecShip notices — automatically, within seconds — and flags the requirement as <strong>drifted</strong>.</p>
+      <ul class="clean" style="margin-top:20px">
+        <li>No one has to remember which requirements a change touches.</li>
+        <li>Drifted items land in a <strong>review queue</strong> with one-click repair actions.</li>
+        <li>A requirement is only cleared when someone re-checks it — or a test re-proves it.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <span class="tag">Example</span>
+      <p style="color:var(--ink)"><strong>Monday:</strong> “Refunds over $500 need manager approval” — verified ✓</p>
+      <p style="margin-top:12px; color:var(--ink)"><strong>Thursday:</strong> a developer refactors the refund code for performance.</p>
+      <p style="margin-top:12px; color:var(--ink)"><strong>Seconds later:</strong> the requirement shows <span style="color:var(--warn); font-weight:700">Drifted ⚠</span> and appears in the review queue — before it reaches customers.</p>
+    </div>
+  </div>
+  <p class="takeaway">Drift turns “did anything change?” <span>from a meeting into a notification.</span></p>
+  <div class="footer"><span>SpecShip</span><span>14</span></div>
+</section>
+
+<!-- 15 -->
+<section class="slide">
+  <div class="kicker">Layer 3 · Quality gates</div>
+  <h2>Quality gates catch the shortcuts fast AI code is prone to.</h2>
+  <div class="grid g3" style="gap:16px">
+    <div class="card" style="padding:16px 20px"><div class="card-h"><div class="ico"><svg viewBox="0 0 24 24"><path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-9V3"/></svg></div><h3>Proof required</h3></div><p>A requirement without a passing test isn't counted as done. Coverage reports show which criteria are proven — and which aren't.</p></div>
+    <div class="card" style="padding:16px 20px"><div class="card-h"><div class="ico"><svg viewBox="0 0 24 24"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="m22 9-6 6M16 9l6 6"/></svg></div><h3>No silencing warnings</h3></div><p>If a change quietly switches off a quality check instead of fixing the problem, the gate spots it and stops the change.</p></div>
+    <div class="card" style="padding:16px 20px"><div class="card-h"><div class="ico"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="13" width="8" height="8" rx="1"/><path d="M11 7h6v6"/></svg></div><h3>Architecture rules</h3></div><p>Your team's structural rules (“the UI never talks to the database directly”) are checked automatically.</p></div>
+    <div class="card" style="padding:16px 20px"><div class="card-h"><div class="ico"><svg viewBox="0 0 24 24"><path d="M3 12h4l3-7 4 14 3-7h4"/></svg></div><h3>Health signals</h3></div><p>Oversized files, tangled dependencies and other warning signs surface before they become expensive.</p></div>
+    <div class="card" style="padding:16px 20px"><div class="card-h"><div class="ico"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg></div><h3>Tests that test</h3></div><p>Tests are written to prove each criterion, not just to pass — and, optionally, your existing test-quality tools report whether they would catch real bugs.</p></div>
+    <div class="card" style="padding:16px 20px"><div class="card-h"><div class="ico"><svg viewBox="0 0 24 24"><path d="M12 3v18M3 8h6M3 16h6M15 8h6M18 5v6"/></svg></div><h3>Only what changed</h3></div><p>The gate can focus on just the requirements a change touches — fast enough to run on every commit.</p></div>
+  </div>
+  <p class="takeaway" style="font-size:19px">Gates start as <span>advisory</span> and are switched to <span>blocking</span> one at a time, when the team is ready.</p>
+  <div class="footer"><span>SpecShip</span><span>15</span></div>
+</section>
+
+<!-- 16 -->
+<section class="slide section-slide">
+  <div class="kicker">Putting it together</div>
+  <h1>From requirement to proven code</h1>
+  <p>The built-in delivery workflow — from an approved plan to a proven change.</p>
+  <div class="footer"><span>SpecShip</span><span>16</span></div>
+</section>
+
+<!-- 17 -->
+<section class="slide">
+  <div class="kicker">The implement workflow</div>
+  <h2>One command takes a spec to reviewed, tested code.</h2>
+  <div class="flow" style="margin-top:10px">
+    <div class="step" style="padding:22px 18px; min-height:250px"><div class="n">1 · PLAN</div><h3 style="font-size:22px">Plan</h3><p style="font-size:17px">Reads the spec and the map; proposes how to build it.</p></div>
+    <div class="arrow">›</div>
+    <div class="step gate" style="padding:22px 18px; min-height:250px"><div class="n">YOU APPROVE</div><h3 style="font-size:22px">Plan review</h3><p style="font-size:17px">Approve it — or reject with feedback and it revises.</p></div>
+    <div class="arrow">›</div>
+    <div class="step" style="padding:22px 18px; min-height:250px"><div class="n">2 · BUILD</div><h3 style="font-size:22px">Build &amp; self-check</h3><p style="font-size:17px">Writes the code in an isolated copy, then runs the quality gates.</p></div>
+    <div class="arrow">›</div>
+    <div class="step" style="padding:22px 18px; min-height:250px"><div class="n">3 · PROVE</div><h3 style="font-size:22px">Prove &amp; critique</h3><p style="font-size:17px">Runs the tests; an independent reviewer grades each criterion satisfied, partial or unaddressed.</p></div>
+    <div class="arrow">›</div>
+    <div class="step gate" style="padding:22px 18px; min-height:250px"><div class="n">YOU APPROVE</div><h3 style="font-size:22px">Final review</h3><p style="font-size:17px">See the real change and the critic's verdict before anything is kept.</p></div>
+  </div>
+  <p style="margin-top:26px; font-size:20px">You make <strong>two decisions</strong>; the assistant does the building, testing and self-review in between.</p>
+  <p class="takeaway">Tests and quality gates compute pass/fail; <span>a separate reviewer pass critiques the result</span> — and nothing is kept without your approval.</p>
+  <div class="footer"><span>SpecShip</span><span>17</span></div>
+</section>
+
+<!-- 18 -->
+<section class="slide">
+  <div class="kicker">A worked example</div>
+  <h2>The life of one requirement, as a product owner sees it.</h2>
+  <div class="timeline" style="margin-top:8px">
+    <div style="min-height:300px; padding:22px 18px" class="t"><div class="day">Day 1</div><h3 style="font-size:23px">Ticket → spec</h3><p style="font-size:18.5px; line-height:1.5">“Refunds over $500 need manager approval” becomes REQ-REFUND-004 with three acceptance criteria — and a JIRA story, if JIRA is connected.</p></div>
+    <div style="min-height:300px; padding:22px 18px" class="t"><div class="day">Day 2</div><h3 style="font-size:23px">Plan approved</h3><p style="font-size:18.5px; line-height:1.5">The developer runs the workflow; you or the lead approve the plan. The assistant builds it in an isolated copy.</p></div>
+    <div style="min-height:300px; padding:22px 18px" class="t good"><div class="day">Day 3</div><h3 style="font-size:23px">Verified ✓</h3><p style="font-size:18.5px; line-height:1.5">Tests pass for all three criteria. The status turns <strong>Verified</strong> and a progress comment lands on the JIRA story.</p></div>
+    <div style="min-height:300px; padding:22px 18px" class="t warn"><div class="day">Week 6</div><h3 style="font-size:23px">Drifted ⚠</h3><p style="font-size:18.5px; line-height:1.5">A refactor touches the refund code. The requirement flips to <strong>Drifted</strong> and shows in the review queue.</p></div>
+    <div style="min-height:300px; padding:22px 18px" class="t good"><div class="day">Week 6</div><h3 style="font-size:23px">Re-proven</h3><p style="font-size:18.5px; line-height:1.5">The tests are re-run, the requirement returns to <strong>Verified</strong> — and the history shows why.</p></div>
+  </div>
+  <p class="note" style="margin-top:18px; font-size:16px">Card colour: <strong style="color:#1c5cab">blue</strong> = in progress · <strong style="color:#0a7f0a">green</strong> = proven · <strong style="color:#a86f00">amber</strong> = needs a re-check</p>
+  <p class="takeaway">At every point, <span>“is it done, and still done?”</span> has a one-glance answer — no meeting required.</p>
+  <div class="footer"><span>SpecShip</span><span>18</span></div>
+</section>
+
+<!-- 19 -->
+<section class="slide">
+  <div class="kicker">Where the speed comes from</div>
+  <h2 style="font-size:38px; margin-bottom:18px">Compound gains across delivery — one stage measured, four to measure with you.</h2>
+  <table class="plain tight" style="font-size:17px">
+    <tr><th style="width:17%">Stage</th><th style="width:32%">What usually costs time</th><th>What SpecShip changes</th><th style="width:17%">Evidence</th></tr>
+    <tr><td>Find the code</td><td>Searching and re-reading files</td><td>One lookup on the map</td><td><span class="tag blue">Measured</span></td></tr>
+    <tr><td>Rework</td><td>Bugs and drift found weeks later</td><td>Gates and drift alerts catch them early</td><td><span class="tag">Not yet measured</span></td></tr>
+    <tr><td>Clarify intent</td><td>Back-and-forth on what “done” means</td><td>Testable criteria agreed up front</td><td><span class="tag">Not yet measured</span></td></tr>
+    <tr><td>Avoid breakage</td><td>Unknown connections break</td><td>Impact known before editing</td><td><span class="tag">Not yet measured</span></td></tr>
+    <tr><td>Review</td><td>Reconstructing the “why”</td><td>Change linked to its requirement + reviewer verdict</td><td><span class="tag">Not yet measured</span></td></tr>
+  </table>
+  <div class="grid g2" style="margin-top:14px; gap:18px">
+    <div class="card accent" style="padding:16px 20px"><h3 style="font-size:18px">Why 5× is a credible target</h3><p style="font-size:16px">With AI, typing is nearly free. Delivery time is now dominated by understanding, alignment, review and rework — exactly the stages SpecShip targets.</p></div>
+    <div class="card" style="padding:16px 20px"><h3 style="font-size:18px">What is proven today</h3><p style="font-size:16px">Finding the code: 21% faster on average, up to 4.2× on a large project. 5× end-to-end is our <strong>target, not a measurement</strong> — the pilot measures it on your team.</p></div>
+  </div>
+  <div class="footer"><span>SpecShip</span><span>19</span></div>
+</section>
+
+<!-- 20 -->
+<section class="slide section-slide">
+  <div class="kicker">Where you see it</div>
+  <h1>The surfaces</h1>
+  <p>Developers work inside their assistant; product owners see the same truth in a dashboard and in JIRA.</p>
+  <div class="footer"><span>SpecShip</span><span>20</span></div>
+</section>
+
+<!-- 21 -->
+<section class="slide">
+  <div class="kicker">The surfaces</div>
+  <h2>One source of truth, shown wherever each role works.</h2>
+  <table class="plain big">
+    <tr><th>Surface</th><th>Who</th><th>What it's for</th></tr>
+    <tr><td>Inside Claude Code</td><td>Developers</td><td>The assistant uses the map automatically; a handful of simple commands cover the daily flow.</td></tr>
+    <tr><td>Dashboard</td><td>POs, leads, devs</td><td>Traceability, the drift queue, workflow runs with approve/reject buttons, and AI-session analytics. Runs locally in the browser.</td></tr>
+    <tr><td>JIRA</td><td>POs, QA, delivery</td><td>Specs as stories and sub-tasks, progress comments, sprint coverage reports, and regression test packs for QA.</td></tr>
+    <tr><td>Command line &amp; CI</td><td>Engineering</td><td>The same checks run on every commit or pull request, so the gate holds for the whole team.</td></tr>
+    <tr><td>Gemini CLI</td><td>Developers (opt-in)</td><td>The map and spec tools are also available in Google's Gemini CLI (slash commands and automatic hooks remain Claude Code only).</td></tr>
+  </table>
+  <div class="footer"><span>SpecShip</span><span>21</span></div>
+</section>
+
+<!-- 22 -->
+<section class="slide">
+  <div class="kicker">The dashboard · Traceability</div>
+  <h2 style="margin-bottom:18px">The product owner's window: what's built, what's proven, what moved.</h2>
+  <div class="grid" style="grid-template-columns: 1.45fr 1fr; align-items:start">
+    <div class="mock">
+      <div class="bar-top"><span>Traceability · 4 of 38 requirements</span><span>Illustrative example</span></div>
+      <table>
+        <tr><th>Requirement</th><th>Criteria</th><th>Tests</th><th>Status</th></tr>
+        <tr><td class="req">REQ-REFUND-004 · Manager approval over $500</td><td>3 / 3</td><td>3</td><td><span class="state" style="font-size:14px;padding:3px 10px"><i class="dot" style="background:var(--good)"></i>Verified</span></td></tr>
+        <tr><td class="req">REQ-AUTH-001 · Rate-limit failed logins</td><td>2 / 2</td><td>2</td><td><span class="state" style="font-size:14px;padding:3px 10px"><i class="dot" style="background:var(--warn)"></i>Drifted · 2d</span></td></tr>
+        <tr><td class="req">REQ-CART-012 · Save cart across devices</td><td>1 / 3</td><td>1</td><td><span class="state" style="font-size:14px;padding:3px 10px"><i class="dot" style="background:#8a8984"></i>Implemented</span></td></tr>
+        <tr><td class="req">REQ-PAY-007 · Retry failed card payments</td><td>0 / 2</td><td>2</td><td><span class="state" style="font-size:14px;padding:3px 10px"><i class="dot" style="background:var(--bad)"></i>Broken</span></td></tr>
+      </table>
+    </div>
+    <div>
+      <ul class="clean">
+        <li><strong>One row per requirement:</strong> its code, its tests, criteria met, verdict, and how long it has been drifted.</li>
+        <li><strong>Specs funnel:</strong> ideas → specs → built → verified.</li>
+        <li><strong>Drift queue</strong> with repair buttons.</li>
+        <li><strong>Honest numbers:</strong> every figure is measured or clearly marked as an estimate — none are invented.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="grid g4" style="margin-top:22px; gap:14px">
+    <div class="card" style="padding:14px 18px"><div class="note">Ideas</div><div class="big-num" style="font-size:34px">12</div></div>
+    <div class="card" style="padding:14px 18px"><div class="note">Specs</div><div class="big-num" style="font-size:34px">38</div></div>
+    <div class="card" style="padding:14px 18px"><div class="note">Built</div><div class="big-num" style="font-size:34px">31</div></div>
+    <div class="card" style="padding:14px 18px"><div class="note">Verified ✓</div><div class="big-num" style="font-size:34px; color:var(--good)">24</div></div>
+  </div>
+  <p class="note" style="margin-top:8px">Specs funnel — illustrative numbers.</p>
+  <div class="footer"><span>SpecShip</span><span>22</span></div>
+</section>
+
+<!-- 23 -->
+<section class="slide">
+  <div class="kicker">What changes for each role</div>
+  <h2>Everyone gets the same truth, framed for their job.</h2>
+  <table class="plain big roomy">
+    <tr><th>Role</th><th>Before</th><th>With SpecShip</th></tr>
+    <tr><td>Product owner</td><td>“Is it done?” means asking around</td><td>A live status per requirement and criterion, with the proof attached</td></tr>
+    <tr><td>Developer</td><td>Searching before every change</td><td>The assistant knows the codebase; impact is known before editing</td></tr>
+    <tr><td>QA</td><td>Test plans rebuilt from tickets by hand</td><td>Regression packs generated from acceptance criteria, results recorded back</td></tr>
+    <tr><td>Tech lead</td><td>Architecture rules enforced by memory</td><td>Rules, health and drift checked on every change</td></tr>
+    <tr><td>Delivery lead</td><td>Sprint progress from status fields</td><td>Sprint coverage joined to real verification state</td></tr>
+  </table>
+  <p class="takeaway">What doesn't change: <span>your tracker, your repository, your review process.</span> SpecShip connects them.</p>
+  <div class="footer"><span>SpecShip</span><span>23</span></div>
+</section>
+
+<!-- 24 -->
+<section class="slide">
+  <div class="kicker">Getting started</div>
+  <h2>Adopt it one rung at a time — climb when the last one has paid off.</h2>
+  <div class="flow">
+    <div class="step" style="padding:22px 18px; min-height:190px"><div class="n">RUNG 1 · DAY ONE</div><h3 style="font-size:22px">The map</h3><p style="font-size:17px">Install once; the assistant stops re-reading the code. No process change.</p></div>
+    <div class="arrow">›</div>
+    <div class="step" style="padding:22px 18px; min-height:190px"><div class="n">RUNG 2</div><h3 style="font-size:22px">Health &amp; impact</h3><p style="font-size:17px">See risky areas and what a change would affect. Still no specs needed.</p></div>
+    <div class="arrow">›</div>
+    <div class="step" style="padding:22px 18px; min-height:190px"><div class="n">RUNG 3</div><h3 style="font-size:22px">Specs &amp; proof</h3><p style="font-size:17px">Write specs for new work; prove criteria with tests; turn on gates.</p></div>
+    <div class="arrow">›</div>
+    <div class="step" style="padding:22px 18px; min-height:190px"><div class="n">RUNG 4</div><h3 style="font-size:22px">Team traceability</h3><p style="font-size:17px">Dashboard and JIRA give product and delivery a live view.</p></div>
+  </div>
+  <div class="card accent" style="margin-top:28px">
+    <span class="tag blue">The pilot — how we measure the gain on your team</span>
+    <p style="font-size:21px; color:var(--ink)"><strong>One team · one feature area · two sprints</strong>, compared with the previous two sprints.</p>
+    <p style="margin-top:8px">We report: <strong>cycle time</strong>, <strong>review rounds</strong>, <strong>escaped bugs</strong> and the <strong>% of requirements verified</strong>. SpecShip supplies the verification data; cycle time and bugs come from your own tracker.</p>
+  </div>
+  <p class="takeaway">Rung 1 needs <span>no process change</span> — start there.</p>
+  <div class="footer"><span>SpecShip</span><span>24</span></div>
+</section>
+
+<!-- 25 -->
+<section class="slide">
+  <div class="kicker">Questions we hear</div>
+  <h2>Straight answers.</h2>
+  <div class="grid g2" style="gap:14px 34px">
+    <div><h3 style="font-size:20px; margin-bottom:4px">Does our code go to a third party?</h3><p style="font-size:18.5px">Not through SpecShip — its core runs entirely on your machine: no network calls, no telemetry. (Your AI assistant has its own terms.)</p></div>
+    <div><h3 style="font-size:20px; margin-bottom:4px">Will the AI change things on its own?</h3><p style="font-size:18.5px">No. Plans, final changes, learned rules and business facts all wait for a person's approval, and the delivery workflow builds in an isolated copy. (Day-to-day edits follow your assistant's own permission settings.)</p></div>
+    <div><h3 style="font-size:20px; margin-bottom:4px">Can we trust what the map says?</h3><p style="font-size:18.5px">It comes from the code's structure, not an AI summary — and where it can't be sure, it stays silent rather than guess.</p></div>
+    <div><h3 style="font-size:20px; margin-bottom:4px">Does it replace JIRA or our process?</h3><p style="font-size:18.5px">No. It connects requirements to code and proof, and mirrors into the JIRA you already use. Integrations are off until switched on.</p></div>
+    <div><h3 style="font-size:20px; margin-bottom:4px">What does writing specs cost us?</h3><p style="font-size:18.5px">A spec is a short plain-language requirement with testable criteria. The assistant drafts it from your description and asks only about gaps; you review it.</p></div>
+    <div><h3 style="font-size:20px; margin-bottom:4px">Which AI assistant — and what does it cost?</h3><p style="font-size:18.5px">Built for Claude Code (Gemini CLI opt-in). SpecShip itself is free and open source (MIT); your assistant subscription is unchanged. Setup: two commands and a restart (plus a one-time index per project).</p></div>
+    <div><h3 style="font-size:20px; margin-bottom:4px">Do we have to write specs for everything?</h3><p style="font-size:18.5px">No. The map works with zero specs. Add specs where proof matters most.</p></div>
+    <div><h3 style="font-size:20px; margin-bottom:4px">How soon do we see value?</h3><p style="font-size:18.5px">The map helps from the first session after install. Specs and gates add value feature by feature, as you adopt them.</p></div>
+  </div>
+  <div class="footer"><span>SpecShip</span><span>25</span></div>
+</section>
+
+<!-- 26 -->
+<section class="slide title-slide center">
+  <div class="kicker">In one sentence</div>
+  <h1 style="font-size:58px">SpecShip gives your AI assistant a map of the code, a contract for each requirement, and proof that it's met.</h1>
+  <p class="lead" style="margin-top:30px">Find it faster. Prove it's done. Know when it drifts.</p>
+  <div class="footer"><span>github.com/selvakumarEsra/specship</span><span>26</span></div>
+</section>
+
+</div>
+<div class="progress" id="progress"></div>
+<div class="nav-hint">← → to navigate · F for fullscreen</div>
+<script>
+  const slides = Array.from(document.querySelectorAll('.slide'));
+  let i = Math.max(0, Math.min(slides.length - 1, (parseInt(location.hash.slice(1), 10) || 1) - 1));
+  function fit() {
+    const s = Math.min(window.innerWidth / 1280, window.innerHeight / 720) * 0.96;
+    slides.forEach(el => el.style.transform = `translate(-50%, -50%) scale(${s})`);
+  }
+  function show(n) {
+    i = Math.max(0, Math.min(slides.length - 1, n));
+    slides.forEach((el, k) => el.classList.toggle('active', k === i));
+    document.getElementById('progress').style.width = ((i + 1) / slides.length * 100) + '%';
+    history.replaceState(null, '', '#' + (i + 1));
+  }
+  document.addEventListener('keydown', e => {
+    if (['ArrowRight', 'PageDown', ' ', 'Enter'].includes(e.key)) { e.preventDefault(); show(i + 1); }
+    if (['ArrowLeft', 'PageUp', 'Backspace'].includes(e.key)) { e.preventDefault(); show(i - 1); }
+    if (e.key === 'Home') show(0);
+    if (e.key === 'End') show(slides.length - 1);
+    if (e.key === 'f' || e.key === 'F') document.documentElement.requestFullscreen?.();
+  });
+  document.addEventListener('click', e => { if (e.target.closest('a')) return; show(e.clientX > window.innerWidth / 2 ? i + 1 : i - 1); });
+  window.addEventListener('resize', fit);
+  fit(); show(i);
+</script>
+</body>
+</html>
