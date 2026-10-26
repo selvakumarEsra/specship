@@ -4060,13 +4060,14 @@ program
   .option('--specs <ids>', 'run-batch: comma-separated requirement ids')
   .option('--concurrency <n>', 'run-batch: max concurrent runs per wave (default 3)')
   .option('--dry-run', 'gc: list merged-run worktrees without removing them')
+  .option('--agent <name>', 'run/run-batch: the coding agent prompt steps run on (claude | gemini; default: SPECSHIP_WORKFLOW_AGENT, workflow.agent, the launching agent, then claude)')
   .option('--json', 'emit JSON where applicable')
   .action(async (
     action: string,
     args: string[] | undefined,
     options: {
       input?: string[]; path?: string; comment?: string; reason?: string; json?: boolean;
-      specs?: string; concurrency?: string; dryRun?: boolean;
+      specs?: string; concurrency?: string; dryRun?: boolean; agent?: string;
     }
   ) => {
     const arg: string | undefined = args?.[0];
@@ -4077,6 +4078,7 @@ program
     }
     const { SpecShip } = await loadSpecShip();
     const { discoverWorkflows, loadWorkflowByName } = await import('../workflows/discovery');
+    const { resolveWorkflowAgent } = await import('../workflows/agents');
     const { WorkflowExecutor } = await import('../workflows/executor');
     const { WorktreeProvider } = await import('../isolation/worktree');
     const { handleJiraRunCompletion } = await import('../mcp/jira-tools');
@@ -4174,9 +4176,17 @@ program
               inputs[inp.name] = inp.default ?? '';
             }
           }
+          // Unknown agent names fail here, before a run exists (REQ-AGENTADAPT-006.A4).
+          try {
+            resolveWorkflowAgent({ flag: options.agent, projectRoot });
+          } catch (err) {
+            error(err instanceof Error ? err.message : String(err));
+            process.exit(1);
+          }
           const result = await executor.start(loaded.workflow, {
             projectRoot,
             inputs,
+            agent: options.agent,
             variables: {
               ARTIFACTS_DIR: path.join(getSpecShipDir(projectRoot), 'artifacts'),
               CONTEXT: projectRoot,
@@ -4348,6 +4358,12 @@ program
               baseInputs[inp.name] = inp.default ?? '';
             }
           }
+          try {
+            resolveWorkflowAgent({ flag: options.agent, projectRoot });
+          } catch (err) {
+            error(err instanceof Error ? err.message : String(err));
+            process.exit(1);
+          }
           const { runBatch, TERMINAL_RUN_STATUSES, DEFAULT_BATCH_CONCURRENCY } = await import('../workflows/batch');
           const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
           let batch: Awaited<ReturnType<typeof runBatch>>;
@@ -4359,6 +4375,7 @@ program
               startRun: async (specId) => {
                 const result = await executor.start(loaded.workflow, {
                   projectRoot,
+                  agent: options.agent,
                   inputs: { ...baseInputs, SPEC_ID: specId },
                   variables: {
                     ARTIFACTS_DIR: path.join(getSpecShipDir(projectRoot), 'artifacts'),

@@ -30,6 +30,11 @@ export interface RunnerContext {
   /** Verbose logging flag. */
   verbose?: boolean;
   /**
+   * The headless agent prompt steps run on — the id stored with the run
+   * (REQ-AGENTADAPT-006). Unset means the default agent.
+   */
+  agent?: string;
+  /**
    * Emit a workflow event mid-step — used by the agent runner to stream its
    * live activity (tool calls, message turns) into the run view. No-op when
    * unset. The executor stamps the step id/kind; callers pass type + data.
