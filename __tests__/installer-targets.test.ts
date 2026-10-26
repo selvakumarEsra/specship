@@ -37,6 +37,9 @@ import {
   geminiTarget,
   writeGeminiInstructionsEntry,
   removeGeminiInstructionsEntry,
+  renderGeminiPolicyToml,
+  writeGeminiPolicyEntry,
+  removeGeminiPolicyEntry,
 } from '../src/installer/targets/gemini';
 import {
   getGeminiRetrievalBlock,
@@ -1663,6 +1666,176 @@ describe('Gemini target — specifics', () => {
   it('SDD portion is byte-identical to Claude; --no-sdd strips it (REQ-GEMINI-004.A4)', geminiSddBlockIsByteIdenticalToClaudeAndOptOutStrips);
   it('re-install reports unchanged; an older block is replaced in place (REQ-GEMINI-004.A5)', geminiReinstallIsUnchangedAndReplacesOldBlockInPlace);
   it('global vs local write ~/.gemini/GEMINI.md and <cwd>/GEMINI.md respectively (REQ-GEMINI-004)', geminiRetrievalBlockHonoursGlobalVsLocalPath);
+
+  // ---- REQ-GEMINI-009: opt-in read-only auto-approval policy TOML ----
+
+  const policyPath = () =>
+    path.join(os.homedir(), '.gemini', 'policies', 'specship.toml');
+
+  /** REQ-GEMINI-009.A1 — the written TOML lists exactly the read-only tool set. */
+  function geminiTrustWritesReadOnlyPolicyToml(): void {
+    const result = geminiTarget.install('global', { autoAllow: true, trust: true });
+    const policyEntry = result.files.find((f) => f.path === policyPath());
+    expect(policyEntry?.action).toBe('created');
+    expect(fs.existsSync(policyPath())).toBe(true);
+
+    const body = fs.readFileSync(policyPath(), 'utf-8');
+    // Gemini's loader reads `[[rule]]` tables (0.28.0 PolicyFileSchema.rule);
+    // `[[rules]]` would parse but be ignored, leaving the policy inert.
+    expect(body).toMatch(/^\[\[rule\]\]$/m);
+    expect(body).not.toContain('[[rules]]');
+    expect(body).toContain('mcpName = "specship"');
+    expect(body).toContain('decision = "allow"');
+    // integer priority in 0–999.
+    const priorityMatch = body.match(/^priority = (\d+)\s*$/m);
+    expect(priorityMatch).not.toBeNull();
+    const priority = Number(priorityMatch![1]);
+    expect(Number.isInteger(priority)).toBe(true);
+    expect(priority).toBeGreaterThanOrEqual(0);
+    expect(priority).toBeLessThanOrEqual(999);
+
+    const expected = [
+      'specship_explore',
+      'specship_search',
+      'specship_node',
+      'specship_callers',
+      'specship_callees',
+      'specship_impact',
+      'specship_files',
+      'specship_status',
+      'specship_health',
+      'specship_spec',
+      'specship_drifted',
+    ];
+    for (const tool of expected) {
+      // Bare server tool name, never prefixed (Gemini composes `specship__<tool>`
+      // from mcpName itself — a prefixed name would match nothing).
+      expect(body).toContain(`"${tool}"`);
+      expect(body).not.toContain(`"specship__${tool}"`);
+    }
+    // No write-capable or external-service tool is allowed by this policy.
+    for (const forbidden of [
+      'specship_link_assert',
+      'specship_link_verify',
+      'specship_jira_',
+      'designer_',
+    ]) {
+      expect(body).not.toContain(forbidden);
+    }
+  }
+
+  /** REQ-GEMINI-009.A2 — the settings entry never carries `trust`. */
+  function geminiTrustNeverSetsTrustOnServerEntry(): void {
+    geminiTarget.install('global', { autoAllow: true, trust: true });
+    const entry = readSettings('global').mcpServers.specship;
+    expect('trust' in entry).toBe(false);
+    // And a plain install (no --trust) is likewise clean.
+    geminiTarget.uninstall('global');
+    geminiTarget.install('global', { autoAllow: true });
+    const entry2 = readSettings('global').mcpServers.specship;
+    expect('trust' in entry2).toBe(false);
+  }
+
+  /** REQ-GEMINI-009.A3 — a later install without --trust preserves the TOML. */
+  function geminiReinstallWithoutTrustPreservesPolicyFile(): void {
+    geminiTarget.install('global', { autoAllow: true, trust: true });
+    const before = fs.readFileSync(policyPath(), 'utf-8');
+
+    geminiTarget.install('global', { autoAllow: true });
+    expect(fs.existsSync(policyPath())).toBe(true);
+    expect(fs.readFileSync(policyPath(), 'utf-8')).toBe(before);
+  }
+
+  /** REQ-GEMINI-009.A3 — install without --trust writes no policy file. */
+  function geminiPlainInstallWritesNoPolicyFile(): void {
+    geminiTarget.install('global', { autoAllow: true });
+    expect(fs.existsSync(policyPath())).toBe(false);
+    // Admin dir is never written.
+    expect(fs.existsSync('/etc/gemini-cli')).toBe(false);
+  }
+
+  /** REQ-GEMINI-009.A4 — uninstall removes only our TOML; siblings survive. */
+  function geminiUninstallRemovesOnlyOurPolicyToml(): void {
+    geminiTarget.install('global', { autoAllow: true, trust: true });
+    const sibling = path.join(path.dirname(policyPath()), 'other.toml');
+    fs.writeFileSync(sibling, '# user authored\n');
+
+    const result = geminiTarget.uninstall('global');
+    const policyEntry = result.files.find((f) => f.path === policyPath());
+    expect(policyEntry?.action).toBe('removed');
+    expect(fs.existsSync(policyPath())).toBe(false);
+    expect(fs.existsSync(sibling)).toBe(true);
+    expect(fs.readFileSync(sibling, 'utf-8')).toBe('# user authored\n');
+    // Admin dir never touched.
+    expect(fs.existsSync('/etc/gemini-cli')).toBe(false);
+  }
+
+  /**
+   * REQ-GEMINI-009 — uninstall never deletes a user-authored specship.toml
+   * (file of the same name without our header marker is left byte-identical).
+   */
+  function geminiUninstallPreservesUserAuthoredSpecshipToml(): void {
+    const file = policyPath();
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    const userBody = '# my own policy\n[[rule]]\nmcpName = "other"\n';
+    fs.writeFileSync(file, userBody);
+
+    geminiTarget.uninstall('global');
+    expect(fs.existsSync(file)).toBe(true);
+    expect(fs.readFileSync(file, 'utf-8')).toBe(userBody);
+  }
+
+  /**
+   * REQ-GEMINI-009 — `--trust` never overwrites a user-authored specship.toml:
+   * only a file carrying our header marker is ours to rewrite.
+   */
+  function geminiTrustNeverOverwritesUserAuthoredSpecshipToml(): void {
+    const file = policyPath();
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    const userBody = '# my own policy\n[[rule]]\nmcpName = "other"\ndecision = "deny"\npriority = 5\n';
+    fs.writeFileSync(file, userBody);
+
+    const result = geminiTarget.install('global', { autoAllow: true, trust: true });
+    expect(result.files.find((f) => f.path === file)?.action).toBe('kept');
+    expect(fs.readFileSync(file, 'utf-8')).toBe(userBody);
+  }
+
+  /** REQ-GEMINI-009.A6 — byte-identical re-run with --trust reports unchanged. */
+  function geminiTrustReinstallIsUnchanged(): void {
+    geminiTarget.install('global', { autoAllow: true, trust: true });
+    const result = geminiTarget.install('global', { autoAllow: true, trust: true });
+    const policyEntry = result.files.find((f) => f.path === policyPath());
+    expect(policyEntry?.action).toBe('unchanged');
+  }
+
+  /**
+   * REQ-GEMINI-009.A5 — policy file plainly states that an admin policy wins
+   * and that shell-command confirmations are unaffected.
+   */
+  function geminiPolicyTomlDocumentsAdminOverrideAndShellCaveat(): void {
+    const body = renderGeminiPolicyToml();
+    expect(body.toLowerCase()).toContain('administrator');
+    expect(body).toContain('run_shell_command');
+  }
+
+  /** Lower-level writer/remover sanity: standalone helpers behave the same. */
+  function geminiPolicyHelpersAreStandalone(): void {
+    expect(writeGeminiPolicyEntry().action).toBe('created');
+    expect(writeGeminiPolicyEntry().action).toBe('unchanged');
+    expect(removeGeminiPolicyEntry().action).toBe('removed');
+    expect(removeGeminiPolicyEntry().action).toBe('not-found');
+  }
+
+  it('--trust writes exactly the read-only tool set as bare server names (REQ-GEMINI-009.A1)', geminiTrustWritesReadOnlyPolicyToml);
+  it('settings entry never carries `trust`, with or without --trust (REQ-GEMINI-009.A2)', geminiTrustNeverSetsTrustOnServerEntry);
+  it('install without --trust preserves a TOML a previous --trust install wrote (REQ-GEMINI-009.A3)', geminiReinstallWithoutTrustPreservesPolicyFile);
+  it('install without --trust writes no policy file (REQ-GEMINI-009.A3)', geminiPlainInstallWritesNoPolicyFile);
+  it('uninstall removes only specship.toml; sibling policies survive (REQ-GEMINI-009.A4)', geminiUninstallRemovesOnlyOurPolicyToml);
+  it('uninstall preserves a user-authored specship.toml without our marker (REQ-GEMINI-009)', geminiUninstallPreservesUserAuthoredSpecshipToml);
+  it('byte-identical --trust re-run reports unchanged (REQ-GEMINI-009)', geminiTrustReinstallIsUnchanged);
+  it('--trust never overwrites a user-authored specship.toml (REQ-GEMINI-009)', geminiTrustNeverOverwritesUserAuthoredSpecshipToml);
+  it('policy TOML states admin override + run_shell_command caveat (REQ-GEMINI-009.A5)', geminiPolicyTomlDocumentsAdminOverrideAndShellCaveat);
+  it('writeGeminiPolicyEntry / removeGeminiPolicyEntry round-trip cleanly (REQ-GEMINI-009)', geminiPolicyHelpersAreStandalone);
 });
 
 /**

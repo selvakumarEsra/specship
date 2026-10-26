@@ -197,9 +197,18 @@ export function writeGeminiMcpEntry(
 const CAPABILITY_NOTE =
   'Gemini CLI install wires the MCP server, writes a GEMINI.md steering ' +
   'block, and installs prompt/session/tool hooks. No slash commands, no ' +
-  'specship-explorer subagent, no status line, and no permissions auto-allow ' +
-  '— Gemini CLI has no equivalent surface. The tool playbook itself still ' +
-  'lives in the MCP server instructions.';
+  'specship-explorer subagent, and no status line — Gemini CLI has no ' +
+  'equivalent surface. The tool playbook itself still lives in the MCP ' +
+  'server instructions.';
+
+/**
+ * Opt-in `--trust` only (REQ-GEMINI-009.A5): shown alongside the policy
+ * writer so a user who opted in knows the limits of what the file does.
+ */
+const TRUST_POLICY_NOTE =
+  'Wrote ~/.gemini/policies/specship.toml allowing SpecShip\'s read-only ' +
+  'tools. An administrator policy still overrides this file, and ' +
+  'run_shell_command confirmations are unaffected.';
 
 /**
  * Gemini's project-level hooks only run when the user has marked the folder
@@ -399,6 +408,98 @@ export function removeGeminiSddHooksEntry(loc: Location): WriteResult['files'][n
   return stripGeminiHooksMatching(loc, isGeminiSddHookCommand);
 }
 
+/**
+ * Policy TOML (REQ-GEMINI-009): auto-allow Gemini's per-tool confirmation
+ * for SpecShip's READ-ONLY MCP tools only. User tier by construction — we
+ * never write to the admin policies directory, and an admin rule still wins
+ * over this one (that is the intended outcome). `run_shell_command` is out
+ * of scope: this file removes prompts only for SpecShip's own tools.
+ *
+ * Verified against Gemini CLI 0.28.0 `loadPoliciesFromToml`: the loader
+ * composes `specship__<toolName>` from `mcpName` itself, so every entry here
+ * is the BARE server tool name — a prefixed name would match nothing.
+ */
+function geminiPolicyPath(): string {
+  return path.join(os.homedir(), '.gemini', 'policies', 'specship.toml');
+}
+const GEMINI_POLICY_HEADER_MARKER =
+  '# Written by specship install --trust — REQ-GEMINI-009';
+const READONLY_TOOLS: readonly string[] = Object.freeze([
+  'specship_explore',
+  'specship_search',
+  'specship_node',
+  'specship_callers',
+  'specship_callees',
+  'specship_impact',
+  'specship_files',
+  'specship_status',
+  'specship_health',
+  'specship_spec',
+  'specship_drifted',
+]);
+/** Mid of Gemini's 0–999 priority range: well below admin tiers. */
+const POLICY_PRIORITY = 100;
+
+/**
+ * Pure string builder for `specship.toml`. Single source for the writer so
+ * the on-disk content and any future `printConfig` surface cannot drift.
+ */
+export function renderGeminiPolicyToml(): string {
+  const toolList = READONLY_TOOLS.map((t) => `"${t}"`).join(', ');
+  return [
+    GEMINI_POLICY_HEADER_MARKER,
+    '# User-tier policy auto-allowing SpecShip\'s read-only MCP tools.',
+    '# An administrator policy overrides this file. Shell-command',
+    '# confirmations (run_shell_command) are not affected.',
+    '',
+    // Gemini's loader reads `[[rule]]` tables (0.28.0 PolicyFileSchema.rule);
+    // any other table name is silently ignored and the policy does nothing.
+    '[[rule]]',
+    'mcpName = "specship"',
+    `toolName = [${toolList}]`,
+    'decision = "allow"',
+    `priority = ${POLICY_PRIORITY}`,
+    '',
+  ].join('\n');
+}
+
+/**
+ * Write `~/.gemini/policies/specship.toml`. Idempotent — byte-identical
+ * contents report `unchanged`. Never touches the admin policies directory.
+ */
+export function writeGeminiPolicyEntry(): WriteResult['files'][number] {
+  const file = geminiPolicyPath();
+  const content = renderGeminiPolicyToml();
+  const existed = fs.existsSync(file);
+  if (existed) {
+    const current = fs.readFileSync(file, 'utf-8');
+    if (current === content) return { path: file, action: 'unchanged' };
+    // Never overwrite a user-authored file of the same name — only one that
+    // an earlier `--trust` install wrote (it carries our header marker).
+    if (!current.startsWith(GEMINI_POLICY_HEADER_MARKER)) return { path: file, action: 'kept' };
+  }
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, content);
+  return { path: file, action: existed ? 'updated' : 'created' };
+}
+
+/**
+ * Inverse of `writeGeminiPolicyEntry`. Removes `specship.toml` ONLY if its
+ * contents carry our header marker — a user-authored file of the same name
+ * is left byte-identical. Sibling files in the policies directory are
+ * untouched; the admin policies dir is never written or read.
+ */
+export function removeGeminiPolicyEntry(): WriteResult['files'][number] {
+  const file = geminiPolicyPath();
+  if (!fs.existsSync(file)) return { path: file, action: 'not-found' };
+  const current = fs.readFileSync(file, 'utf-8');
+  if (!current.startsWith(GEMINI_POLICY_HEADER_MARKER)) {
+    return { path: file, action: 'kept' };
+  }
+  fs.unlinkSync(file);
+  return { path: file, action: 'removed' };
+}
+
 export class GeminiCliTarget implements AgentTarget {
   readonly id = 'gemini' as const;
   readonly displayName = 'Gemini CLI';
@@ -448,7 +549,14 @@ export class GeminiCliTarget implements AgentTarget {
     // self-heals (strip on `--no-sdd`).
     files.push(writeGeminiHooksEntry(loc));
     files.push(includeGovernance ? writeGeminiSddHooksEntry(loc) : removeGeminiSddHooksEntry(loc));
+    // REQ-GEMINI-009: strictly opt-in. Omitting `--trust` NEVER touches the
+    // policy file — a prior `--trust` install is preserved byte-identical
+    // (parity with REQ-INTEG-001.A3).
     const notes: string[] = [CAPABILITY_NOTE];
+    if (opts.trust === true) {
+      files.push(writeGeminiPolicyEntry());
+      notes.push(TRUST_POLICY_NOTE);
+    }
     if (loc === 'local') notes.push(LOCAL_TRUST_NOTE);
     return { files, notes };
   }
@@ -484,6 +592,12 @@ export class GeminiCliTarget implements AgentTarget {
     // removal leaves it empty, so a user-authored GEMINI.md is preserved.
     files.push(removeGeminiInstructionsEntry(loc));
     files.push(removeGeminiSddEntry(loc));
+    // REQ-GEMINI-009.A4: strip our policy TOML iff it carries our header
+    // marker — a user-authored specship.toml of the same name is left
+    // byte-identical. Sibling files in the policies directory survive, and
+    // the admin policies dir is never written or read.
+    const policyCleanup = removeGeminiPolicyEntry();
+    if (policyCleanup.action !== 'not-found') files.push(policyCleanup);
     return { files };
   }
 

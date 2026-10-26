@@ -83,6 +83,18 @@ export interface InstallOptions {
    * when none exists (or when re-asserting its own).
    */
   installStatusLine?: boolean;
+  /**
+   * Gemini CLI only (REQ-GEMINI-009): write an opt-in, user-tier policy TOML
+   * at `~/.gemini/policies/specship.toml` that auto-allows SpecShip's
+   * read-only MCP tools. Off by default and never prompted — strictly opt-in
+   * via `--trust`. The MCP server entry is NEVER given `trust: true` (that
+   * would allow every tool, including the write-capable ones). SpecShip never
+   * writes to Gemini's system/admin policy directory; an administrator policy
+   * can still override this file, and `run_shell_command` confirmations are
+   * unaffected. The option is host-neutral at the type level — targets that
+   * have no policy surface (Claude) ignore it.
+   */
+  trust?: boolean;
 }
 
 export interface AgentTarget {

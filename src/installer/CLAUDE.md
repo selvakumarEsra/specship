@@ -14,7 +14,7 @@ new file + one registry entry.
 
 - **Claude Code only, plus the ratified Gemini CLI exception** (explicit ask,
   2026-08-22 — `specs/agent-target-gemini.md`, `GEMINI-TARGET-DOC`).
-  `targets/gemini.ts` implements the full `AgentTarget` contract over three
+  `targets/gemini.ts` implements the full `AgentTarget` contract over four
   surfaces — Gemini's `mcpServers` settings block (REQ-GEMINI-002/003),
   GEMINI.md steering (REQ-GEMINI-004: a marker-delimited retrieval-preference
   block plus the default-on SDD rule, generated from the same
@@ -25,7 +25,14 @@ new file + one registry entry.
   REQ-GEMINI-011 adds `BeforeTool` matchers on `grep_search` / `glob` /
   `run_shell_command` for the search interceptor, with opt-in strict mode
   via `SPECSHIP_GEMINI_STRICT=1` that denies built-in search tools only —
-  never `run_shell_command`).
+  never `run_shell_command`), and an opt-in user-tier policy TOML at
+  `~/.gemini/policies/specship.toml` (REQ-GEMINI-009, `--trust`) that
+  auto-allows SpecShip's read-only tools ONLY — write-capable tools and
+  `run_shell_command` still prompt, an administrator policy still wins,
+  the MCP entry is NEVER given `trust: true`, and uninstall removes the
+  TOML iff it carries our header marker (user-authored files of the same
+  name are left byte-identical). Omitting `--trust` writes no policy file;
+  a plain reinstall preserves one a prior `--trust` install wrote.
   Being in `ALL_TARGETS` does NOT make it install by default:
   `resolveInstallTargets` maps absent / `claude` / `auto` / `all` to Claude
   alone, so Gemini is reachable only by naming it (`--target gemini`,

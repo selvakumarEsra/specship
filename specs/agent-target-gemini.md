@@ -381,6 +381,20 @@ off the shell.
 implementations:
   - src/installer/targets/gemini.ts:GeminiCliTarget.install
   - src/installer/targets/gemini.ts:GeminiCliTarget.uninstall
+  - src/installer/targets/gemini.ts:writeGeminiPolicyEntry
+  - src/installer/targets/gemini.ts:removeGeminiPolicyEntry
+  - src/installer/targets/gemini.ts:renderGeminiPolicyToml
+
+verifies:
+  - __tests__/installer-targets.test.ts:geminiTrustWritesReadOnlyPolicyToml
+  - __tests__/installer-targets.test.ts:geminiTrustNeverSetsTrustOnServerEntry
+  - __tests__/installer-targets.test.ts:geminiReinstallWithoutTrustPreservesPolicyFile
+  - __tests__/installer-targets.test.ts:geminiPlainInstallWritesNoPolicyFile
+  - __tests__/installer-targets.test.ts:geminiUninstallRemovesOnlyOurPolicyToml
+  - __tests__/installer-targets.test.ts:geminiUninstallPreservesUserAuthoredSpecshipToml
+  - __tests__/installer-targets.test.ts:geminiTrustReinstallIsUnchanged
+  - __tests__/installer-targets.test.ts:geminiPolicyTomlDocumentsAdminOverrideAndShellCaveat
+  - __tests__/installer-targets.test.ts:geminiPolicyHelpersAreStandalone
 
 ## Acceptance
 <!-- id: REQ-GEMINI-009.A1 -->
