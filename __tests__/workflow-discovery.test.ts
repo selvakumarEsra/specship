@@ -438,6 +438,32 @@ describe('bundled implement workflows — pipeline quality gates (REQ-AUTHG-004/
     }
   }
 
+  function workflowProposesKnowledgeButNeverWritesDomain(name: string): void {
+    const wf = load(name);
+    const propose = nodeOf(wf, 'knowledge_proposals');
+    expect(propose.kind).toBe('prompt');
+    expect(propose.depends_on).toContain('adversarial_review');
+    expect(propose.prompt).toContain('.specship/knowledge/proposals/');
+    expect(propose.prompt).toContain('NEVER edit');
+    const publish = nodeOf(wf, 'knowledge_publish');
+    expect(publish.kind).toBe('bash');
+    // A change under specs/domain/ halts the run — only a human applies knowledge.
+    expect(publish.bash).toContain('git status --porcelain -- specs/domain');
+    expect(publish.bash).toContain('exit 1');
+    expect(nodeOf(wf, 'final_review').depends_on).toContain('knowledge_publish');
+    expect(nodeOf(wf, 'final_review').message).toContain('$knowledge_publish.output');
+  }
+
+  function promptsRespectEnforcedRules(name: string): void {
+    const wf = load(name);
+    for (const id of ['plan', 'implement']) {
+      const prompt = nodeOf(wf, id).prompt ?? '';
+      expect(prompt, id).toContain('## Enforced');
+      expect(prompt, id).toContain('hard constraint');
+      expect(prompt, id).toContain('specship knowledge check');
+    }
+  }
+
   function qualityBaselineRunsBeforeImplement(name: string): void {
     const wf = load(name);
     const base = nodeOf(wf, 'quality_baseline');
@@ -528,6 +554,14 @@ describe('bundled implement workflows — pipeline quality gates (REQ-AUTHG-004/
 
   it.each(['spec-implement', 'spec-implement-mixed'])(
     '%s runs the readiness gate before planning (REQ-PIPETRUST-004.A3)', readinessGatesThePlan);
+
+  it.each(['spec-implement', 'spec-implement-mixed'])(
+    '%s proposes knowledge but never writes specs/domain (REQ-KNOW-004.A1)',
+    workflowProposesKnowledgeButNeverWritesDomain);
+
+  it.each(['spec-implement', 'spec-implement-mixed'])(
+    'the %s plan and implement prompts treat enforced rules as constraints (REQ-KNOW-005.A2)',
+    promptsRespectEnforcedRules);
 
   it.each(['spec-implement', 'spec-implement-mixed'])(
     '%s runs postcheck after the quality recheck and halts on failure (REQ-PIPETRUST-005.A5)',

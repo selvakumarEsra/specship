@@ -3436,7 +3436,7 @@ program
         for await (const c of process.stdin) chunks.push(c as Buffer);
       } catch { /* no stdin — fall through with empty payload */ }
       const raw = Buffer.concat(chunks).toString('utf-8');
-      const { parseHookPayload, deriveHostTraits, buildHookAdditionalContext } =
+      const { parseHookPayload, deriveHostTraits, buildHookAdditionalContext, buildHookDenyDecision } =
         await import('../activation/hook-output');
       const payload = parseHookPayload(raw);
       const traits = deriveHostTraits(payload);
@@ -3485,7 +3485,7 @@ program
         if ('decision' in result) {
           // Gemini BeforeToolHookOutput reads `decision` at the top level
           // (isBlockingDecision), not inside hookSpecificOutput.
-          process.stdout.write(JSON.stringify({ decision: 'deny', reason: result.reason }) + '\n');
+          process.stdout.write(buildHookDenyDecision(result.reason));
         } else {
           process.stdout.write(
             buildHookAdditionalContext(result.additionalContext, payload.hookEventName, traits.fallbackToolEvent),

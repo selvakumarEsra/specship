@@ -81,6 +81,12 @@ nodes:
       criterion id in its title):
       $readiness.output
 
+      Domain facts that `specship_spec` returns with the requirement are
+      constraints, not background: honour each external fact's verified
+      version, and treat every `## Enforced` rule (`<glob>` must not match
+      `/<regex>/`) as a hard constraint — `specship knowledge check` fails the
+      run on a violation (REQ-KNOW-005).
+
       The plan should list:
       - Files to create or modify (with project-relative paths)
       - Specific functions/methods/classes to add or change
@@ -166,6 +172,12 @@ nodes:
       - mcp__specship__specship_spec
     prompt: |
       Implement the approved plan. Follow it closely.
+
+      Domain facts that `specship_spec` returns with the requirement are
+      constraints, not background: honour each external fact's verified
+      version, and treat every `## Enforced` rule (`<glob>` must not match
+      `/<regex>/`) as a hard constraint — `specship knowledge check` fails the
+      run on a violation (REQ-KNOW-005).
 
       Plan:
       $plan.output
@@ -645,9 +657,88 @@ nodes:
       3. `Verdict:` one line — the most serious gap a reviewer should look at
          first, or `no gaps found`.
 
+  - id: knowledge_proposals
+    kind: prompt
+    depends_on: [adversarial_review]
+    output_type: knowledge_proposals
+    allowed_tools:
+      - Read
+      - Write
+      - mcp__specship__specship_spec
+      - mcp__specship__specship_explore
+    prompt: |
+      Propose knowledge this change relied on, for a HUMAN to confirm
+      (REQ-KNOW-004). Domain knowledge is human-confirmed, never
+      auto-extracted (DOM-SPECSHIP-003): you only PROPOSE.
+
+      Write 0–5 proposal files, one fact each, ONLY under
+      `.specship/knowledge/proposals/` (create the directory). NEVER edit
+      `specs/domain/` or any tracked file. Each file is a domain fact:
+
+      ---
+      title: <short name>
+      type: term | rule | decision | constraint | external
+      area: <AREA, e.g. the prefix used by existing DOM-<AREA>-NNN facts>
+      depends_on: $INPUT.SPEC_ID
+      # external facts ONLY — verified from the installed dependency, not memory:
+      dependency: <package or tool name>
+      version: <installed version you verified against>
+      source: <file and symbol in that dependency>
+      ---
+
+      # <title>
+
+      <one paragraph: the fact, stated plainly>
+
+      ## Enforced            (optional — only for a mechanically checkable rule)
+      - `<glob>` must not match `/<regex>/`
+
+      Propose only what this change actually depended on and a future change
+      would otherwise rediscover — especially facts about third-party tools.
+      If there is nothing worth keeping, write no files.
+
+      Implementation diff summary:
+      $implement.output
+
+      Output one line per proposal file you wrote, or `NO_PROPOSALS`.
+
+  - id: knowledge_publish
+    kind: bash
+    depends_on: [knowledge_proposals]
+    output_type: knowledge_report
+    bash: |
+      # REQ-KNOW-004.A1 — the proposal step may write ONLY proposals. Any
+      # change under specs/domain/ halts the run. Proposals are then copied to
+      # the main project's .specship/knowledge/proposals/ (a run worktree's
+      # .specship/ is gitignored and would vanish), where
+      # `specship knowledge proposals` / `apply` / `reject` find them.
+      if [ -n "$(git status --porcelain -- specs/domain 2>/dev/null)" ]; then
+        echo "KNOWLEDGE_PROPOSALS=refused"
+        echo "HALT_CAUSE=the knowledge step changed specs/domain/ — only a human applies knowledge"
+        git status --porcelain -- specs/domain
+        exit 1
+      fi
+      SRC=".specship/knowledge/proposals"
+      N=0
+      if [ -d "$SRC" ]; then N=$(ls "$SRC"/*.md 2>/dev/null | wc -l | tr -d ' '); fi
+      echo "KNOWLEDGE_PROPOSALS=$N"
+      if [ "$N" -gt 0 ] && [ -n "$SPECSHIP_ARTIFACTS_DIR" ]; then
+        DEST="$(cd "$SPECSHIP_ARTIFACTS_DIR/../../.." 2>/dev/null && pwd)/knowledge/proposals"
+        mkdir -p "$DEST"
+        for f in "$SRC"/*.md; do
+          base=$(basename "$f")
+          target="$DEST/$base"
+          i=2
+          while [ -e "$target" ]; do target="$DEST/${base%.md}-$i.md"; i=$((i+1)); done
+          cp "$f" "$target"
+          echo "- $(basename "$target") ($(sed -n 's/^title: //p' "$f" | head -1))"
+        done
+        echo "Review with: specship knowledge proposals · apply <id> · reject <id>"
+      fi
+
   - id: final_review
     kind: approval
-    depends_on: [adversarial_review]
+    depends_on: [adversarial_review, knowledge_publish]
     message: |
       Implementation complete for $INPUT.SPEC_ID.
 
@@ -672,6 +763,10 @@ nodes:
 
       Adversarial review:
       $adversarial_review.output
+
+      Knowledge proposals (nothing is applied until you run
+      `specship knowledge apply <id>`):
+      $knowledge_publish.output
 
       Approve to finalize the run (worktree is left for you to inspect
       and merge), or reject to abandon.
