@@ -2940,6 +2940,7 @@ program
   // existing invocations — including our own offline-install scripts — behave
   // exactly as before.
   .option('-t, --target <ids>', 'Agents to wire, comma-separated: "claude" (default) | "gemini" | "claude,gemini". Also selects the snippet `--print-config` prints. Legacy: "auto"/"all" = claude, "none" = skip')
+  .option('--trust', 'Gemini only (REQ-GEMINI-009): write ~/.gemini/policies/specship.toml auto-allowing SpecShip\'s read-only tools. Opt-in — an admin policy still wins and run_shell_command is unaffected')
   .action(async (opts: {
     target?: string;
     location?: string;
@@ -2951,6 +2952,7 @@ program
     statusline?: boolean;
     skipStatusline?: boolean;
     skipIndex?: boolean;
+    trust?: boolean;
     printConfig?: boolean;
     path?: string;
   }) => {
@@ -3019,6 +3021,8 @@ program
         statusLine,
         // REQ-AUDFIX-001: a local install must honor --skip-index too.
         skipIndex: opts.skipIndex === true,
+        // REQ-GEMINI-009: strictly opt-in, no prompt. Claude target ignores it.
+        trust: opts.trust === true ? true : undefined,
         yes: opts.yes,
       });
 

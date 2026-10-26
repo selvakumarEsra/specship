@@ -86,7 +86,15 @@ specship install --target gemini                  # Gemini CLI only
 specship install --target claude,gemini           # both agents
 ```
 
-A plain `specship install` still wires Claude Code alone — Gemini is opt-in. The install writes the `specship` entry into your Gemini settings file (`~/.gemini/settings.json` globally, `<your-project>/.gemini/settings.json` with `--location local`), preserving any other MCP servers and settings already there, and `specship uninstall --target gemini --keep-data` removes exactly that entry.
+A plain `specship install` still wires Claude Code alone — Gemini is opt-in. The install writes, preserving any other servers, settings and hooks already there:
+
+- the `specship` MCP server entry in your Gemini settings file (`~/.gemini/settings.json` globally, `<your-project>/.gemini/settings.json` with `--location local`);
+- a short block in `GEMINI.md` telling Gemini to reach for SpecShip before searching files (plus the spec-first rule, unless you pass `--no-sdd`);
+- hooks: a per-prompt reminder, the session cheat-sheet, index sync after file writes, and a one-line pointer to SpecShip the first time a session searches with Gemini's own tools or `grep`/`rg` in the shell. Set `SPECSHIP_GEMINI_STRICT=1` to redirect Gemini's built-in file-search tools to SpecShip instead; shell commands are never blocked. Gemini runs project-level hooks only in folders you've marked trusted.
+
+Add `--trust` to also write `~/.gemini/policies/specship.toml`, which auto-approves SpecShip's read-only tools (explore, search, callers, impact, …) so they stop asking for confirmation. Tools that write — JIRA, link changes, Designer — still ask. **An administrator policy always overrides this file**, and it does not affect Gemini's confirmation prompt for shell commands.
+
+`specship uninstall --target gemini --keep-data` removes exactly what the install wrote.
 
 <details>
 <summary>Prefer to paste it in by hand?</summary>

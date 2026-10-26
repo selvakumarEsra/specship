@@ -115,6 +115,13 @@ export interface RunInstallerOptions {
    */
   skipIndex?: boolean;
   /**
+   * Gemini CLI only (REQ-GEMINI-009): write the opt-in, user-tier policy TOML
+   * that auto-allows SpecShip's read-only MCP tools. Off by default and
+   * never prompted. Host-neutral at the type level — the Claude target
+   * simply ignores it.
+   */
+  trust?: boolean;
+  /**
    * Skip every confirm and use defaults: location=local,
    * autoAllow=true. For scripting / CI.
    */
@@ -298,6 +305,7 @@ export async function runInstallerWithOptions(
       withJira: opts.withJira,
       withDesigner: opts.withDesigner,
       installStatusLine,
+      trust: opts.trust,
     });
     for (const file of result.files) {
       const verb = file.action === 'unchanged'
