@@ -14,16 +14,19 @@ new file + one registry entry.
 
 - **Claude Code only, plus the ratified Gemini CLI exception** (explicit ask,
   2026-08-22 — `specs/agent-target-gemini.md`, `GEMINI-TARGET-DOC`).
-  `targets/gemini.ts` implements the full `AgentTarget` contract over two
-  surfaces — Gemini's `mcpServers` settings block (REQ-GEMINI-002/003) and
+  `targets/gemini.ts` implements the full `AgentTarget` contract over three
+  surfaces — Gemini's `mcpServers` settings block (REQ-GEMINI-002/003),
   GEMINI.md steering (REQ-GEMINI-004: a marker-delimited retrieval-preference
   block plus the default-on SDD rule, generated from the same
-  `getSddRuleBlock` the Claude target uses so the two surfaces cannot drift).
+  `getSddRuleBlock` the Claude target uses so the two surfaces cannot drift),
+  and the settings `hooks` block (REQ-GEMINI-010: `BeforeAgent` /
+  `SessionStart` / `AfterTool` wired to the same `specship` hook commands the
+  Claude target uses; those commands echo the payload's `hook_event_name`).
   Being in `ALL_TARGETS` does NOT make it install by default:
   `resolveInstallTargets` maps absent / `claude` / `auto` / `all` to Claude
   alone, so Gemini is reachable only by naming it (`--target gemini`,
   `--target claude,gemini`). Everything Gemini has no equivalent for
-  (permissions, hooks, commands, the explorer subagent, the status line) is
+  (permissions, slash commands, the explorer subagent, the status line) is
   left unwritten and named in `WriteResult.notes` — never faked, never
   half-installed (REQ-GEMINI-006). TOML commands (REQ-GEMINI-005) are still
   unimplemented. Don't add any OTHER agent target without an equally explicit

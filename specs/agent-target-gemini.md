@@ -428,8 +428,22 @@ MUST survive install and uninstall byte-identical.
 
 implementations:
   - src/installer/targets/gemini.ts:GeminiCliTarget.install
+  - src/installer/targets/gemini.ts:writeGeminiHooksEntry
+  - src/installer/targets/gemini.ts:writeGeminiSddHooksEntry
+  - src/installer/targets/gemini.ts:removeGeminiHooksEntry
+  - src/installer/targets/gemini.ts:removeGeminiSddHooksEntry
+  - src/activation/hook-output.ts:parseHookPayload
+  - src/activation/hook-output.ts:buildHookAdditionalContext
   - src/activation/steering.ts:buildSteeringNudge
   - src/activation/cheatsheet.ts:buildCheatsheetPayload
+
+verifies:
+  - __tests__/installer-targets.test.ts:geminiInstallWritesHookEntries
+  - __tests__/installer-targets.test.ts:geminiHookInstallIsIdempotent
+  - __tests__/installer-targets.test.ts:geminiBeforeAgentNudgeEmitsAdditionalContext
+  - __tests__/installer-targets.test.ts:geminiSessionStartCheatsheetEmitsSystemMessage
+  - __tests__/installer-targets.test.ts:geminiUninstallPreservesUserHooks
+  - __tests__/installer-targets.test.ts:geminiNoSddOmitsSpecNudge
 
 ## Acceptance
 <!-- id: REQ-GEMINI-010.A1 -->
