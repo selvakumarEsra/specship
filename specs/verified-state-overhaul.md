@@ -4,6 +4,18 @@ title: Review remediation Wave 2 — make `verified` real
 owner: specship-core
 priority: high
 version: 1
+jira_issue_REQ-VSTATE-001: SSHIP-323
+jira_fingerprint_REQ-VSTATE-001: d4598227027f5ff7
+jira_issue_REQ-VSTATE-002: SSHIP-328
+jira_fingerprint_REQ-VSTATE-002: 7f3f0c65e58841d0
+jira_issue_REQ-VSTATE-003: SSHIP-333
+jira_fingerprint_REQ-VSTATE-003: 89be63fd265a8945
+jira_issue_REQ-VSTATE-004: SSHIP-337
+jira_fingerprint_REQ-VSTATE-004: 3b662eef92929b84
+jira_issue_REQ-VSTATE-005: SSHIP-342
+jira_fingerprint_REQ-VSTATE-005: 7172e041c6528554
+jira_issue_REQ-VSTATE-006: SSHIP-346
+jira_fingerprint_REQ-VSTATE-006: c5ac0e16f2b908cc
 ---
 
 <!-- id: VSTATE-DOC -->

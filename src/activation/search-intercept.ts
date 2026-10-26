@@ -1,28 +1,37 @@
 /**
- * Point-of-use search interceptor (STEER-HOOK-DOC, REQ-STEER-004/005).
+ * Point-of-use search interceptor (STEER-HOOK-DOC, REQ-STEER-004/005,
+ * REQ-GEMINI-011).
  *
  * The prompt-level nudge (steering.ts) fires once, at prompt submit, and its
  * pull decays across a long turn — the observed failure is a search-shaped
  * tool call made many tool-calls after the nudge. This module is the decision
- * logic for the `PreToolUse` hook the installer writes on search tools
- * (`specship search-intercept`): deliver the same guidance at the moment of
- * the wrong choice.
+ * logic for the hook the installer writes on each host's search tools
+ * (Claude: PreToolUse on Grep/Glob; Gemini: BeforeTool on grep_search / glob /
+ * run_shell_command): deliver the same guidance at the moment of the wrong
+ * choice.
  *
- * Two properties are non-negotiable:
+ * Two modes exist:
  *
- *   - ADVISORY (REQ-STEER-004): the emitted text is `additionalContext`,
- *     never a permission decision. A search the index cannot answer is a
- *     legitimate search; a wrong denial costs the agent a turn — the very
- *     failure this feature exists to reduce.
- *   - SELF-SILENCING (REQ-STEER-005): at most one line per session, and only
- *     when the session has made zero specship tool calls. Firing on every
- *     search would make the hook noise, and noise is what taught the agent to
- *     ignore the prompt-level nudge.
+ *   - ADVISORY (default, both hosts, REQ-STEER-004/005): emit a one-line
+ *     `additionalContext` redirect. At most once per session, silent once the
+ *     session has used specship. The search still runs.
+ *   - STRICT (Gemini-only opt-in, REQ-GEMINI-011): for a built-in search tool
+ *     (`grep_search`, `glob`) in an indexed project, emit a top-level
+ *     `{decision:'deny'}` with a reason naming `specship_explore`. A
+ *     search-shaped `run_shell_command` NEVER denies — Gemini's hook runs
+ *     after the user's shell confirmation, so denying it would make the user
+ *     approve a command and then see it blocked. Parse-failure / unindexed
+ *     project / already-using-specship → ALLOW.
+ *
+ * Shared code stays agent-agnostic: this file never sniffs `hook_event_name`
+ * or tool-name prefixes. The caller (bin/specship) hands in host traits
+ * derived in the hook I/O adapter (`activation/hook-output.ts`).
  */
 
 import * as fs from 'fs';
 import * as path from 'path';
 import { resolveSetting } from '../config/runtime-settings';
+import { CLAUDE_CODE_TRAITS } from './hook-output';
 
 /**
  * The one redirect line. Explicitly advisory ("your search still runs") so
@@ -30,7 +39,7 @@ import { resolveSetting } from '../config/runtime-settings';
  */
 export const SEARCH_INTERCEPT_TEXT =
   'SpecShip: this project has an indexed code graph. For finding or understanding code, ' +
-  'mcp__specship__specship_explore with the relevant symbol/file names usually answers in ' +
+  'specship_explore with the relevant symbol/file names usually answers in ' +
   'ONE call and returns the verbatim source. Your search still runs — reach for explore ' +
   'on the next lookup.';
 
@@ -60,7 +69,6 @@ function readState(file: string): InterceptState {
   }
 }
 
-/** Best-effort write with TTL pruning; a failed write must never fail the hook. */
 function writeState(file: string, state: InterceptState, now: Date): void {
   try {
     const pruned: InterceptState = {};
@@ -74,25 +82,20 @@ function writeState(file: string, state: InterceptState, now: Date): void {
   }
 }
 
-/**
- * Whether the session's transcript shows any specship tool USE. A transcript
- * record must be an actual `tool_use` naming a specship tool — a bare
- * mention of a tool name is NOT use: transcripts routinely carry the full
- * tool listing (`deferred_tools_delta` attachments, skill listings), so a
- * substring test alone silences the hook in every session where specship is
- * merely INSTALLED (found live in the REQ-STEER-006 A/B — the interceptor
- * never fired). Reads at most the trailing 4 MB — usage anywhere counts, but
- * a huge transcript must not blow the hook's latency budget, and a false
- * negative costs one harmless advisory line.
- */
-function transcriptUsedSpecship(transcriptPath: string): boolean {
+type TranscriptScan = 'used' | 'not-used' | 'parse-failure';
+
+function scanTranscript(
+  transcriptPath: string,
+  markers: string[],
+  format: 'jsonl' | 'single-json',
+): TranscriptScan {
   const MAX_SCAN_BYTES = 4 * 1024 * 1024;
   let text: string;
   try {
     const stat = fs.statSync(transcriptPath);
     if (stat.size <= MAX_SCAN_BYTES) {
       text = fs.readFileSync(transcriptPath, 'utf-8');
-    } else {
+    } else if (format === 'jsonl') {
       const fd = fs.openSync(transcriptPath, 'r');
       try {
         const buf = Buffer.alloc(MAX_SCAN_BYTES);
@@ -101,24 +104,97 @@ function transcriptUsedSpecship(transcriptPath: string): boolean {
       } finally {
         fs.closeSync(fd);
       }
+    } else {
+      // single-json needs a full read to parse; a huge transcript can't be
+      // reliably scanned → treat as parse-failure (ALLOW in strict).
+      return 'parse-failure';
     }
   } catch {
-    return false;
+    return format === 'single-json' ? 'parse-failure' : 'not-used';
   }
-  // One JSONL record per line; a specship tool_use block puts both markers on
-  // the same record. Cheap two-substring test — no JSON.parse per line.
-  for (const line of text.split('\n')) {
-    if (line.includes('"type":"tool_use"') && line.includes('"name":"mcp__specship__')) {
-      return true;
+
+  if (format === 'jsonl') {
+    for (const line of text.split('\n')) {
+      if (line.includes('"type":"tool_use"') && markers.some((m) => line.includes(m))) {
+        return 'used';
+      }
+    }
+    return 'not-used';
+  }
+
+  // single-json: Gemini CLI's ChatRecordingService writes one pretty-printed
+  // JSON doc with `messages[].toolCalls[].name`. Parse once, iterate names.
+  let doc: unknown;
+  try {
+    doc = JSON.parse(text);
+  } catch {
+    return 'parse-failure';
+  }
+  const messages = (doc as { messages?: unknown })?.messages;
+  if (!Array.isArray(messages)) return 'not-used';
+  for (const m of messages) {
+    const calls = (m as { toolCalls?: unknown })?.toolCalls;
+    if (!Array.isArray(calls)) continue;
+    for (const c of calls) {
+      const name = (c as { name?: unknown })?.name;
+      if (typeof name === 'string') {
+        // Gemini records the function name the model called, which for an
+        // MCP tool is its bare name (`specship_explore`); the composite
+        // `specship__<tool>` form appears only when a name collision forces
+        // qualification (verified in 0.28.0 DiscoveredMCPTool). `specship_`
+        // covers both; tolerate the Claude form if a transcript carries it.
+        if (name.startsWith('specship_') || name.startsWith(CLAUDE_CODE_TRAITS.toolPrefix)) {
+          return 'used';
+        }
+      }
     }
   }
-  return false;
+  return 'not-used';
+}
+
+/**
+ * Classify a shell command string for intercept purposes. We ONLY look at the
+ * first pipeline segment: `npm test | grep FAIL` uses grep as a FILTER on
+ * another command's output and must not be nudged, while `rg "renderScene"
+ * src/` is the lookup we care about. Read-shaped programs (`cat`, `head`,
+ * `tail`, `sed -n`, …) are never classified `search` — reading a config or
+ * log is legitimate.
+ */
+export function classifyShellCommand(cmd: string): 'search' | 'other' {
+  const first = firstPipelineSegment(cmd).trim();
+  if (!first) return 'other';
+  const tokens = first.split(/\s+/);
+  const t0 = tokens[0] ?? '';
+  const t1 = tokens[1] ?? '';
+  const SEARCH_TOOLS = new Set(['grep', 'rg', 'ag', 'ack', 'fd', 'find']);
+  if (SEARCH_TOOLS.has(t0)) return 'search';
+  if (t0 === 'git' && t1 === 'grep') return 'search';
+  return 'other';
+}
+
+/** Return the first `|`/`&&`/`;` separated segment, respecting simple quotes. */
+function firstPipelineSegment(cmd: string): string {
+  let quote: '"' | "'" | null = null;
+  for (let i = 0; i < cmd.length; i++) {
+    const c = cmd[i];
+    if (quote) {
+      if (c === quote && cmd[i - 1] !== '\\') quote = null;
+      continue;
+    }
+    if (c === '"' || c === "'") {
+      quote = c as '"' | "'";
+      continue;
+    }
+    if (c === '|' || c === ';') return cmd.slice(0, i);
+    if (c === '&' && cmd[i + 1] === '&') return cmd.slice(0, i);
+  }
+  return cmd;
 }
 
 export interface SearchInterceptInput {
   /** Project the intercepted call belongs to (the hook payload's `cwd`). */
   cwd: string;
-  /** Claude Code session id from the hook payload; null → untrackable, stay silent. */
+  /** Host session id from the hook payload; null → untrackable, stay silent. */
   sessionId: string | null;
   /** Session transcript path from the hook payload, when present. */
   transcriptPath: string | null;
@@ -126,27 +202,64 @@ export interface SearchInterceptInput {
   homedir?: string;
   /** Injectable clock for tests. */
   now?: Date;
+
+  /** Transcript substrings signaling specship tool_use. Default: Claude form. */
+  specshipToolMarkers?: string[];
+  /** Transcript file format. Default: Claude JSONL. */
+  transcriptFormat?: 'jsonl' | 'single-json';
+  /** Strict mode (host supports a BeforeTool deny AND user opted in). */
+  strict?: boolean;
+  /** Whether the intercepted tool is a built-in search eligible for deny. */
+  denyEligible?: boolean;
+  /** When the intercepted tool is a shell runner, the raw command string. */
+  shellCommand?: string | null;
+  /** Search pattern/needle to echo in the deny reason, when known. */
+  searchPattern?: string | null;
+}
+
+export type SearchInterceptResult =
+  | { additionalContext: string }
+  | { decision: 'deny'; reason: string }
+  | null;
+
+function denyReason(pattern?: string | null): string {
+  const trimmed = pattern ? pattern.trim() : '';
+  const named = trimmed ? ` naming ${JSON.stringify(trimmed.slice(0, 80))}` : '';
+  return (
+    `SpecShip: this project has an indexed code graph. Call specship_explore${named} ` +
+    'instead — it returns the verbatim source in one call. If the index cannot ' +
+    'answer the question, ask the user and retry.'
+  );
 }
 
 /**
- * Decide whether to emit the redirect line for one intercepted search call.
+ * Decide what to emit for one intercepted search call.
  *
- * Silence gates, in order (all REQ-STEER-004.A3 / REQ-STEER-005):
- *   1. `SPECSHIP_NO_STEERING=1` (env > project > install settings) — same
- *      opt-out as the prompt nudge.
- *   2. No `.specship/` directory at cwd — uninitialized projects get zero
- *      noise.
- *   3. No session id — nothing to key the once-per-session guarantee on, so
- *      silence beats repeat-firing.
- *   4. The session is already recorded — it fired before, or was seen using
- *      specship.
- *   5. The transcript shows specship use — the agent doesn't need redirecting;
- *      record the session so later calls skip the scan.
- *
- * Otherwise: record the session and return the line (fires exactly once).
+ * Order:
+ *   1. `SPECSHIP_NO_STEERING=1` → ALLOW (silent).
+ *   2. No `.specship/` at cwd → ALLOW.
+ *   3. Shell runner: classify; `other` → ALLOW; `search` → advisory path
+ *      only (never deny, REQ-GEMINI-011.A3).
+ *   4. Strict + denyEligible: parse transcript; `used` or `parse-failure` or
+ *      no transcript path → ALLOW; `not-used` → DENY with reason.
+ *   5. Otherwise advisory: once-per-session, silent in sessions already using
+ *      specship (REQ-STEER-005).
  */
-export function buildSearchIntercept(input: SearchInterceptInput): string | null {
-  const { cwd, sessionId, transcriptPath, env = process.env, homedir, now = new Date() } = input;
+export function buildSearchIntercept(input: SearchInterceptInput): SearchInterceptResult {
+  const {
+    cwd,
+    sessionId,
+    transcriptPath,
+    env = process.env,
+    homedir,
+    now = new Date(),
+    specshipToolMarkers = CLAUDE_CODE_TRAITS.specshipToolMarkers,
+    transcriptFormat = 'jsonl',
+    strict = false,
+    denyEligible = false,
+    shellCommand = null,
+    searchPattern = null,
+  } = input;
 
   if (resolveSetting('SPECSHIP_NO_STEERING', cwd, env, homedir) === '1') return null;
   try {
@@ -154,19 +267,42 @@ export function buildSearchIntercept(input: SearchInterceptInput): string | null
   } catch {
     return null;
   }
-  if (!sessionId) return null;
 
+  // Shell runner — strict is NEVER applied here. Non-search shell commands
+  // pass through silently; search-shaped ones fall into the advisory path.
+  if (shellCommand !== null) {
+    if (classifyShellCommand(shellCommand) !== 'search') return null;
+  }
+
+  // Strict deny path: built-in search tools only, never shell.
+  if (strict && denyEligible && shellCommand === null) {
+    if (!transcriptPath) return null;
+    const scan = scanTranscript(transcriptPath, specshipToolMarkers, transcriptFormat);
+    if (scan !== 'not-used') return null;
+    return { decision: 'deny', reason: denyReason(searchPattern) };
+  }
+
+  // Advisory path.
+  if (!sessionId) return null;
   const stateFile = interceptStatePath(cwd);
   const state = readState(stateFile);
   if (state[sessionId]) return null;
 
   state[sessionId] = { at: now.toISOString() };
-  if (transcriptPath && transcriptUsedSpecship(transcriptPath)) {
-    // Already an index user — silence, but remember so we don't rescan.
-    writeState(stateFile, state, now);
-    return null;
+  if (transcriptPath) {
+    const scan = scanTranscript(transcriptPath, specshipToolMarkers, transcriptFormat);
+    if (scan === 'used') {
+      writeState(stateFile, state, now);
+      return null;
+    }
+    // Gemini parse-failure fails toward silence in advisory mode (spec
+    // REQ-GEMINI-011); Claude JSONL never returns parse-failure.
+    if (scan === 'parse-failure' && transcriptFormat === 'single-json') {
+      writeState(stateFile, state, now);
+      return null;
+    }
   }
 
   writeState(stateFile, state, now);
-  return SEARCH_INTERCEPT_TEXT;
+  return { additionalContext: SEARCH_INTERCEPT_TEXT };
 }

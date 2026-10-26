@@ -5,6 +5,14 @@ owner: specship-core
 priority: high
 version: 1
 depends_on: REFLECT-DOC
+jira_issue_REQ-ALEARN-001: SSHIP-125
+jira_fingerprint_REQ-ALEARN-001: baeac69d14d83544
+jira_issue_REQ-ALEARN-002: SSHIP-129
+jira_fingerprint_REQ-ALEARN-002: 3fa1cb393639dd75
+jira_issue_REQ-ALEARN-003: SSHIP-132
+jira_fingerprint_REQ-ALEARN-003: fb6e48555f8de1f3
+jira_issue_REQ-ALEARN-004: SSHIP-136
+jira_fingerprint_REQ-ALEARN-004: 0922aa8016e97466
 ---
 
 <!-- id: ALEARN-DOC -->

@@ -3,6 +3,20 @@ id: LOWEND-DOC
 title: Low-end model support (Gemini 3.5 Flash)
 owner: "@selvakumar"
 priority: high
+jira_issue_REQ-LOWEND-001: SSHIP-189
+jira_fingerprint_REQ-LOWEND-001: 9d8f6d8b34f5ba07
+jira_issue_REQ-LOWEND-002: SSHIP-194
+jira_fingerprint_REQ-LOWEND-002: 90e79cd5b3e80fb9
+jira_issue_REQ-LOWEND-003: SSHIP-198
+jira_fingerprint_REQ-LOWEND-003: 538f0b9c5874d320
+jira_issue_REQ-LOWEND-004: SSHIP-202
+jira_fingerprint_REQ-LOWEND-004: d616b1f62904f7a4
+jira_issue_REQ-LOWEND-005: SSHIP-207
+jira_fingerprint_REQ-LOWEND-005: eaecb51047193b7b
+jira_issue_REQ-LOWEND-006: SSHIP-211
+jira_fingerprint_REQ-LOWEND-006: ab6ef643e795e0cf
+jira_issue_REQ-LOWEND-007: SSHIP-215
+jira_fingerprint_REQ-LOWEND-007: 799a94360f749a19
 ---
 
 <!-- id: LOWEND-DOC -->

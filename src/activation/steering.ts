@@ -15,18 +15,32 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { detectModelTier } from '../mcp/model-context';
 import { resolveSetting } from '../config/runtime-settings';
+import { CLAUDE_CODE_TRAITS } from './hook-output';
 
 /**
  * The one steering line injected per prompt. Kept short (~40 tokens) — it is
  * added to EVERY prompt in an initialized project, so brevity is the cost
  * ceiling. Wording is A/B-gated before default-on release (REQ-STEER-003).
  */
-export const STEERING_TEXT =
+const STEERING_TEMPLATE =
   'This project has a SpecShip code-graph index. Before reading or editing ANY ' +
   'code for a task — understanding, implementing, fixing, refactoring — call ' +
-  'mcp__specship__specship_explore with the relevant symbol/file names FIRST. ' +
+  '{explore} with the relevant symbol/file names FIRST. ' +
   'Treat the source it returns as already read; use Read/Grep only for content ' +
   'it did not return.';
+
+/**
+ * Render a steering template with the calling host's tool-name form
+ * (AGENTADAPT-DOC, REQ-AGENTADAPT-001): Claude Code calls the tool
+ * `mcp__specship__specship_explore`, Gemini CLI calls it `specship_explore`.
+ * The prefix comes from the hook adapter — this module never names a host.
+ */
+export function renderSteering(template: string, toolPrefix: string): string {
+  return template.replace('{explore}', `${toolPrefix}specship_explore`);
+}
+
+/** The standard line as Claude Code (the legacy default host) receives it. */
+export const STEERING_TEXT = renderSteering(STEERING_TEMPLATE, CLAUDE_CODE_TRAITS.toolPrefix);
 
 /**
  * The lite-tier template (LOWMODEL-DOC, REQ-LOWMODEL-002): small models
@@ -34,11 +48,14 @@ export const STEERING_TEXT =
  * (subagents) multiplies their cost and confusion. Kept under ~80 tokens
  * (REQ-LOWMODEL-002.A2).
  */
-export const STEERING_TEXT_LITE =
+const STEERING_TEMPLATE_LITE =
   'This project has a SpecShip index. For any code question, call exactly: ' +
-  'mcp__specship__specship_explore with the symbol/file names from the question. ' +
+  '{explore} with the symbol/file names from the question. ' +
   'ONE call, then answer from its output — the source it returns is already read. ' +
   'Do not spawn subagents. Do not Read/Grep files the tool returned.';
+
+/** The lite line as Claude Code (the legacy default host) receives it. */
+export const STEERING_TEXT_LITE = renderSteering(STEERING_TEMPLATE_LITE, CLAUDE_CODE_TRAITS.toolPrefix);
 
 /**
  * Decide whether to emit the steering line (REQ-STEER-002): silent unless the
@@ -51,7 +68,8 @@ export const STEERING_TEXT_LITE =
 export function buildSteeringNudge(
   cwd: string,
   env: NodeJS.ProcessEnv = process.env,
-  homedir?: string
+  homedir?: string,
+  toolPrefix: string = CLAUDE_CODE_TRAITS.toolPrefix,
 ): string | null {
   // RUNSET-DOC: the opt-out resolves env > project .specship/settings.json >
   // ~/.specship/settings.json, so a repo can silence steering durably.
@@ -61,5 +79,8 @@ export function buildSteeringNudge(
   } catch {
     return null;
   }
-  return detectModelTier(cwd, env, homedir) === 'lite' ? STEERING_TEXT_LITE : STEERING_TEXT;
+  return renderSteering(
+    detectModelTier(cwd, env, homedir) === 'lite' ? STEERING_TEMPLATE_LITE : STEERING_TEMPLATE,
+    toolPrefix,
+  );
 }

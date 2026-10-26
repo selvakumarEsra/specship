@@ -3,6 +3,24 @@ id: AUDFIX-DOC
 title: Docs-audit defect fixes (2026-10)
 owner: specship-core
 priority: high
+jira_issue_REQ-AUDFIX-001: SSHIP-140
+jira_fingerprint_REQ-AUDFIX-001: 204d8e45fa169679
+jira_issue_REQ-AUDFIX-002: SSHIP-144
+jira_fingerprint_REQ-AUDFIX-002: a965954f1d2eb84f
+jira_issue_REQ-AUDFIX-003: SSHIP-149
+jira_fingerprint_REQ-AUDFIX-003: ef937af4a1f0b9dd
+jira_issue_REQ-AUDFIX-004: SSHIP-154
+jira_fingerprint_REQ-AUDFIX-004: b3030cf436858298
+jira_issue_REQ-AUDFIX-005: SSHIP-158
+jira_fingerprint_REQ-AUDFIX-005: 04d480da729e5258
+jira_issue_REQ-AUDFIX-006: SSHIP-161
+jira_fingerprint_REQ-AUDFIX-006: 6b9ef8f515958589
+jira_issue_REQ-AUDFIX-007: SSHIP-165
+jira_fingerprint_REQ-AUDFIX-007: d76628acaeb255dc
+jira_issue_REQ-AUDFIX-008: SSHIP-168
+jira_fingerprint_REQ-AUDFIX-008: 49a84385ea5ce48b
+jira_issue_REQ-AUDFIX-009: SSHIP-171
+jira_fingerprint_REQ-AUDFIX-009: f4f190bb333019c5
 ---
 
 <!-- id: AUDFIX-DOC -->

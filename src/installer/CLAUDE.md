@@ -14,25 +14,45 @@ new file + one registry entry.
 
 - **Claude Code only, plus the ratified Gemini CLI exception** (explicit ask,
   2026-08-22 — `specs/agent-target-gemini.md`, `GEMINI-TARGET-DOC`).
-  `targets/gemini.ts` implements the full `AgentTarget` contract over ONE
-  surface — Gemini's `mcpServers` settings block (REQ-GEMINI-002/003). Being
-  in `ALL_TARGETS` does NOT make it install by default: `resolveInstallTargets`
-  maps absent / `claude` / `auto` / `all` to Claude alone, so Gemini is
-  reachable only by naming it (`--target gemini`, `--target claude,gemini`).
-  Everything Gemini has no equivalent for (permissions, hooks, commands, the
-  explorer subagent, the status line) is left unwritten and named in
-  `WriteResult.notes` — never faked, never half-installed (REQ-GEMINI-006).
-  GEMINI.md steering (REQ-GEMINI-004) and TOML commands (REQ-GEMINI-005) are
-  still unimplemented. Don't add any OTHER agent target without an equally
-  explicit ask — this fork's selling point is the smaller surface.
+  `targets/gemini.ts` implements the full `AgentTarget` contract over four
+  surfaces — Gemini's `mcpServers` settings block (REQ-GEMINI-002/003),
+  GEMINI.md steering (REQ-GEMINI-004: a marker-delimited retrieval-preference
+  block plus the default-on SDD rule, generated from the same
+  `getSddRuleBlock` the Claude target uses so the two surfaces cannot drift),
+  and the settings `hooks` block (REQ-GEMINI-010: `BeforeAgent` /
+  `SessionStart` / `AfterTool` wired to the same `specship` hook commands the
+  Claude target uses; those commands echo the payload's `hook_event_name`;
+  REQ-GEMINI-011 adds `BeforeTool` matchers on `grep_search` / `glob` /
+  `run_shell_command` for the search interceptor, with opt-in strict mode
+  via `SPECSHIP_GEMINI_STRICT=1` that denies built-in search tools only —
+  never `run_shell_command`), and an opt-in user-tier policy TOML at
+  `~/.gemini/policies/specship.toml` (REQ-GEMINI-009, `--trust`) that
+  auto-allows SpecShip's read-only tools ONLY — write-capable tools and
+  `run_shell_command` still prompt, an administrator policy still wins,
+  the MCP entry is NEVER given `trust: true`, and uninstall removes the
+  TOML iff it carries our header marker (user-authored files of the same
+  name are left byte-identical). Omitting `--trust` writes no policy file;
+  a plain reinstall preserves one a prior `--trust` install wrote.
+  Being in `ALL_TARGETS` does NOT make it install by default:
+  `resolveInstallTargets` maps absent / `claude` / `auto` / `all` to Claude
+  alone, so Gemini is reachable only by naming it (`--target gemini`,
+  `--target claude,gemini`). Everything Gemini has no equivalent for
+  (permissions, slash commands, the explorer subagent, the status line) is
+  left unwritten and named in `WriteResult.notes` — never faked, never
+  half-installed (REQ-GEMINI-006). TOML commands (REQ-GEMINI-005) are still
+  unimplemented. Don't add any OTHER agent target without an equally explicit
+  ask — this fork's selling point is the smaller surface.
 - Any installer change needs matching coverage in
   `__tests__/installer-targets.test.ts` and a CHANGELOG entry — installer
   regressions break every new install silently.
-- `instructions-template.ts` exports only the `<!-- SPECSHIP_START -->` /
-  `<!-- SPECSHIP_END -->` markers. The installer **stopped writing** the
-  legacy `## SpecShip` block into CLAUDE.md (issue #529); `install`
-  (self-heal) and `uninstall` use the markers only to **strip** a block a
-  previous install left behind.
+- `instructions-template.ts` holds three marker pairs. The legacy
+  `<!-- SPECSHIP_START -->` / `<!-- SPECSHIP_END -->` pair is strip-only: the
+  installer **stopped writing** the `## SpecShip` block into CLAUDE.md
+  (issue #529), and `install` (self-heal) and `uninstall` use it only to
+  **strip** a block a previous install left behind. The SDD pair wraps
+  `getSddRuleBlock` (shared by both targets), and the Gemini retrieval pair
+  wraps `getGeminiRetrievalBlock` — an ordering rule only, never a copy of
+  the tool playbook in `server-instructions.ts`.
 
 ## Where things live
 

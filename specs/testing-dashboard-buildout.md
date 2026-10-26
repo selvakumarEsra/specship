@@ -4,6 +4,26 @@ title: Review remediation Wave 4 — testing depth & dashboard traceability
 owner: specship-core
 priority: medium
 version: 1
+jira_issue_REQ-TVIZ-001: SSHIP-285
+jira_fingerprint_REQ-TVIZ-001: f18933f83206853e
+jira_issue_REQ-TVIZ-002: SSHIP-290
+jira_fingerprint_REQ-TVIZ-002: de784154d8354ad8
+jira_issue_REQ-TVIZ-003: SSHIP-293
+jira_fingerprint_REQ-TVIZ-003: 25739681df27d89f
+jira_issue_REQ-TVIZ-004: SSHIP-297
+jira_fingerprint_REQ-TVIZ-004: 8d4d0526b03120c9
+jira_issue_REQ-TVIZ-005: SSHIP-301
+jira_fingerprint_REQ-TVIZ-005: b6f4819a31d3b022
+jira_issue_REQ-TVIZ-006: SSHIP-304
+jira_fingerprint_REQ-TVIZ-006: c99ad85bd182caa0
+jira_issue_REQ-TVIZ-007: SSHIP-308
+jira_fingerprint_REQ-TVIZ-007: ff295b65c91fca10
+jira_issue_REQ-TVIZ-008: SSHIP-312
+jira_fingerprint_REQ-TVIZ-008: 8dee7f9da05fb688
+jira_issue_REQ-TVIZ-009: SSHIP-316
+jira_fingerprint_REQ-TVIZ-009: f4f0947bae31241a
+jira_issue_REQ-TVIZ-010: SSHIP-320
+jira_fingerprint_REQ-TVIZ-010: 7cb0d224ea4067ce
 ---
 
 <!-- id: TVIZ-DOC -->

@@ -33,7 +33,19 @@ import {
   removeStatusLineEntry,
   statusLineState,
 } from '../src/installer/targets/claude';
-import { geminiTarget } from '../src/installer/targets/gemini';
+import {
+  geminiTarget,
+  writeGeminiInstructionsEntry,
+  removeGeminiInstructionsEntry,
+  renderGeminiPolicyToml,
+  writeGeminiPolicyEntry,
+  removeGeminiPolicyEntry,
+} from '../src/installer/targets/gemini';
+import {
+  getGeminiRetrievalBlock,
+  getSddRuleBlock,
+} from '../src/installer/instructions-template';
+import { SERVER_INSTRUCTIONS } from '../src/mcp/server-instructions';
 import {
   resolveStatusLine,
   resolveAutoAllow,
@@ -1166,9 +1178,11 @@ describe('GeminiCliTarget.printConfig', () => {
     expect(local).toContain(path.join(process.cwd(), '.gemini', 'settings.json'));
     expect(geminiTarget.describePaths('global')).toEqual([
       path.join(os.homedir(), '.gemini', 'settings.json'),
+      path.join(os.homedir(), '.gemini', 'GEMINI.md'),
     ]);
     expect(geminiTarget.describePaths('local')).toEqual([
       path.join(process.cwd(), '.gemini', 'settings.json'),
+      path.join(process.cwd(), 'GEMINI.md'),
     ]);
   }
 
@@ -1275,8 +1289,12 @@ describe('Gemini target — specifics', () => {
   /** REQ-GEMINI-002.A2 — uninstalling what was never installed is a no-op. */
   function geminiUninstallOnVirginHomeIsNotFound(): void {
     const result = geminiTarget.uninstall('global');
-    expect(result.files).toEqual([{ path: settingsFile('global'), action: 'not-found' }]);
+    // settings.json → not-found; GEMINI.md strips → `kept` (file absent).
+    const settingsEntry = result.files.find((f) => f.path === settingsFile('global'));
+    expect(settingsEntry?.action).toBe('not-found');
+    expect(result.files.every((f) => f.action === 'not-found' || f.action === 'kept')).toBe(true);
     expect(fs.existsSync(settingsFile('global'))).toBe(false);
+    expect(fs.existsSync(path.join(tmpHome, '.gemini', 'GEMINI.md'))).toBe(false);
   }
 
   /** REQ-GEMINI-003.A2 — a prior install's integrations survive an upgrade. */
@@ -1302,11 +1320,22 @@ describe('Gemini target — specifics', () => {
       installStatusLine: true,
     });
 
-    expect(result.files.map((f) => f.path)).toEqual([settingsFile('local')]);
+    // Writes exactly the MCP settings entry (with hooks block) and the
+    // GEMINI.md steering file — nothing matching Claude's commands /
+    // subagent / status line.
+    expect(new Set(result.files.map((f) => f.path))).toEqual(
+      new Set([settingsFile('local'), path.join(process.cwd(), 'GEMINI.md')]),
+    );
     const note = (result.notes ?? []).join('\n');
-    for (const surface of ['hook', 'command', 'specship-explorer', 'status line']) {
+    // REQ-GEMINI-006.A1: the capability note no longer lists hooks (hooks
+    // are installed now, REQ-GEMINI-010); the still-unsupported surfaces
+    // remain called out.
+    for (const surface of ['slash command', 'specship-explorer', 'status line']) {
       expect(note).toContain(surface);
     }
+    // Local install also carries the trusted-folder note so a user whose
+    // hooks appear inert knows where to look.
+    expect(note).toContain('trusted');
     // Nothing under .claude/ — not even with sdd + statusline requested.
     expect(fs.existsSync(path.join(tmpCwd, '.claude'))).toBe(false);
     expect(fs.existsSync(path.join(tmpHome, '.claude'))).toBe(false);
@@ -1339,11 +1368,291 @@ describe('Gemini target — specifics', () => {
     const reports = uninstallTargets(ALL_TARGETS, 'global');
     const gemini = reports.find((r) => r.id === 'gemini');
     expect(gemini?.status).toBe('removed');
-    expect(gemini?.removedPaths).toEqual([settingsFile('global')]);
+    // Sweeps both the MCP settings entry and the GEMINI.md steering file.
+    expect(new Set(gemini?.removedPaths)).toEqual(
+      new Set([settingsFile('global'), path.join(tmpHome, '.gemini', 'GEMINI.md')]),
+    );
     expect(geminiTarget.detect('global').alreadyConfigured).toBe(false);
+    expect(fs.existsSync(path.join(tmpHome, '.gemini', 'GEMINI.md'))).toBe(false);
+  }
+
+  /** REQ-GEMINI-004.A1 — install preserves user content byte-identical outside the markers. */
+  function geminiInstallPreservesUserGeminiMdContent(): void {
+    const file = path.join(tmpCwd, 'GEMINI.md');
+    const userBody = '# My project\n\nTabs, not spaces. Prefer pnpm.\n';
+    fs.writeFileSync(file, userBody);
+
+    geminiTarget.install('local', { autoAllow: true });
+
+    const after = fs.readFileSync(file, 'utf-8');
+    expect(after.startsWith(userBody.trimEnd() + '\n')).toBe(true);
+    expect(after).toContain('SPECSHIP_GEMINI_RETRIEVAL_START');
+    expect(after).toContain('SPECSHIP_SDD_START');
+
+    // Second install leaves everything byte-identical.
+    const before = fs.readFileSync(file, 'utf-8');
+    geminiTarget.install('local', { autoAllow: true });
+    expect(fs.readFileSync(file, 'utf-8')).toBe(before);
+  }
+
+  /** REQ-GEMINI-004.A2 — uninstall strips the block; deletes the file iff empty. */
+  function geminiUninstallStripsOnlyOurBlock(): void {
+    const file = path.join(tmpCwd, 'GEMINI.md');
+    const userBody = '# My project\n\nTabs, not spaces.\n';
+    fs.writeFileSync(file, userBody);
+
+    geminiTarget.install('local', { autoAllow: true });
+    expect(fs.readFileSync(file, 'utf-8')).toContain('SPECSHIP_GEMINI_RETRIEVAL_START');
+
+    geminiTarget.uninstall('local');
+    const after = fs.readFileSync(file, 'utf-8');
+    expect(after).not.toContain('SPECSHIP_');
+    expect(after).toContain('Tabs, not spaces.');
+
+    // SpecShip-created GEMINI.md (no user content) is deleted on uninstall.
+    const virgin = path.join(tmpHome, '.gemini', 'GEMINI.md');
+    geminiTarget.install('global', { autoAllow: true });
+    expect(fs.existsSync(virgin)).toBe(true);
+    geminiTarget.uninstall('global');
+    expect(fs.existsSync(virgin)).toBe(false);
+  }
+
+  /** REQ-GEMINI-004.A3 — the retrieval block names specship_* first and shares no paragraph with server-instructions. */
+  function geminiRetrievalBlockLeadsWithSpecshipAndDoesNotDuplicatePlaybook(): void {
+    const block = getGeminiRetrievalBlock();
+    const idxSpecship = block.indexOf('specship_');
+    expect(idxSpecship).toBeGreaterThan(-1);
+    for (const other of ['grep_search', 'glob', 'read_file', 'run_shell_command']) {
+      const idx = block.indexOf(other);
+      // Each named Gemini surface either doesn't appear or appears after specship_*.
+      if (idx !== -1) expect(idx).toBeGreaterThan(idxSpecship);
+    }
+
+    // No shared paragraph with the MCP server instructions (the single source
+    // of truth that Gemini CLI forwards to the model).
+    const paragraphs = (text: string) =>
+      text.split(/\n\s*\n/).map((p) => p.trim()).filter((p) => p.length >= 40);
+    const blockPara = new Set(paragraphs(block.replace(/<!--.*?-->/g, '')));
+    const serverPara = paragraphs(SERVER_INSTRUCTIONS);
+    for (const p of serverPara) {
+      expect(blockPara.has(p)).toBe(false);
+    }
+  }
+
+  /** REQ-GEMINI-004.A4 — SDD portion is byte-identical to Claude's; absent on --no-sdd. */
+  function geminiSddBlockIsByteIdenticalToClaudeAndOptOutStrips(): void {
+    geminiTarget.install('local', { autoAllow: true });
+    const file = path.join(tmpCwd, 'GEMINI.md');
+    const body = fs.readFileSync(file, 'utf-8');
+    // The byte-exact Claude SDD block appears inside GEMINI.md.
+    expect(body.includes(getSddRuleBlock())).toBe(true);
+
+    // --no-sdd on a subsequent install strips the SDD block, leaves retrieval.
+    geminiTarget.install('local', { autoAllow: true, sdd: false });
+    const after = fs.readFileSync(file, 'utf-8');
+    expect(after).not.toContain('SPECSHIP_SDD_START');
+    expect(after).toContain('SPECSHIP_GEMINI_RETRIEVAL_START');
+  }
+
+  /** REQ-GEMINI-004.A5 — identical re-install is unchanged; older block replaced in place. */
+  function geminiReinstallIsUnchangedAndReplacesOldBlockInPlace(): void {
+    geminiTarget.install('local', { autoAllow: true });
+    const second = geminiTarget.install('local', { autoAllow: true });
+    const geminiMdEntries = second.files.filter((f) => f.path.endsWith('GEMINI.md'));
+    expect(geminiMdEntries.length).toBeGreaterThan(0);
+    expect(geminiMdEntries.every((f) => f.action === 'unchanged')).toBe(true);
+
+    // Simulate a prior-version block by overwriting between the markers.
+    const file = path.join(tmpCwd, 'GEMINI.md');
+    const body = fs.readFileSync(file, 'utf-8');
+    const altered = body.replace(
+      /<!-- SPECSHIP_GEMINI_RETRIEVAL_START -->[\s\S]*?<!-- SPECSHIP_GEMINI_RETRIEVAL_END -->/,
+      '<!-- SPECSHIP_GEMINI_RETRIEVAL_START -->\nOLD VARIANT\n<!-- SPECSHIP_GEMINI_RETRIEVAL_END -->',
+    );
+    fs.writeFileSync(file, altered);
+
+    geminiTarget.install('local', { autoAllow: true });
+    const final = fs.readFileSync(file, 'utf-8');
+    expect(final).not.toContain('OLD VARIANT');
+    // The block appears exactly once (not duplicated).
+    const occurrences = final.match(/SPECSHIP_GEMINI_RETRIEVAL_START/g) ?? [];
+    expect(occurrences).toHaveLength(1);
+  }
+
+  /** REQ-GEMINI-004 — global location writes `~/.gemini/GEMINI.md`, local writes `<cwd>/GEMINI.md`. */
+  function geminiRetrievalBlockHonoursGlobalVsLocalPath(): void {
+    writeGeminiInstructionsEntry('global');
+    expect(fs.existsSync(path.join(tmpHome, '.gemini', 'GEMINI.md'))).toBe(true);
+    expect(fs.existsSync(path.join(tmpCwd, 'GEMINI.md'))).toBe(false);
+
+    writeGeminiInstructionsEntry('local');
+    expect(fs.existsSync(path.join(tmpCwd, 'GEMINI.md'))).toBe(true);
+
+    removeGeminiInstructionsEntry('global');
+    removeGeminiInstructionsEntry('local');
+    expect(fs.existsSync(path.join(tmpHome, '.gemini', 'GEMINI.md'))).toBe(false);
+    expect(fs.existsSync(path.join(tmpCwd, 'GEMINI.md'))).toBe(false);
+  }
+
+  // ---- REQ-GEMINI-010: prompt / session / tool hooks on Gemini's settings surface ----
+
+  /** REQ-GEMINI-010.A1 — install writes the expected hook events and re-install is unchanged. */
+  function geminiInstallWritesHookEntries(): void {
+    geminiTarget.install('global', { autoAllow: true });
+    const hooks = readSettings('global').hooks;
+    expect(hooks).toBeDefined();
+
+    const commandsFor = (event: string): string[] => {
+      const groups = hooks[event] ?? [];
+      return (groups as any[]).flatMap((g) =>
+        (g.hooks ?? []).map((h: any) => h.command),
+      );
+    };
+    expect(commandsFor('BeforeAgent')).toEqual(
+      expect.arrayContaining(['specship steer-nudge', 'specship spec-nudge']),
+    );
+    expect(commandsFor('SessionStart')).toEqual(
+      expect.arrayContaining([
+        'specship cheatsheet',
+        'specship sync --quiet --drift-summary',
+      ]),
+    );
+    expect(commandsFor('AfterTool')).toEqual(['specship sync --quiet']);
+    // AfterTool matcher is scoped to the write-surface tools, not every tool.
+    const afterTool = hooks.AfterTool[0];
+    expect(afterTool.matcher).toBe('write_file|replace');
+    // REQ-GEMINI-011: BeforeTool search-intercept wired on grep_search, glob,
+    // and run_shell_command — each as its own matcher group.
+    expect(commandsFor('BeforeTool')).toEqual([
+      'specship search-intercept',
+      'specship search-intercept',
+      'specship search-intercept',
+    ]);
+    const beforeToolMatchers = (hooks.BeforeTool as any[]).map((g) => g.matcher);
+    expect(new Set(beforeToolMatchers)).toEqual(
+      new Set(['grep_search', 'glob', 'run_shell_command']),
+    );
+    // Every entry is a command-type hook.
+    for (const event of ['BeforeAgent', 'SessionStart', 'AfterTool', 'BeforeTool']) {
+      for (const group of hooks[event]) {
+        for (const h of group.hooks) expect(h.type).toBe('command');
+      }
+    }
+  }
+
+  /** REQ-GEMINI-010.A1 — a re-run with nothing changed reports settings `unchanged`. */
+  function geminiHookInstallIsIdempotent(): void {
+    geminiTarget.install('global', { autoAllow: true });
+    const second = geminiTarget.install('global', { autoAllow: true });
+    expect(second.files.every((f) => f.action === 'unchanged')).toBe(true);
+  }
+
+  /**
+   * REQ-GEMINI-010.A2 — the retrieval nudge, driven directly from the shared
+   * emitter + `buildSteeringNudge` the CLI command uses, yields a Gemini-shaped
+   * payload with the event name echoed back. Spawns no subprocess — dist/ is
+   * absent in the worktree and would false-fail the test either way.
+   */
+  async function geminiBeforeAgentNudgeEmitsAdditionalContext(): Promise<void> {
+    // Indexed project (the silence gate).
+    fs.mkdirSync(path.join(tmpCwd, '.specship'), { recursive: true });
+    const { buildSteeringNudge } = await import('../src/activation/steering');
+    const { buildHookAdditionalContext, parseHookPayload } = await import('../src/activation/hook-output');
+
+    const payload = parseHookPayload(
+      JSON.stringify({ hook_event_name: 'BeforeAgent', cwd: tmpCwd, prompt: 'how does X reach Y' }),
+    );
+    const nudge = buildSteeringNudge(payload.cwd ?? tmpCwd, { ...process.env });
+    expect(nudge).toBeTruthy();
+    const line = buildHookAdditionalContext(nudge as string, payload.hookEventName, 'UserPromptSubmit');
+    const out = JSON.parse(line);
+    expect(out.hookSpecificOutput.hookEventName).toBe('BeforeAgent');
+    expect(out.hookSpecificOutput.additionalContext).toContain('specship_explore');
+
+    // Opt-out: SPECSHIP_NO_STEERING=1 silences the nudge.
+    expect(buildSteeringNudge(tmpCwd, { SPECSHIP_NO_STEERING: '1' })).toBeNull();
+    // Unindexed cwd: silent.
+    expect(buildSteeringNudge(tmpHome, {})).toBeNull();
+  }
+
+  /** REQ-GEMINI-010.A3 — SessionStart cheat-sheet emits `systemMessage` only. */
+  async function geminiSessionStartCheatsheetEmitsSystemMessage(): Promise<void> {
+    const { buildCheatsheetPayload } = await import('../src/activation/cheatsheet');
+    const payload = buildCheatsheetPayload({});
+    expect(payload).not.toBeNull();
+    expect((payload as any).systemMessage).toContain('SpecShip');
+    expect((payload as any).additionalContext).toBeUndefined();
+    expect(buildCheatsheetPayload({ SPECSHIP_NO_CHEATSHEET: '1' })).toBeNull();
+  }
+
+  /** REQ-GEMINI-010.A4 — uninstall strips our hook entries; user-written hooks survive. */
+  function geminiUninstallPreservesUserHooks(): void {
+    const file = settingsFile('local');
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(
+      file,
+      JSON.stringify(
+        {
+          hooks: {
+            BeforeAgent: [
+              { matcher: '', hooks: [{ type: 'command', command: 'my-own-hook.sh' }] },
+            ],
+          },
+        },
+        null,
+        2,
+      ) + '\n',
+    );
+
+    geminiTarget.install('local', { autoAllow: true });
+    // Our commands are in alongside the user's — no clobber.
+    const afterInstall = readSettings('local').hooks.BeforeAgent[0].hooks.map((h: any) => h.command);
+    expect(afterInstall).toContain('my-own-hook.sh');
+    expect(afterInstall).toContain('specship steer-nudge');
+
+    geminiTarget.uninstall('local');
+    const afterUninstall = readSettings('local');
+    const commands = (afterUninstall.hooks?.BeforeAgent ?? []).flatMap(
+      (g: any) => g.hooks.map((h: any) => h.command),
+    );
+    expect(commands).toEqual(['my-own-hook.sh']);
+    // The specship commands are gone from every event.
+    const all = JSON.stringify(afterUninstall.hooks ?? {});
+    for (const forbidden of [
+      'specship steer-nudge',
+      'specship spec-nudge',
+      'specship cheatsheet',
+      'specship search-intercept',
+    ]) {
+      expect(all).not.toContain(forbidden);
+    }
+  }
+
+  /** REQ-GEMINI-010 — `--no-sdd` writes no `spec-nudge`; a prior governance install self-heals. */
+  function geminiNoSddOmitsSpecNudge(): void {
+    // First install with governance writes spec-nudge.
+    geminiTarget.install('local', { autoAllow: true, sdd: true });
+    const governanceCommands = readSettings('local').hooks.BeforeAgent.flatMap(
+      (g: any) => g.hooks.map((h: any) => h.command),
+    );
+    expect(governanceCommands).toContain('specship spec-nudge');
+
+    // Re-run with --no-sdd strips the spec-nudge entry (self-heal).
+    geminiTarget.install('local', { autoAllow: true, sdd: false });
+    const afterNoSdd = readSettings('local').hooks.BeforeAgent.flatMap(
+      (g: any) => g.hooks.map((h: any) => h.command),
+    );
+    expect(afterNoSdd).not.toContain('specship spec-nudge');
+    expect(afterNoSdd).toContain('specship steer-nudge');
   }
 
   it('writes a stdio entry with no `type` key (Gemini allows only sse|http)', geminiInstallWritesTypelessStdioEntry);
+  it('install writes BeforeAgent / SessionStart / AfterTool hook entries (REQ-GEMINI-010.A1)', geminiInstallWritesHookEntries);
+  it('re-running install reports every file unchanged, hooks included (REQ-GEMINI-010.A1)', geminiHookInstallIsIdempotent);
+  it('BeforeAgent nudge echoes hookEventName and names specship_explore (REQ-GEMINI-010.A2)', geminiBeforeAgentNudgeEmitsAdditionalContext);
+  it('SessionStart cheat-sheet emits systemMessage, never additionalContext (REQ-GEMINI-010.A3)', geminiSessionStartCheatsheetEmitsSystemMessage);
+  it('uninstall preserves user-written sibling hooks byte-identical (REQ-GEMINI-010.A4)', geminiUninstallPreservesUserHooks);
+  it('--no-sdd omits spec-nudge and self-heals an earlier governance install (REQ-GEMINI-010)', geminiNoSddOmitsSpecNudge);
   it('detect reports installed once the .gemini dir exists (REQ-GEMINI-002.A1)', geminiDetectReportsInstalledAndConfigured);
   it('preserves sibling servers and unrelated keys across install + uninstall (REQ-GEMINI-002.A2 / 003.A1)', geminiPreservesSiblingServersAndKeys);
   it('uninstall on a virgin home returns not-found without throwing (REQ-GEMINI-002.A2)', geminiUninstallOnVirginHomeIsNotFound);
@@ -1351,6 +1660,182 @@ describe('Gemini target — specifics', () => {
   it('names every unsupported surface in one note and writes nothing else (REQ-GEMINI-006.A1/A2)', geminiInstallNotesUnsupportedSurfaces);
   it('never installs the spec-author skill (REQ-AUTHG-007.A1)', geminiInstallWritesNoSkill);
   it('npm-uninstall sweeps the Gemini entry too (REQ-GEMINI-008)', geminiEntrySweptByRegistryUninstall);
+  it('install preserves user content outside the markers (REQ-GEMINI-004.A1)', geminiInstallPreservesUserGeminiMdContent);
+  it('uninstall strips only our block, deletes an empty file (REQ-GEMINI-004.A2)', geminiUninstallStripsOnlyOurBlock);
+  it('retrieval block names specship_* first and shares no paragraph with server-instructions (REQ-GEMINI-004.A3)', geminiRetrievalBlockLeadsWithSpecshipAndDoesNotDuplicatePlaybook);
+  it('SDD portion is byte-identical to Claude; --no-sdd strips it (REQ-GEMINI-004.A4)', geminiSddBlockIsByteIdenticalToClaudeAndOptOutStrips);
+  it('re-install reports unchanged; an older block is replaced in place (REQ-GEMINI-004.A5)', geminiReinstallIsUnchangedAndReplacesOldBlockInPlace);
+  it('global vs local write ~/.gemini/GEMINI.md and <cwd>/GEMINI.md respectively (REQ-GEMINI-004)', geminiRetrievalBlockHonoursGlobalVsLocalPath);
+
+  // ---- REQ-GEMINI-009: opt-in read-only auto-approval policy TOML ----
+
+  const policyPath = () =>
+    path.join(os.homedir(), '.gemini', 'policies', 'specship.toml');
+
+  /** REQ-GEMINI-009.A1 — the written TOML lists exactly the read-only tool set. */
+  function geminiTrustWritesReadOnlyPolicyToml(): void {
+    const result = geminiTarget.install('global', { autoAllow: true, trust: true });
+    const policyEntry = result.files.find((f) => f.path === policyPath());
+    expect(policyEntry?.action).toBe('created');
+    expect(fs.existsSync(policyPath())).toBe(true);
+
+    const body = fs.readFileSync(policyPath(), 'utf-8');
+    // Gemini's loader reads `[[rule]]` tables (0.28.0 PolicyFileSchema.rule);
+    // `[[rules]]` would parse but be ignored, leaving the policy inert.
+    expect(body).toMatch(/^\[\[rule\]\]$/m);
+    expect(body).not.toContain('[[rules]]');
+    expect(body).toContain('mcpName = "specship"');
+    expect(body).toContain('decision = "allow"');
+    // integer priority in 0–999.
+    const priorityMatch = body.match(/^priority = (\d+)\s*$/m);
+    expect(priorityMatch).not.toBeNull();
+    const priority = Number(priorityMatch![1]);
+    expect(Number.isInteger(priority)).toBe(true);
+    expect(priority).toBeGreaterThanOrEqual(0);
+    expect(priority).toBeLessThanOrEqual(999);
+
+    const expected = [
+      'specship_explore',
+      'specship_search',
+      'specship_node',
+      'specship_callers',
+      'specship_callees',
+      'specship_impact',
+      'specship_files',
+      'specship_status',
+      'specship_health',
+      'specship_spec',
+      'specship_drifted',
+    ];
+    for (const tool of expected) {
+      // Bare server tool name, never prefixed (Gemini composes `specship__<tool>`
+      // from mcpName itself — a prefixed name would match nothing).
+      expect(body).toContain(`"${tool}"`);
+      expect(body).not.toContain(`"specship__${tool}"`);
+    }
+    // No write-capable or external-service tool is allowed by this policy.
+    for (const forbidden of [
+      'specship_link_assert',
+      'specship_link_verify',
+      'specship_jira_',
+      'designer_',
+    ]) {
+      expect(body).not.toContain(forbidden);
+    }
+  }
+
+  /** REQ-GEMINI-009.A2 — the settings entry never carries `trust`. */
+  function geminiTrustNeverSetsTrustOnServerEntry(): void {
+    geminiTarget.install('global', { autoAllow: true, trust: true });
+    const entry = readSettings('global').mcpServers.specship;
+    expect('trust' in entry).toBe(false);
+    // And a plain install (no --trust) is likewise clean.
+    geminiTarget.uninstall('global');
+    geminiTarget.install('global', { autoAllow: true });
+    const entry2 = readSettings('global').mcpServers.specship;
+    expect('trust' in entry2).toBe(false);
+  }
+
+  /** REQ-GEMINI-009.A3 — a later install without --trust preserves the TOML. */
+  function geminiReinstallWithoutTrustPreservesPolicyFile(): void {
+    geminiTarget.install('global', { autoAllow: true, trust: true });
+    const before = fs.readFileSync(policyPath(), 'utf-8');
+
+    geminiTarget.install('global', { autoAllow: true });
+    expect(fs.existsSync(policyPath())).toBe(true);
+    expect(fs.readFileSync(policyPath(), 'utf-8')).toBe(before);
+  }
+
+  /** REQ-GEMINI-009.A3 — install without --trust writes no policy file. */
+  function geminiPlainInstallWritesNoPolicyFile(): void {
+    geminiTarget.install('global', { autoAllow: true });
+    expect(fs.existsSync(policyPath())).toBe(false);
+    // Admin dir is never written.
+    expect(fs.existsSync('/etc/gemini-cli')).toBe(false);
+  }
+
+  /** REQ-GEMINI-009.A4 — uninstall removes only our TOML; siblings survive. */
+  function geminiUninstallRemovesOnlyOurPolicyToml(): void {
+    geminiTarget.install('global', { autoAllow: true, trust: true });
+    const sibling = path.join(path.dirname(policyPath()), 'other.toml');
+    fs.writeFileSync(sibling, '# user authored\n');
+
+    const result = geminiTarget.uninstall('global');
+    const policyEntry = result.files.find((f) => f.path === policyPath());
+    expect(policyEntry?.action).toBe('removed');
+    expect(fs.existsSync(policyPath())).toBe(false);
+    expect(fs.existsSync(sibling)).toBe(true);
+    expect(fs.readFileSync(sibling, 'utf-8')).toBe('# user authored\n');
+    // Admin dir never touched.
+    expect(fs.existsSync('/etc/gemini-cli')).toBe(false);
+  }
+
+  /**
+   * REQ-GEMINI-009 — uninstall never deletes a user-authored specship.toml
+   * (file of the same name without our header marker is left byte-identical).
+   */
+  function geminiUninstallPreservesUserAuthoredSpecshipToml(): void {
+    const file = policyPath();
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    const userBody = '# my own policy\n[[rule]]\nmcpName = "other"\n';
+    fs.writeFileSync(file, userBody);
+
+    geminiTarget.uninstall('global');
+    expect(fs.existsSync(file)).toBe(true);
+    expect(fs.readFileSync(file, 'utf-8')).toBe(userBody);
+  }
+
+  /**
+   * REQ-GEMINI-009 — `--trust` never overwrites a user-authored specship.toml:
+   * only a file carrying our header marker is ours to rewrite.
+   */
+  function geminiTrustNeverOverwritesUserAuthoredSpecshipToml(): void {
+    const file = policyPath();
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    const userBody = '# my own policy\n[[rule]]\nmcpName = "other"\ndecision = "deny"\npriority = 5\n';
+    fs.writeFileSync(file, userBody);
+
+    const result = geminiTarget.install('global', { autoAllow: true, trust: true });
+    expect(result.files.find((f) => f.path === file)?.action).toBe('kept');
+    expect(fs.readFileSync(file, 'utf-8')).toBe(userBody);
+  }
+
+  /** REQ-GEMINI-009.A6 — byte-identical re-run with --trust reports unchanged. */
+  function geminiTrustReinstallIsUnchanged(): void {
+    geminiTarget.install('global', { autoAllow: true, trust: true });
+    const result = geminiTarget.install('global', { autoAllow: true, trust: true });
+    const policyEntry = result.files.find((f) => f.path === policyPath());
+    expect(policyEntry?.action).toBe('unchanged');
+  }
+
+  /**
+   * REQ-GEMINI-009.A5 — policy file plainly states that an admin policy wins
+   * and that shell-command confirmations are unaffected.
+   */
+  function geminiPolicyTomlDocumentsAdminOverrideAndShellCaveat(): void {
+    const body = renderGeminiPolicyToml();
+    expect(body.toLowerCase()).toContain('administrator');
+    expect(body).toContain('run_shell_command');
+  }
+
+  /** Lower-level writer/remover sanity: standalone helpers behave the same. */
+  function geminiPolicyHelpersAreStandalone(): void {
+    expect(writeGeminiPolicyEntry().action).toBe('created');
+    expect(writeGeminiPolicyEntry().action).toBe('unchanged');
+    expect(removeGeminiPolicyEntry().action).toBe('removed');
+    expect(removeGeminiPolicyEntry().action).toBe('not-found');
+  }
+
+  it('--trust writes exactly the read-only tool set as bare server names (REQ-GEMINI-009.A1)', geminiTrustWritesReadOnlyPolicyToml);
+  it('settings entry never carries `trust`, with or without --trust (REQ-GEMINI-009.A2)', geminiTrustNeverSetsTrustOnServerEntry);
+  it('install without --trust preserves a TOML a previous --trust install wrote (REQ-GEMINI-009.A3)', geminiReinstallWithoutTrustPreservesPolicyFile);
+  it('install without --trust writes no policy file (REQ-GEMINI-009.A3)', geminiPlainInstallWritesNoPolicyFile);
+  it('uninstall removes only specship.toml; sibling policies survive (REQ-GEMINI-009.A4)', geminiUninstallRemovesOnlyOurPolicyToml);
+  it('uninstall preserves a user-authored specship.toml without our marker (REQ-GEMINI-009)', geminiUninstallPreservesUserAuthoredSpecshipToml);
+  it('byte-identical --trust re-run reports unchanged (REQ-GEMINI-009)', geminiTrustReinstallIsUnchanged);
+  it('--trust never overwrites a user-authored specship.toml (REQ-GEMINI-009)', geminiTrustNeverOverwritesUserAuthoredSpecshipToml);
+  it('policy TOML states admin override + run_shell_command caveat (REQ-GEMINI-009.A5)', geminiPolicyTomlDocumentsAdminOverrideAndShellCaveat);
+  it('writeGeminiPolicyEntry / removeGeminiPolicyEntry round-trip cleanly (REQ-GEMINI-009)', geminiPolicyHelpersAreStandalone);
 });
 
 /**
