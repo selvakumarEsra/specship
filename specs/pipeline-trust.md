@@ -15,7 +15,7 @@ jira_fingerprint_REQ-PIPETRUST-004: 5985fbd563f92121
 jira_issue_REQ-PIPETRUST-005: SSHIP-392
 jira_fingerprint_REQ-PIPETRUST-005: d24a3e404a4393c2
 jira_issue_REQ-PIPETRUST-006: SSHIP-398
-jira_fingerprint_REQ-PIPETRUST-006: 2ad3ef2d80b3e4c0
+jira_fingerprint_REQ-PIPETRUST-006: 2aa81c3b8fb6454c
 jira_issue_REQ-PIPETRUST-007: SSHIP-402
 jira_fingerprint_REQ-PIPETRUST-007: 0d4156ce25a82c73
 ---
@@ -195,8 +195,14 @@ and artifact, and the recorded error MUST keep the END of the output (where
 test runners print their summary), not the beginning. The implement
 workflows' link step MUST NOT depend on headless `specship_link_assert`
 calls: it MUST record links in the spec's `implementations:` / `verifies:`
-blocks and run `specship sync`, and, when the verify step produced a test
-report, ingest it with `specship verify --report`.
+blocks, which survive any reindex. A run worktree has no SpecShip index, so
+syncing or ingesting there is meaningless; instead, when the project's tests
+run under vitest the verify step MUST save a JSON test report into the run's
+artifacts, and the final review MUST show the `specship verify --report`
+command that ingests it once the branch is merged. Bash steps MUST be told
+which CLI is running the workflow (`SPECSHIP_CLI`) and prefer it over any
+`specship` on `PATH`, so a step never runs an older global install that lacks
+the command it needs.
 
 implementations:
   - src/workflows/runners/bash.ts:BashRunner.run
@@ -208,6 +214,7 @@ verifies:
   - __tests__/workflow-durable-evidence.test.ts:failedBashKeepsOutputTail
   - __tests__/workflow-durable-evidence.test.ts:failedStepOutputIsStored
   - __tests__/workflow-discovery.test.ts:linkStepUsesSpecBlocksNotLinkAssert
+  - __tests__/workflow-durable-evidence.test.ts:bashStepsSeeTheRunningCli
 
 ## Acceptance
 <!-- id: REQ-PIPETRUST-006.A1 -->
@@ -215,7 +222,9 @@ verifies:
 <!-- id: REQ-PIPETRUST-006.A2 -->
 - A failed step's output is persisted in the run record and as an artifact, exactly as a completed step's is.
 <!-- id: REQ-PIPETRUST-006.A3 -->
-- The bundled implement workflows' link step lists no `specship_link_assert` tool, edits the spec's link blocks, runs `specship sync`, and runs `specship verify --report` when a report file exists.
+- The bundled implement workflows' link step lists no `specship_link_assert` tool and records links in the spec's link blocks; for a vitest project the verify step saves a JSON report under the run's artifacts and the final review names the `specship verify --report` command for it.
+<!-- id: REQ-PIPETRUST-006.A4 -->
+- A bash step launched by the SpecShip CLI sees `SPECSHIP_CLI` naming that CLI, and the bundled workflows' steps use it before `specship` on `PATH`.
 
 <!-- id: REQ-PIPETRUST-007 -->
 ## Pipeline failures MUST be surfaced, not discovered

@@ -358,11 +358,13 @@ describe('bundled implement workflows — pipeline quality gates (REQ-AUTHG-004/
     const diff = nodeOf(wf, 'diff');
     expect(diff.kind).toBe('bash');
     // The suppression gate (REQ-QGATE-004.A3) sits between the quality
-    // recheck and the diff artifact.
+    // checks and the diff artifact — after the mechanical postcheck since
+    // REQ-PIPETRUST-005, which itself follows the quality recheck.
     expect(diff.depends_on).toContain('suppression_gate');
     const suppression = nodeOf(wf, 'suppression_gate');
     expect(suppression.kind).toBe('bash');
-    expect(suppression.depends_on).toContain('quality_recheck');
+    expect(suppression.depends_on).toContain('postcheck_recheck');
+    expect(nodeOf(wf, 'postcheck').depends_on).toContain('quality_recheck');
     expect(suppression.bash).toContain('suppressions');
     expect(suppression.bash).toContain('SUPPRESSION_GATE=skipped');
     expect(nodeOf(wf, 'final_review').message).toContain('$suppression_gate.output');
@@ -385,6 +387,55 @@ describe('bundled implement workflows — pipeline quality gates (REQ-AUTHG-004/
     // Everything the gate reports must be upstream of it.
     expect(finalReview.depends_on).toContain('adversarial_review');
     expect(nodeOf(wf, 'adversarial_review').depends_on).toContain('coverage');
+  }
+
+  function readinessGatesThePlan(name: string): void {
+    const wf = load(name);
+    const ready = nodeOf(wf, 'readiness');
+    expect(ready.kind).toBe('bash');
+    expect(ready.bash).toContain('ready $INPUT.SPEC_ID');
+    // A missing CLI is a halt, never a silent pass.
+    expect(ready.bash).toContain('READY=unavailable');
+    expect(ready.bash).toContain('specship-run-base');
+    expect(nodeOf(wf, 'plan').depends_on).toContain('readiness');
+    expect(nodeOf(wf, 'plan').prompt).toContain('$readiness.output');
+    expect(nodeOf(wf, 'implement').prompt).toContain('$readiness.output');
+  }
+
+  function postcheckRunsAfterQualityAndHalts(name: string): void {
+    const wf = load(name);
+    const post = nodeOf(wf, 'postcheck');
+    expect(post.kind).toBe('bash');
+    expect(post.depends_on).toContain('quality_recheck');
+    expect(post.bash).toContain('postcheck $INPUT.SPEC_ID --path . --fix');
+    const fix = nodeOf(wf, 'fix_postcheck');
+    expect(fix.kind).toBe('prompt');
+    expect(fix.depends_on).toContain('postcheck');
+    expect(fix.prompt).toContain('POSTCHECK=failed');
+    const recheck = nodeOf(wf, 'postcheck_recheck');
+    expect(recheck.kind).toBe('bash');
+    expect(recheck.depends_on).toContain('fix_postcheck');
+    expect(recheck.bash).toContain('exit 1');
+    expect(recheck.bash).toContain('HALT_CAUSE=');
+    const ids = wf.nodes.map((n) => n.id);
+    expect(ids.indexOf('postcheck_recheck')).toBeLessThan(ids.indexOf('verify'));
+    expect(nodeOf(wf, 'final_review').message).toContain('$postcheck_recheck.output');
+  }
+
+  function linkStepUsesSpecBlocksNotLinkAssert(name: string): void {
+    const wf = load(name);
+    const link = nodeOf(wf, 'link');
+    expect(link.allowed_tools ?? []).not.toContain('mcp__specship__specship_link_assert');
+    expect(link.allowed_tools ?? []).not.toContain('mcp__specship__specship_link_verify');
+    expect(link.prompt).toContain('implementations:');
+    expect(link.prompt).toContain('specship verify --report');
+    const verify = nodeOf(wf, 'verify');
+    expect(verify.bash).toContain('$SPECSHIP_ARTIFACTS_DIR/test-report.json');
+    expect(verify.bash).toContain('VERIFY_REPORT=');
+    // Every CLI-calling step prefers the CLI running the workflow (006.A4).
+    for (const id of ['readiness', 'postcheck', 'postcheck_recheck', 'suppression_gate', 'coverage']) {
+      expect(nodeOf(wf, id).bash, id).toContain('$SPECSHIP_CLI_SCRIPT');
+    }
   }
 
   function qualityBaselineRunsBeforeImplement(name: string): void {
@@ -474,6 +525,17 @@ describe('bundled implement workflows — pipeline quality gates (REQ-AUTHG-004/
   it.each(['spec-implement', 'spec-implement-mixed'])(
     '%s captures a quality baseline before implement (REQ-AUTHG-008.A1)',
     qualityBaselineRunsBeforeImplement);
+
+  it.each(['spec-implement', 'spec-implement-mixed'])(
+    '%s runs the readiness gate before planning (REQ-PIPETRUST-004.A3)', readinessGatesThePlan);
+
+  it.each(['spec-implement', 'spec-implement-mixed'])(
+    '%s runs postcheck after the quality recheck and halts on failure (REQ-PIPETRUST-005.A5)',
+    postcheckRunsAfterQualityAndHalts);
+
+  it.each(['spec-implement', 'spec-implement-mixed'])(
+    'the %s link step records spec blocks instead of link_assert (REQ-PIPETRUST-006.A3)',
+    linkStepUsesSpecBlocksNotLinkAssert);
 
   it.each(['spec-implement', 'spec-implement-mixed'])(
     'a %s quality failure feeds the revise loop and halts if unfixed (REQ-AUTHG-005.A1)',

@@ -16,7 +16,7 @@ import * as path from 'path';
 import SpecShip from '../src';
 import { WorkflowExecutor, resetFailedNodes } from '../src/workflows/executor';
 import { WorktreeProvider } from '../src/isolation/worktree';
-import { BashRunner } from '../src/workflows/runners/bash';
+import { BashRunner, specshipCli } from '../src/workflows/runners/bash';
 import type { WorkflowDefinition, BashNode } from '../src/workflows/schemas/workflow';
 import type { NodeOutput } from '../src/workflows/condition-evaluator';
 
@@ -103,4 +103,22 @@ describe('REQ-PIPETRUST-006 failed step evidence', () => {
     },
     30_000
   );
+});
+
+/**
+ * REQ-PIPETRUST-006.A4 — a bash step launched by the SpecShip CLI is told which
+ * CLI is running it, so it never falls back to an older `specship` on PATH.
+ */
+function bashStepsSeeTheRunningCli(): void {
+  expect(specshipCli(['node', '/opt/x/dist/bin/specship.js'], '/usr/bin/node')).toEqual({
+    node: '/usr/bin/node',
+    script: '/opt/x/dist/bin/specship.js',
+  });
+  expect(specshipCli(['node', '/usr/local/bin/specship'], '/usr/bin/node')?.script).toBe('/usr/local/bin/specship');
+  // Not the CLI (e.g. vitest itself) → nothing exported.
+  expect(specshipCli(['node', '/repo/node_modules/vitest/vitest.mjs'], '/usr/bin/node')).toBeNull();
+}
+
+describe('the running CLI is exported to bash steps (REQ-PIPETRUST-006)', () => {
+  it('bash steps see the CLI running the workflow (REQ-PIPETRUST-006.A4)', bashStepsSeeTheRunningCli);
 });

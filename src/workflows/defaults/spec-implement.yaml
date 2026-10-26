@@ -41,9 +41,30 @@ nodes:
       (b) which code areas / symbols are most relevant, and (c) whether
       any code currently claims to implement it (look at linked_code).
 
+  - id: readiness
+    kind: bash
+    depends_on: [fetch_spec]
+    output_type: readiness_report
+    timeout: 120000
+    bash: |
+      # REQ-PIPETRUST-004 — implement must not start on a spec that is not
+      # ready (lint errors, no criteria, a criterion still [needs review]).
+      # Also records the run's base commit so postcheck can diff against it.
+      git rev-parse HEAD > "$(git rev-parse --git-dir)/specship-run-base" 2>/dev/null || true
+      if [ -n "$SPECSHIP_CLI_SCRIPT" ]; then ss_cli() { "$SPECSHIP_CLI_NODE" "$SPECSHIP_CLI_SCRIPT" "$@"; }; SS=ss_cli
+      elif command -v specship >/dev/null 2>&1; then SS=specship
+      elif [ -x node_modules/.bin/specship ]; then SS=node_modules/.bin/specship
+      else SS=""
+      fi
+      if [ -z "$SS" ]; then
+        echo "READY=unavailable — specship CLI not found; the readiness gate did NOT run"
+        exit 1
+      fi
+      $SS ready $INPUT.SPEC_ID --path .
+
   - id: plan
     kind: prompt
-    depends_on: [fetch_spec]
+    depends_on: [fetch_spec, readiness]
     output_type: plan
     allowed_tools:
       - mcp__specship__specship_explore
@@ -54,6 +75,11 @@ nodes:
       Based on this spec summary, write a concrete implementation plan:
 
       $fetch_spec.output
+
+      Readiness + evidence plan (every acceptance criterion needs a test of
+      the stated kind, written as a NAMED function passed to it() with the
+      criterion id in its title):
+      $readiness.output
 
       The plan should list:
       - Files to create or modify (with project-relative paths)
@@ -146,6 +172,11 @@ nodes:
 
       Approval feedback (if any):
       $approve_plan.output
+
+      Readiness + evidence plan (every acceptance criterion needs a test of
+      the stated kind, written as a NAMED function passed to it() with the
+      criterion id in its title):
+      $readiness.output
 
       When done, output a short diff summary (which files changed and why).
 
@@ -280,9 +311,93 @@ nodes:
       echo "HALT_CAUSE=lint/typecheck still fails after the fix attempt — the change is not reviewable yet"
       exit 1
 
-  - id: suppression_gate
+  - id: postcheck
     kind: bash
     depends_on: [quality_recheck]
+    output_type: postcheck_report
+    timeout: 600000
+    bash: |
+      # REQ-PIPETRUST-005 — check the agent's work mechanically: verifies
+      # bullets are real named test symbols covering every criterion, a src
+      # change has a CHANGELOG entry, and project-configured checks pass
+      # (their fix commands run first). Exit 0 always: the POSTCHECK marker
+      # routes the fix step; postcheck_recheck is what halts.
+      if [ -n "$SPECSHIP_CLI_SCRIPT" ]; then ss_cli() { "$SPECSHIP_CLI_NODE" "$SPECSHIP_CLI_SCRIPT" "$@"; }; SS=ss_cli
+      elif command -v specship >/dev/null 2>&1; then SS=specship
+      elif [ -x node_modules/.bin/specship ]; then SS=node_modules/.bin/specship
+      else SS=""
+      fi
+      if [ -z "$SS" ]; then
+        echo "POSTCHECK=failed"
+        echo "specship CLI not found — postcheck did NOT run"
+        exit 0
+      fi
+      $SS postcheck $INPUT.SPEC_ID --path . --fix || true
+
+  - id: fix_postcheck
+    kind: prompt
+    depends_on: [postcheck]
+    output_type: postcheck_fix
+    allowed_tools:
+      - Read
+      - Edit
+      - Write
+      - Bash
+      - mcp__specship__specship_spec
+    prompt: |
+      Mechanical post-implement check for $INPUT.SPEC_ID:
+
+      $postcheck.output
+
+      Route on the POSTCHECK marker — do not re-judge:
+
+      - POSTCHECK=passed → change NOTHING. Output exactly
+        `FIX_POSTCHECK=not-needed` and stop.
+      - POSTCHECK=failed → fix every ✗ finding:
+        - [verifies] — every acceptance criterion needs a test written as a
+          NAMED function passed to it(), with the criterion id in the it()
+          title, listed under the requirement's `verifies:` block in its spec
+          file as `path:FunctionName` (never an it() title string).
+        - [changelog] — add a plain-sentence, user-facing entry under
+          `## [Unreleased]` in CHANGELOG.md (no internal paths or symbols).
+        - [command] — make the named check pass by fixing the cause.
+        A bash step re-runs postcheck after you; any finding left halts the run.
+
+      Output `FIX_POSTCHECK=fixed` or `FIX_POSTCHECK=still-failing` followed
+      by what remains.
+
+  - id: postcheck_recheck
+    kind: bash
+    depends_on: [fix_postcheck]
+    output_type: postcheck_result
+    timeout: 600000
+    bash: |
+      # REQ-PIPETRUST-005.A5 — the authoritative half: re-run and halt while
+      # anything still fails, so an unlinked or undocumented change never
+      # reaches verify or the human gate.
+      if [ -n "$SPECSHIP_CLI_SCRIPT" ]; then ss_cli() { "$SPECSHIP_CLI_NODE" "$SPECSHIP_CLI_SCRIPT" "$@"; }; SS=ss_cli
+      elif command -v specship >/dev/null 2>&1; then SS=specship
+      elif [ -x node_modules/.bin/specship ]; then SS=node_modules/.bin/specship
+      else SS=""
+      fi
+      if [ -z "$SS" ]; then
+        echo "POSTCHECK_RESULT=failed"
+        echo "HALT_CAUSE=specship CLI not found — postcheck did NOT run"
+        exit 1
+      fi
+      if OUT=$($SS postcheck $INPUT.SPEC_ID --path . 2>&1); then
+        echo "POSTCHECK_RESULT=clean"
+        printf '%s\n' "$OUT"
+        exit 0
+      fi
+      echo "POSTCHECK_RESULT=failed"
+      printf '%s\n' "$OUT"
+      echo "HALT_CAUSE=postcheck still fails after the fix attempt — the change is not reviewable yet"
+      exit 1
+
+  - id: suppression_gate
+    kind: bash
+    depends_on: [postcheck_recheck]
     output_type: suppression_report
     bash: |
       # REQ-QGATE-004.A3 — deterministic scan for lint/type suppression
@@ -290,7 +405,10 @@ nodes:
       # The fix_quality prompt forbids silencing rules; this node enforces it
       # in code. SUPPRESSION_GATE is the marker contract: a scan that could
       # not run is `skipped`, never `clean`.
-      if command -v specship >/dev/null 2>&1; then SS=specship
+      # REQ-PIPETRUST-006.A4 — prefer the CLI running this workflow over any
+      # (possibly older) `specship` on PATH.
+      if [ -n "$SPECSHIP_CLI_SCRIPT" ]; then ss_cli() { "$SPECSHIP_CLI_NODE" "$SPECSHIP_CLI_SCRIPT" "$@"; }; SS=ss_cli
+      elif command -v specship >/dev/null 2>&1; then SS=specship
       elif [ -x node_modules/.bin/specship ]; then SS=node_modules/.bin/specship
       elif [ -x dist/bin/specship.js ]; then SS="node dist/bin/specship.js"
       else SS=""; fi
@@ -360,7 +478,16 @@ nodes:
           fi
         fi
         if ! npm run build --if-present; then echo "VERIFY_RESULT=build-failed"; exit 1; fi
-        if npm test; then echo "VERIFY_RESULT=ran-and-passed"; else echo "VERIFY_RESULT=ran-and-failed"; exit 1; fi
+        # REQ-PIPETRUST-006.A3 — a vitest project also leaves a JSON report in
+        # the run's artifacts, ingestible with `specship verify --report`.
+        TEST_ARGS=""
+        if [ -n "$SPECSHIP_ARTIFACTS_DIR" ] && node -e 'const s=((require("./package.json").scripts)||{}).test||"";process.exit(/^\s*vitest\b/.test(s)?0:1)' 2>/dev/null; then
+          mkdir -p "$SPECSHIP_ARTIFACTS_DIR"
+          REPORT="$SPECSHIP_ARTIFACTS_DIR/test-report.json"
+          TEST_ARGS="-- --reporter=default --reporter=json --outputFile.json=$REPORT"
+          echo "VERIFY_REPORT=$REPORT (ingest after merge: specship verify --report $REPORT)"
+        fi
+        if npm test $TEST_ARGS; then echo "VERIFY_RESULT=ran-and-passed"; else echo "VERIFY_RESULT=ran-and-failed"; exit 1; fi
       elif [ -f Cargo.toml ]; then
         if ! cargo build; then echo "VERIFY_RESULT=build-failed"; exit 1; fi
         if cargo test; then echo "VERIFY_RESULT=ran-and-passed"; else echo "VERIFY_RESULT=ran-and-failed"; exit 1; fi
@@ -410,39 +537,38 @@ nodes:
     depends_on: [route_verify]
     output_type: link_summary
     allowed_tools:
-      - mcp__specship__specship_link_assert
-      - mcp__specship__specship_link_verify
+      - Read
+      - Edit
       - mcp__specship__specship_spec
     prompt: |
-      Assert spec→code links for the changes made in the implement step.
-      For each symbol that implements $INPUT.SPEC_ID (or its child
-      requirements), call specship_link_assert with the spec_id, the
-      file path, and the qualified symbol name.
+      Record spec→code links for the changes made in the implement step —
+      durably, in the spec file (REQ-PIPETRUST-006). Do NOT call
+      specship_link_assert or specship_link_verify: runtime links vanish on a
+      full reindex, and a headless run cannot be granted them.
 
-      You MUST NOT assert a `tests`-kind link (REQ-REVINT-005.A1). Every
-      specship_link_assert call here is an implementation link — leave `kind`
-      at its default and never pass kind: 'tests'. Test evidence is
-      file-derived only: it comes from the spec's `verifies:` block or an
-      `@verifies` comment on the test symbol, never from this node. A workflow
-      that minted its own test evidence would be promoting itself past the
-      gate that exists to check it.
+      Open the spec file that declares $INPUT.SPEC_ID. Under the requirement:
+      - `implementations:` — one `path:Symbol` bullet per symbol that
+        implements it (qualified `Class.method` for methods). Add any that
+        are missing; never duplicate an existing bullet.
+      - `verifies:` — leave as the postcheck step left it (named test
+        functions only). Never add an it() title string.
 
-      Then act on LINK_ACTION, which a bash node already computed from the
-      VERIFY_RESULT marker (REQ-VSTATE-005.A1). Do NOT re-derive it from the
-      test log — read it:
+      You MUST NOT assert a `tests`-kind link (REQ-REVINT-005.A1) —
+      never pass kind: 'tests', and never mint test evidence: it comes only
+      from the spec's `verifies:` block or an `@verifies` comment on a test
+      symbol.
+
+      Verification state is not yours to set, so you
+      do NOT call specship_link_verify, whatever LINK_ACTION says. On
+      LINK_ACTION=assert-and-verify-pass, LINK_ACTION=assert-and-verify-fail
+      or LINK_ACTION=assert-only alike, record the implementations bullets
+      only: tests that ran are in the run's JSON test report (see the verify
+      output) and are ingested with `specship verify --report` after the
+      branch merges; tests that did not run are never reported as passing.
+
+      Routing context (computed by a bash node from VERIFY_RESULT):
 
       $route_verify.output
-
-      - LINK_ACTION=assert-and-verify-pass → after each assert, call
-        specship_link_verify with result="pass".
-      - LINK_ACTION=assert-and-verify-fail → call specship_link_verify with
-        result="fail" and the failing test name as the reason.
-      - LINK_ACTION=assert-only → do NOT call specship_link_verify at all;
-        the links stay in the `implemented` state. Tests that did not run
-        are never reported as passing.
-
-      A run whose environment or build broke never reaches this node — the
-      routing step halts it first (REQ-VSTATE-005.A3).
 
       Implementation diff summary:
       $implement.output
@@ -450,9 +576,8 @@ nodes:
       Test results:
       $verify.output
 
-      Output: a short list of "spec_id → file:symbol [verified|implemented]"
-      lines, ending with one line stating whether verification ran or was
-      skipped.
+      Output: a short list of "spec_id → file:symbol" lines you recorded,
+      ending with the VERIFY_REPORT line from the verify output if present.
 
   - id: coverage
     kind: bash
@@ -464,7 +589,10 @@ nodes:
       # `getSpecCoverage` report the MCP tool and the dashboard read, so the
       # number on the approval gate cannot disagree with them. It used to be
       # counted by a prompt.
-      if command -v specship >/dev/null 2>&1; then SS=specship
+      # REQ-PIPETRUST-006.A4 — prefer the CLI running this workflow over any
+      # (possibly older) `specship` on PATH.
+      if [ -n "$SPECSHIP_CLI_SCRIPT" ]; then ss_cli() { "$SPECSHIP_CLI_NODE" "$SPECSHIP_CLI_SCRIPT" "$@"; }; SS=ss_cli
+      elif command -v specship >/dev/null 2>&1; then SS=specship
       elif [ -x node_modules/.bin/specship ]; then SS=node_modules/.bin/specship
       elif [ -x dist/bin/specship.js ]; then SS="node dist/bin/specship.js"
       else SS=""; fi
@@ -529,10 +657,14 @@ nodes:
       Lint / typecheck:
       $quality_recheck.output
 
+      Mechanical postcheck (verifies symbols, CHANGELOG, project checks):
+      $postcheck_recheck.output
+
       Suppression scan (new noqa / eslint-disable / @ts-ignore):
       $suppression_gate.output
 
-      Links asserted:
+      Links recorded in the spec (ingest the test report after merge with the
+      `specship verify --report` command named here):
       $link.output
 
       Acceptance-criteria test coverage:

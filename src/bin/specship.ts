@@ -2019,6 +2019,53 @@ program
   });
 
 /**
+ * specship ready <SPEC_ID> — readiness gate (PIPETRUST-DOC, REQ-PIPETRUST-004).
+ * File-based (no index needed), so it runs inside a workflow worktree. Exits
+ * non-zero when the requirement is not ready; prints the evidence plan.
+ */
+program
+  .command('ready <specId>')
+  .description('Check a requirement is ready to implement and print its evidence plan (exits non-zero when not ready)')
+  .option('-p, --path <path>', 'Project path (defaults to cwd)')
+  .option('-j, --json', 'Output as JSON')
+  .action(async (specId: string, options: { path?: string; json?: boolean }) => {
+    const projectRoot = options.path ? path.resolve(options.path) : process.cwd();
+    try {
+      const { assessReadinessFromFile, formatEvidencePlan } = await import('../spec-quality/readiness');
+      const result = assessReadinessFromFile(projectRoot, specId);
+      console.log(options.json ? JSON.stringify(result, null, 2) : formatEvidencePlan(result));
+      if (!result.ready) process.exit(1);
+    } catch (err) {
+      error(`ready failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(1);
+    }
+  });
+
+/**
+ * specship postcheck <SPEC_ID> [--fix] — mechanical post-implement checks
+ * (PIPETRUST-DOC, REQ-PIPETRUST-005). File-based, worktree-safe.
+ */
+program
+  .command('postcheck <specId>')
+  .description('Mechanically check an implemented requirement: verifies coverage, CHANGELOG, configured checks (exits non-zero on failure)')
+  .option('-p, --path <path>', 'Project path (defaults to cwd)')
+  .option('--fix', 'Run each configured check\'s fix command first')
+  .option('--base <ref>', 'Base ref for the CHANGELOG check (defaults to the recorded run base, then the merge-base with the default branch)')
+  .option('-j, --json', 'Output as JSON')
+  .action(async (specId: string, options: { path?: string; fix?: boolean; base?: string; json?: boolean }) => {
+    const projectRoot = options.path ? path.resolve(options.path) : process.cwd();
+    try {
+      const { runPostcheck, formatPostcheck } = await import('../spec-quality/postcheck');
+      const result = runPostcheck({ projectRoot, requirementId: specId, fix: options.fix, base: options.base });
+      console.log(options.json ? JSON.stringify(result, null, 2) : formatPostcheck(result));
+      if (!result.ok) process.exit(1);
+    } catch (err) {
+      error(`postcheck failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(1);
+    }
+  });
+
+/**
  * specship verify --report <file>
  *
  * Derive verification from a REAL test run (REQ-VSTATE-004): read a vitest JSON

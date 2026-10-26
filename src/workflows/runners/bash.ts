@@ -29,6 +29,31 @@ function combinedOutput(stdout: string, stderr: string): string {
   return stdout || stderr;
 }
 
+/**
+ * The SpecShip CLI running this process — `{ node, script }` when this
+ * process is the CLI, else null. Exported to bash steps as
+ * SPECSHIP_CLI_NODE / SPECSHIP_CLI_SCRIPT (kept separate so paths with spaces
+ * survive) plus a display-only SPECSHIP_CLI.
+ */
+export function specshipCli(
+  argv: string[] = process.argv,
+  execPath: string = process.execPath,
+): { node: string; script: string } | null {
+  const script = argv[1] ?? '';
+  if (!/^specship(\.js)?$/.test(path.basename(script))) return null;
+  return { node: execPath, script };
+}
+
+function cliEnv(): Record<string, string> {
+  const cli = specshipCli();
+  if (!cli) return {};
+  return {
+    SPECSHIP_CLI_NODE: cli.node,
+    SPECSHIP_CLI_SCRIPT: cli.script,
+    SPECSHIP_CLI: `${cli.node} ${cli.script}`,
+  };
+}
+
 export class BashRunner implements NodeRunner {
   readonly kind = 'bash' as const;
 
@@ -51,6 +76,13 @@ export class BashRunner implements NodeRunner {
       // Always prepend — being merely *present* later in PATH still loses to
       // an earlier host Node.
       PATH: `${runtimeDir}${path.delimiter}${basePath}`,
+      // The exact CLI running this workflow (PIPETRUST-DOC, REQ-PIPETRUST-006.A4):
+      // steps call `$SPECSHIP_CLI` before any `specship` on PATH, so a step
+      // never runs an older globally installed CLI that lacks its command.
+      ...cliEnv(),
+      // Where this run keeps its artifacts, so a step can leave durable
+      // evidence (e.g. a JSON test report) beside the node outputs.
+      SPECSHIP_ARTIFACTS_DIR: ctx.artifactsDir,
       ...(node.env ?? {}),
     };
 
