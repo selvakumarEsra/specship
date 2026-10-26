@@ -25,7 +25,7 @@ jira_fingerprint_REQ-GEMINI-009: 4fc822fee7260a63
 jira_issue_REQ-GEMINI-010: SSHIP-70
 jira_fingerprint_REQ-GEMINI-010: c6eadc7467e6773f
 jira_issue_REQ-GEMINI-011: SSHIP-76
-jira_fingerprint_REQ-GEMINI-011: ceb5d564ce8e42b3
+jira_fingerprint_REQ-GEMINI-011: 53832d7937a30164
 ---
 
 <!-- id: GEMINI-TARGET-DOC -->
@@ -474,8 +474,10 @@ The Gemini install MUST add a `BeforeTool` hook matching `grep_search`,
 the command is search-shaped — its first program is a code-search tool
 (`grep`, `rg`, `ag`, `ack`, `git grep`, `find`, `fd`) — and MUST ignore a
 search tool used as a filter on another command's output (e.g.
-`npm test | grep FAIL`). [needs review: whether read-shaped commands such as
-`cat`/`head` belong in the advisory set]
+`npm test | grep FAIL`). Read-shaped commands (`cat`, `head`, `tail`,
+`sed -n`) are NOT intercepted: reading a config or log file is legitimate,
+and hinting on it would train the agent to ignore the hint (resolved
+2026-10-26).
 
 Two modes (resolved 2026-10-26):
 
@@ -484,12 +486,18 @@ Two modes (resolved 2026-10-26):
   `specship_explore`, never a decision; at most once per session; silent once
   the session has used a specship tool. The search still runs.
 - **Strict (opt-in, `SPECSHIP_GEMINI_STRICT=1`, env > project > install
-  settings)** — for a search-shaped call in an indexed project, return
-  `decision: "deny"` with a `reason` telling the agent to call
+  settings)** — for a `grep_search` or `glob` call in an indexed project,
+  return `decision: "deny"` with a `reason` telling the agent to call
   `specship_explore` (naming the symbols from the search pattern) and that a
-  search the index cannot answer may be retried by asking the user. Strict is
-  a deliberate, Gemini-only exception to the advisory rule, chosen by the
-  user; it is never on by default and never applies to the Claude target.
+  search the index cannot answer may be retried by asking the user. Strict
+  NEVER denies `run_shell_command`: Gemini fires `BeforeTool` only after its
+  policy check and the user's confirmation (verified in 0.28.0 —
+  `Scheduler._processToolCall` → `resolveConfirmation` → `_execute` →
+  `executeToolWithHooks`), so denying a shell search would make the user
+  approve a command and then see it blocked. Shell searches get the advisory
+  line in both modes (resolved 2026-10-26). Strict is a deliberate,
+  Gemini-only exception to the advisory rule, chosen by the user; it is never
+  on by default and never applies to the Claude target.
 
 Session-use detection MUST be host-aware: Gemini's transcript format and its
 MCP tool naming (`specship__<tool>`) differ from Claude's, and a parser that
@@ -509,15 +517,16 @@ implementations:
 - `run_shell_command` with `rg "renderScene" src/` is treated as a search;
   `npm test | grep FAIL`, `git status` and `ls` are not, in both modes.
 <!-- id: REQ-GEMINI-011.A3 -->
-- Strict: the same search-shaped call returns `decision: "deny"` with a
-  reason naming `specship_explore`; in an unindexed project, or when the
-  transcript cannot be read, the call is allowed (no decision).
+- Strict: a `grep_search` / `glob` call in an indexed project returns
+  `decision: "deny"` with a reason naming `specship_explore`; in an unindexed
+  project, or when the transcript cannot be read, the call is allowed (no
+  decision). A search-shaped `run_shell_command` gets the advisory line and
+  no decision even with strict set.
 <!-- id: REQ-GEMINI-011.A4 -->
 - With strict unset, no code path emits a `deny`/`block` decision (test
   asserts across all fixtures).
 <!-- id: REQ-GEMINI-011.A5 -->
-- Docs claim strict mode avoids the shell confirmation prompt only if a test
-  against Gemini CLI proves `BeforeTool` runs before policy confirmation.
-  [needs review: verify hook-vs-confirmation ordering in Gemini CLI before
-  making that claim]
+- Docs state that neither mode removes Gemini's shell confirmation prompt
+  (the hook runs after it), and describe strict mode as redirecting Gemini's
+  built-in `grep_search` / `glob` only.
 
