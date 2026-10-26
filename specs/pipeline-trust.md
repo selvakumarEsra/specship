@@ -17,7 +17,9 @@ jira_fingerprint_REQ-PIPETRUST-005: d24a3e404a4393c2
 jira_issue_REQ-PIPETRUST-006: SSHIP-398
 jira_fingerprint_REQ-PIPETRUST-006: 2aa81c3b8fb6454c
 jira_issue_REQ-PIPETRUST-007: SSHIP-402
-jira_fingerprint_REQ-PIPETRUST-007: 1cca1c3b70ec59ec
+jira_fingerprint_REQ-PIPETRUST-007: 3711406a7e8ca556
+jira_issue_REQ-PIPETRUST-008: SSHIP-500
+jira_fingerprint_REQ-PIPETRUST-008: de6b4dbd74baa937
 ---
 
 <!-- id: PIPETRUST-DOC -->
@@ -267,3 +269,35 @@ verifies:
 - With every check healthy, pulse output and the SessionStart summary add no lines.
 <!-- id: REQ-PIPETRUST-007.A6 -->
 - When `gh` or `npm` is unavailable or the network check exceeds its time budget, those checks are reported as skipped and never fail or stall the session start.
+
+<!-- id: REQ-PIPETRUST-008 -->
+## Criterion shorthand in a test title MUST name every criterion it lists
+
+Test titles across the suite cite several criteria in shorthand —
+`(REQ-X-004.A1/A3)`, `(REQ-X-028.A2/.A3)`, `(REQ-X-005.A1/A2/A3/A5)` — and
+both the test-title link scanner and postcheck read only the first id, so
+the later criteria silently stay unlinked. One shared parser MUST expand a
+shorthand chain into every full criterion id it names, and both consumers
+MUST use it. A bare `A2` with no preceding full id names nothing, and an id
+MUST match whole, so `REQ-X.A1` never matches inside `REQ-X.A10`.
+
+implementations:
+  - src/spec-quality/criterion-ids.ts:criterionIdsInText
+  - src/resolution/test-title-links.ts:scanTestTitleRefs
+  - src/spec-quality/postcheck.ts:checkVerifiesCoverage
+
+verifies:
+  - __tests__/criterion-ids.test.ts:shorthandChainsExpand
+  - __tests__/criterion-ids.test.ts:idsMatchWhole
+  - __tests__/criterion-ids.test.ts:titleScannerLinksEveryShorthandCriterion
+  - __tests__/criterion-ids.test.ts:postcheckCountsShorthandCriteria
+
+## Acceptance
+<!-- id: REQ-PIPETRUST-008.A1 -->
+- `REQ-X-004.A1/A3`, `REQ-X-028.A2/.A3`, `REQ-X-005.A1/A2/A3/A5` and `REQ-X-001.A1 / A3` expand to every full id they list; a lone `A2` expands to nothing.
+<!-- id: REQ-PIPETRUST-008.A2 -->
+- Text naming `REQ-X.A10` does not count as evidence for `REQ-X.A1`.
+<!-- id: REQ-PIPETRUST-008.A3 -->
+- The test-title scanner produces a reference for each criterion in a shorthand title.
+<!-- id: REQ-PIPETRUST-008.A4 -->
+- Postcheck reports no missing evidence for a criterion named only through shorthand in a verifies-listed test file.
