@@ -47,7 +47,7 @@ description: Every SpecShip command and the flags it accepts.
 | `specship drifted [path]` | List spec links in concerning states (drifted, broken, orphaned). |
 | `specship domain-gaps [path]` | List code entities and specs not yet covered by a domain fact (the domain gap-seed). Feeds the /specship:spec domain … |
 | `specship spec [id]` | Spec lifecycle funnel (idea → spec → implemented). With an id, show that spec/brief detail. |
-| `specship workflow <action> [arg]` | Workflow engine: list \| run <name> \| resume <runId> \| cancel <runId> \| approve <runId> \| reject <runId> \| purge <runI… |
+| `specship workflow <action> [args...]` | Workflow engine: list \| run <name> \| run-batch <name> --specs <ids> \| merge-queue <runId...> \| gc \| resume <runId> \| … |
 | `specship update` | Update SpecShip to the latest released version |
 | `specship jira` | Connect SpecShip to a JIRA instance (Cloud or Data Center). |
 | `specship jira configure` | Save JIRA credentials to ~/.specship/jira.json (0600) and test the connection. |
@@ -249,10 +249,17 @@ Saves a lesson so the mistake isn't repeated. `memory capture --title <t>` takes
 
 ## workflow
 
-Drives the workflow engine from the terminal — `list`, `run <name>`, `resume <runId>`, `cancel <runId>`, `approve <runId>`, `reject <runId>`, `purge <runId>`, `runs`. Pass inputs with repeatable `-i KEY=VALUE`, and a note for approve/reject with `--comment`. Reject and cancel keep the run's worktree; only `purge` deletes it. See [Workflows](/workflows/overview/).
+Drives the workflow engine from the terminal — `list`, `run <name>`, `resume <runId>`, `cancel <runId>`, `approve <runId>`, `reject <runId>`, `purge <runId>`, `runs`. Pass inputs with repeatable `-i KEY=VALUE`, and a note for approve/reject with `--comment`. Reject and cancel keep the run's worktree; only `purge` (or `gc`) deletes it. See [Workflows](/workflows/overview/).
+
+- `run-batch <name> --specs <ID,ID,…> [--concurrency N]` starts one run per requirement (default concurrency 3). Requirements whose `implementations:` files overlap are put in later waves and never run at the same time; the chosen waves and each run id are printed.
+- `merge-queue <runId…>` merges each completed run's branch into the current branch in order, re-running the project's lint/typecheck after each merge. It stops at the first conflict or failing check, leaving the tree at the last good merge. Runs that aren't completed are refused.
+- `gc [--dry-run]` purges the worktrees of runs whose branch is already merged into the default branch, keeping run records and artifacts. `--dry-run` only lists them.
 
 ```bash
 specship workflow run spec-implement -i SPEC_ID=REQ-AUTH-005
+specship workflow run-batch spec-implement --specs REQ-AUTH-005,REQ-AUTH-006
+specship workflow merge-queue <runId> <runId>
+specship workflow gc --dry-run
 ```
 
 ## desktop

@@ -4030,18 +4030,25 @@ program
   });
 
 program
-  .command('workflow <action> [arg]')
-  .description('Workflow engine: list | run <name> | resume <runId> | cancel <runId> | approve <runId> | reject <runId> | purge <runId> | runs')
+  .command('workflow <action> [args...]')
+  .description('Workflow engine: list | run <name> | run-batch <name> --specs <ids> | merge-queue <runId...> | gc | resume <runId> | cancel <runId> | approve <runId> | reject <runId> | purge <runId> | runs')
   .option('-i, --input <kv...>', 'workflow inputs as KEY=VALUE (repeatable)')
   .option('--path <projectRoot>', 'project root (default: cwd)')
   .option('--comment <text>', 'comment for approve/reject')
   .option('--reason <text>', 'reason for cancel/reject')
+  .option('--specs <ids>', 'run-batch: comma-separated requirement ids')
+  .option('--concurrency <n>', 'run-batch: max concurrent runs per wave (default 3)')
+  .option('--dry-run', 'gc: list merged-run worktrees without removing them')
   .option('--json', 'emit JSON where applicable')
   .action(async (
     action: string,
-    arg: string | undefined,
-    options: { input?: string[]; path?: string; comment?: string; reason?: string; json?: boolean }
+    args: string[] | undefined,
+    options: {
+      input?: string[]; path?: string; comment?: string; reason?: string; json?: boolean;
+      specs?: string; concurrency?: string; dryRun?: boolean;
+    }
   ) => {
+    const arg: string | undefined = args?.[0];
     const projectRoot = path.resolve(options.path ?? process.cwd());
     if (!isInitialized(projectRoot)) {
       error(`SpecShip not initialized in ${projectRoot}. Run \`specship init -i\` first.`);
@@ -4281,6 +4288,195 @@ program
           break;
         }
 
+        case 'run-batch': {
+          // REQ-THRU-001 — one run per requirement, overlapping files serialized.
+          if (!arg) {
+            error('workflow run-batch requires a workflow name');
+            process.exit(1);
+          }
+          const loaded = loadWorkflowByName(projectRoot, arg);
+          if (!loaded) {
+            error(`Workflow "${arg}" not found. Use \`specship workflow list\` to see available workflows.`);
+            process.exit(1);
+          }
+          const specIds = (options.specs ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+          if (specIds.length === 0) {
+            error('workflow run-batch requires --specs <ID,ID,...>');
+            process.exit(1);
+          }
+          const concurrency = options.concurrency !== undefined ? Number(options.concurrency) : undefined;
+          if (concurrency !== undefined && (!Number.isInteger(concurrency) || concurrency < 1)) {
+            error('--concurrency must be a positive integer');
+            process.exit(1);
+          }
+          const baseInputs: Record<string, string> = {};
+          for (const kv of options.input ?? []) {
+            const eqIdx = kv.indexOf('=');
+            if (eqIdx <= 0) {
+              error(`--input must be KEY=VALUE (got "${kv}")`);
+              process.exit(1);
+            }
+            baseInputs[kv.slice(0, eqIdx)] = kv.slice(eqIdx + 1);
+          }
+          for (const inp of loaded.workflow.inputs ?? []) {
+            if (inp.name !== 'SPEC_ID' && !(inp.name in baseInputs)) {
+              if (inp.required) {
+                error(`Required input missing: --input ${inp.name}=...`);
+                process.exit(1);
+              }
+              baseInputs[inp.name] = inp.default ?? '';
+            }
+          }
+          const { runBatch, TERMINAL_RUN_STATUSES, DEFAULT_BATCH_CONCURRENCY } = await import('../workflows/batch');
+          const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+          let batch: Awaited<ReturnType<typeof runBatch>>;
+          try {
+            batch = await runBatch({
+              projectRoot,
+              specIds,
+              concurrency,
+              startRun: async (specId) => {
+                const result = await executor.start(loaded.workflow, {
+                  projectRoot,
+                  inputs: { ...baseInputs, SPEC_ID: specId },
+                  variables: {
+                    ARTIFACTS_DIR: path.join(getSpecShipDir(projectRoot), 'artifacts'),
+                    CONTEXT: projectRoot,
+                  },
+                });
+                return { runId: result.run.id, status: result.run.status };
+              },
+              // A run paused at an approval still holds its files: wait for a
+              // terminal status (approve + resume it from another terminal).
+              waitForRun: async (runId, status) => {
+                let current = status;
+                let announced = false;
+                while (!TERMINAL_RUN_STATUSES.has(current)) {
+                  if (current === 'paused' && !announced) {
+                    // eslint-disable-next-line no-console
+                    console.log(`  ${runId} is paused — approve it with \`specship workflow approve ${runId}\`, then \`specship workflow resume ${runId}\``);
+                    announced = true;
+                  }
+                  await sleep(5000);
+                  current = specQueries.getWorkflowRunById(runId)?.status ?? 'failed';
+                }
+                return current;
+              },
+              onPlan: (waves) => {
+                if (options.json) return;
+                // eslint-disable-next-line no-console
+                console.log(`Serialization: ${waves.length} wave(s), concurrency ${concurrency ?? DEFAULT_BATCH_CONCURRENCY}`);
+                waves.forEach((w, i) => {
+                  // eslint-disable-next-line no-console
+                  console.log(`  wave ${i + 1}: ${w.join(', ')}`);
+                });
+              },
+              onRunStarted: (r) => {
+                if (options.json) return;
+                // eslint-disable-next-line no-console
+                console.log(`  ${r.specId} → run ${r.runId} [${r.status}] (wave ${r.wave + 1})`);
+              },
+            });
+          } catch (err) {
+            error(err instanceof Error ? err.message : String(err));
+            process.exit(1);
+          }
+          if (options.json) {
+            // eslint-disable-next-line no-console
+            console.log(JSON.stringify(batch, null, 2));
+          } else {
+            // eslint-disable-next-line no-console
+            console.log('Runs:');
+            for (const r of batch.runs) {
+              // eslint-disable-next-line no-console
+              console.log(`  ${r.runId} ${r.specId} [${r.status}]`);
+            }
+          }
+          if (batch.runs.some((r) => r.status === 'failed')) process.exit(1);
+          break;
+        }
+
+        case 'merge-queue': {
+          // REQ-THRU-002 — merge completed runs in order, re-checking each merge.
+          const runIds = args ?? [];
+          if (runIds.length === 0) {
+            error('workflow merge-queue requires one or more runIds');
+            process.exit(1);
+          }
+          const { runMergeQueue } = await import('../workflows/merge-queue');
+          const result = runMergeQueue({
+            projectRoot,
+            runIds,
+            getRun: (id) => {
+              const run = specQueries.getWorkflowRunById(id);
+              if (!run) return null;
+              const env = run.isolationEnvId ? specQueries.getIsolationEnvById(run.isolationEnvId) : null;
+              return { id: run.id, status: run.status, branch: env?.branchName };
+            },
+          });
+          if (options.json) {
+            // eslint-disable-next-line no-console
+            console.log(JSON.stringify(result, null, 2));
+          } else {
+            for (const id of result.merged) {
+              // eslint-disable-next-line no-console
+              console.log(`  merged ${id}`);
+            }
+            // eslint-disable-next-line no-console
+            console.log(
+              result.stoppedAt
+                ? `Stopped at run ${result.stoppedAt} (${result.reason}): ${result.detail ?? ''}`
+                : `Merge queue done — ${result.merged.length} run(s) merged.`
+            );
+          }
+          if (result.stoppedAt) process.exit(1);
+          break;
+        }
+
+        case 'gc': {
+          // REQ-THRU-007 — purge worktrees of merged runs; records + artifacts kept.
+          const { collectMergedRuns } = await import('../workflows/gc');
+          const result = collectMergedRuns({
+            projectRoot,
+            dryRun: options.dryRun === true,
+            listRuns: () => specQueries.getAllWorkflowRuns(1000).flatMap((run) => {
+              if (!run.isolationEnvId) return [];
+              const env = specQueries.getIsolationEnvById(run.isolationEnvId);
+              if (!env) return [];
+              return [{ id: run.id, status: run.status, branch: env.branchName, workingPath: env.workingPath }];
+            }),
+            purge: (runId) => {
+              executor.purge(runId);
+            },
+          });
+          if (options.json) {
+            // eslint-disable-next-line no-console
+            console.log(JSON.stringify(result, null, 2));
+          } else if (!result.defaultBranch) {
+            // eslint-disable-next-line no-console
+            console.log('Default branch unknown (no origin HEAD, main or master) — nothing collected.');
+          } else {
+            const verb = result.dryRun ? 'would remove' : 'removed';
+            for (const c of result.candidates) {
+              // eslint-disable-next-line no-console
+              console.log(`  ${verb} ${c.runId} ${c.branch} (${c.workingPath})`);
+            }
+            for (const s of result.skipped) {
+              // eslint-disable-next-line no-console
+              console.log(`  kept ${s.runId} — ${s.reason}`);
+            }
+            // eslint-disable-next-line no-console
+            console.log(
+              result.candidates.length === 0
+                ? `No merged-run worktrees to collect (default branch: ${result.defaultBranch}).`
+                : result.dryRun
+                  ? `${result.candidates.length} worktree(s) would be removed. Run without --dry-run to collect.`
+                  : `${result.purged.length} worktree(s) removed. Run records and artifacts are kept.`
+            );
+          }
+          break;
+        }
+
         case 'runs': {
           const runs = specQueries.getAllWorkflowRuns(50);
           if (options.json) {
@@ -4302,7 +4498,7 @@ program
         }
 
         default:
-          error(`Unknown workflow action "${action}". Use: list | run | resume | cancel | approve | reject | purge | runs`);
+          error(`Unknown workflow action "${action}". Use: list | run | run-batch | merge-queue | gc | resume | cancel | approve | reject | purge | runs`);
           process.exit(1);
       }
     } finally {
