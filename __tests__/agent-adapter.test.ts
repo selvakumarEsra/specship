@@ -93,6 +93,7 @@ function payloadWithoutEventNameGetsLegacyTraits(): void {
 export const HOST_SPECIFIC_ALLOWLIST: Record<string, string> = {
   'src/installer/': 'install targets write each host\'s own config files (the per-host adapter)',
   'src/activation/hook-output.ts': 'the hook I/O adapter — the single source of host traits',
+  'src/workflows/agents/': 'headless-agent adapters — each owns one host\'s binary, flags and stream format (REQ-AGENTADAPT-005)',
   'src/analytics/': 'Claude transcript analytics; per-host ingest is uncontracted (2026-09 pivot, phase D)',
   'src/db/migrations.ts': 'schema for the Claude transcript analytics tables',
   'src/claudemd/': 'CLAUDE.md governance audit — Claude-specific per GEMINI-TARGET-DOC',
@@ -124,6 +125,40 @@ export function findHostSpecificViolations(repoRoot: string, allow = HOST_SPECIF
     });
   }
   return hits;
+}
+
+/** Host binaries, host-only flags and host env markers — adapter knowledge only. */
+const HOST_BINARY = /['"`](claude|gemini)['"`]|--print\b|--append-system-prompt|--output-format|--allowed-tools|--disallowed-tools|SPECSHIP_(CLAUDE|GEMINI)_BIN|CLAUDECODE|GEMINI_CLI\b/;
+
+/** `file:line` hits under `src/workflows/` outside `src/workflows/agents/`; comment lines excluded. */
+export function findWorkflowHostBinaryHits(repoRoot: string): string[] {
+  const hits: string[] = [];
+  for (const file of listTs(path.join(repoRoot, 'src', 'workflows'))) {
+    const rel = path.relative(repoRoot, file).split(path.sep).join('/');
+    if (rel.startsWith('src/workflows/agents/')) continue;
+    fs.readFileSync(file, 'utf-8').split('\n').forEach((line, i) => {
+      const code = line.trim();
+      if (code.startsWith('*') || code.startsWith('//') || code.startsWith('/*')) return;
+      if (HOST_BINARY.test(line)) hits.push(`${rel}:${i + 1}: ${code}`);
+    });
+  }
+  return hits;
+}
+
+function workflowCodeNamesNoHostBinary(): void {
+  const repoRoot = path.join(__dirname, '..');
+  expect(findWorkflowHostBinaryHits(repoRoot)).toEqual([]);
+  // The guard fires on a planted spawn of a host binary outside the adapters.
+  const fake = fs.mkdtempSync(path.join(os.tmpdir(), 'wf-guard-'));
+  try {
+    fs.mkdirSync(path.join(fake, 'src', 'workflows', 'runners'), { recursive: true });
+    fs.mkdirSync(path.join(fake, 'src', 'workflows', 'agents'), { recursive: true });
+    fs.writeFileSync(path.join(fake, 'src', 'workflows', 'runners', 'x.ts'), "spawn('claude', ['--print']);\n");
+    fs.writeFileSync(path.join(fake, 'src', 'workflows', 'agents', 'ok.ts'), "spawn('gemini', ['--output-format']);\n");
+    expect(findWorkflowHostBinaryHits(fake)).toEqual(["src/workflows/runners/x.ts:1: spawn('claude', ['--print']);"]);
+  } finally {
+    fs.rmSync(fake, { recursive: true, force: true });
+  }
 }
 
 function sharedCodeHasNoHostSpecificNames(): void {
@@ -189,4 +224,5 @@ describe('agent-adapter layer (AGENTADAPT-DOC)', () => {
   it('every allowlist entry carries a reason (REQ-AGENTADAPT-003.A2)', allowlistEntriesCarryReasons);
   it('Claude-scoped modules are declared in the allowlist (REQ-AGENTADAPT-004.A1)', claudeScopedModulesAreDeclared);
   it('an allowlist entry with no remaining matches does not fail (REQ-AGENTADAPT-004.A2)', unusedAllowlistEntryDoesNotFail);
+  it('workflow code outside the agent adapters names no host binary or flag (REQ-AGENTADAPT-005.A3)', workflowCodeNamesNoHostBinary);
 });

@@ -11,6 +11,9 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### New Features
 
+- Workflows can now run on Gemini CLI. `specship workflow run` (and `/specship:spec implement`) runs each step on Gemini when you launch it from inside Gemini CLI, pass `--agent gemini`, set `SPECSHIP_WORKFLOW_AGENT=gemini`, or set `workflow.agent` in `specship.config.json`; otherwise it uses Claude Code as before. A run keeps the agent it started with through approvals and resumes. Map the `haiku` / `sonnet` / `opus` step models to Gemini models under `workflow.agents.gemini.models`; without a mapping Gemini's default model runs. A step Gemini can't run as written fails with the reason instead of running without the missing piece, and an unknown agent name is refused before the run starts.
+- The README and the Gemini CLI guide now show a full Claude Code vs Gemini CLI capability table, checked against what the installer actually sets up.
+
 - New `specship workflow run-batch spec-implement --specs <ids>` implements several requirements at once, each in its own worktree. Requirements that change the same files wait for each other.
 - New `specship workflow merge-queue <run ids>` merges finished runs one at a time and re-runs your lint or type check after each. It stops at the first conflict or failure and keeps the last good merge.
 - New `specship workflow gc` deletes the worktrees of runs that are already merged and keeps their records; `--dry-run` only lists them.
@@ -53,6 +56,7 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixes
 
+- A test whose title cites several criteria in shorthand, such as `(REQ-X-004.A1/A3)`, now counts as evidence for each of them; before, only the first was linked. A criterion id also no longer matches a longer one, so `.A10` is not taken as evidence for `.A1`.
 - `specship sync` no longer publishes to JIRA on its own. Set `jira.autoPublish: true` to turn automatic publishing back on, or publish explicitly with `specship jira publish --pending`; until then, sync tells you how many specs are waiting.
 - Links created by the assistant's link tool are now also written into the spec file, so they are no longer lost when the project is reindexed.
 - The mixed-model implement workflow now gets the same instructions as the standard one; it had been missing the rule about prefixing commits with the JIRA issue key.

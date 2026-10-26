@@ -24,6 +24,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { execSync, spawnSync } from 'child_process';
 import { checkEnforcedRules } from '../knowledge/enforce';
+import { criterionIdsInText } from './criterion-ids';
 import { loadEnforceConfig } from '../enforce/enforce';
 import { loadMutationDeps } from '../enforce/mutation';
 
@@ -153,8 +154,11 @@ export function checkVerifiesCoverage(projectRoot: string, specSource: string, r
     testSources.push(source);
   }
 
+  // Whole-id match with shorthand expanded: `REQ-X.A1/A3` covers A3, and
+  // `REQ-X.A10` never counts for A1 (REQ-PIPETRUST-008).
+  const named = new Set(testSources.flatMap((src) => criterionIdsInText(src)));
   for (const id of criterionIds(block, requirementId)) {
-    if (!testSources.some((src) => src.includes(id))) {
+    if (!named.has(id)) {
       findings.push({
         check: 'verifies',
         message: `${id} has no test evidence — no verifies-listed test file mentions it (put the id in the it() title)`,
