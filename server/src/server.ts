@@ -31,6 +31,7 @@ import { registerProjectsRoutes } from './routes/projects.js';
 import { registerReflectRoutes } from './routes/reflect.js';
 import { registerMaintainabilityRoutes } from './routes/maintainability.js';
 import { registerDomainRoutes } from './routes/domain.js';
+import { registerKnowledgeRoutes } from './routes/knowledge.js';
 import { registerMcpRoutes } from './routes/mcp.js';
 import { registerConfigRoutes } from './routes/config.js';
 import { readServerConfig } from './server-config.js';
@@ -332,6 +333,7 @@ export async function createServer(options: ServerOptions): Promise<ServerHandle
   await registerReflectRoutes(app);
   await registerMaintainabilityRoutes(app);
   await registerDomainRoutes(app);
+  await registerKnowledgeRoutes(app);
   // Chat routes removed (CHAT-REMOVE-DOC) — /api/chat and /api/chat/stream
   // intentionally 404; the reviewer loop lives on Workflows + Runs.
   await registerMcpRoutes(app);

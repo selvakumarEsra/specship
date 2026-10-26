@@ -45,7 +45,8 @@ beforeEach(() => {
   repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'jira-multireq-repo-'));
   fs.writeFileSync(
     path.join(repoRoot, ENFORCE_CONFIG_FILE),
-    JSON.stringify({ jira: { projectKey: 'PROJ' } }, null, 2),
+    // REQ-THRU-006: sync publishes only for an opted-in binding.
+    JSON.stringify({ jira: { projectKey: 'PROJ', autoPublish: true } }, null, 2),
   );
   fs.writeFileSync(
     userCfgPath,

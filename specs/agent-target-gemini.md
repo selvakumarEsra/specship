@@ -15,7 +15,7 @@ jira_fingerprint_REQ-GEMINI-004: 5429f748c21a6d3f
 jira_issue_REQ-GEMINI-005: SSHIP-61
 jira_fingerprint_REQ-GEMINI-005: dde32fd0d774fa74
 jira_issue_REQ-GEMINI-006: SSHIP-64
-jira_fingerprint_REQ-GEMINI-006: c2a163b53ec930df
+jira_fingerprint_REQ-GEMINI-006: 6485925b440c7179
 jira_issue_REQ-GEMINI-007: SSHIP-68
 jira_fingerprint_REQ-GEMINI-007: 761be48e4b321386
 jira_issue_REQ-GEMINI-008: SSHIP-73
@@ -238,8 +238,25 @@ install path uses — two renderers, one source — so the surfaces cannot drift
 A command whose body depends on Claude-only machinery (e.g. dispatching the
 `specship-explorer` subagent) MUST either degrade to an equivalent inline
 instruction or be excluded with a note, never shipped broken.
-[needs review: which commands are in the Gemini set vs excluded — decide at
-implementation from the capability matrix]
+Resolved 2026-10-26 (verified against Gemini CLI 0.28.0 `FileCommandLoader`):
+the Gemini set is exactly the Claude installer's set and tiering — `explore`
+always; `spec`, `check`, `learn`, `day` unless `--no-sdd` — rendered to
+`<commands dir>/specship/<name>.toml` (`/specship:<name>`), with `$ARGUMENTS`
+→ `{{args}}`, `mcp__specship__<tool>` → `<tool>`, and Claude tool names mapped
+to Gemini's (`Read`/`Write`/`Edit` → `read_file`/`write_file`/`replace`).
+`jira` is not rendered because the Claude installer does not ship it either.
+A rendered prompt that still contains Claude-only machinery is skipped with
+an install note. Note: the `implement` / `design` routes launch SpecShip
+workflows, whose prompt steps currently run on the Claude CLI.
+
+implementations:
+  - src/installer/gemini-commands.ts:renderGeminiCommand
+  - src/installer/gemini-commands.ts:geminiCommandSet
+  - src/installer/targets/gemini.ts:GeminiCliTarget.install
+
+verifies:
+  - __tests__/installer-targets.test.ts:geminiCommandsDeriveFromClaudeSource
+  - __tests__/installer-targets.test.ts:geminiUninstallKeepsUserCommands
 
 ## Acceptance
 <!-- id: REQ-GEMINI-005.A1 -->
@@ -254,9 +271,9 @@ implementation from the capability matrix]
 
 The Claude target's surfaces with no Gemini equivalent MUST NOT be faked or
 half-installed. As of REQ-GEMINI-010/011 the steering and session hooks DO
-have Gemini equivalents and are installed; what remains unsupported is the
-`specship-explorer` subagent, the status-line segment, and (until
-REQ-GEMINI-005 lands) the slash commands. `install` MUST print one
+have Gemini equivalents and are installed, and REQ-GEMINI-005 ships the slash
+commands; what remains unsupported is the `specship-explorer` subagent and
+the status-line segment. `install` MUST print one
 capability note listing exactly the surfaces a Claude install provides that
 this Gemini install does not. `describePaths` MUST list only paths the Gemini
 target actually writes.
@@ -270,8 +287,8 @@ verifies:
 ## Acceptance
 <!-- id: REQ-GEMINI-006.A1 -->
 - A Gemini install's `WriteResult.notes` names each still-unsupported surface
-  (subagent, status line, and slash commands while REQ-GEMINI-005 is unbuilt)
-  in one note, and no longer lists hooks.
+  (subagent, status line) in one note, and no longer lists hooks or slash
+  commands.
 <!-- id: REQ-GEMINI-006.A2 -->
 - No file under `.claude/` or Claude's settings is ever written by the Gemini
   target.

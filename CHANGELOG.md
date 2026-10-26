@@ -11,6 +11,27 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### New Features
 
+- New `specship workflow run-batch spec-implement --specs <ids>` implements several requirements at once, each in its own worktree. Requirements that change the same files wait for each other.
+- New `specship workflow merge-queue <run ids>` merges finished runs one at a time and re-runs your lint or type check after each. It stops at the first conflict or failure and keeps the last good merge.
+- New `specship workflow gc` deletes the worktrees of runs that are already merged and keeps their records; `--dry-run` only lists them.
+- Projects can let small changes skip the plan approval by setting `workflow.autoApproveSmallPlans` in `specship.config.json`. A plan qualifies when it only touches files the requirement already lists and the requirement has three or fewer acceptance criteria. The final review always waits for you.
+- After its review, the implement workflow now tries to break the change: it writes a small test for each acceptance criterion and reports whether the change held, broke, or the test could not be run. The run stops if this step edits any of your project files.
+- Custom workflows can now build on another workflow with `extends:` and override individual steps, so a variant only states its differences. The bundled mixed-model workflow now works this way.
+- `specship postcheck` also checks mutation scores when `enforce.mutation` is configured.
+- `specship jira reconcile` now reports acceptance criteria with no matching sub-task and criteria matched by more than one, as well as sub-tasks with no matching criterion.
+- Gemini CLI installs now include the `/specship:*` slash commands, generated from the same source as the Claude Code commands.
+
+- Domain facts can now record facts about the tools and libraries you depend on, as `type: external` with the dependency, the version it was checked against, and where it was checked. `specship knowledge stale` lists facts whose dependency has changed version since, along with the tests to re-run, and the start of each session mentions any stale facts.
+- A domain fact can carry rules that are checked automatically. For example, an `## Enforced` section can say that certain files must never contain a given pattern. `specship knowledge check` reports any violations, and `specship postcheck` fails on them.
+- The implement workflow now suggests new domain knowledge it relied on, such as terms, rules and facts about external tools, for you to confirm. Nothing is added automatically: review suggestions with `specship knowledge proposals` and accept or discard each one with `apply` or `reject`.
+- When the assistant looks up a requirement, linked facts about external tools now include their version, whether that version is out of date, and any enforced rules, so it doesn't have to rediscover them.
+- The dashboard API has a read-only knowledge endpoint that lists domain facts with their type, the requirements they relate to, and whether external facts are up to date.
+
+- Acceptance criteria now say what kind of test proves them — unit, property, end-to-end or contract. Add `(evidence: e2e)` to a criterion to choose, or let SpecShip pick from the wording ("never" and "always" mean a property test). `specship coverage` shows, for each criterion, the kind it needs and the kinds its tests provide, and `--require-kinds` fails when one is missing.
+- New `specship ready <REQ-ID>` checks that a requirement can be implemented before work starts — no spec errors, at least one acceptance criterion, nothing still marked for review — and prints the test plan: which kind of test each criterion needs and what to name it. The implement workflow now runs it first.
+- New `specship postcheck <REQ-ID>` checks finished work the way a reviewer would: every criterion has a test that is actually linked, source changes come with a CHANGELOG entry, and any checks you list in `specship.config.json` pass (with optional automatic fixes). The implement workflow runs it after the lint step, fixes what it finds, and stops if anything is left.
+- New `specship pulse` reports problems that used to go unnoticed: a failed release run, npm falling behind your latest release, JIRA publish failures, and finished workflow worktrees still on disk. Failing items also appear at the start of each session, and the check refreshes itself in the background.
+
 - Installing SpecShip into Gemini CLI with the new `--trust` flag writes an opt-in, user-tier policy file at `~/.gemini/policies/specship.toml` that auto-allows SpecShip's read-only tools (explore, search, node, callers, callees, impact, files, status, health, spec, drifted) so those calls stop raising Gemini's per-tool confirmation. Write-capable tools (link assertions, JIRA, Designer) are deliberately left to confirm, the MCP server entry is never given blanket `trust`, an administrator policy still overrides this file, and `run_shell_command` confirmations are unaffected. Omitting `--trust` writes no policy file; a later install without `--trust` preserves one a prior `--trust` install wrote; uninstall removes `specship.toml` only when it carries SpecShip's own header marker, so a user-authored file of the same name is left untouched.
 
 - Gemini CLI installs now nudge the assistant toward SpecShip when it reaches for a code search: the first time a session uses Gemini's own file-search tools or a search command like `grep` or `rg` in the shell, it gets a one-line pointer to SpecShip's explore tool, and the search still runs. Set `SPECSHIP_GEMINI_STRICT=1` to have Gemini's built-in file-search tools redirected to SpecShip instead; shell commands are never blocked. Neither mode removes Gemini's own confirmation prompt for shell commands.
@@ -32,6 +53,12 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixes
 
+- `specship sync` no longer publishes to JIRA on its own. Set `jira.autoPublish: true` to turn automatic publishing back on, or publish explicitly with `specship jira publish --pending`; until then, sync tells you how many specs are waiting.
+- Links created by the assistant's link tool are now also written into the spec file, so they are no longer lost when the project is reindexed.
+- The mixed-model implement workflow now gets the same instructions as the standard one; it had been missing the rule about prefixing commits with the JIRA issue key.
+- When a workflow step fails, its full output is now kept and the error shows the end of the log, where test runners print their summary. Previously the summary was cut off and a failed test step showed no output at all.
+- Workflow steps now use the same SpecShip version that is running the workflow, instead of whichever `specship` is installed globally.
+- The implement workflow now records links in the spec file instead of a session-only link that was lost on reindexing, and keeps a test report you can import with `specship verify --report` after merging.
 - In Gemini CLI, SpecShip's per-prompt reminder told the assistant to call the explore tool by Claude Code's name for it. It now uses the name Gemini CLI actually gives the tool; Claude Code sessions see exactly the same reminder as before.
 - The implement workflow's quality gate no longer halts a run over lint or type errors that were already there before the change. It now records the project's errors before implementing and fails only on errors the change introduced; errors that were already present are still listed in the run's output.
 - `specship install --skip-index` now actually skips indexing on a project-local install. Previously the flag only worked for global installs; a local install always built the index anyway. The install summary lists the skip as your choice and tells you how to index later.

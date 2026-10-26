@@ -59,7 +59,8 @@ function writeUserCfg(obj: unknown): void {
 function writeRepoBinding(projectKey = 'PROJ'): void {
   fs.writeFileSync(
     path.join(repoRoot, ENFORCE_CONFIG_FILE),
-    JSON.stringify({ jira: { projectKey } }, null, 2),
+    // REQ-THRU-006: sync publishes only for an opted-in binding.
+    JSON.stringify({ jira: { projectKey, autoPublish: true } }, null, 2),
   );
 }
 

@@ -1,15 +1,15 @@
 /**
  * Google Gemini CLI target — Phase 1 (GEMINI-TARGET-DOC, REQ-GEMINI-002/003).
  *
- * Implements the full `AgentTarget` contract over exactly ONE surface:
- * Gemini CLI's `mcpServers` settings block. Everything the Claude target
- * additionally writes (permissions, auto-sync + steering hooks, slash
- * commands, the `specship-explorer` subagent, the status line) has no Gemini
- * equivalent, so `install` writes none of it and says so in `notes` rather than
- * half-installing it (REQ-GEMINI-006). GEMINI.md steering IS written now
- * (REQ-GEMINI-004) — retrieval preference always, SDD rule by default and
- * opt-out via `--no-sdd`. TOML commands (REQ-GEMINI-005) are still
- * unimplemented — deliberately absent, not faked.
+ * Implements the full `AgentTarget` contract over Gemini CLI's `mcpServers`
+ * settings block, GEMINI.md steering (REQ-GEMINI-004), settings hooks
+ * (REQ-GEMINI-010/011), the opt-in `--trust` policy (REQ-GEMINI-009) and the
+ * slash commands rendered into Gemini TOML from the same
+ * `commands/specship/*.md` sources the Claude target copies (REQ-GEMINI-005,
+ * see `../gemini-commands.ts` for the verified format + per-command
+ * decisions). What still has no Gemini equivalent (the `specship-explorer`
+ * subagent, the status line, the permissions list) is left unwritten and
+ * named in `notes` rather than half-installed (REQ-GEMINI-006).
  *
  * The target IS registered in `targets/registry.ts`, but a plain
  * `specship install` stays Claude-only: target selection is opt-in through
@@ -44,6 +44,7 @@ import {
 import {
   getMcpServerConfig,
   jsonDeepEqual,
+  packageAssetPath,
   readJsonFile,
   removeMarkedSection,
   upsertMarkedSection,
@@ -57,6 +58,12 @@ import {
   getGeminiRetrievalBlock,
   getSddRuleBlock,
 } from '../instructions-template';
+import { GOVERNANCE_TIER_COMMANDS, RETRIEVAL_TIER_COMMANDS } from './claude';
+import {
+  GEMINI_COMMAND_HEADER_MARKER,
+  geminiCommandSet,
+  geminiCommandTarget,
+} from '../gemini-commands';
 
 /** Gemini CLI's settings file for this location. */
 export function settingsPath(loc: Location): string {
@@ -190,16 +197,128 @@ export function writeGeminiMcpEntry(
  * What a Claude install provides that this one does not (REQ-GEMINI-006.A1).
  * One note, naming every still-unsupported surface. As of REQ-GEMINI-010 the
  * prompt / session / tool hooks DO have Gemini equivalents and are installed,
- * so the note no longer lists them; what remains is slash commands (until
- * REQ-GEMINI-005), the specship-explorer subagent, the status line, and the
- * permissions auto-allow list (REQ-GEMINI-009 covers the opt-in policy file).
+ * so the note no longer lists them; nor slash commands, which REQ-GEMINI-005
+ * renders as Gemini TOML. What remains is the specship-explorer subagent, the
+ * status line, and the permissions auto-allow list (REQ-GEMINI-009 covers the
+ * opt-in policy file). A command the renderer had to exclude gets its own
+ * note from `writeGeminiCommandsEntries`.
  */
 const CAPABILITY_NOTE =
   'Gemini CLI install wires the MCP server, writes a GEMINI.md steering ' +
-  'block, and installs prompt/session/tool hooks. No slash commands, no ' +
-  'specship-explorer subagent, and no status line — Gemini CLI has no ' +
-  'equivalent surface. The tool playbook itself still lives in the MCP ' +
-  'server instructions.';
+  'block, installs prompt/session/tool hooks, and renders the /specship:* ' +
+  'slash commands as Gemini TOML. No specship-explorer subagent and no ' +
+  'status line — Gemini CLI has no equivalent surface. The tool playbook ' +
+  'itself still lives in the MCP server instructions.';
+
+/**
+ * Gemini CLI's custom-commands dir for this location (verified against
+ * gemini-cli 0.28.0 `Storage.getUserCommandsDir` / `getProjectCommandsDir`):
+ * global `~/.gemini/commands`, local `<cwd>/.gemini/commands`. Same scope as
+ * the MCP entry written by `settingsPath`.
+ */
+export function geminiCommandsDir(loc: Location): string {
+  return path.join(path.dirname(settingsPath(loc)), 'commands');
+}
+
+/**
+ * Every command the Claude installer ships, both tiers — the Gemini set is
+ * derived from the same list so the surfaces can't diverge (REQ-GEMINI-005).
+ */
+const ALL_COMMAND_SOURCES: readonly string[] = [
+  ...RETRIEVAL_TIER_COMMANDS,
+  ...GOVERNANCE_TIER_COMMANDS,
+];
+
+/** True when `file` is a TOML a SpecShip install wrote (carries our header). */
+function isOurCommandFile(file: string): boolean {
+  try {
+    return fs.readFileSync(file, 'utf-8').startsWith(GEMINI_COMMAND_HEADER_MARKER);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Render and write the slash commands (REQ-GEMINI-005). Same tiering as the
+ * Claude target: the retrieval door always, the governance doors unless
+ * `--no-sdd`. Per-file idempotent (byte-equal → `unchanged`); a user-authored
+ * file at one of our paths (no header marker) is never overwritten (`kept`).
+ * A command the renderer excluded is NOT written, a stale copy an earlier
+ * install wrote is removed, and the exclusion is returned as a note.
+ *
+ * `commandsSourceDir` defaults to the packaged `commands/` dir — the same
+ * one the Claude target copies from.
+ */
+export function writeGeminiCommandsEntries(
+  loc: Location,
+  includeGovernance = true,
+  commandsSourceDir: string = packageAssetPath('commands'),
+): { files: WriteResult['files']; notes: string[] } {
+  const names = includeGovernance ? ALL_COMMAND_SOURCES : [...RETRIEVAL_TIER_COMMANDS];
+  const dir = geminiCommandsDir(loc);
+  const files: WriteResult['files'] = [];
+  const notes: string[] = [];
+  for (const cmd of geminiCommandSet(commandsSourceDir, names)) {
+    const dest = path.join(dir, cmd.target);
+    if (cmd.toml === undefined) {
+      notes.push(`Gemini CLI: skipped /${cmd.target.replace(/\.toml$/, '').replace(/\//g, ':')} — ${cmd.excluded}.`);
+      if (isOurCommandFile(dest)) {
+        fs.unlinkSync(dest);
+        files.push({ path: dest, action: 'removed' });
+      }
+      continue;
+    }
+    const existed = fs.existsSync(dest);
+    if (existed) {
+      const current = fs.readFileSync(dest, 'utf-8');
+      if (current === cmd.toml) {
+        files.push({ path: dest, action: 'unchanged' });
+        continue;
+      }
+      if (!current.startsWith(GEMINI_COMMAND_HEADER_MARKER)) {
+        files.push({ path: dest, action: 'kept' });
+        continue;
+      }
+    }
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.writeFileSync(dest, cmd.toml);
+    files.push({ path: dest, action: existed ? 'updated' : 'created' });
+  }
+  return { files, notes };
+}
+
+/**
+ * Inverse of `writeGeminiCommandsEntries` (REQ-GEMINI-005.A2). Removes only
+ * files at our command paths that carry our header marker — user-authored
+ * commands, in the same `specship/` subdir or anywhere else in the commands
+ * dir, survive byte-identical. The `specship/` subdir is dropped only when
+ * that leaves it empty.
+ */
+export function removeGeminiCommandsEntries(loc: Location): WriteResult['files'] {
+  const dir = geminiCommandsDir(loc);
+  const files: WriteResult['files'] = [];
+  for (const source of ALL_COMMAND_SOURCES) {
+    const dest = path.join(dir, geminiCommandTarget(source));
+    if (!fs.existsSync(dest)) continue;
+    if (!isOurCommandFile(dest)) {
+      files.push({ path: dest, action: 'kept' });
+      continue;
+    }
+    fs.unlinkSync(dest);
+    files.push({ path: dest, action: 'removed' });
+  }
+  const parents = new Set(ALL_COMMAND_SOURCES.map((s) => path.dirname(path.join(dir, s))));
+  for (const parent of parents) {
+    try {
+      if (parent !== dir && fs.existsSync(parent) && fs.readdirSync(parent).length === 0) {
+        fs.rmdirSync(parent);
+      }
+    } catch {
+      // Leave the directory in place if it can't be removed — never fatal.
+    }
+  }
+  return files;
+}
 
 /**
  * Opt-in `--trust` only (REQ-GEMINI-009.A5): shown alongside the policy
@@ -525,11 +644,12 @@ export class GeminiCliTarget implements AgentTarget {
   }
 
   /**
-   * Writes exactly one thing: the MCP entry. `autoAllow`, `sdd` and
+   * Writes the MCP entry, GEMINI.md steering, hooks, the rendered slash
+   * commands and (with `--trust`) the policy TOML. `autoAllow` and
    * `installStatusLine` are accepted and IGNORED — Gemini CLI has no
-   * permissions, hooks or commands surface to write them to, and faking one
-   * would be worse than the note (REQ-GEMINI-006). Nothing under `.claude/`
-   * is ever touched (REQ-GEMINI-006.A2).
+   * permissions list or status line to write them to, and faking one would be
+   * worse than the note (REQ-GEMINI-006). Nothing under `.claude/` is ever
+   * touched (REQ-GEMINI-006.A2).
    */
   install(loc: Location, opts: InstallOptions): WriteResult {
     const integrations: string[] = [
@@ -549,10 +669,14 @@ export class GeminiCliTarget implements AgentTarget {
     // self-heals (strip on `--no-sdd`).
     files.push(writeGeminiHooksEntry(loc));
     files.push(includeGovernance ? writeGeminiSddHooksEntry(loc) : removeGeminiSddHooksEntry(loc));
+    // Slash commands (REQ-GEMINI-005), rendered from the Claude sources.
+    // Same tiering as the Claude target: governance doors ride `--sdd`.
+    const commands = writeGeminiCommandsEntries(loc, includeGovernance);
+    files.push(...commands.files);
     // REQ-GEMINI-009: strictly opt-in. Omitting `--trust` NEVER touches the
     // policy file — a prior `--trust` install is preserved byte-identical
     // (parity with REQ-INTEG-001.A3).
-    const notes: string[] = [CAPABILITY_NOTE];
+    const notes: string[] = [CAPABILITY_NOTE, ...commands.notes];
     if (opts.trust === true) {
       files.push(writeGeminiPolicyEntry());
       notes.push(TRUST_POLICY_NOTE);
@@ -592,6 +716,8 @@ export class GeminiCliTarget implements AgentTarget {
     // removal leaves it empty, so a user-authored GEMINI.md is preserved.
     files.push(removeGeminiInstructionsEntry(loc));
     files.push(removeGeminiSddEntry(loc));
+    // Slash commands (REQ-GEMINI-005.A2) — only our marked TOMLs go.
+    files.push(...removeGeminiCommandsEntries(loc));
     // REQ-GEMINI-009.A4: strip our policy TOML iff it carries our header
     // marker — a user-authored specship.toml of the same name is left
     // byte-identical. Sibling files in the policies directory survive, and
@@ -611,7 +737,7 @@ export class GeminiCliTarget implements AgentTarget {
   }
 
   describePaths(loc: Location): string[] {
-    return [settingsPath(loc), geminiMdPath(loc)];
+    return [settingsPath(loc), geminiMdPath(loc), geminiCommandsDir(loc)];
   }
 }
 

@@ -142,6 +142,13 @@ export interface ApprovalNode extends BaseNode {
   message: string;
   /** If true, the user's reply text becomes `$nodeId.output`. */
   capture_response?: boolean;
+  /**
+   * Auto-approve (THROUGHPUT-DOC, REQ-THRU-003): when the output of node
+   * `from` contains `marker`, the gate completes without pausing and its
+   * output records why. Used only for the plan gate behind a project opt-in;
+   * the final review never carries it.
+   */
+  auto_approve?: { from: string; marker: string };
   /** Optional on-reject retry config. */
   on_reject?: {
     prompt: string;
@@ -607,6 +614,14 @@ function validateNode(
         return null;
       }
       const node: ApprovalNode = { ...base, kind: 'approval', message: obj.message };
+      if (obj.auto_approve !== undefined) {
+        const aa = obj.auto_approve as Record<string, unknown> | null;
+        if (!aa || typeof aa !== 'object' || !isString(aa.from) || !isString(aa.marker) || !aa.from || !aa.marker) {
+          errors.push({ path: `${path}.auto_approve`, message: 'must be { from: <node id>, marker: <non-empty string> }' });
+        } else {
+          node.auto_approve = { from: aa.from, marker: aa.marker };
+        }
+      }
       if (obj.capture_response !== undefined) {
         if (typeof obj.capture_response !== 'boolean') {
           errors.push({ path: `${path}.capture_response`, message: 'must be a boolean' });

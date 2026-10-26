@@ -16,7 +16,7 @@ import type SpecShip from '../index';
 import type { Spec, SpecLink, SpecLinkState, SpecLinkKind, NodeKind } from '../types';
 import type { SpecQueries } from '../db/spec-queries';
 import { renderBehaviourSurface } from '../behaviour/behaviour-surface';
-import { writeBackImplementation } from '../extraction/specs/spec-file-writeback';
+import { persistLinkToSpecFile } from '../spec-quality/link-persist';
 import type { ToolDefinition, ToolResult } from './tools';
 import { canonicalQualifiedName } from '../resolution/spec-link-resolver';
 import { isNonTestEvidence } from '../resolution/test-title-links';
@@ -24,6 +24,8 @@ import { formatCoverageLine } from '../graph/spec-coverage';
 import type { SpecCoverageReport } from '../graph/spec-coverage';
 import { summarizeBriefFunnel, ideaCaptureFields } from '../resolution/brief-link-resolver';
 import type { FunnelLookup } from '../resolution/brief-link-resolver';
+import { resolveInstalledVersion, defaultGlobalNpmRoot } from '../knowledge/stale';
+import { parseEnforcedRules } from '../knowledge/enforce';
 
 const projectPathProperty = {
   type: 'string',
@@ -634,6 +636,48 @@ function buildInventory(sq: FunnelLookup): string {
   return lines.join('\n');
 }
 
+/**
+ * Render linked domain facts inline (REQ-DOMAIN-005.A1, REQ-KNOW-005). An
+ * `external` fact also carries its provenance — dependency, the version it was
+ * verified against, the installed version with a stale marker — and its
+ * enforced rules, so the agent does not rediscover any of it. Freshness is
+ * best-effort: an unresolvable dependency reads `unverifiable`, never fresh.
+ */
+export function renderDomainFactsInline(facts: Spec[], projectRoot: string): string[] {
+  const lines: string[] = ['', '## Domain facts', '_Human-confirmed domain knowledge linked to this spec (from the domain layer)._'];
+  for (const f of facts) {
+    const meta = (f.metadata ?? {}) as Record<string, unknown>;
+    const factType = meta.type;
+    const typeSuffix = typeof factType === 'string' ? ` · ${factType}` : '';
+    lines.push(`### ${f.id} — ${f.title}${typeSuffix}`);
+    if (factType === 'external') {
+      const dependency = typeof meta.dependency === 'string' ? meta.dependency : undefined;
+      const version = meta.version !== undefined ? String(meta.version) : undefined;
+      let installed: string | null = null;
+      try {
+        if (dependency) installed = resolveInstalledVersion(dependency, projectRoot, { globalRoot: defaultGlobalNpmRoot });
+      } catch {
+        installed = null;
+      }
+      const state = !dependency || !version || installed === null ? 'unverifiable' : installed === version ? 'fresh' : 'STALE';
+      lines.push(
+        `_External: ${dependency ?? '?'} — verified against ${version ?? '?'}; installed ${installed ?? 'not found'} (${state})` +
+          `${typeof meta.source === 'string' ? `; source: ${meta.source}` : ''}_`,
+      );
+      if (state === 'STALE') {
+        lines.push('_⚠ The dependency changed since this fact was verified — re-check it against the installed version before relying on it._');
+      }
+    }
+    lines.push((f.body || '').trim() || '_(empty)_');
+    const { rules } = parseEnforcedRules(f.body || '');
+    if (rules.length > 0) {
+      lines.push('_Enforced (hard constraints — `specship knowledge check` fails on a violation):_');
+      for (const r of rules) lines.push(`- \`${r.glob}\` must not match \`/${r.pattern}/${r.flags ?? ''}\``);
+    }
+  }
+  return lines;
+}
+
 export async function handleSpecshipSpec(
   cg: SpecShip,
   args: Record<string, unknown>
@@ -800,15 +844,7 @@ export async function handleSpecshipSpec(
       return typeof d === 'string' && d === spec.id;
     });
     if (dependentFacts.length > 0) {
-      lines.push('');
-      lines.push('## Domain facts');
-      lines.push('_Human-confirmed domain knowledge linked to this spec (from the domain layer)._');
-      for (const f of dependentFacts) {
-        const factType = (f.metadata as Record<string, unknown> | undefined)?.type;
-        const typeSuffix = typeof factType === 'string' ? ` · ${factType}` : '';
-        lines.push(`### ${f.id} — ${f.title}${typeSuffix}`);
-        lines.push((f.body || '').trim() || '_(empty)_');
-      }
+      lines.push(...renderDomainFactsInline(dependentFacts, cg.getProjectRoot()));
     }
   }
 
@@ -952,24 +988,29 @@ export async function handleSpecshipLinkAssert(
     updatedAt: now,
   });
 
-  // Persist the assertion into the spec file's `implementations:` block —
-  // the file is the source of truth; the DB row alone would vanish on a full
-  // reindex (LINK-TRUTH-DOC, REQ-LINKWB-001). `implements` only: `verifies`
-  // evidence has its own block (VERIFY-EVID-DOC).
+  // Persist the assertion into the spec file — the file is the source of
+  // truth; the DB row alone would vanish on a full reindex (LINK-TRUTH-DOC,
+  // REQ-THRU-005). `implements` → `implementations:`, `tests` → `verifies:`;
+  // a criterion id persists into its parent requirement's block. The graph
+  // already resolved the target above, so the textual check is skipped.
   let writeBackNote = '';
-  if (kind === 'implements') {
-    const wb = writeBackImplementation(
-      cg.getProjectRoot(),
-      spec.sourcePath,
+  if (kind === 'implements' || kind === 'tests') {
+    const persisted = persistLinkToSpecFile({
+      projectRoot: cg.getProjectRoot(),
       specId,
-      targetFilePath,
-      targetQualifiedName
-    );
-    writeBackNote = wb.changed
-      ? ` — persisted to ${spec.sourcePath}`
-      : wb.ok
-        ? '' // already present in the file: nothing to add
-        : `\n⚠ Link stored in the index but NOT persisted to the spec file (${wb.detail}). It will not survive a full reindex — add \`- ${targetFilePath}:${targetQualifiedName}\` under \`implementations:\` in ${spec.sourcePath}.`;
+      kind,
+      filePath: targetFilePath,
+      symbol: targetQualifiedName,
+      specSourcePath: spec.sourcePath,
+      symbolResolved: true,
+    });
+    const blockName = kind === 'tests' ? 'verifies' : 'implementations';
+    writeBackNote =
+      persisted.status === 'persisted'
+        ? ` — persisted to ${persisted.specFile ?? spec.sourcePath} (${blockName}: under ${persisted.requirementId})`
+        : persisted.status === 'unchanged'
+          ? ` — already persisted in ${persisted.specFile ?? spec.sourcePath}`
+          : `\n⚠ Link stored in the index but NOT persisted to the spec file (${persisted.detail}). It will not survive a full reindex — add \`- ${targetFilePath}:${targetQualifiedName}\` under \`${blockName}:\` for ${persisted.requirementId} in ${spec.sourcePath}.`;
   }
 
   return text(

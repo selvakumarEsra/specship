@@ -150,7 +150,14 @@ export type {
 } from './resolution/brief-link-resolver';
 export { computeDomainGapSeed } from './resolution/domain-gap-seed';
 // Spec coverage rollup + test-report ingestion (VSTATE-DOC).
-export { computeSpecCoverage, formatCoverageLine, verdictFor } from './graph/spec-coverage';
+export {
+  computeSpecCoverage,
+  formatCoverageLine,
+  verdictFor,
+  evidenceKindCoverage,
+  criteriaMissingKind,
+  requireKindsExitCode,
+} from './graph/spec-coverage';
 export type {
   SpecCoverageReport,
   RequirementCoverage,
@@ -382,7 +389,7 @@ export class SpecShip {
    * workflow is this function's output, not an LLM's count (REQ-VSTATE-005.A2).
    */
   getSpecCoverage(specId?: string): SpecCoverageReport {
-    return computeSpecCoverage(this.specQueries, specId);
+    return computeSpecCoverage(this.specQueries, specId, { projectRoot: this.projectRoot });
   }
 
   /**
@@ -1425,7 +1432,9 @@ export class SpecShip {
 
         // JIRA auto-publish (REQ-JIRATEAM-002). Gated on a repo-committed
         // binding: on an unbound repo this is a no-op and constructs no
-        // client. Best-effort — a JIRA fault never fails the sync.
+        // client; a bound repo publishes only with `jira.autoPublish: true`
+        // (REQ-THRU-006), otherwise it reports the pending count. Best-effort
+        // — a JIRA fault never fails the sync.
         try {
           const { autoPublishSpecsOnSync } = await import('./jira/auto-publish');
           result.jiraAutoPublish = await autoPublishSpecsOnSync({

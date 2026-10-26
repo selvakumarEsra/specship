@@ -9,5 +9,14 @@
     "projectKey": "SSHIP",
     "storyIssueType": "Task",
     "subtaskIssueType": "Subtask"
+  },
+  "postcheck": {
+    "commands": [
+      {
+        "name": "reference-docs",
+        "check": "node scripts/generate-reference-docs.mjs --check",
+        "fix": "node scripts/generate-reference-docs.mjs"
+      }
+    ]
   }
 }

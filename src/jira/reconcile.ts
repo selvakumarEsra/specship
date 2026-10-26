@@ -9,6 +9,10 @@
  *   - subtask divergence: a Sub-task was added in JIRA that has no matching
  *     acceptance criterion — reported with a proposed `.A<N+1>` id and text
  *     derived from the Sub-task summary.
+ *   - criterion divergence (REQ-THRU-009): the reverse direction — an
+ *     acceptance criterion with no Sub-task of matching summary
+ *     (`missingSubtasks`), or one matched by more than one Sub-task
+ *     (`duplicateSubtasks`).
  *
  * Sub-task matching reuses `subtaskSummary()` from `./publish` so the
  * comparison uses the EXACT same one-line truncation the publisher wrote
@@ -27,6 +31,21 @@ export interface SubtaskDivergence {
   proposedCriterionText: string;
 }
 
+/** An acceptance criterion with no matching Sub-task (REQ-THRU-009.A1). */
+export interface MissingSubtask {
+  criterionId: string;
+  criterionText: string;
+  /** The Sub-task summary publish would have written for this criterion. */
+  expectedSummary: string;
+}
+
+/** An acceptance criterion matched by more than one Sub-task (REQ-THRU-009.A2). */
+export interface DuplicateSubtasks {
+  criterionId: string;
+  criterionText: string;
+  subtaskKeys: string[];
+}
+
 export interface ContentDivergence {
   issueKey: string;
   liveSummary: string;
@@ -41,15 +60,26 @@ export interface ReconcileReport {
   /** The requirement's spec id (e.g. `REQ-AUTH-001`) the divergences belong to. */
   requirementId: string;
   content?: ContentDivergence;
+  /** Sub-tasks with no matching acceptance criterion. */
   subtasks: SubtaskDivergence[];
+  /** Acceptance criteria with no Sub-task of matching summary. */
+  missingSubtasks: MissingSubtask[];
+  /** Acceptance criteria matched by more than one Sub-task. */
+  duplicateSubtasks: DuplicateSubtasks[];
 }
 
 /**
  * True when the report has any divergence to show. A clean report (no content
- * mismatch, no orphan Sub-task) is not surfaced to the user.
+ * mismatch, no orphan Sub-task, no criterion missing or duplicated as a
+ * Sub-task) is not surfaced to the user.
  */
 export function reportHasDivergence(report: ReconcileReport): boolean {
-  return Boolean(report.content) || report.subtasks.length > 0;
+  return (
+    Boolean(report.content) ||
+    report.subtasks.length > 0 ||
+    (report.missingSubtasks?.length ?? 0) > 0 ||
+    (report.duplicateSubtasks?.length ?? 0) > 0
+  );
 }
 
 /**
@@ -110,6 +140,8 @@ export function diffIssueVsSpec(
     issueKey: issue.key,
     requirementId: spec.requirementId,
     subtasks: [],
+    missingSubtasks: [],
+    duplicateSubtasks: [],
   };
 
   // Content divergence (REQ-JIRATEAM-005.A1). The publisher's fingerprint is
@@ -151,6 +183,38 @@ export function diffIssueVsSpec(
     // Reserve the id we just proposed for the next iteration.
     const n = Number(nextId.slice(`${spec.requirementId}.A`.length)) + 1;
     nextId = `${spec.requirementId}.A${n}`;
+  }
+
+  // Criterion → Sub-task direction (REQ-THRU-009). Only judged when the live
+  // issue carries its sub-task list (the detail path); a summary-only read
+  // can't tell "no sub-tasks" from "not fetched".
+  if (Array.isArray(issue.subtasks)) {
+    const keysBySummary = new Map<string, string[]>();
+    for (const st of issue.subtasks) {
+      const summary = subtaskSummary(st.summary ?? '');
+      if (!summary) continue;
+      const keys = keysBySummary.get(summary) ?? [];
+      keys.push(st.key);
+      keysBySummary.set(summary, keys);
+    }
+    for (const a of spec.acceptance) {
+      const expected = subtaskSummary(a.text);
+      if (!expected) continue;
+      const keys = keysBySummary.get(expected) ?? [];
+      if (keys.length === 0) {
+        report.missingSubtasks.push({
+          criterionId: a.id,
+          criterionText: a.text,
+          expectedSummary: expected,
+        });
+      } else if (keys.length > 1) {
+        report.duplicateSubtasks.push({
+          criterionId: a.id,
+          criterionText: a.text,
+          subtaskKeys: [...keys],
+        });
+      }
+    }
   }
 
   return report;

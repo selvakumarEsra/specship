@@ -31,6 +31,7 @@ import {
   getSpecShipPermissions,
   getMcpServerConfig,
   jsonDeepEqual,
+  packageAssetPath,
   readJsonFile,
   removeMarkedSection,
   upsertMarkedSection,
@@ -95,23 +96,6 @@ function skillsDir(loc: Location): string {
   return path.join(configDir(loc), 'skills');
 }
 
-/**
- * Resolve a plugin-asset path (`commands/`, `agents/`, …) the installer copies.
- *
- * In the **bundled** distribution only `dist/` ships, so `copy-assets` stages
- * the asset dirs under `dist/` and we resolve `dist/<seg>` first — `__dirname`
- * is `dist/installer/targets/` in the installed package, so `../../<seg>` →
- * `dist/<seg>`. We fall back to the package/repo **root** (`../../../<seg>`) for
- * the non-bundled package and for dev/test runs, where this file executes from
- * `src/installer/targets/` and the assets live at the repo root. Without the
- * dist-first lookup, a bundled install hits `ENOENT … /commands/ss-explore.md`
- * (INSTALL-BUNDLE-ASSETS-DOC).
- */
-function packageAssetPath(...segments: string[]): string {
-  const fromDist = path.join(__dirname, '..', '..', ...segments);
-  const fromRoot = path.join(__dirname, '..', '..', '..', ...segments);
-  return fs.existsSync(fromDist) ? fromDist : fromRoot;
-}
 
 // Slash commands are a small set of progressive DOORS (WORKFLOW-DOORS-DOC),
 // split into two TIERS (INSTALL-WEDGE-DOC, REQ-WEDGE-001.A3). The retrieval door
@@ -128,12 +112,12 @@ function packageAssetPath(...segments: string[]): string {
 // parent directory on write.
 
 /** Retrieval tier — the reads door. Shipped on every install. */
-const RETRIEVAL_TIER_COMMANDS = [
+export const RETRIEVAL_TIER_COMMANDS = [
   'specship/explore.md', // reads: explore / trace / impact → /specship:explore
 ] as const;
 
 /** Governance tier — the intent + gate doors. Opt-in (`--sdd`). */
-const GOVERNANCE_TIER_COMMANDS = [
+export const GOVERNANCE_TIER_COMMANDS = [
   'specship/spec.md',  // intent loop: view / new / fast / design / implement / review / triage / behaviour / domain
   'specship/check.md', // gate & health: check / drifted / fix / relink / health
   'specship/learn.md', // capture door: crystallize this session's workflow as a skill proposal (LEARN-DOC)
