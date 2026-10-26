@@ -16,7 +16,7 @@ jira_fingerprint_REQ-AGENTADAPT-004: c791de9f1bfa0db5
 jira_issue_REQ-AGENTADAPT-005: SSHIP-484
 jira_fingerprint_REQ-AGENTADAPT-005: df9129d43a33a271
 jira_issue_REQ-AGENTADAPT-006: SSHIP-488
-jira_fingerprint_REQ-AGENTADAPT-006: 56f98edf708ce770
+jira_fingerprint_REQ-AGENTADAPT-006: f0cc08be444bb130
 jira_issue_REQ-AGENTADAPT-007: SSHIP-494
 jira_fingerprint_REQ-AGENTADAPT-007: 3d65e6513967d4d2
 ---
