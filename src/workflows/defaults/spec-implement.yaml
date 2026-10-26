@@ -14,8 +14,9 @@ inputs:
 systemPromptAppend: |
   You are implementing a specific requirement. Before editing code, call
   specship_spec($INPUT.SPEC_ID) to see the spec body and any code it
-  already links to. After editing, call specship_link_assert with the
-  spec_id and the symbol you implemented BEFORE reporting done.
+  already links to. After editing, record each symbol you implemented as a
+  `path:Symbol` bullet under the requirement's `implementations:` block in
+  its spec file — links in the spec file survive any reindex.
 
   JIRA-backed specs (REQ-JIRAPUB-004): if the spec file's frontmatter
   carries a `jira_issue:` key, EVERY git commit message you write for this

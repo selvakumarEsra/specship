@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { spawnSync } from 'child_process';
-import { parse } from 'yaml';
+import { discoverWorkflows } from '../src/workflows/discovery';
 
 /**
  * REQ-AUTHG-008 (specs/authoring-pipeline-gates.md) — the implement workflows'
@@ -17,9 +17,11 @@ type Node = { id: string; bash?: string };
 const WORKFLOWS = ['spec-implement', 'spec-implement-mixed'];
 
 function nodeBash(workflow: string, id: string): string {
-  const file = path.join(__dirname, '..', 'src', 'workflows', 'defaults', `${workflow}.yaml`);
-  const wf = parse(fs.readFileSync(file, 'utf8')) as { nodes: Node[] };
-  const node = wf.nodes.find((n) => n.id === id);
+  // Through the loader, so a workflow that `extends` another (REQ-THRU-004)
+  // is exercised exactly as it runs.
+  const found = discoverWorkflows(os.tmpdir()).workflows.find((w) => w.workflow.name === workflow);
+  if (!found) throw new Error(`no bundled workflow ${workflow}`);
+  const node = (found.workflow.nodes as Node[]).find((n) => n.id === id);
   if (!node?.bash) throw new Error(`${workflow}: no bash node ${id}`);
   return node.bash;
 }
