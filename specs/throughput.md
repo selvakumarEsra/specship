@@ -12,6 +12,22 @@ jira_issue_REQ-THRU-003: SSHIP-443
 jira_fingerprint_REQ-THRU-003: 78b4275a7b1dc945
 jira_issue_REQ-THRU-004: SSHIP-448
 jira_fingerprint_REQ-THRU-004: a9c074de75af0dce
+jira_issue_REQ-THRU-005: SSHIP-452
+jira_fingerprint_REQ-THRU-005: ec5e5641334faa60
+jira_issue_REQ-THRU-006: SSHIP-456
+jira_fingerprint_REQ-THRU-006: 536d23ddd86596bb
+jira_issue_REQ-THRU-007: SSHIP-460
+jira_fingerprint_REQ-THRU-007: 149ea3e3adc3e502
+jira_issue_REQ-THRU-008: SSHIP-464
+jira_fingerprint_REQ-THRU-008: ba664d3440547212
+jira_issue_REQ-THRU-009: SSHIP-467
+jira_fingerprint_REQ-THRU-009: 7e23c433eff7772b
+jira_issue_REQ-THRU-010: SSHIP-471
+jira_fingerprint_REQ-THRU-010: b2ec80bcbb5264b2
+jira_issue_REQ-THRU-011: SSHIP-474
+jira_fingerprint_REQ-THRU-011: 570634fb70a9272a
+jira_issue_REQ-THRU-012: SSHIP-477
+jira_fingerprint_REQ-THRU-012: 2182df356040399e
 ---
 
 <!-- id: THROUGHPUT-DOC -->
