@@ -33,7 +33,16 @@ import {
   removeStatusLineEntry,
   statusLineState,
 } from '../src/installer/targets/claude';
-import { geminiTarget } from '../src/installer/targets/gemini';
+import {
+  geminiTarget,
+  writeGeminiInstructionsEntry,
+  removeGeminiInstructionsEntry,
+} from '../src/installer/targets/gemini';
+import {
+  getGeminiRetrievalBlock,
+  getSddRuleBlock,
+} from '../src/installer/instructions-template';
+import { SERVER_INSTRUCTIONS } from '../src/mcp/server-instructions';
 import {
   resolveStatusLine,
   resolveAutoAllow,
@@ -1166,9 +1175,11 @@ describe('GeminiCliTarget.printConfig', () => {
     expect(local).toContain(path.join(process.cwd(), '.gemini', 'settings.json'));
     expect(geminiTarget.describePaths('global')).toEqual([
       path.join(os.homedir(), '.gemini', 'settings.json'),
+      path.join(os.homedir(), '.gemini', 'GEMINI.md'),
     ]);
     expect(geminiTarget.describePaths('local')).toEqual([
       path.join(process.cwd(), '.gemini', 'settings.json'),
+      path.join(process.cwd(), 'GEMINI.md'),
     ]);
   }
 
@@ -1275,8 +1286,12 @@ describe('Gemini target — specifics', () => {
   /** REQ-GEMINI-002.A2 — uninstalling what was never installed is a no-op. */
   function geminiUninstallOnVirginHomeIsNotFound(): void {
     const result = geminiTarget.uninstall('global');
-    expect(result.files).toEqual([{ path: settingsFile('global'), action: 'not-found' }]);
+    // settings.json → not-found; GEMINI.md strips → `kept` (file absent).
+    const settingsEntry = result.files.find((f) => f.path === settingsFile('global'));
+    expect(settingsEntry?.action).toBe('not-found');
+    expect(result.files.every((f) => f.action === 'not-found' || f.action === 'kept')).toBe(true);
     expect(fs.existsSync(settingsFile('global'))).toBe(false);
+    expect(fs.existsSync(path.join(tmpHome, '.gemini', 'GEMINI.md'))).toBe(false);
   }
 
   /** REQ-GEMINI-003.A2 — a prior install's integrations survive an upgrade. */
@@ -1302,7 +1317,11 @@ describe('Gemini target — specifics', () => {
       installStatusLine: true,
     });
 
-    expect(result.files.map((f) => f.path)).toEqual([settingsFile('local')]);
+    // Writes exactly the MCP settings entry and the GEMINI.md steering file —
+    // nothing matching Claude's hooks / commands / subagent / status line.
+    expect(new Set(result.files.map((f) => f.path))).toEqual(
+      new Set([settingsFile('local'), path.join(process.cwd(), 'GEMINI.md')]),
+    );
     const note = (result.notes ?? []).join('\n');
     for (const surface of ['hook', 'command', 'specship-explorer', 'status line']) {
       expect(note).toContain(surface);
@@ -1339,8 +1358,130 @@ describe('Gemini target — specifics', () => {
     const reports = uninstallTargets(ALL_TARGETS, 'global');
     const gemini = reports.find((r) => r.id === 'gemini');
     expect(gemini?.status).toBe('removed');
-    expect(gemini?.removedPaths).toEqual([settingsFile('global')]);
+    // Sweeps both the MCP settings entry and the GEMINI.md steering file.
+    expect(new Set(gemini?.removedPaths)).toEqual(
+      new Set([settingsFile('global'), path.join(tmpHome, '.gemini', 'GEMINI.md')]),
+    );
     expect(geminiTarget.detect('global').alreadyConfigured).toBe(false);
+    expect(fs.existsSync(path.join(tmpHome, '.gemini', 'GEMINI.md'))).toBe(false);
+  }
+
+  /** REQ-GEMINI-004.A1 — install preserves user content byte-identical outside the markers. */
+  function geminiInstallPreservesUserGeminiMdContent(): void {
+    const file = path.join(tmpCwd, 'GEMINI.md');
+    const userBody = '# My project\n\nTabs, not spaces. Prefer pnpm.\n';
+    fs.writeFileSync(file, userBody);
+
+    geminiTarget.install('local', { autoAllow: true });
+
+    const after = fs.readFileSync(file, 'utf-8');
+    expect(after.startsWith(userBody.trimEnd() + '\n')).toBe(true);
+    expect(after).toContain('SPECSHIP_GEMINI_RETRIEVAL_START');
+    expect(after).toContain('SPECSHIP_SDD_START');
+
+    // Second install leaves everything byte-identical.
+    const before = fs.readFileSync(file, 'utf-8');
+    geminiTarget.install('local', { autoAllow: true });
+    expect(fs.readFileSync(file, 'utf-8')).toBe(before);
+  }
+
+  /** REQ-GEMINI-004.A2 — uninstall strips the block; deletes the file iff empty. */
+  function geminiUninstallStripsOnlyOurBlock(): void {
+    const file = path.join(tmpCwd, 'GEMINI.md');
+    const userBody = '# My project\n\nTabs, not spaces.\n';
+    fs.writeFileSync(file, userBody);
+
+    geminiTarget.install('local', { autoAllow: true });
+    expect(fs.readFileSync(file, 'utf-8')).toContain('SPECSHIP_GEMINI_RETRIEVAL_START');
+
+    geminiTarget.uninstall('local');
+    const after = fs.readFileSync(file, 'utf-8');
+    expect(after).not.toContain('SPECSHIP_');
+    expect(after).toContain('Tabs, not spaces.');
+
+    // SpecShip-created GEMINI.md (no user content) is deleted on uninstall.
+    const virgin = path.join(tmpHome, '.gemini', 'GEMINI.md');
+    geminiTarget.install('global', { autoAllow: true });
+    expect(fs.existsSync(virgin)).toBe(true);
+    geminiTarget.uninstall('global');
+    expect(fs.existsSync(virgin)).toBe(false);
+  }
+
+  /** REQ-GEMINI-004.A3 — the retrieval block names specship_* first and shares no paragraph with server-instructions. */
+  function geminiRetrievalBlockLeadsWithSpecshipAndDoesNotDuplicatePlaybook(): void {
+    const block = getGeminiRetrievalBlock();
+    const idxSpecship = block.indexOf('specship_');
+    expect(idxSpecship).toBeGreaterThan(-1);
+    for (const other of ['grep_search', 'glob', 'read_file', 'run_shell_command']) {
+      const idx = block.indexOf(other);
+      // Each named Gemini surface either doesn't appear or appears after specship_*.
+      if (idx !== -1) expect(idx).toBeGreaterThan(idxSpecship);
+    }
+
+    // No shared paragraph with the MCP server instructions (the single source
+    // of truth that Gemini CLI forwards to the model).
+    const paragraphs = (text: string) =>
+      text.split(/\n\s*\n/).map((p) => p.trim()).filter((p) => p.length >= 40);
+    const blockPara = new Set(paragraphs(block.replace(/<!--.*?-->/g, '')));
+    const serverPara = paragraphs(SERVER_INSTRUCTIONS);
+    for (const p of serverPara) {
+      expect(blockPara.has(p)).toBe(false);
+    }
+  }
+
+  /** REQ-GEMINI-004.A4 — SDD portion is byte-identical to Claude's; absent on --no-sdd. */
+  function geminiSddBlockIsByteIdenticalToClaudeAndOptOutStrips(): void {
+    geminiTarget.install('local', { autoAllow: true });
+    const file = path.join(tmpCwd, 'GEMINI.md');
+    const body = fs.readFileSync(file, 'utf-8');
+    // The byte-exact Claude SDD block appears inside GEMINI.md.
+    expect(body.includes(getSddRuleBlock())).toBe(true);
+
+    // --no-sdd on a subsequent install strips the SDD block, leaves retrieval.
+    geminiTarget.install('local', { autoAllow: true, sdd: false });
+    const after = fs.readFileSync(file, 'utf-8');
+    expect(after).not.toContain('SPECSHIP_SDD_START');
+    expect(after).toContain('SPECSHIP_GEMINI_RETRIEVAL_START');
+  }
+
+  /** REQ-GEMINI-004.A5 — identical re-install is unchanged; older block replaced in place. */
+  function geminiReinstallIsUnchangedAndReplacesOldBlockInPlace(): void {
+    geminiTarget.install('local', { autoAllow: true });
+    const second = geminiTarget.install('local', { autoAllow: true });
+    const geminiMdEntries = second.files.filter((f) => f.path.endsWith('GEMINI.md'));
+    expect(geminiMdEntries.length).toBeGreaterThan(0);
+    expect(geminiMdEntries.every((f) => f.action === 'unchanged')).toBe(true);
+
+    // Simulate a prior-version block by overwriting between the markers.
+    const file = path.join(tmpCwd, 'GEMINI.md');
+    const body = fs.readFileSync(file, 'utf-8');
+    const altered = body.replace(
+      /<!-- SPECSHIP_GEMINI_RETRIEVAL_START -->[\s\S]*?<!-- SPECSHIP_GEMINI_RETRIEVAL_END -->/,
+      '<!-- SPECSHIP_GEMINI_RETRIEVAL_START -->\nOLD VARIANT\n<!-- SPECSHIP_GEMINI_RETRIEVAL_END -->',
+    );
+    fs.writeFileSync(file, altered);
+
+    geminiTarget.install('local', { autoAllow: true });
+    const final = fs.readFileSync(file, 'utf-8');
+    expect(final).not.toContain('OLD VARIANT');
+    // The block appears exactly once (not duplicated).
+    const occurrences = final.match(/SPECSHIP_GEMINI_RETRIEVAL_START/g) ?? [];
+    expect(occurrences).toHaveLength(1);
+  }
+
+  /** REQ-GEMINI-004 — global location writes `~/.gemini/GEMINI.md`, local writes `<cwd>/GEMINI.md`. */
+  function geminiRetrievalBlockHonoursGlobalVsLocalPath(): void {
+    writeGeminiInstructionsEntry('global');
+    expect(fs.existsSync(path.join(tmpHome, '.gemini', 'GEMINI.md'))).toBe(true);
+    expect(fs.existsSync(path.join(tmpCwd, 'GEMINI.md'))).toBe(false);
+
+    writeGeminiInstructionsEntry('local');
+    expect(fs.existsSync(path.join(tmpCwd, 'GEMINI.md'))).toBe(true);
+
+    removeGeminiInstructionsEntry('global');
+    removeGeminiInstructionsEntry('local');
+    expect(fs.existsSync(path.join(tmpHome, '.gemini', 'GEMINI.md'))).toBe(false);
+    expect(fs.existsSync(path.join(tmpCwd, 'GEMINI.md'))).toBe(false);
   }
 
   it('writes a stdio entry with no `type` key (Gemini allows only sse|http)', geminiInstallWritesTypelessStdioEntry);
@@ -1351,6 +1492,12 @@ describe('Gemini target — specifics', () => {
   it('names every unsupported surface in one note and writes nothing else (REQ-GEMINI-006.A1/A2)', geminiInstallNotesUnsupportedSurfaces);
   it('never installs the spec-author skill (REQ-AUTHG-007.A1)', geminiInstallWritesNoSkill);
   it('npm-uninstall sweeps the Gemini entry too (REQ-GEMINI-008)', geminiEntrySweptByRegistryUninstall);
+  it('install preserves user content outside the markers (REQ-GEMINI-004.A1)', geminiInstallPreservesUserGeminiMdContent);
+  it('uninstall strips only our block, deletes an empty file (REQ-GEMINI-004.A2)', geminiUninstallStripsOnlyOurBlock);
+  it('retrieval block names specship_* first and shares no paragraph with server-instructions (REQ-GEMINI-004.A3)', geminiRetrievalBlockLeadsWithSpecshipAndDoesNotDuplicatePlaybook);
+  it('SDD portion is byte-identical to Claude; --no-sdd strips it (REQ-GEMINI-004.A4)', geminiSddBlockIsByteIdenticalToClaudeAndOptOutStrips);
+  it('re-install reports unchanged; an older block is replaced in place (REQ-GEMINI-004.A5)', geminiReinstallIsUnchangedAndReplacesOldBlockInPlace);
+  it('global vs local write ~/.gemini/GEMINI.md and <cwd>/GEMINI.md respectively (REQ-GEMINI-004)', geminiRetrievalBlockHonoursGlobalVsLocalPath);
 });
 
 /**

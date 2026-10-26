@@ -35,6 +35,43 @@ export const SPECSHIP_SDD_SECTION_END = '<!-- SPECSHIP_SDD_END -->';
  * claude.ai/design links to the design sub-route. Kept to ordering rules only —
  * they MUST NOT duplicate the MCP server instructions.
  */
+/**
+ * Markers for the Gemini CLI retrieval-preference block (REQ-GEMINI-004).
+ *
+ * Distinct from the legacy `SPECSHIP_START/END` pair on purpose. That pair is
+ * strip-only (the #529 MCP playbook, which stays in `server-instructions.ts`
+ * alone). This pair wraps the retrieval ORDERING rule the Gemini target writes
+ * into GEMINI.md: a single sentence naming the `specship_*` MCP tools as the
+ * first stop before Gemini's own `grep_search` / `glob` / `read_file` / shell
+ * `run_shell_command` search for structure / flow / "where is X" questions.
+ * No tool playbook — Gemini CLI forwards the MCP server's `initialize`
+ * instructions to the model (`McpClient.getInstructions`, verified in 0.28.0),
+ * so `server-instructions.ts` stays the single source of truth.
+ */
+export const SPECSHIP_GEMINI_RETRIEVAL_START = '<!-- SPECSHIP_GEMINI_RETRIEVAL_START -->';
+export const SPECSHIP_GEMINI_RETRIEVAL_END = '<!-- SPECSHIP_GEMINI_RETRIEVAL_END -->';
+
+/**
+ * The retrieval-preference block the Gemini target writes into GEMINI.md
+ * (REQ-GEMINI-004). An ORDERING RULE only — it must not restate the MCP tool
+ * playbook (the A3 test asserts no shared paragraph with
+ * `getServerInstructions`).
+ */
+export function getGeminiRetrievalBlock(): string {
+  return [
+    SPECSHIP_GEMINI_RETRIEVAL_START,
+    '## SpecShip retrieval',
+    '',
+    'When the project has a SpecShip index (a `.specship/` folder), questions',
+    'about code structure, call flow, "where is X defined", "who calls X", or',
+    '"what breaks if I change X" go to the `specship_*` MCP tools FIRST —',
+    'before `grep_search`, `glob`, `read_file`, or a search command run through',
+    '`run_shell_command`. The MCP server itself tells you which tool to pick',
+    'and how to call it.',
+    SPECSHIP_GEMINI_RETRIEVAL_END,
+  ].join('\n');
+}
+
 export function getSddRuleBlock(): string {
   return [
     SPECSHIP_SDD_SECTION_START,

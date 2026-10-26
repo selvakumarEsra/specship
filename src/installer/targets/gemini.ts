@@ -4,11 +4,12 @@
  * Implements the full `AgentTarget` contract over exactly ONE surface:
  * Gemini CLI's `mcpServers` settings block. Everything the Claude target
  * additionally writes (permissions, auto-sync + steering hooks, slash
- * commands, the `specship-explorer` subagent, the status line, the CLAUDE.md
- * steering block) has no Gemini equivalent, so `install` writes none of it and
- * says so in `notes` rather than half-installing it (REQ-GEMINI-006).
- * GEMINI.md steering (REQ-GEMINI-004) and TOML commands (REQ-GEMINI-005) are
- * still unimplemented — deliberately absent, not faked.
+ * commands, the `specship-explorer` subagent, the status line) has no Gemini
+ * equivalent, so `install` writes none of it and says so in `notes` rather than
+ * half-installing it (REQ-GEMINI-006). GEMINI.md steering IS written now
+ * (REQ-GEMINI-004) — retrieval preference always, SDD rule by default and
+ * opt-out via `--no-sdd`. TOML commands (REQ-GEMINI-005) are still
+ * unimplemented — deliberately absent, not faked.
  *
  * The target IS registered in `targets/registry.ts`, but a plain
  * `specship install` stays Claude-only: target selection is opt-in through
@@ -44,14 +45,90 @@ import {
   getMcpServerConfig,
   jsonDeepEqual,
   readJsonFile,
+  removeMarkedSection,
+  upsertMarkedSection,
   writeJsonFile,
 } from './shared';
+import {
+  SPECSHIP_GEMINI_RETRIEVAL_END,
+  SPECSHIP_GEMINI_RETRIEVAL_START,
+  SPECSHIP_SDD_SECTION_END,
+  SPECSHIP_SDD_SECTION_START,
+  getGeminiRetrievalBlock,
+  getSddRuleBlock,
+} from '../instructions-template';
 
 /** Gemini CLI's settings file for this location. */
 export function settingsPath(loc: Location): string {
   return loc === 'global'
     ? path.join(os.homedir(), '.gemini', 'settings.json')
     : path.join(process.cwd(), '.gemini', 'settings.json');
+}
+
+/**
+ * Gemini CLI's project / user context file. Global → `~/.gemini/GEMINI.md`
+ * (user memory, loaded in every session); local → `<cwd>/GEMINI.md` (project
+ * memory, loaded when Gemini CLI starts in this repo). Mirror of the Claude
+ * target's `claudeMdPath` for CLAUDE.md.
+ */
+function geminiMdPath(loc: Location): string {
+  return loc === 'global'
+    ? path.join(os.homedir(), '.gemini', 'GEMINI.md')
+    : path.join(process.cwd(), 'GEMINI.md');
+}
+
+/**
+ * Write the retrieval-preference block into GEMINI.md (REQ-GEMINI-004).
+ * Marker-delimited and idempotent — content outside the markers is never
+ * touched, and a byte-identical re-run returns `unchanged`.
+ */
+export function writeGeminiInstructionsEntry(loc: Location): WriteResult['files'][number] {
+  const file = geminiMdPath(loc);
+  const action = upsertMarkedSection(
+    file,
+    SPECSHIP_GEMINI_RETRIEVAL_START,
+    SPECSHIP_GEMINI_RETRIEVAL_END,
+    getGeminiRetrievalBlock(),
+  );
+  return { path: file, action };
+}
+
+/** Inverse of `writeGeminiInstructionsEntry`: strip the retrieval block. */
+export function removeGeminiInstructionsEntry(loc: Location): WriteResult['files'][number] {
+  const file = geminiMdPath(loc);
+  const action = removeMarkedSection(
+    file,
+    SPECSHIP_GEMINI_RETRIEVAL_START,
+    SPECSHIP_GEMINI_RETRIEVAL_END,
+  );
+  return { path: file, action };
+}
+
+/**
+ * Write the spec-driven-development steering block into GEMINI.md
+ * (REQ-GEMINI-004.A4). Generated from the SAME `getSddRuleBlock` the Claude
+ * target writes, so the two surfaces cannot drift byte-wise.
+ */
+export function writeGeminiSddEntry(loc: Location): WriteResult['files'][number] {
+  const file = geminiMdPath(loc);
+  const action = upsertMarkedSection(
+    file,
+    SPECSHIP_SDD_SECTION_START,
+    SPECSHIP_SDD_SECTION_END,
+    getSddRuleBlock(),
+  );
+  return { path: file, action };
+}
+
+/** Inverse of `writeGeminiSddEntry`: strip the SDD rule block. */
+export function removeGeminiSddEntry(loc: Location): WriteResult['files'][number] {
+  const file = geminiMdPath(loc);
+  const action = removeMarkedSection(
+    file,
+    SPECSHIP_SDD_SECTION_START,
+    SPECSHIP_SDD_SECTION_END,
+  );
+  return { path: file, action };
 }
 
 /**
@@ -115,10 +192,11 @@ export function writeGeminiMcpEntry(
  * install time instead of discovered as a missing feature later.
  */
 const CAPABILITY_NOTE =
-  'Gemini CLI install wires the MCP server only. No auto-sync/steering hooks, ' +
-  'no slash commands, no specship-explorer subagent, no status line, and no ' +
-  'permissions auto-allow — Gemini CLI has no equivalent surface. Retrieval ' +
-  'steering therefore relies solely on the MCP server instructions.';
+  'Gemini CLI install wires the MCP server and writes a GEMINI.md steering ' +
+  'block. No auto-sync/steering hooks, no slash commands, no ' +
+  'specship-explorer subagent, no status line, and no permissions auto-allow ' +
+  '— Gemini CLI has no equivalent surface. The tool playbook itself still ' +
+  'lives in the MCP server instructions.';
 
 export class GeminiCliTarget implements AgentTarget {
   readonly id = 'gemini' as const;
@@ -156,10 +234,15 @@ export class GeminiCliTarget implements AgentTarget {
       ...(opts.withJira ? ['jira'] : []),
       ...(opts.withDesigner ? ['designer'] : []),
     ];
-    return {
-      files: [writeGeminiMcpEntry(loc, integrations)],
-      notes: [CAPABILITY_NOTE],
-    };
+    const files: WriteResult['files'] = [writeGeminiMcpEntry(loc, integrations)];
+    // GEMINI.md retrieval preference — always written (REQ-GEMINI-004).
+    files.push(writeGeminiInstructionsEntry(loc));
+    // SDD rule — default-on, matching the Claude target's governance tier.
+    // `--no-sdd` (opts.sdd === false) self-heals by stripping an earlier
+    // governance install.
+    const includeGovernance = opts.sdd !== false;
+    files.push(includeGovernance ? writeGeminiSddEntry(loc) : removeGeminiSddEntry(loc));
+    return { files, notes: [CAPABILITY_NOTE] };
   }
 
   /**
@@ -169,15 +252,24 @@ export class GeminiCliTarget implements AgentTarget {
    * rather than throwing.
    */
   uninstall(loc: Location): WriteResult {
+    const files: WriteResult['files'] = [];
     const file = settingsPath(loc);
     const config = readJsonFile(file);
     if (!config.mcpServers?.specship) {
-      return { files: [{ path: file, action: 'not-found' }] };
+      files.push({ path: file, action: 'not-found' });
+    } else {
+      delete config.mcpServers.specship;
+      if (Object.keys(config.mcpServers).length === 0) delete config.mcpServers;
+      writeJsonFile(file, config);
+      files.push({ path: file, action: 'removed' });
     }
-    delete config.mcpServers.specship;
-    if (Object.keys(config.mcpServers).length === 0) delete config.mcpServers;
-    writeJsonFile(file, config);
-    return { files: [{ path: file, action: 'removed' }] };
+    // Strip both GEMINI.md blocks regardless of which tier was selected on
+    // install, so uninstall fully reverses either install path
+    // (REQ-GEMINI-004.A2). `removeMarkedSection` deletes the file iff
+    // removal leaves it empty, so a user-authored GEMINI.md is preserved.
+    files.push(removeGeminiInstructionsEntry(loc));
+    files.push(removeGeminiSddEntry(loc));
+    return { files };
   }
 
   /**
@@ -190,7 +282,7 @@ export class GeminiCliTarget implements AgentTarget {
   }
 
   describePaths(loc: Location): string[] {
-    return [settingsPath(loc)];
+    return [settingsPath(loc), geminiMdPath(loc)];
   }
 }
 

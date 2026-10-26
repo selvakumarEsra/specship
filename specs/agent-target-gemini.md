@@ -193,7 +193,20 @@ the markers MUST never be modified. Default-on for `--target gemini`
 
 implementations:
   - src/installer/targets/gemini.ts:GeminiCliTarget.install
+  - src/installer/targets/gemini.ts:writeGeminiInstructionsEntry
+  - src/installer/targets/gemini.ts:writeGeminiSddEntry
+  - src/installer/targets/gemini.ts:removeGeminiInstructionsEntry
+  - src/installer/targets/gemini.ts:removeGeminiSddEntry
+  - src/installer/instructions-template.ts:getGeminiRetrievalBlock
   - src/installer/instructions-template.ts:getSddRuleBlock
+
+verifies:
+  - __tests__/installer-targets.test.ts:geminiInstallPreservesUserGeminiMdContent
+  - __tests__/installer-targets.test.ts:geminiUninstallStripsOnlyOurBlock
+  - __tests__/installer-targets.test.ts:geminiRetrievalBlockLeadsWithSpecshipAndDoesNotDuplicatePlaybook
+  - __tests__/installer-targets.test.ts:geminiSddBlockIsByteIdenticalToClaudeAndOptOutStrips
+  - __tests__/installer-targets.test.ts:geminiReinstallIsUnchangedAndReplacesOldBlockInPlace
+  - __tests__/installer-targets.test.ts:geminiRetrievalBlockHonoursGlobalVsLocalPath
 
 ## Acceptance
 <!-- id: REQ-GEMINI-004.A1 -->
