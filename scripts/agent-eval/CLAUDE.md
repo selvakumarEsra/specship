@@ -58,6 +58,14 @@ SPECSHIP_MODEL=standard scripts/agent-eval/run-all-gemini.sh <repo> "<Q>"
 - **The two `SPECSHIP_MODEL` arms are REQ-LOWEND-002's decision procedure**:
   run `lite` and `standard` under the same question and adopt the tier with
   the lower fallback rate that still meets the pass bar.
+- **Auth:** Gemini CLI prefers the auth type in settings over
+  `GEMINI_API_KEY`, so a user-level `oauth-personal` choice (now refused for
+  individual accounts with `IneligibleTierError`) wins over the key. Point
+  `GEMINI_CLI_HOME` at a scratch home whose `.gemini/settings.json` is
+  `{"security":{"auth":{"selectedType":"gemini-api-key"},"folderTrust":{"enabled":false}}}`
+  and export `GEMINI_API_KEY`. That leaves the user's `~/.gemini` untouched and
+  keeps their own hooks out of the arms. Folder trust off is needed, or the
+  runner's per-arm workspace settings are ignored.
 - `EVAL_RUNS` defaults to **2** — the ≥2-runs-per-arm rule applies here too.
 - **No cost figure.** Gemini CLI reports no dollar amount, so `costUsd` is
   `null` and prints as `n/a`; comparisons use tool calls, wall-clock, and the

@@ -2486,6 +2486,28 @@ function formatReconcileReport(report: import('../jira/reconcile').ReconcileRepo
       );
     }
   }
+  if (report.missingSubtasks.length > 0) {
+    lines.push('');
+    lines.push('**Acceptance criteria with no matching Sub-task**');
+    lines.push('');
+    lines.push('| Criterion | Text |');
+    lines.push('| --- | --- |');
+    for (const m of report.missingSubtasks) {
+      lines.push(`| ${cell(m.criterionId)} | ${cell(m.criterionText)} |`);
+    }
+  }
+  if (report.duplicateSubtasks.length > 0) {
+    lines.push('');
+    lines.push('**Acceptance criteria matched by more than one Sub-task**');
+    lines.push('');
+    lines.push('| Criterion | Sub-tasks | Text |');
+    lines.push('| --- | --- | --- |');
+    for (const d of report.duplicateSubtasks) {
+      lines.push(
+        `| ${cell(d.criterionId)} | ${cell(d.subtaskKeys.join(', '))} | ${cell(d.criterionText)} |`,
+      );
+    }
+  }
   return lines.join('\n');
 }
 
@@ -2737,6 +2759,11 @@ export async function handleSpecshipJiraReconcile(
             subtask_key: d.subtaskKey,
             proposed_criterion_id: d.proposedCriterionId,
             proposed_criterion_text: d.proposedCriterionText,
+          })),
+          missing_subtasks: report.missingSubtasks.map((m) => m.criterionId),
+          duplicate_subtasks: report.duplicateSubtasks.map((d) => ({
+            criterion_id: d.criterionId,
+            subtask_keys: d.subtaskKeys,
           })),
         },
         null,

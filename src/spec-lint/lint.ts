@@ -19,6 +19,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { MarkdownSpecExtractor, parseAcceptanceParentId } from '../extraction/specs/markdown-spec-extractor';
 import { Spec } from '../types';
+import { parseDeclaredEvidenceKind, EVIDENCE_KINDS } from '../spec-quality/evidence-kind';
+import { parseEnforcedRules } from '../knowledge/enforce';
 
 export type LintSeverity = 'error' | 'warning';
 
@@ -33,6 +35,9 @@ export type LintCode =
   | 'spec_orphan_acceptance_parent'
   | 'spec_requirement_without_acceptance'
   | 'spec_needs_review_marker'
+  | 'spec_unknown_evidence_kind'
+  | 'spec_external_fact_missing_provenance'
+  | 'spec_malformed_enforced_rule'
   // warnings
   | 'spec_no_negative_case'
   | 'spec_missing_non_goals'
@@ -135,6 +140,53 @@ function isDomainFile(filePath: string): boolean {
   return filePath.replace(/\\/g, '/').includes('specs/domain/');
 }
 
+/** The provenance an external fact must carry (REQ-KNOW-001). */
+const EXTERNAL_PROVENANCE = ['dependency', 'version', 'source'] as const;
+
+/**
+ * Domain-fact checks (KNOWLEDGE-DOC):
+ *  - an `external` fact missing `dependency` / `version` / `source` is an
+ *    error naming the missing field(s) (REQ-KNOW-001.A2) — it still indexes;
+ *  - an `## Enforced` bullet not of the form `` `<glob>` must not match
+ *    `/<regex>/` `` is an error (REQ-KNOW-003.A3).
+ */
+function lintDomainFact(
+  specs: Spec[],
+  source: string,
+  add: (f: Omit<LintFinding, 'filePath'>) => void
+): void {
+  const fact = specs.find((s) => s.kind === 'domain');
+  if (fact) {
+    const meta = (fact.metadata ?? {}) as Record<string, unknown>;
+    if (meta.type === 'external') {
+      const missing = EXTERNAL_PROVENANCE.filter((k) => {
+        const v = meta[k];
+        return !(typeof v === 'number' || (typeof v === 'string' && v.trim().length > 0));
+      });
+      if (missing.length > 0) {
+        add({
+          code: 'spec_external_fact_missing_provenance',
+          severity: 'error',
+          line: 1,
+          specId: fact.id,
+          message: `External fact ${fact.id} is missing ${missing.join(', ')} — an external fact must record the dependency, the version it was verified against, and its source.`,
+        });
+      }
+    }
+  }
+  // Parsed over the whole source so the line numbers are file lines; the
+  // frontmatter can't contain a `## Enforced` heading.
+  for (const m of parseEnforcedRules(source).malformed) {
+    add({
+      code: 'spec_malformed_enforced_rule',
+      severity: 'error',
+      line: m.line,
+      specId: fact?.id,
+      message: `Malformed enforced rule "${m.text}": ${m.reason}.`,
+    });
+  }
+}
+
 /**
  * Lint one spec file's source. `filePath` is used verbatim in findings, so
  * callers should pass a project-relative path.
@@ -185,8 +237,12 @@ export function lintSpecSource(filePath: string, source: string): LintFinding[] 
   }
 
   // A domain fact keeps the extractor's verdict (its frontmatter can genuinely
-  // be malformed) but has no requirement/acceptance structure to check.
-  if (isDomainFile(filePath)) return sortFindings(findings);
+  // be malformed) but has no requirement/acceptance structure to check. It has
+  // its own two checks instead (KNOWLEDGE-DOC).
+  if (isDomainFile(filePath)) {
+    lintDomainFact(result.specs, source, add);
+    return sortFindings(findings);
+  }
 
   const declared = new Set<string>([...seen.keys(), ...result.specs.map((s) => s.id)]);
   const acceptance = result.specs.filter((s) => s.kind === 'acceptance');
@@ -232,6 +288,22 @@ export function lintSpecSource(filePath: string, source: string): LintFinding[] 
         line: a.startLine,
         specId: a.id,
         message: `${a.id} still carries a [needs review] marker.`,
+      });
+    }
+  }
+
+  // 5b. An `(evidence: <kind>)` tag naming a kind outside the four
+  //     (REQ-PIPETRUST-001.A3). Resolution would silently fall back to the
+  //     derived kind, so the author's intent would be lost — an error.
+  for (const a of acceptance) {
+    const { invalid } = parseDeclaredEvidenceKind(a.body);
+    if (invalid !== undefined) {
+      add({
+        code: 'spec_unknown_evidence_kind',
+        severity: 'error',
+        line: a.startLine,
+        specId: a.id,
+        message: `${a.id} declares unknown evidence kind "${invalid}" — use one of ${EVIDENCE_KINDS.join(', ')}.`,
       });
     }
   }

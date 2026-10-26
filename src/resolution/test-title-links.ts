@@ -25,6 +25,7 @@
  */
 
 import type { SpecLinkKind } from '../types';
+import { criterionIdsInText } from '../spec-quality/criterion-ids';
 
 /** A spec id found inside an `it()` / `test()` title in a test file. */
 export interface TestTitleRef {
@@ -42,14 +43,6 @@ export interface TestTitleRef {
  */
 const TEST_CALL =
   /\b(?:it|test|bench)((?:\.\w+)*(?:\([^()]*\))?(?:\.\w+)*)?\s*\(\s*(['"`])((?:\\.|(?!\2)[^\\])*)\2/g;
-
-/**
- * A spec id as embedded in a test title: an upper-case dashed token
- * (`REQ-VSTATE-001`, `VSTATE-DOC`, `DOM-AUTH-003`) with an optional `.A<N>`
- * acceptance suffix. Deliberately loose — every hit is checked against the specs
- * table before a link is created, so a false positive costs nothing.
- */
-const SPEC_ID_IN_TITLE = /\b([A-Z][A-Z0-9]*(?:-[A-Z0-9]+)+(?:\.A\d+)?)\b/g;
 
 /**
  * True when `filePath` is a recognized test file (REQ-VSTATE-002.A4): it lives
@@ -102,13 +95,8 @@ export function scanTestTitleRefs(source: string): TestTitleRef[] {
     // the report carries the interpolated text, which we can't reconstruct.
     if (m[2] === '`' && title.includes('${')) continue;
     const line = source.slice(0, m.index).split('\n').length;
-    SPEC_ID_IN_TITLE.lastIndex = 0;
-    let idMatch: RegExpExecArray | null;
-    while ((idMatch = SPEC_ID_IN_TITLE.exec(title)) !== null) {
-      const specId = idMatch[1];
-      if (specId === undefined) continue;
-      out.push({ specId, title, line });
-    }
+    // Shorthand (`REQ-X.A1/A3`) names every criterion it lists (REQ-PIPETRUST-008).
+    for (const specId of criterionIdsInText(title)) out.push({ specId, title, line });
   }
   return out;
 }

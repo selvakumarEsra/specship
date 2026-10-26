@@ -30,6 +30,11 @@ export interface RunnerContext {
   /** Verbose logging flag. */
   verbose?: boolean;
   /**
+   * The headless agent prompt steps run on — the id stored with the run
+   * (REQ-AGENTADAPT-006). Unset means the default agent.
+   */
+  agent?: string;
+  /**
    * Emit a workflow event mid-step — used by the agent runner to stream its
    * live activity (tool calls, message turns) into the run view. No-op when
    * unset. The executor stamps the step id/kind; callers pass type + data.
@@ -51,7 +56,18 @@ export interface NodeRunStats {
 
 export type NodeRunResult =
   | { status: 'completed'; output: NodeOutput; stats?: NodeRunStats }
-  | { status: 'failed'; error: string; transient?: boolean }
+  | {
+      status: 'failed';
+      error: string;
+      transient?: boolean;
+      /**
+       * What the step printed before it failed (e.g. a bash step's combined
+       * stdout+stderr). The executor stores it in the run's outputs and writes
+       * it as the step's artifact so a failure keeps its evidence
+       * (REQ-PIPETRUST-006). Does NOT make the node count as completed.
+       */
+      output?: NodeOutput;
+    }
   | { status: 'paused'; approval: ApprovalContext }
   | { status: 'cancelled'; reason: string };
 

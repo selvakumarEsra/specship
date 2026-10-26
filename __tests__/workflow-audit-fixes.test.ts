@@ -18,6 +18,7 @@ import SpecShip from '../src';
 import { WorkflowExecutor } from '../src/workflows/executor';
 import { WorktreeProvider } from '../src/isolation/worktree';
 import { bundledDefaults } from '../src/workflows/defaults';
+import { resolveExtends } from '../src/workflows/discovery';
 import {
   validateWorkflow,
   type WorkflowDefinition,
@@ -28,6 +29,20 @@ import {
 import type { NodeRunner, NodeRunResult, RunnerContext } from '../src/workflows/runners/types';
 
 type PromptBehaviour = (node: PromptNode) => NodeRunResult;
+
+/**
+ * A bundled workflow as the loader resolves it — `extends:` overlays
+ * (REQ-THRU-004, e.g. spec-implement-mixed) are merged over their base first.
+ */
+function resolvedBundled(yamlText: string) {
+  const raws = new Map<string, Record<string, unknown>>();
+  for (const b of bundledDefaults) {
+    const v = yaml.parse(b.yaml) as Record<string, unknown>;
+    if (v && typeof v.name === 'string') raws.set(v.name, v);
+  }
+  const resolved = resolveExtends(yaml.parse(yamlText) as Record<string, unknown>, (n) => raws.get(n));
+  return validateWorkflow(resolved.value);
+}
 
 describe('workflow docs-audit fixes', () => {
   let dir: string;
@@ -211,7 +226,7 @@ describe('workflow docs-audit fixes', () => {
     it('REQ-AUDFIX-003.A4: no bundled on_reject prompt references its own gate output; each revising gate declares a valid revises', () => {
       let gatesWithOnReject = 0;
       for (const bw of bundledDefaults) {
-        const res = validateWorkflow(yaml.parse(bw.yaml));
+        const res = resolvedBundled(bw.yaml);
         expect(res.ok, `${bw.name}: ${JSON.stringify(res.errors)}`).toBe(true);
         const ids = new Set(res.workflow!.nodes.map((n) => n.id));
         for (const node of res.workflow!.nodes) {
@@ -242,7 +257,7 @@ describe('workflow docs-audit fixes', () => {
       for (const [name, gates] of Object.entries(expected)) {
         const bw = bundledDefaults.find((b) => b.name === name)!;
         expect(bw, name).toBeDefined();
-        const wf = validateWorkflow(yaml.parse(bw.yaml)).workflow!;
+        const wf = resolvedBundled(bw.yaml).workflow!;
         for (const [gateId, target] of Object.entries(gates)) {
           const gate = wf.nodes.find((n) => n.id === gateId) as ApprovalNode;
           expect(gate.on_reject?.revises, `${name}:${gateId}`).toBe(target);

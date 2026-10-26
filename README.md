@@ -128,7 +128,28 @@ If the file already exists, merge the `specship` entry into your existing `mcpSe
 
 You still need `specship init -i` in each project (step 3) so there's an index to query.
 
-<sub>Verified against Gemini CLI 0.56.0. This gives Gemini CLI the SpecShip **MCP tools** only — the Claude Code install additionally wires slash commands, auto-sync hooks, the retrieval-steering nudge, the `specship-explorer` subagent, and the status-line segment, none of which have a Gemini equivalent here. Output is sized to the Gemini model you run — read from `GEMINI_MODEL` or `model` in `.gemini/settings.json` (read-only), so a Flash session gets the compact Lite-tier output. Retrieval benchmarks were measured on Claude Code.</sub>
+**What each agent gets:**
+
+<!-- capability-matrix:start -->
+| | Claude Code | Gemini CLI |
+|---|---|---|
+| SpecShip MCP tools (explore, search, specs, links, …) | ✓ | ✓ |
+| Opt-in JIRA / Designer tools | ✓ | ✓ with `--with-jira` / `--with-designer` |
+| Model-tier adaptation | ✓ | ✓ |
+| Steering block (retrieval preference + spec-first rule) | ✓ `CLAUDE.md` | ✓ `GEMINI.md` |
+| Hooks: per-prompt reminder, session cheat-sheet, sync after edits, search pointer | ✓ | ✓ (project hooks run only in trusted folders) |
+| `/specship:*` slash commands | ✓ | ✓ rendered as Gemini TOML commands |
+| Workflow prompt steps (`specship workflow run`, `/specship:spec implement`) | ✓ | ✓ with `--agent gemini`, or automatically when launched from Gemini CLI — single steps checked live; a full implement run has not been measured |
+| Auto-approved SpecShip tools | ✓ | ✓ read-only tools only, opt-in with `--trust`; an administrator policy still wins |
+| `specship-explorer` subagent | ✓ | — |
+| Status-line segment | ✓ | — |
+<!-- capability-matrix:end -->
+
+Retrieval benchmarks (one-call answers, no file reads) were measured on Claude Code. A first Gemini CLI comparison (one question, two runs per arm) is in `docs/benchmarks/call-sequence-analysis.md`; it shows fewer file reads with SpecShip but does not yet meet the Claude Code bar.
+
+Workflow prompt steps run on Gemini CLI too: launched from inside Gemini they pick it automatically, or pass `specship workflow run … --agent gemini` (see the [Gemini CLI guide](https://specship.cc/guides/gemini-cli/) for model mapping). Output is sized to the Gemini model you run — read from `GEMINI_MODEL` or `model` in `.gemini/settings.json` (read-only), so a Flash session gets the compact Lite-tier output.
+
+<sub>Verified against Gemini CLI 0.28.0.</sub>
 
 ### 3. Initialize each project
 

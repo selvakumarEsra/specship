@@ -427,14 +427,13 @@ node scripts/agent-eval/parse-bench-readme.mjs   # medians + % saved (summed per
 
 ---
 
-## Gemini CLI rows (LOWEND-DOC REQ-LOWEND-005) — runner shipped, numbers pending
+## Gemini CLI rows (LOWEND-DOC REQ-LOWEND-005) — first measured run
 
 `scripts/agent-eval/run-all-gemini.sh` runs the same with/without A/B through
-Gemini CLI pinned to `gemini-3.5-flash`, normalizing the host's output into the
-shared metrics schema (`scripts/agent-eval/eval-metrics.mjs`). Gemini rows are
-recorded **here**, not in the README block: the CLI reports no dollar figure, so
-`costUsd` is `null` and the comparison is tool calls, wall-clock, and the
-Read/Grep fallback rate.
+Gemini CLI, normalizing the host's output into the shared metrics schema
+(`scripts/agent-eval/eval-metrics.mjs`). Gemini rows are recorded **here**, not
+in the README block: the CLI reports no dollar figure, so `costUsd` is `null`
+and the comparison is tool calls, wall-clock, and the Read/Grep fallback rate.
 
 ```bash
 scripts/agent-eval/run-all-gemini.sh <repo> "<Q>"                # auto tier
@@ -442,10 +441,36 @@ SPECSHIP_MODEL=lite     scripts/agent-eval/run-all-gemini.sh <repo> "<Q>"
 SPECSHIP_MODEL=standard scripts/agent-eval/run-all-gemini.sh <repo> "<Q>"
 ```
 
-**No measured Gemini row exists yet.** The runner was implemented and its
-preflight verified against the installed `@google/gemini-cli` 0.28.0 — which on
-this machine is unauthenticated, so the preflight correctly refuses to run
-(`exit 1`, naming the auth step) and no arm executed. REQ-LOWEND-002's
-`lite` vs `standard` decision therefore stays **open**: `TIER_RULES` keeps
-mapping every `gemini…flash` id to `lite` until the two tier arms above are run
-on a corpus repo and their medians recorded in this section.
+### 2026-10-27 — specship repo, `gemini-3.5-flash`, auto tier, n=2/arm
+
+Gemini CLI 0.28.0, API-key auth, SpecShip built from `main` @ `c2d9482`.
+MCP-only arms: the runner's isolated settings carry no GEMINI.md steering
+and no hooks, so this measures the tools alone, not the full Gemini install.
+Question: *"In THIS repository's source, how does a call to the
+specship_explore MCP tool reach the SQLite full-text search? Name the
+functions on the path."* Answer correctness was not scored.
+
+| Arm | Run | Wall-clock | Tool calls | specship | Grep | Read | Input tokens |
+|---|---|---|---|---|---|---|---|
+| with | 1 | 46 s | 16 | 1 | 5 | 10 | 608k |
+| with | 2 | 47 s | 16 | 12 | 4 | 0 | 800k |
+| without | 1 | 51 s | 20 | 0 | 8 | 12 | 546k |
+| without | 2 | 51 s | 19 | 0 | 7 | 12 | 477k |
+
+Reading:
+
+- **Does not meet the pass bar.** With-arm median: 16 calls, 4.5 Grep, 5 Read
+  (vs 19.5 / 7.5 / 12 without), ~10% faster — but neither with-run got near
+  0 Read/Grep, and both used MORE input tokens than the without-arm.
+- **Run 1 fell back after one call.** Its single `specship_explore` was a
+  term bag (`"specship_explore tool handler sqlite full text search"`); the
+  21 KB answer did not contain the `case 'specship_explore'` handler →
+  `findRelevantContext` → `searchNodes` path (the tool name is a string
+  `case` label, not a symbol), so the agent grepped for it and read 10
+  slices. Run 2 named symbols (`specship_search` / `specship_node`) and
+  reached 0 Read with 12 SpecShip calls — over the 1-call target.
+- **No parity claim follows** (REQ-THRU-012): one question, one repo, n=2,
+  MCP-only. `docs/benchmarks/gemini-agent-eval.md` is deliberately not
+  created, so the docs guard keeps refusing parity wording.
+- REQ-LOWEND-002's `lite` vs `standard` decision is still **open** — the two
+  tier arms have not been run.

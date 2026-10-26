@@ -52,6 +52,7 @@ import { BashRunner } from './runners/bash';
 import { ScriptRunner } from './runners/script';
 import { ApprovalRunner } from './runners/approval';
 import { CancelRunner } from './runners/cancel';
+import { RUN_AGENT_KEY, resolveWorkflowAgent } from './agents';
 
 export interface ExecuteOptions {
   /** Project root (used to derive default cwd + spawn the worktree). */
@@ -75,6 +76,12 @@ export interface ExecuteOptions {
    * finalize so a completion hook can recover it (e.g. `{ jira: { issueKey } }`).
    */
   runMetadata?: Record<string, unknown>;
+  /**
+   * The headless agent for prompt steps (`--agent`). When unset it is resolved
+   * from SPECSHIP_WORKFLOW_AGENT, `workflow.agent`, then the launching host
+   * (REQ-AGENTADAPT-006). Either way it is stored on the run.
+   */
+  agent?: string;
 }
 
 /**
@@ -140,6 +147,9 @@ export class WorkflowExecutor {
   ): Promise<ExecuteResult> {
     const runId = opts.runId ?? randomUUID();
     const now = Date.now();
+    // Resolved before anything is created, so an unknown agent leaves no run
+    // behind (REQ-AGENTADAPT-006.A4); stored so resume uses the same one (A3).
+    const agent = resolveWorkflowAgent({ flag: opts.agent, projectRoot: opts.projectRoot });
 
     // Pre-flight: required capabilities. `specship` is always available
     // (we're running inside it); `git` and `tests` are checked lazily by
@@ -209,6 +219,7 @@ export class WorkflowExecutor {
         nodeStates: {},
         completedNodes: [],
         ...(opts.runMetadata ?? {}),
+        [RUN_AGENT_KEY]: agent,
       },
     };
     this.specQueries.insertWorkflowRun(run);
@@ -344,6 +355,7 @@ export class WorkflowExecutor {
                 variables: opts.variables,
                 outputs,
                 verbose: opts.verbose,
+                agent: runAgent(meta),
                 emitEvent: (type, data) =>
                   this.event(runId, type, { stepId: reviseId, stepKind: 'prompt', ...data }),
               })
@@ -624,6 +636,7 @@ export class WorkflowExecutor {
         variables: opts.variables,
         outputs,
         verbose: opts.verbose,
+        agent: runAgent(meta),
         // Stream a step's live activity (agent tool calls / messages) into the
         // run view (WF-STREAM-DOC). Stamp the step id/kind so the UI can group.
         emitEvent: (type, data) =>
@@ -650,6 +663,14 @@ export class WorkflowExecutor {
         }
         case 'failed': {
           nodeStates.set(nodeId, 'failed');
+          // Keep what the failed step printed as evidence (REQ-PIPETRUST-006.A2):
+          // stored in the run's outputs + written as its artifact. The node
+          // stays `failed`, so resume still re-runs it (resetFailedNodes is
+          // state-driven) and a successful re-run overwrites this output.
+          if (result.output) {
+            outputs.set(nodeId, result.output);
+            await this.writeArtifact(artifactsDir, node, result.output);
+          }
           this.event(run.id, 'step_failed', { stepId: nodeId, error: result.error });
           await this.finalize(run, workflow, nodeStates, outputs, 'failed', result.error);
           return { run, nodeStates, outputs };
@@ -860,6 +881,8 @@ export class WorkflowExecutor {
     // Preserve the rejection history so on_reject `max_attempts` counts across
     // reject → resume → re-pause cycles (WF-REJECT-DOC, REQ-WFREJ-003).
     if (prevMeta.rejection !== undefined) meta.rejection = prevMeta.rejection;
+    // The run's agent stays fixed for every later step (REQ-AGENTADAPT-006.A3).
+    if (prevMeta[RUN_AGENT_KEY] !== undefined) meta[RUN_AGENT_KEY] = prevMeta[RUN_AGENT_KEY];
 
     const updated: WorkflowRun = {
       ...run,
@@ -1044,4 +1067,10 @@ function sanitizeFilename(s: string): string {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** The agent stored with a run; undefined for runs created before agents were recorded (→ default). */
+function runAgent(meta: Record<string, unknown>): string | undefined {
+  const a = meta[RUN_AGENT_KEY];
+  return typeof a === 'string' && a ? a : undefined;
 }

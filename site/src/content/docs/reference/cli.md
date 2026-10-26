@@ -23,6 +23,10 @@ description: Every SpecShip command and the flags it accepts.
 | `specship maintainability [path]` | Report graph-derived maintainability signals (coupling, size, cycles, dead code) |
 | `specship coverage [spec]` | Show spec test-coverage: per requirement and criterion, tests-link state and verdict |
 | `specship lint [paths...]` | Lint spec files for authoring problems (exits non-zero on an error finding) |
+| `specship knowledge <action> [id]` | Knowledge layer: stale \| check \| proposals \| apply <id> \| reject <id> |
+| `specship plan-scope <specId>` | Decide whether a plan may skip the plan gate (opt-in; prints AUTO_APPROVE=yes\|no) |
+| `specship ready <specId>` | Check a requirement is ready to implement and print its evidence plan (exits non-zero when not ready) |
+| `specship postcheck <specId>` | Mechanically check an implemented requirement: verifies coverage, CHANGELOG, configured checks (exits non-zero on fai… |
 | `specship verify` | Ingest a test report (vitest JSON) and promote/demote spec test links from it |
 | `specship fitness [path]` | Check architecture-fitness rules against the code graph (CI gate; exits non-zero on violation) |
 | `specship check [path]` | Run the enforcement gate (drift + fitness + maintainability + behaviour); exits non-zero on a gating failure |
@@ -40,10 +44,11 @@ description: Every SpecShip command and the flags it accepts.
 | `specship cheatsheet` | Print the SpecShip session cheat-sheet (used by the SessionStart hook). |
 | `specship uninstall` | Completely remove SpecShip (wiring, indexes, ~/.specship data, and the binary) |
 | `specship diagram [path]` | Generate a Mermaid flow diagram of the indexed application into docs/ (kept fresh by sync). |
+| `specship pulse [path]` | Report pipeline health (release run, npm lag, JIRA auto-publish, merged run worktrees); exits non-zero on any failure. |
 | `specship drifted [path]` | List spec links in concerning states (drifted, broken, orphaned). |
 | `specship domain-gaps [path]` | List code entities and specs not yet covered by a domain fact (the domain gap-seed). Feeds the /specship:spec domain … |
 | `specship spec [id]` | Spec lifecycle funnel (idea → spec → implemented). With an id, show that spec/brief detail. |
-| `specship workflow <action> [arg]` | Workflow engine: list \| run <name> \| resume <runId> \| cancel <runId> \| approve <runId> \| reject <runId> \| purge <runI… |
+| `specship workflow <action> [args...]` | Workflow engine: list \| run <name> \| run-batch <name> --specs <ids> \| merge-queue <runId...> \| gc \| resume <runId> \| … |
 | `specship update` | Update SpecShip to the latest released version |
 | `specship jira` | Connect SpecShip to a JIRA instance (Cloud or Data Center). |
 | `specship jira configure` | Save JIRA credentials to ~/.specship/jira.json (0600) and test the connection. |
@@ -52,6 +57,7 @@ description: Every SpecShip command and the flags it accepts.
 | `specship jira transition <key> [state]` | Transition a JIRA issue to <state>, or list its available transitions when <state> is omitted (or with --list). |
 | `specship jira track` | Show each picked JIRA issue with its SpecShip work-state + live JIRA status. |
 | `specship jira coverage` | Sprint coverage report joining JIRA sprint issues to spec truth (read-only unless --post). |
+| `specship jira publish` | Publish specs to the bound JIRA project in one explicit batch (--pending: every requirement sync held back). |
 | `specship jira reconcile` | Detect JIRA-side edits to published specs; --apply folds a confirmed diff back into the spec. |
 | `specship jira release <version>` | Set <version> as fixVersion on JIRA issues (creating the project version if missing) with a shipped-in comment. |
 | `specship jira regression-pack` | Generate / refresh the SpecShip Regression Pack in the bound JIRA project. |
@@ -245,10 +251,17 @@ Saves a lesson so the mistake isn't repeated. `memory capture --title <t>` takes
 
 ## workflow
 
-Drives the workflow engine from the terminal — `list`, `run <name>`, `resume <runId>`, `cancel <runId>`, `approve <runId>`, `reject <runId>`, `purge <runId>`, `runs`. Pass inputs with repeatable `-i KEY=VALUE`, and a note for approve/reject with `--comment`. Reject and cancel keep the run's worktree; only `purge` deletes it. See [Workflows](/workflows/overview/).
+Drives the workflow engine from the terminal — `list`, `run <name>`, `resume <runId>`, `cancel <runId>`, `approve <runId>`, `reject <runId>`, `purge <runId>`, `runs`. Pass inputs with repeatable `-i KEY=VALUE`, and a note for approve/reject with `--comment`. Reject and cancel keep the run's worktree; only `purge` (or `gc`) deletes it. See [Workflows](/workflows/overview/).
+
+- `run-batch <name> --specs <ID,ID,…> [--concurrency N]` starts one run per requirement (default concurrency 3). Requirements whose `implementations:` files overlap are put in later waves and never run at the same time; the chosen waves and each run id are printed.
+- `merge-queue <runId…>` merges each completed run's branch into the current branch in order, re-running the project's lint/typecheck after each merge. It stops at the first conflict or failing check, leaving the tree at the last good merge. Runs that aren't completed are refused.
+- `gc [--dry-run]` purges the worktrees of runs whose branch is already merged into the default branch, keeping run records and artifacts. `--dry-run` only lists them.
 
 ```bash
 specship workflow run spec-implement -i SPEC_ID=REQ-AUTH-005
+specship workflow run-batch spec-implement --specs REQ-AUTH-005,REQ-AUTH-006
+specship workflow merge-queue <runId> <runId>
+specship workflow gc --dry-run
 ```
 
 ## desktop
@@ -291,10 +304,14 @@ Every `SPECSHIP_*` variable the shipped code reads:
 <!-- GENERATED:env-vars START — derived from source by scripts/generate-reference-docs.mjs; do not edit by hand -->
 - `SPECSHIP_ADAPTIVE_EXPLORE`
 - `SPECSHIP_ALLOW_UNSAFE_NODE`
+- `SPECSHIP_ARTIFACTS_DIR`
 - `SPECSHIP_ASCII`
 - `SPECSHIP_BIN_DIR`
 - `SPECSHIP_BUN_BIN`
 - `SPECSHIP_CLAUDE_BIN`
+- `SPECSHIP_CLI`
+- `SPECSHIP_CLI_NODE`
+- `SPECSHIP_CLI_SCRIPT`
 - `SPECSHIP_COMPACT`
 - `SPECSHIP_CTX_WARN_PCT`
 - `SPECSHIP_DAEMON_IDLE_TIMEOUT_MS`
@@ -304,6 +321,7 @@ Every `SPECSHIP_*` variable the shipped code reads:
 - `SPECSHIP_END`
 - `SPECSHIP_EXPLORE_LINENUMS`
 - `SPECSHIP_FORCE_WATCH`
+- `SPECSHIP_GEMINI_BIN`
 - `SPECSHIP_GEMINI_RETRIEVAL_END`
 - `SPECSHIP_GEMINI_RETRIEVAL_START`
 - `SPECSHIP_GEMINI_STRICT`
@@ -333,6 +351,7 @@ Every `SPECSHIP_*` variable the shipped code reads:
 - `SPECSHIP_MODEL`
 - `SPECSHIP_NO_CHEATSHEET`
 - `SPECSHIP_NO_DAEMON`
+- `SPECSHIP_NO_PULSE`
 - `SPECSHIP_NO_RELAUNCH`
 - `SPECSHIP_NO_STATUSLINE_TIPS`
 - `SPECSHIP_NO_STEERING`
@@ -355,4 +374,5 @@ Every `SPECSHIP_*` variable the shipped code reads:
 - `SPECSHIP_VERBOSE`
 - `SPECSHIP_WASM_RELAUNCHED`
 - `SPECSHIP_WATCH_DEBOUNCE_MS`
+- `SPECSHIP_WORKFLOW_AGENT`
 <!-- GENERATED:env-vars END -->

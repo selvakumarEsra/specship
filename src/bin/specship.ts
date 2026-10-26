@@ -900,6 +900,42 @@ program
       } catch {
         /* surfacing is best-effort */
       }
+      // Stale external facts (REQ-KNOW-002): one line when any dependency
+      // moved past the version a fact was verified against. Local
+      // node_modules only on this path — no `npm root -g` spawn at session start.
+      try {
+        const { findStaleExternalFacts } = require('../knowledge/stale') as typeof import('../knowledge/stale');
+        const stale = findStaleExternalFacts(projectPath, { globalRoot: () => null }).stale;
+        if (stale.length > 0) {
+          console.log(`⚠ ${stale.length} external fact(s) stale (dependency changed since verified) — review with: specship knowledge stale`);
+        }
+      } catch {
+        /* surfacing is best-effort */
+      }
+      // Pipeline pulse (REQ-PIPETRUST-007): one line per failing item from
+      // the CACHED pulse only — no network on this path; silent when healthy.
+      try {
+        const { readCachedPulse, formatPulseLines } = require('../pulse/pulse') as typeof import('../pulse/pulse');
+        const cached = readCachedPulse(projectPath);
+        if (cached) {
+          for (const line of formatPulseLines(cached.items)) console.log(line);
+        }
+        // Keep the cache warm without blocking the session: when it is missing
+        // or older than six hours, refresh it in a detached child (bounded by
+        // pulse's own time budget). This session prints what was cached; the
+        // next one sees the refreshed result.
+        const SIX_HOURS = 6 * 60 * 60 * 1000;
+        if ((!cached || Date.now() - cached.checkedAt > SIX_HOURS) && !process.env.SPECSHIP_NO_PULSE) {
+          const { spawn } = require('child_process') as typeof import('child_process');
+          const child = spawn(process.execPath, [process.argv[1]!, 'pulse', projectPath, '--refresh', '--json'], {
+            detached: true,
+            stdio: 'ignore',
+          });
+          child.unref();
+        }
+      } catch {
+        /* surfacing is best-effort */
+      }
     };
 
     try {
@@ -1907,25 +1943,35 @@ program
   .option('-p, --path <path>', 'Project path')
   .option('-j, --json', 'Output as JSON')
   .option('--line', 'Print only the one-line "N of M acceptance criteria …" summary')
-  .action(async (specArg: string | undefined, options: { path?: string; json?: boolean; line?: boolean }) => {
+  .option('--require-kinds', 'Exit non-zero when any criterion in scope lacks its required evidence kind')
+  .action(async (
+    specArg: string | undefined,
+    options: { path?: string; json?: boolean; line?: boolean; requireKinds?: boolean }
+  ) => {
     const projectPath = resolveProjectPath(options.path);
     try {
       if (!isInitialized(projectPath)) {
         error(`SpecShip not initialized in ${projectPath}`);
         process.exit(1);
       }
-      const { default: SpecShip, formatCoverageLine } = await loadSpecShip();
+      const { default: SpecShip, formatCoverageLine, requireKindsExitCode, criteriaMissingKind } =
+        await loadSpecShip();
       const cg = await SpecShip.open(projectPath);
       const report = cg.getSpecCoverage(specArg);
+      // REQ-PIPETRUST-003.A2: --require-kinds gates on evidence kind; the
+      // verdicts themselves are unchanged.
+      const kindsExit = requireKindsExitCode(report, !!options.requireKinds);
 
       if (options.json) {
         console.log(JSON.stringify(report, null, 2));
         cg.destroy();
+        if (kindsExit !== 0) process.exit(kindsExit);
         return;
       }
       if (options.line) {
         console.log(formatCoverageLine(report));
         cg.destroy();
+        if (kindsExit !== 0) process.exit(kindsExit);
         return;
       }
 
@@ -1944,21 +1990,34 @@ program
         untested: chalk.dim('·'),
         broken: chalk.red('✗'),
       };
+      // Evidence kind per criterion (REQ-PIPETRUST-003.A1): required vs present,
+      // flagged `needs <kind>` when the tests don't include the required kind.
+      const kindNote = (c: { requiredKind: string; presentKinds: string[]; kindSatisfied: boolean }) => {
+        const present = c.presentKinds.length > 0 ? c.presentKinds.join(',') : 'none';
+        const base = `kind: requires ${c.requiredKind}, has ${present}`;
+        return c.kindSatisfied ? chalk.dim(base) : `${chalk.dim(base)} ${chalk.yellow(`needs ${c.requiredKind}`)}`;
+      };
       for (const req of report.requirements) {
         console.log(
-          `${mark[req.verdict]} ${chalk.bold(req.specId)} ${chalk.dim(req.verdict)} — ${req.title}`
+          `${mark[req.verdict]} ${chalk.bold(req.specId)} ${chalk.dim(req.verdict)} — ${req.title}` +
+            (req.criteria.length === 0 ? ` ${kindNote(req)}` : '')
         );
         for (const c of req.criteria) {
           console.log(
             `    ${mark[c.verdict]} ${c.specId} ${chalk.dim(
               `${c.verdict} · implements:${c.implementsLinks.count} tests:${c.testsLinks.count}`
-            )}`
+            )} · ${kindNote(c)}`
           );
         }
       }
       console.log();
       console.log(formatCoverageLine(report));
+      const missing = criteriaMissingKind(report);
+      if (missing.length > 0) {
+        console.log(`${missing.length} criteria lack their required evidence kind.`);
+      }
       cg.destroy();
+      if (kindsExit !== 0) process.exit(kindsExit);
     } catch (err) {
       error(`coverage failed: ${err instanceof Error ? err.message : String(err)}`);
       process.exit(1);
@@ -1991,6 +2050,138 @@ program
       if (exitCode !== 0) process.exit(exitCode);
     } catch (err) {
       error(`lint failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(1);
+    }
+  });
+
+/**
+ * specship knowledge <action> — the knowledge layer (KNOWLEDGE-DOC).
+ *   stale            external facts whose dependency version changed (REQ-KNOW-002/006)
+ *   check            enforced rules → violations (REQ-KNOW-003)
+ *   proposals        pending proposals drafted by the implement workflow (REQ-KNOW-004)
+ *   apply <id>       move a confirmed proposal into specs/domain/ (human-only)
+ *   reject <id>      delete a proposal
+ * File-based: needs no index, so it runs in CI and inside run worktrees.
+ */
+program
+  .command('knowledge <action> [id]')
+  .description('Knowledge layer: stale | check | proposals | apply <id> | reject <id>')
+  .option('-p, --path <path>', 'Project path (defaults to cwd)')
+  .option('-j, --json', 'Output as JSON')
+  .action(async (action: string, id: string | undefined, options: { path?: string; json?: boolean }) => {
+    const projectRoot = options.path ? path.resolve(options.path) : process.cwd();
+    const out = (value: unknown, textOut: string) => console.log(options.json ? JSON.stringify(value, null, 2) : textOut);
+    try {
+      if (action === 'stale') {
+        const { findStaleExternalFacts, formatStaleReport, exitCodeForStale } = await import('../knowledge/stale');
+        const result = findStaleExternalFacts(projectRoot);
+        out(result, formatStaleReport(result));
+        process.exit(exitCodeForStale(result));
+      } else if (action === 'check') {
+        const { checkEnforcedRules, formatEnforceReport, exitCodeForEnforce } = await import('../knowledge/enforce');
+        const result = checkEnforcedRules(projectRoot);
+        out(result, formatEnforceReport(result));
+        process.exit(exitCodeForEnforce(result));
+      } else if (action === 'proposals') {
+        const { listProposals, formatProposalList } = await import('../knowledge/proposals');
+        const list = listProposals(projectRoot);
+        out(list, formatProposalList(list));
+      } else if (action === 'apply' || action === 'reject') {
+        if (!id) {
+          error(`knowledge ${action} needs a proposal id — see \`specship knowledge proposals\``);
+          process.exit(1);
+        }
+        const { applyProposal, rejectProposal, ProposalRefusedError } = await import('../knowledge/proposals');
+        if (action === 'reject') {
+          rejectProposal(projectRoot, id);
+          out({ rejected: id }, `Rejected proposal ${id} — nothing was written to specs/domain/.`);
+        } else {
+          try {
+            const applied = applyProposal(projectRoot, id);
+            out(applied, `Applied ${id} as ${applied.id} → ${applied.path}. Run \`specship sync\` to index it.`);
+          } catch (err) {
+            if (err instanceof ProposalRefusedError) {
+              error(`Refused to apply ${id} — fix the proposal first:`);
+              for (const f of err.findings) console.log(`  ${f.severity} ${f.code}: ${f.message}`);
+              process.exit(1);
+            }
+            throw err;
+          }
+        }
+      } else {
+        error(`unknown knowledge action "${action}" — expected stale | check | proposals | apply | reject`);
+        process.exit(1);
+      }
+    } catch (err) {
+      error(`knowledge ${action} failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(1);
+    }
+  });
+
+/**
+ * specship plan-scope <SPEC_ID> --plan-file <f> — small-plan auto-approval
+ * check (THROUGHPUT-DOC, REQ-THRU-003). Always exits 0; the AUTO_APPROVE
+ * marker is what the plan gate reads.
+ */
+program
+  .command('plan-scope <specId>')
+  .description('Decide whether a plan may skip the plan gate (opt-in; prints AUTO_APPROVE=yes|no)')
+  .requiredOption('--plan-file <file>', 'File holding the plan text')
+  .option('-p, --path <path>', 'Project path (defaults to cwd)')
+  .action(async (specId: string, options: { planFile: string; path?: string }) => {
+    const projectRoot = options.path ? path.resolve(options.path) : process.cwd();
+    try {
+      const { assessPlanScopeFromFile, formatPlanScope } = await import('../spec-quality/plan-scope');
+      const planText = fs.readFileSync(path.resolve(options.planFile), 'utf8');
+      console.log(formatPlanScope(assessPlanScopeFromFile(projectRoot, specId, planText)));
+    } catch (err) {
+      console.log(`AUTO_APPROVE=no\n- plan-scope failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  });
+
+/**
+ * specship ready <SPEC_ID> — readiness gate (PIPETRUST-DOC, REQ-PIPETRUST-004).
+ * File-based (no index needed), so it runs inside a workflow worktree. Exits
+ * non-zero when the requirement is not ready; prints the evidence plan.
+ */
+program
+  .command('ready <specId>')
+  .description('Check a requirement is ready to implement and print its evidence plan (exits non-zero when not ready)')
+  .option('-p, --path <path>', 'Project path (defaults to cwd)')
+  .option('-j, --json', 'Output as JSON')
+  .action(async (specId: string, options: { path?: string; json?: boolean }) => {
+    const projectRoot = options.path ? path.resolve(options.path) : process.cwd();
+    try {
+      const { assessReadinessFromFile, formatEvidencePlan } = await import('../spec-quality/readiness');
+      const result = assessReadinessFromFile(projectRoot, specId);
+      console.log(options.json ? JSON.stringify(result, null, 2) : formatEvidencePlan(result));
+      if (!result.ready) process.exit(1);
+    } catch (err) {
+      error(`ready failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(1);
+    }
+  });
+
+/**
+ * specship postcheck <SPEC_ID> [--fix] — mechanical post-implement checks
+ * (PIPETRUST-DOC, REQ-PIPETRUST-005). File-based, worktree-safe.
+ */
+program
+  .command('postcheck <specId>')
+  .description('Mechanically check an implemented requirement: verifies coverage, CHANGELOG, configured checks (exits non-zero on failure)')
+  .option('-p, --path <path>', 'Project path (defaults to cwd)')
+  .option('--fix', 'Run each configured check\'s fix command first')
+  .option('--base <ref>', 'Base ref for the CHANGELOG check (defaults to the recorded run base, then the merge-base with the default branch)')
+  .option('-j, --json', 'Output as JSON')
+  .action(async (specId: string, options: { path?: string; fix?: boolean; base?: string; json?: boolean }) => {
+    const projectRoot = options.path ? path.resolve(options.path) : process.cwd();
+    try {
+      const { runPostcheck, formatPostcheck } = await import('../spec-quality/postcheck');
+      const result = runPostcheck({ projectRoot, requirementId: specId, fix: options.fix, base: options.base });
+      console.log(options.json ? JSON.stringify(result, null, 2) : formatPostcheck(result));
+      if (!result.ok) process.exit(1);
+    } catch (err) {
+      error(`postcheck failed: ${err instanceof Error ? err.message : String(err)}`);
       process.exit(1);
     }
   });
@@ -3342,7 +3533,7 @@ program
         for await (const c of process.stdin) chunks.push(c as Buffer);
       } catch { /* no stdin — fall through with empty payload */ }
       const raw = Buffer.concat(chunks).toString('utf-8');
-      const { parseHookPayload, deriveHostTraits, buildHookAdditionalContext } =
+      const { parseHookPayload, deriveHostTraits, buildHookAdditionalContext, buildHookDenyDecision } =
         await import('../activation/hook-output');
       const payload = parseHookPayload(raw);
       const traits = deriveHostTraits(payload);
@@ -3391,7 +3582,7 @@ program
         if ('decision' in result) {
           // Gemini BeforeToolHookOutput reads `decision` at the top level
           // (isBlockingDecision), not inside hookSpecificOutput.
-          process.stdout.write(JSON.stringify({ decision: 'deny', reason: result.reason }) + '\n');
+          process.stdout.write(buildHookDenyDecision(result.reason));
         } else {
           process.stdout.write(
             buildHookAdditionalContext(result.additionalContext, payload.hookEventName, traits.fallbackToolEvent),
@@ -3503,6 +3694,76 @@ program
     } finally {
       cg.close();
     }
+  });
+
+// @implements REQ-PIPETRUST-007
+// Pipeline health: release run, npm lag, last JIRA auto-publish, merged run
+// worktrees. Network checks are time-bounded and skip offline; results are
+// cached to .specship/pulse.json for the session-start summary.
+program
+  .command('pulse [path]')
+  .description('Report pipeline health (release run, npm lag, JIRA auto-publish, merged run worktrees); exits non-zero on any failure.')
+  .option('--refresh', 'ignore the cache and re-run every check')
+  .option('--max-age <minutes>', 'serve the cached result when younger than this (default: always re-run)')
+  .option('--json', 'emit JSON')
+  .action(async (
+    pathArg: string | undefined,
+    options: { refresh?: boolean; maxAge?: string; json?: boolean }
+  ) => {
+    const projectRoot = path.resolve(pathArg ?? process.cwd());
+    const { computePulse } = await import('../pulse/pulse');
+
+    // Resolve a run worktree back to its full run id for the purge hint
+    // (best-effort; falls back to the short id from the branch name).
+    let runIdForWorktree: ((p: string) => string | undefined) | undefined;
+    let close: (() => void) | undefined;
+    if (isInitialized(projectRoot)) {
+      try {
+        const { SpecShip } = await loadSpecShip();
+        const cg = await SpecShip.open(projectRoot);
+        close = () => cg.close();
+        const byPath = new Map<string, string>();
+        const sq = cg.getSpecQueries();
+        for (const run of sq.getAllWorkflowRuns(500)) {
+          if (!run.isolationEnvId) continue;
+          const env = sq.getIsolationEnvById(run.isolationEnvId);
+          if (env?.workingPath) byPath.set(path.resolve(env.workingPath), run.id);
+        }
+        runIdForWorktree = (p) => byPath.get(path.resolve(p));
+      } catch {
+        /* hint falls back to the short id */
+      }
+    }
+
+    const maxAgeMin = options.maxAge !== undefined ? Number(options.maxAge) : NaN;
+    let result: Awaited<ReturnType<typeof computePulse>>;
+    try {
+      result = await computePulse({
+        projectRoot,
+        refresh: options.refresh,
+        maxAgeMs: Number.isFinite(maxAgeMin) ? maxAgeMin * 60_000 : undefined,
+        writeCache: fs.existsSync(path.join(projectRoot, '.specship')),
+        runIdForWorktree,
+      });
+    } finally {
+      close?.();
+    }
+
+    if (options.json) {
+      // eslint-disable-next-line no-console
+      console.log(JSON.stringify(result, null, 2));
+    } else {
+      const tag = { ok: 'ok  ', fail: 'FAIL', skipped: 'skip' } as const;
+      for (const item of result.items) {
+        // eslint-disable-next-line no-console
+        console.log(`[${tag[item.status]}] ${item.message}${item.hint ? ` — ${item.hint}` : ''}`);
+      }
+      if (result.fromCache) {
+        // eslint-disable-next-line no-console
+        console.log(`(cached ${new Date(result.checkedAt).toISOString()}; --refresh to re-run)`);
+      }
+    }
+    if (result.items.some((i) => i.status === 'fail')) process.exit(1);
   });
 
 program
@@ -3790,18 +4051,26 @@ program
   });
 
 program
-  .command('workflow <action> [arg]')
-  .description('Workflow engine: list | run <name> | resume <runId> | cancel <runId> | approve <runId> | reject <runId> | purge <runId> | runs')
+  .command('workflow <action> [args...]')
+  .description('Workflow engine: list | run <name> | run-batch <name> --specs <ids> | merge-queue <runId...> | gc | resume <runId> | cancel <runId> | approve <runId> | reject <runId> | purge <runId> | runs')
   .option('-i, --input <kv...>', 'workflow inputs as KEY=VALUE (repeatable)')
   .option('--path <projectRoot>', 'project root (default: cwd)')
   .option('--comment <text>', 'comment for approve/reject')
   .option('--reason <text>', 'reason for cancel/reject')
+  .option('--specs <ids>', 'run-batch: comma-separated requirement ids')
+  .option('--concurrency <n>', 'run-batch: max concurrent runs per wave (default 3)')
+  .option('--dry-run', 'gc: list merged-run worktrees without removing them')
+  .option('--agent <name>', 'run/run-batch: the coding agent prompt steps run on (claude | gemini; default: SPECSHIP_WORKFLOW_AGENT, workflow.agent, the launching agent, then claude)')
   .option('--json', 'emit JSON where applicable')
   .action(async (
     action: string,
-    arg: string | undefined,
-    options: { input?: string[]; path?: string; comment?: string; reason?: string; json?: boolean }
+    args: string[] | undefined,
+    options: {
+      input?: string[]; path?: string; comment?: string; reason?: string; json?: boolean;
+      specs?: string; concurrency?: string; dryRun?: boolean; agent?: string;
+    }
   ) => {
+    const arg: string | undefined = args?.[0];
     const projectRoot = path.resolve(options.path ?? process.cwd());
     if (!isInitialized(projectRoot)) {
       error(`SpecShip not initialized in ${projectRoot}. Run \`specship init -i\` first.`);
@@ -3809,6 +4078,7 @@ program
     }
     const { SpecShip } = await loadSpecShip();
     const { discoverWorkflows, loadWorkflowByName } = await import('../workflows/discovery');
+    const { resolveWorkflowAgent } = await import('../workflows/agents');
     const { WorkflowExecutor } = await import('../workflows/executor');
     const { WorktreeProvider } = await import('../isolation/worktree');
     const { handleJiraRunCompletion } = await import('../mcp/jira-tools');
@@ -3906,9 +4176,17 @@ program
               inputs[inp.name] = inp.default ?? '';
             }
           }
+          // Unknown agent names fail here, before a run exists (REQ-AGENTADAPT-006.A4).
+          try {
+            resolveWorkflowAgent({ flag: options.agent, projectRoot });
+          } catch (err) {
+            error(err instanceof Error ? err.message : String(err));
+            process.exit(1);
+          }
           const result = await executor.start(loaded.workflow, {
             projectRoot,
             inputs,
+            agent: options.agent,
             variables: {
               ARTIFACTS_DIR: path.join(getSpecShipDir(projectRoot), 'artifacts'),
               CONTEXT: projectRoot,
@@ -4041,6 +4319,202 @@ program
           break;
         }
 
+        case 'run-batch': {
+          // REQ-THRU-001 — one run per requirement, overlapping files serialized.
+          if (!arg) {
+            error('workflow run-batch requires a workflow name');
+            process.exit(1);
+          }
+          const loaded = loadWorkflowByName(projectRoot, arg);
+          if (!loaded) {
+            error(`Workflow "${arg}" not found. Use \`specship workflow list\` to see available workflows.`);
+            process.exit(1);
+          }
+          const specIds = (options.specs ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+          if (specIds.length === 0) {
+            error('workflow run-batch requires --specs <ID,ID,...>');
+            process.exit(1);
+          }
+          const concurrency = options.concurrency !== undefined ? Number(options.concurrency) : undefined;
+          if (concurrency !== undefined && (!Number.isInteger(concurrency) || concurrency < 1)) {
+            error('--concurrency must be a positive integer');
+            process.exit(1);
+          }
+          const baseInputs: Record<string, string> = {};
+          for (const kv of options.input ?? []) {
+            const eqIdx = kv.indexOf('=');
+            if (eqIdx <= 0) {
+              error(`--input must be KEY=VALUE (got "${kv}")`);
+              process.exit(1);
+            }
+            baseInputs[kv.slice(0, eqIdx)] = kv.slice(eqIdx + 1);
+          }
+          for (const inp of loaded.workflow.inputs ?? []) {
+            if (inp.name !== 'SPEC_ID' && !(inp.name in baseInputs)) {
+              if (inp.required) {
+                error(`Required input missing: --input ${inp.name}=...`);
+                process.exit(1);
+              }
+              baseInputs[inp.name] = inp.default ?? '';
+            }
+          }
+          try {
+            resolveWorkflowAgent({ flag: options.agent, projectRoot });
+          } catch (err) {
+            error(err instanceof Error ? err.message : String(err));
+            process.exit(1);
+          }
+          const { runBatch, TERMINAL_RUN_STATUSES, DEFAULT_BATCH_CONCURRENCY } = await import('../workflows/batch');
+          const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+          let batch: Awaited<ReturnType<typeof runBatch>>;
+          try {
+            batch = await runBatch({
+              projectRoot,
+              specIds,
+              concurrency,
+              startRun: async (specId) => {
+                const result = await executor.start(loaded.workflow, {
+                  projectRoot,
+                  agent: options.agent,
+                  inputs: { ...baseInputs, SPEC_ID: specId },
+                  variables: {
+                    ARTIFACTS_DIR: path.join(getSpecShipDir(projectRoot), 'artifacts'),
+                    CONTEXT: projectRoot,
+                  },
+                });
+                return { runId: result.run.id, status: result.run.status };
+              },
+              // A run paused at an approval still holds its files: wait for a
+              // terminal status (approve + resume it from another terminal).
+              waitForRun: async (runId, status) => {
+                let current = status;
+                let announced = false;
+                while (!TERMINAL_RUN_STATUSES.has(current)) {
+                  if (current === 'paused' && !announced) {
+                    // eslint-disable-next-line no-console
+                    console.log(`  ${runId} is paused — approve it with \`specship workflow approve ${runId}\`, then \`specship workflow resume ${runId}\``);
+                    announced = true;
+                  }
+                  await sleep(5000);
+                  current = specQueries.getWorkflowRunById(runId)?.status ?? 'failed';
+                }
+                return current;
+              },
+              onPlan: (waves) => {
+                if (options.json) return;
+                // eslint-disable-next-line no-console
+                console.log(`Serialization: ${waves.length} wave(s), concurrency ${concurrency ?? DEFAULT_BATCH_CONCURRENCY}`);
+                waves.forEach((w, i) => {
+                  // eslint-disable-next-line no-console
+                  console.log(`  wave ${i + 1}: ${w.join(', ')}`);
+                });
+              },
+              onRunStarted: (r) => {
+                if (options.json) return;
+                // eslint-disable-next-line no-console
+                console.log(`  ${r.specId} → run ${r.runId} [${r.status}] (wave ${r.wave + 1})`);
+              },
+            });
+          } catch (err) {
+            error(err instanceof Error ? err.message : String(err));
+            process.exit(1);
+          }
+          if (options.json) {
+            // eslint-disable-next-line no-console
+            console.log(JSON.stringify(batch, null, 2));
+          } else {
+            // eslint-disable-next-line no-console
+            console.log('Runs:');
+            for (const r of batch.runs) {
+              // eslint-disable-next-line no-console
+              console.log(`  ${r.runId} ${r.specId} [${r.status}]`);
+            }
+          }
+          if (batch.runs.some((r) => r.status === 'failed')) process.exit(1);
+          break;
+        }
+
+        case 'merge-queue': {
+          // REQ-THRU-002 — merge completed runs in order, re-checking each merge.
+          const runIds = args ?? [];
+          if (runIds.length === 0) {
+            error('workflow merge-queue requires one or more runIds');
+            process.exit(1);
+          }
+          const { runMergeQueue } = await import('../workflows/merge-queue');
+          const result = runMergeQueue({
+            projectRoot,
+            runIds,
+            getRun: (id) => {
+              const run = specQueries.getWorkflowRunById(id);
+              if (!run) return null;
+              const env = run.isolationEnvId ? specQueries.getIsolationEnvById(run.isolationEnvId) : null;
+              return { id: run.id, status: run.status, branch: env?.branchName };
+            },
+          });
+          if (options.json) {
+            // eslint-disable-next-line no-console
+            console.log(JSON.stringify(result, null, 2));
+          } else {
+            for (const id of result.merged) {
+              // eslint-disable-next-line no-console
+              console.log(`  merged ${id}`);
+            }
+            // eslint-disable-next-line no-console
+            console.log(
+              result.stoppedAt
+                ? `Stopped at run ${result.stoppedAt} (${result.reason}): ${result.detail ?? ''}`
+                : `Merge queue done — ${result.merged.length} run(s) merged.`
+            );
+          }
+          if (result.stoppedAt) process.exit(1);
+          break;
+        }
+
+        case 'gc': {
+          // REQ-THRU-007 — purge worktrees of merged runs; records + artifacts kept.
+          const { collectMergedRuns } = await import('../workflows/gc');
+          const result = collectMergedRuns({
+            projectRoot,
+            dryRun: options.dryRun === true,
+            listRuns: () => specQueries.getAllWorkflowRuns(1000).flatMap((run) => {
+              if (!run.isolationEnvId) return [];
+              const env = specQueries.getIsolationEnvById(run.isolationEnvId);
+              if (!env) return [];
+              return [{ id: run.id, status: run.status, branch: env.branchName, workingPath: env.workingPath }];
+            }),
+            purge: (runId) => {
+              executor.purge(runId);
+            },
+          });
+          if (options.json) {
+            // eslint-disable-next-line no-console
+            console.log(JSON.stringify(result, null, 2));
+          } else if (!result.defaultBranch) {
+            // eslint-disable-next-line no-console
+            console.log('Default branch unknown (no origin HEAD, main or master) — nothing collected.');
+          } else {
+            const verb = result.dryRun ? 'would remove' : 'removed';
+            for (const c of result.candidates) {
+              // eslint-disable-next-line no-console
+              console.log(`  ${verb} ${c.runId} ${c.branch} (${c.workingPath})`);
+            }
+            for (const s of result.skipped) {
+              // eslint-disable-next-line no-console
+              console.log(`  kept ${s.runId} — ${s.reason}`);
+            }
+            // eslint-disable-next-line no-console
+            console.log(
+              result.candidates.length === 0
+                ? `No merged-run worktrees to collect (default branch: ${result.defaultBranch}).`
+                : result.dryRun
+                  ? `${result.candidates.length} worktree(s) would be removed. Run without --dry-run to collect.`
+                  : `${result.purged.length} worktree(s) removed. Run records and artifacts are kept.`
+            );
+          }
+          break;
+        }
+
         case 'runs': {
           const runs = specQueries.getAllWorkflowRuns(50);
           if (options.json) {
@@ -4062,7 +4536,7 @@ program
         }
 
         default:
-          error(`Unknown workflow action "${action}". Use: list | run | resume | cancel | approve | reject | purge | runs`);
+          error(`Unknown workflow action "${action}". Use: list | run | run-batch | merge-queue | gc | resume | cancel | approve | reject | purge | runs`);
           process.exit(1);
       }
     } finally {
@@ -4477,6 +4951,66 @@ jira
       // eslint-disable-next-line no-console
       console.log(out);
       if (result.isError) process.exit(1);
+    } finally {
+      cg.close();
+    }
+  });
+
+/**
+ * specship jira publish --pending — the explicit, one-batch publish of every
+ * requirement sync held back (REQ-THRU-006). Sync only publishes when
+ * `jira.autoPublish: true` is set in specship.config.json; otherwise it
+ * reports the pending count and points here.
+ */
+jira
+  .command('publish')
+  .description('Publish specs to the bound JIRA project in one explicit batch (--pending: every requirement sync held back).')
+  .option('--pending', 'publish every requirement with no JIRA issue yet or whose content changed')
+  .option('--dry-run', 'list what would be published without writing to JIRA')
+  .option('--path <projectRoot>', 'project root (default: cwd)')
+  .action(async (options: { pending?: boolean; dryRun?: boolean; path?: string }) => {
+    const projectRoot = path.resolve(options.path ?? process.cwd());
+    if (!options.pending) {
+      error('Nothing to publish: pass --pending to publish every requirement sync held back.');
+      process.exit(1);
+    }
+    if (!isInitialized(projectRoot)) {
+      error(`SpecShip not initialized in ${projectRoot}. Run \`specship init -i\` first.`);
+      process.exit(1);
+    }
+    const { SpecShip } = await loadSpecShip();
+    const { publishPendingSpecs, runAutoPublish, summarizeAutoPublishReport, countAutoPublishReport } =
+      await import('../jira/auto-publish');
+    const cg = await SpecShip.open(projectRoot);
+    try {
+      const deps = { specQueries: cg.getSpecQueries(), projectRoot };
+      const report = options.dryRun
+        ? await runAutoPublish(deps, { explicit: true, dryRun: true })
+        : await publishPendingSpecs(deps);
+      if (report.skipped === 'unbound') {
+        error('No JIRA binding in specship.config.json — run `specship jira bind` first.');
+        process.exit(1);
+      }
+      if (options.dryRun) {
+        const pending = report.results.filter((r) => r.status === 'pending');
+        // eslint-disable-next-line no-console
+        console.log(`${pending.length} spec(s) would be published:`);
+        // eslint-disable-next-line no-console
+        for (const r of pending) console.log(`  ${r.specId}${r.jiraKey ? ` (${r.jiraKey})` : ''}`);
+        return;
+      }
+      const line = summarizeAutoPublishReport(report);
+      // eslint-disable-next-line no-console
+      if (line) console.log(line.replace(/^JIRA auto-publish/, 'JIRA publish'));
+      for (const r of report.results) {
+        if (r.status === 'failed') {
+          // eslint-disable-next-line no-console
+          console.log(`JIRA: ${r.specId} failed — ${r.note ?? 'unknown error'}`);
+        }
+      }
+      if (report.skipped === 'no-credentials' || countAutoPublishReport(report).failed > 0) {
+        process.exitCode = 1;
+      }
     } finally {
       cg.close();
     }

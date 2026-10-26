@@ -58,7 +58,8 @@ afterEach(() => {
 function writeBinding(jira: Record<string, unknown>): void {
   fs.writeFileSync(
     path.join(repoRoot, ENFORCE_CONFIG_FILE),
-    JSON.stringify({ jira }, null, 2),
+    // REQ-THRU-006: sync publishes only for an opted-in binding.
+    JSON.stringify({ jira: { autoPublish: true, ...jira } }, null, 2),
   );
 }
 

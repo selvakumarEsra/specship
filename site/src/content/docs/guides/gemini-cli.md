@@ -8,9 +8,11 @@ supports**, and only as an explicit opt-in: a plain `specship install` still
 sets up Claude Code alone.
 
 What Gemini CLI gets is the SpecShip **MCP server** — the same server Claude
-Code launches, with the same code-graph and spec tools. The Claude Code extras
-(hooks, slash commands, status line) have no Gemini equivalent and are not
-installed.
+Code launches, with the same code-graph and spec tools — plus a `GEMINI.md`
+steering block, hooks, and the `/specship:*` commands. Two Claude Code
+surfaces have no Gemini equivalent and are not installed: the
+`specship-explorer` subagent and the status line. See
+[the full comparison](#what-gemini-cli-gets--and-doesnt).
 
 ## Install
 
@@ -69,7 +71,7 @@ launched by Gemini CLI, which turns on
 
 ## Model-aware output
 
-Because a Gemini session runs no SpecShip hooks or status line, the server
+Because Gemini CLI has no status line to report the model, the server
 reads the session's model from Gemini CLI's own configuration — the
 `GEMINI_MODEL` environment variable, or `model` in the project's
 `.gemini/settings.json`, falling back to `~/.gemini/settings.json`. A Flash
@@ -79,18 +81,51 @@ needs; Gemini Pro gets full output. Set `SPECSHIP_MODEL` to force a tier. See
 
 ## What Gemini CLI gets — and doesn't
 
+<!-- capability-matrix:start -->
 | | Claude Code | Gemini CLI |
 |---|---|---|
 | SpecShip MCP tools (explore, search, specs, links, …) | ✓ | ✓ |
-| Opt-in JIRA / Designer tools | ✓ | ✓ (with `--with-jira` / `--with-designer`) |
+| Opt-in JIRA / Designer tools | ✓ | ✓ with `--with-jira` / `--with-designer` |
 | Model-tier adaptation | ✓ | ✓ |
-| Index freshness while the server runs (its file watcher) | ✓ | ✓ |
-| Auto-sync hooks (post-edit and session-start sync, drift summary) | ✓ | — run `specship sync` when you need it |
-| Steering nudges and session-start cheatsheet | ✓ | — the server's built-in instructions are the only steering |
-| `/specship:*` slash commands | ✓ | — |
+| Steering block (retrieval preference + spec-first rule) | ✓ `CLAUDE.md` | ✓ `GEMINI.md` |
+| Hooks: per-prompt reminder, session cheat-sheet, sync after edits, search pointer | ✓ | ✓ (project hooks run only in trusted folders) |
+| `/specship:*` slash commands | ✓ | ✓ rendered as Gemini TOML commands |
+| Workflow prompt steps (`specship workflow run`, `/specship:spec implement`) | ✓ | ✓ with `--agent gemini`, or automatically when launched from Gemini CLI — single steps checked live; a full implement run has not been measured |
+| Auto-approved SpecShip tools | ✓ | ✓ read-only tools only, opt-in with `--trust`; an administrator policy still wins |
 | `specship-explorer` subagent | ✓ | — |
 | Status-line segment | ✓ | — |
-| Auto-allowed tool permissions | ✓ | — Gemini CLI asks per its own settings |
+<!-- capability-matrix:end -->
+
+Retrieval benchmarks (one-call answers, no file reads) were measured on Claude Code. A first Gemini CLI comparison (one question, two runs per arm) is in `docs/benchmarks/call-sequence-analysis.md`; it shows fewer file reads with SpecShip but does not yet meet the Claude Code bar.
+
+## Workflows on Gemini CLI
+
+`specship workflow run` (and `/specship:spec implement`) runs each prompt step
+on a coding agent's headless mode. Launched from inside Gemini CLI it picks
+Gemini automatically; elsewhere choose it with `--agent gemini`,
+`SPECSHIP_WORKFLOW_AGENT=gemini`, or `"workflow": { "agent": "gemini" }` in
+`specship.config.json`. A run keeps the agent it started with through
+approvals and resumes. Gemini needs to be signed in with an account that can
+make API calls (for example a `GEMINI_API_KEY`).
+
+Steps name Claude-style model tiers (`haiku`, `sonnet`, `opus`). Map them to
+Gemini models in `specship.config.json`; without a mapping, Gemini's own
+default model runs:
+
+```json
+{
+  "workflow": {
+    "agents": {
+      "gemini": { "models": { "haiku": "<flash-lite model>", "sonnet": "<flash model>", "opus": "<pro model>" } }
+    }
+  }
+}
+```
+
+A step Gemini can't run faithfully — a tool with no Gemini equivalent, or a
+tool deny-list — fails with the reason rather than running without it. An
+administrator policy that requires confirmation for shell commands makes
+those steps fail in headless mode; it is never bypassed.
 
 ## Uninstall
 

@@ -358,11 +358,13 @@ describe('bundled implement workflows — pipeline quality gates (REQ-AUTHG-004/
     const diff = nodeOf(wf, 'diff');
     expect(diff.kind).toBe('bash');
     // The suppression gate (REQ-QGATE-004.A3) sits between the quality
-    // recheck and the diff artifact.
+    // checks and the diff artifact — after the mechanical postcheck since
+    // REQ-PIPETRUST-005, which itself follows the quality recheck.
     expect(diff.depends_on).toContain('suppression_gate');
     const suppression = nodeOf(wf, 'suppression_gate');
     expect(suppression.kind).toBe('bash');
-    expect(suppression.depends_on).toContain('quality_recheck');
+    expect(suppression.depends_on).toContain('postcheck_recheck');
+    expect(nodeOf(wf, 'postcheck').depends_on).toContain('quality_recheck');
     expect(suppression.bash).toContain('suppressions');
     expect(suppression.bash).toContain('SUPPRESSION_GATE=skipped');
     expect(nodeOf(wf, 'final_review').message).toContain('$suppression_gate.output');
@@ -385,6 +387,115 @@ describe('bundled implement workflows — pipeline quality gates (REQ-AUTHG-004/
     // Everything the gate reports must be upstream of it.
     expect(finalReview.depends_on).toContain('adversarial_review');
     expect(nodeOf(wf, 'adversarial_review').depends_on).toContain('coverage');
+  }
+
+  function readinessGatesThePlan(name: string): void {
+    const wf = load(name);
+    const ready = nodeOf(wf, 'readiness');
+    expect(ready.kind).toBe('bash');
+    expect(ready.bash).toContain('ready $INPUT.SPEC_ID');
+    // A missing CLI is a halt, never a silent pass.
+    expect(ready.bash).toContain('READY=unavailable');
+    expect(ready.bash).toContain('specship-run-base');
+    expect(nodeOf(wf, 'plan').depends_on).toContain('readiness');
+    expect(nodeOf(wf, 'plan').prompt).toContain('$readiness.output');
+    expect(nodeOf(wf, 'implement').prompt).toContain('$readiness.output');
+  }
+
+  function postcheckRunsAfterQualityAndHalts(name: string): void {
+    const wf = load(name);
+    const post = nodeOf(wf, 'postcheck');
+    expect(post.kind).toBe('bash');
+    expect(post.depends_on).toContain('quality_recheck');
+    expect(post.bash).toContain('postcheck $INPUT.SPEC_ID --path . --fix');
+    const fix = nodeOf(wf, 'fix_postcheck');
+    expect(fix.kind).toBe('prompt');
+    expect(fix.depends_on).toContain('postcheck');
+    expect(fix.prompt).toContain('POSTCHECK=failed');
+    const recheck = nodeOf(wf, 'postcheck_recheck');
+    expect(recheck.kind).toBe('bash');
+    expect(recheck.depends_on).toContain('fix_postcheck');
+    expect(recheck.bash).toContain('exit 1');
+    expect(recheck.bash).toContain('HALT_CAUSE=');
+    const ids = wf.nodes.map((n) => n.id);
+    expect(ids.indexOf('postcheck_recheck')).toBeLessThan(ids.indexOf('verify'));
+    expect(nodeOf(wf, 'final_review').message).toContain('$postcheck_recheck.output');
+  }
+
+  function linkStepUsesSpecBlocksNotLinkAssert(name: string): void {
+    const wf = load(name);
+    const link = nodeOf(wf, 'link');
+    expect(link.allowed_tools ?? []).not.toContain('mcp__specship__specship_link_assert');
+    expect(link.allowed_tools ?? []).not.toContain('mcp__specship__specship_link_verify');
+    expect(link.prompt).toContain('implementations:');
+    expect(link.prompt).toContain('specship verify --report');
+    const verify = nodeOf(wf, 'verify');
+    expect(verify.bash).toContain('$SPECSHIP_ARTIFACTS_DIR/test-report.json');
+    expect(verify.bash).toContain('VERIFY_REPORT=');
+    // Every CLI-calling step prefers the CLI running the workflow (006.A4).
+    for (const id of ['readiness', 'postcheck', 'postcheck_recheck', 'suppression_gate', 'coverage']) {
+      expect(nodeOf(wf, id).bash, id).toContain('$SPECSHIP_CLI_SCRIPT');
+    }
+  }
+
+  function workflowProposesKnowledgeButNeverWritesDomain(name: string): void {
+    const wf = load(name);
+    const propose = nodeOf(wf, 'knowledge_proposals');
+    expect(propose.kind).toBe('prompt');
+    // After the adversarial review stage — which now ends with the probe guard (REQ-THRU-008).
+    expect(propose.depends_on).toContain('review_guard');
+    const ids = wf.nodes.map((n) => n.id);
+    expect(ids.indexOf('adversarial_review')).toBeLessThan(ids.indexOf('knowledge_proposals'));
+    expect(propose.prompt).toContain('.specship/knowledge/proposals/');
+    expect(propose.prompt).toContain('NEVER edit');
+    const publish = nodeOf(wf, 'knowledge_publish');
+    expect(publish.kind).toBe('bash');
+    // A change under specs/domain/ halts the run — only a human applies knowledge.
+    expect(publish.bash).toContain('git status --porcelain -- specs/domain');
+    expect(publish.bash).toContain('exit 1');
+    expect(nodeOf(wf, 'final_review').depends_on).toContain('knowledge_publish');
+    expect(nodeOf(wf, 'final_review').message).toContain('$knowledge_publish.output');
+  }
+
+  function promptsRespectEnforcedRules(name: string): void {
+    const wf = load(name);
+    for (const id of ['plan', 'implement']) {
+      const prompt = nodeOf(wf, id).prompt ?? '';
+      expect(prompt, id).toContain('## Enforced');
+      expect(prompt, id).toContain('hard constraint');
+      expect(prompt, id).toContain('specship knowledge check');
+    }
+  }
+
+  function finalReviewIsNeverSkipped(name: string): void {
+    const wf = load(name);
+    const plan = nodeOf(wf, 'approve_plan') as { auto_approve?: { from: string; marker: string }; depends_on?: string[] };
+    expect(plan.auto_approve).toEqual({ from: 'plan_scope', marker: 'AUTO_APPROVE=yes' });
+    expect(plan.depends_on).toContain('plan_scope');
+    expect(nodeOf(wf, 'plan_scope').bash).toContain('plan-scope $INPUT.SPEC_ID');
+    // The final human review never auto-approves, under any configuration.
+    expect((nodeOf(wf, 'final_review') as { auto_approve?: unknown }).auto_approve).toBeUndefined();
+    expect(nodeOf(wf, 'final_review').kind).toBe('approval');
+  }
+
+  function reviewWritesProbesNotTrackedFiles(name: string): void {
+    const wf = load(name);
+    // The scoring review stays read-only (REQ-AUTHG-005.A3) …
+    expect(nodeOf(wf, 'adversarial_review').allowed_tools ?? []).not.toContain('Write');
+    // … the probe step writes only probes, one per criterion, with a verdict each.
+    const probes = nodeOf(wf, 'review_probes');
+    expect(probes.kind).toBe('prompt');
+    expect(probes.prompt).toContain('.specship/review-probes/');
+    expect(probes.prompt).toContain('held | broke | unrun');
+    expect(probes.prompt).toContain('EACH acceptance criterion');
+    expect(nodeOf(wf, 'probe_baseline').depends_on).toContain('adversarial_review');
+    const guard = nodeOf(wf, 'review_guard');
+    expect(guard.kind).toBe('bash');
+    expect(guard.depends_on).toContain('review_probes');
+    expect(guard.bash).toContain('specship-probe-baseline');
+    expect(guard.bash).toContain('exit 1');
+    expect(nodeOf(wf, 'knowledge_proposals').depends_on).toContain('review_guard');
+    expect(nodeOf(wf, 'final_review').message).toContain('$review_probes.output');
   }
 
   function qualityBaselineRunsBeforeImplement(name: string): void {
@@ -474,6 +585,31 @@ describe('bundled implement workflows — pipeline quality gates (REQ-AUTHG-004/
   it.each(['spec-implement', 'spec-implement-mixed'])(
     '%s captures a quality baseline before implement (REQ-AUTHG-008.A1)',
     qualityBaselineRunsBeforeImplement);
+
+  it.each(['spec-implement', 'spec-implement-mixed'])(
+    '%s runs the readiness gate before planning (REQ-PIPETRUST-004.A3)', readinessGatesThePlan);
+
+  it.each(['spec-implement', 'spec-implement-mixed'])(
+    'the %s final review is never auto-approved (REQ-THRU-003.A4)', finalReviewIsNeverSkipped);
+
+  it.each(['spec-implement', 'spec-implement-mixed'])(
+    'the %s probe step writes probes, never tracked files (REQ-THRU-008.A1, REQ-THRU-008.A2)', reviewWritesProbesNotTrackedFiles);
+
+  it.each(['spec-implement', 'spec-implement-mixed'])(
+    '%s proposes knowledge but never writes specs/domain (REQ-KNOW-004.A1)',
+    workflowProposesKnowledgeButNeverWritesDomain);
+
+  it.each(['spec-implement', 'spec-implement-mixed'])(
+    'the %s plan and implement prompts treat enforced rules as constraints (REQ-KNOW-005.A2)',
+    promptsRespectEnforcedRules);
+
+  it.each(['spec-implement', 'spec-implement-mixed'])(
+    '%s runs postcheck after the quality recheck and halts on failure (REQ-PIPETRUST-005.A5)',
+    postcheckRunsAfterQualityAndHalts);
+
+  it.each(['spec-implement', 'spec-implement-mixed'])(
+    'the %s link step records spec blocks instead of link_assert (REQ-PIPETRUST-006.A3)',
+    linkStepUsesSpecBlocksNotLinkAssert);
 
   it.each(['spec-implement', 'spec-implement-mixed'])(
     'a %s quality failure feeds the revise loop and halts if unfixed (REQ-AUTHG-005.A1)',

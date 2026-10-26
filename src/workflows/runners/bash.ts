@@ -12,6 +12,47 @@ import { DagNode, BashNode } from '../schemas/workflow';
 import { NodeRunner, NodeRunResult, RunnerContext } from './types';
 
 const DEFAULT_TIMEOUT_MS = 60_000;
+/** How much of a failed step's output the one-line `error` keeps. */
+const ERROR_TAIL_CHARS = 4000;
+
+/**
+ * Keep the LAST `max` chars — test runners and compilers print their summary
+ * at the end, so the head is the least useful part (REQ-PIPETRUST-006.A1).
+ */
+export function tailForError(text: string, max = ERROR_TAIL_CHARS): string {
+  return text.length > max ? `…${text.slice(text.length - max)}` : text;
+}
+
+/** Combined output of a failed step, stdout first then stderr. */
+function combinedOutput(stdout: string, stderr: string): string {
+  if (stdout && stderr) return `${stdout}${stdout.endsWith('\n') ? '' : '\n'}${stderr}`;
+  return stdout || stderr;
+}
+
+/**
+ * The SpecShip CLI running this process — `{ node, script }` when this
+ * process is the CLI, else null. Exported to bash steps as
+ * SPECSHIP_CLI_NODE / SPECSHIP_CLI_SCRIPT (kept separate so paths with spaces
+ * survive) plus a display-only SPECSHIP_CLI.
+ */
+export function specshipCli(
+  argv: string[] = process.argv,
+  execPath: string = process.execPath,
+): { node: string; script: string } | null {
+  const script = argv[1] ?? '';
+  if (!/^specship(\.js)?$/.test(path.basename(script))) return null;
+  return { node: execPath, script };
+}
+
+function cliEnv(): Record<string, string> {
+  const cli = specshipCli();
+  if (!cli) return {};
+  return {
+    SPECSHIP_CLI_NODE: cli.node,
+    SPECSHIP_CLI_SCRIPT: cli.script,
+    SPECSHIP_CLI: `${cli.node} ${cli.script}`,
+  };
+}
 
 export class BashRunner implements NodeRunner {
   readonly kind = 'bash' as const;
@@ -35,6 +76,13 @@ export class BashRunner implements NodeRunner {
       // Always prepend — being merely *present* later in PATH still loses to
       // an earlier host Node.
       PATH: `${runtimeDir}${path.delimiter}${basePath}`,
+      // The exact CLI running this workflow (PIPETRUST-DOC, REQ-PIPETRUST-006.A4):
+      // steps call `$SPECSHIP_CLI` before any `specship` on PATH, so a step
+      // never runs an older globally installed CLI that lacks its command.
+      ...cliEnv(),
+      // Where this run keeps its artifacts, so a step can leave durable
+      // evidence (e.g. a JSON test report) beside the node outputs.
+      SPECSHIP_ARTIFACTS_DIR: ctx.artifactsDir,
       ...(node.env ?? {}),
     };
 
@@ -109,18 +157,21 @@ export class BashRunner implements NodeRunner {
           });
           return;
         }
+        const combined = combinedOutput(stdout, stderr);
         if (signal === 'SIGTERM') {
           resolve({
             status: 'failed',
             error: `bash node timed out after ${timeout}ms`,
             transient: true,
+            ...(combined ? { output: { text: combined } } : {}),
           });
           return;
         }
-        const errMsg = (stderr || stdout || '').slice(0, 4000);
+        const errMsg = tailForError(stderr || stdout || '');
         resolve({
           status: 'failed',
           error: `bash exited with code ${code}: ${errMsg}`,
+          output: { text: combined },
         });
       });
     });

@@ -67,6 +67,17 @@ export function buildHookAdditionalContext(
 }
 
 /**
+ * A blocking decision for a host whose before-tool hook reads a TOP-LEVEL
+ * `decision` (Gemini CLI 0.28.0 `BeforeToolHookOutput.isBlockingDecision`
+ * checks `this.decision === 'block' || 'deny'`; nested under
+ * `hookSpecificOutput` it is ignored). Only emitted for hosts whose traits
+ * report `supportsBeforeToolDeny`.
+ */
+export function buildHookDenyDecision(reason: string): string {
+  return JSON.stringify({ decision: 'deny', reason }) + '\n';
+}
+
+/**
  * Host-shaped traits derived from a hook payload — the one place that peeks
  * at `hook_event_name` to decide whether we're serving Claude Code or Gemini
  * CLI. Shared code (`search-intercept`, `bin/specship`) consumes the traits

@@ -14,7 +14,7 @@ new file + one registry entry.
 
 - **Claude Code only, plus the ratified Gemini CLI exception** (explicit ask,
   2026-08-22 — `specs/agent-target-gemini.md`, `GEMINI-TARGET-DOC`).
-  `targets/gemini.ts` implements the full `AgentTarget` contract over four
+  `targets/gemini.ts` implements the full `AgentTarget` contract over five
   surfaces — Gemini's `mcpServers` settings block (REQ-GEMINI-002/003),
   GEMINI.md steering (REQ-GEMINI-004: a marker-delimited retrieval-preference
   block plus the default-on SDD rule, generated from the same
@@ -32,15 +32,19 @@ new file + one registry entry.
   the MCP entry is NEVER given `trust: true`, and uninstall removes the
   TOML iff it carries our header marker (user-authored files of the same
   name are left byte-identical). Omitting `--trust` writes no policy file;
-  a plain reinstall preserves one a prior `--trust` install wrote.
+  a plain reinstall preserves one a prior `--trust` install wrote. Fifth,
+  the `/specship:*` slash commands as Gemini TOML under
+  `<commands dir>/specship/` (REQ-GEMINI-005), rendered by
+  `gemini-commands.ts` from the same `commands/specship/*.md` source and tier
+  lists the Claude target installs — one source, two renderers — with
+  marker-guarded install/uninstall.
   Being in `ALL_TARGETS` does NOT make it install by default:
   `resolveInstallTargets` maps absent / `claude` / `auto` / `all` to Claude
   alone, so Gemini is reachable only by naming it (`--target gemini`,
   `--target claude,gemini`). Everything Gemini has no equivalent for
-  (permissions, slash commands, the explorer subagent, the status line) is
-  left unwritten and named in `WriteResult.notes` — never faked, never
-  half-installed (REQ-GEMINI-006). TOML commands (REQ-GEMINI-005) are still
-  unimplemented. Don't add any OTHER agent target without an equally explicit
+  (the explorer subagent, the status line) is left unwritten and named in
+  `WriteResult.notes` — never faked, never half-installed (REQ-GEMINI-006).
+  Don't add any OTHER agent target without an equally explicit
   ask — this fork's selling point is the smaller surface.
 - Any installer change needs matching coverage in
   `__tests__/installer-targets.test.ts` and a CHANGELOG entry — installer
