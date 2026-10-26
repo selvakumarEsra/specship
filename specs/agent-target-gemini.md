@@ -11,7 +11,7 @@ jira_fingerprint_REQ-GEMINI-002: 80f873d64381857c
 jira_issue_REQ-GEMINI-003: SSHIP-55
 jira_fingerprint_REQ-GEMINI-003: 7512a4f8dbe0f3fe
 jira_issue_REQ-GEMINI-004: SSHIP-58
-jira_fingerprint_REQ-GEMINI-004: d5c05d16a1ffe668
+jira_fingerprint_REQ-GEMINI-004: 8c670887ce8247da
 jira_issue_REQ-GEMINI-005: SSHIP-61
 jira_fingerprint_REQ-GEMINI-005: dde32fd0d774fa74
 jira_issue_REQ-GEMINI-006: SSHIP-64
@@ -34,6 +34,12 @@ abstraction, and making the model-compaction tier system provider-neutral.
 Out of scope (future phases, not contracted here): client-aware MCP server
 instructions (Phase 3) and dashboard transcript-ingest adapters for Gemini
 sessions (Phase 4). The `src/claudemd/` audit remains Claude-specific.
+
+Phase 1b (2026-10-26, REQ-GEMINI-009–011, REQ-GEMINI-004 revised): make
+Gemini prefer SpecShip — GEMINI.md steering, prompt/session/tool hooks
+mapped onto Gemini's hook events, and an opt-in read-only auto-approval
+policy for SpecShip's own tools. Non-goal: bypassing or weakening an
+administrator's Gemini policy, including its `run_shell_command` rule.
 SpecShip never calls an LLM itself — "agnostic" here means agent-host and
 model-family agnostic, not a Gemini API integration.
 
@@ -156,13 +162,32 @@ verifies:
   install omits the flag (parity with REQ-INTEG-001.A3).
 
 <!-- id: REQ-GEMINI-004 -->
-## SDD steering MUST target GEMINI.md with the same marker semantics
+## Gemini install MUST write a GEMINI.md steering block with marker semantics
 
-When the governance tier is selected, the spec-driven-development steering
-rule MUST be written into the project `GEMINI.md` (Gemini CLI's context file)
-as a marker-delimited block, with the same idempotence, upgrade self-healing,
-and surgical-removal semantics the Claude target applies to CLAUDE.md.
-Content outside the markers MUST never be modified.
+`specship install --target gemini` MUST write a marker-delimited SpecShip
+block into Gemini CLI's context file (`GEMINI.md` — global
+`~/.gemini/GEMINI.md`, local `<project>/GEMINI.md`, matching the install
+location). The block MUST carry two things and nothing more:
+
+- **Retrieval preference** — a short directive that, in a SpecShip-indexed
+  project, structure / flow / "where is X" / "who calls X" / impact questions
+  go to the `specship_*` MCP tools BEFORE `grep_search`, `glob`, `read_file`
+  or a search command in `run_shell_command`. It MUST NOT restate the tool
+  playbook: Gemini CLI forwards the MCP server's `initialize` instructions to
+  the model (verified in 0.28.0, `McpClient.getInstructions`), so
+  `server-instructions.ts` stays the single source of truth (issue #529).
+- **SDD rule** — when the governance tier is selected, the same
+  spec-author-first rule the Claude target writes, generated from the same
+  source (`getSddRuleBlock`) so the two cannot drift.
+
+The block MUST have the same idempotence, upgrade self-healing and surgical
+removal semantics the Claude target applies to CLAUDE.md, and content outside
+the markers MUST never be modified. Default-on for `--target gemini`
+(resolved 2026-10-26).
+
+implementations:
+  - src/installer/targets/gemini.ts:GeminiCliTarget.install
+  - src/installer/instructions-template.ts:getSddRuleBlock
 
 ## Acceptance
 <!-- id: REQ-GEMINI-004.A1 -->
@@ -171,6 +196,17 @@ Content outside the markers MUST never be modified.
 <!-- id: REQ-GEMINI-004.A2 -->
 - Uninstall removes exactly the marker block (and the file only if SpecShip
   created it and nothing else remains).
+<!-- id: REQ-GEMINI-004.A3 -->
+- The written block names the `specship_*` tools as the first choice over
+  `grep_search` / `glob` / `read_file` / shell search, and contains no
+  per-tool usage text that also appears in `server-instructions.ts` (a test
+  asserts no shared paragraph).
+<!-- id: REQ-GEMINI-004.A4 -->
+- The SDD portion is byte-identical to the Claude target's SDD rule block
+  and is absent when the governance tier is not selected (`--no-sdd`).
+<!-- id: REQ-GEMINI-004.A5 -->
+- Re-running install with nothing changed reports GEMINI.md `unchanged`; a
+  block from an older version is replaced in place, not duplicated.
 
 <!-- id: REQ-GEMINI-005 -->
 ## Slash commands MUST render from a single source into Gemini's format
@@ -197,14 +233,14 @@ implementation from the capability matrix]
 <!-- id: REQ-GEMINI-006 -->
 ## Capability degradation MUST be explicit, never silent
 
-The Claude target's surfaces with no Gemini equivalent — auto-sync hooks
-(PostToolUse/SessionStart), the UserPromptSubmit retrieval-steering and SDD
-nudge hooks, the `specship-explorer` subagent, and the status-line segment —
-MUST NOT be faked or half-installed. `install` MUST print a capability note
-listing what a Claude install provides that this Gemini install does not,
-including the consequence that steering relies solely on the MCP server
-instructions. `describePaths` MUST list only paths the Gemini target actually
-writes.
+The Claude target's surfaces with no Gemini equivalent MUST NOT be faked or
+half-installed. As of REQ-GEMINI-010/011 the steering and session hooks DO
+have Gemini equivalents and are installed; what remains unsupported is the
+`specship-explorer` subagent, the status-line segment, and (until
+REQ-GEMINI-005 lands) the slash commands. `install` MUST print one
+capability note listing exactly the surfaces a Claude install provides that
+this Gemini install does not. `describePaths` MUST list only paths the Gemini
+target actually writes.
 
 implementations:
   - src/installer/targets/gemini.ts:GeminiCliTarget.install
@@ -214,8 +250,9 @@ verifies:
 
 ## Acceptance
 <!-- id: REQ-GEMINI-006.A1 -->
-- A Gemini install's `WriteResult.notes` names each unsupported surface
-  (hooks, subagent, status line) in one note.
+- A Gemini install's `WriteResult.notes` names each still-unsupported surface
+  (subagent, status line, and slash commands while REQ-GEMINI-005 is unbuilt)
+  in one note, and no longer lists hooks.
 <!-- id: REQ-GEMINI-006.A2 -->
 - No file under `.claude/` or Claude's settings is ever written by the Gemini
   target.
@@ -296,3 +333,157 @@ implementations:
 <!-- id: REQ-GEMINI-008.A2 -->
 - CHANGELOG `[Unreleased]` gains a plain-sentence New Features entry with no
   internal paths or symbols.
+
+<!-- id: REQ-GEMINI-009 -->
+## An opt-in read-only auto-approval policy MUST be installable for Gemini
+
+`specship install --target gemini --trust` MUST write a user-tier Gemini
+policy file (`~/.gemini/policies/specship.toml`) whose rules ALLOW only
+SpecShip's read-only MCP tools — `specship_explore`, `specship_search`,
+`specship_node`, `specship_callers`, `specship_callees`, `specship_impact`,
+`specship_files`, `specship_status`, `specship_health`, `specship_spec`,
+`specship_drifted` — so those calls never raise Gemini's per-tool
+confirmation. Tools that write state or reach an external service
+(`specship_link_assert`, `specship_link_verify`, every `specship_jira_*`,
+the designer tools) MUST NOT be allowed by this policy and keep Gemini's
+normal confirmation. The installer MUST NOT set `trust: true` on the server
+entry (it approves every tool, verified in 0.28.0 as a `specship__*` allow
+rule). Without `--trust`, no policy file is written (resolved 2026-10-26:
+it changes the user's approval settings, so it is opt-in).
+
+The policy is user tier by construction. SpecShip MUST NOT write to Gemini's
+system/admin policy directory and MUST NOT attempt to override an
+administrator's policy: Gemini's tier ordering lets an admin rule win over
+this one, and that is the intended outcome. The `run_shell_command` tool is
+out of scope — this requirement removes prompts only for SpecShip's own
+tools; fewer shell prompts come from REQ-GEMINI-010/011 steering the agent
+off the shell.
+
+implementations:
+  - src/installer/targets/gemini.ts:GeminiCliTarget.install
+  - src/installer/targets/gemini.ts:GeminiCliTarget.uninstall
+
+## Acceptance
+<!-- id: REQ-GEMINI-009.A1 -->
+- With `--trust`, the written TOML parses under Gemini CLI's policy schema
+  (`mcpName = "specship"`, `toolName` list, `decision = "allow"`, integer
+  `priority` in 0–999) and lists exactly the read-only tool set above.
+<!-- id: REQ-GEMINI-009.A2 -->
+- No write-capable tool (link_assert, link_verify, any jira_*, any designer_*)
+  appears in an allow rule, and the settings entry never carries `trust`.
+<!-- id: REQ-GEMINI-009.A3 -->
+- Without `--trust`, install writes no policy file; a later install without
+  `--trust` preserves a policy file a previous `--trust` install wrote
+  (parity with integration opt-ins, REQ-INTEG-001.A3).
+<!-- id: REQ-GEMINI-009.A4 -->
+- Uninstall removes only `specship.toml`; other files in the user policies
+  directory are untouched, and nothing is ever written under the system
+  policies directory.
+<!-- id: REQ-GEMINI-009.A5 -->
+- README/docs state plainly that an administrator policy overrides this file
+  and that shell-command confirmations are unaffected by it.
+
+<!-- id: REQ-GEMINI-010 -->
+## Gemini install MUST wire prompt- and session-level steering hooks
+
+`specship install --target gemini` MUST write SpecShip's hooks into the
+`hooks` block of Gemini's settings file (same location as the MCP entry),
+mapping the Claude hooks onto Gemini's events (verified in 0.28.0
+`HookEventName`):
+
+| Claude hook | Gemini event | Command |
+|---|---|---|
+| UserPromptSubmit `steer-nudge` | `BeforeAgent` | retrieval nudge |
+| UserPromptSubmit `spec-nudge` (governance tier) | `BeforeAgent` | SDD nudge |
+| SessionStart `cheatsheet` | `SessionStart` | cheat-sheet |
+| SessionStart / PostToolUse `sync` | `SessionStart` / `AfterTool` on `write_file\|replace` | index sync |
+
+Each command MUST read Gemini's hook payload (`session_id`,
+`transcript_path`, `cwd`, `hook_event_name`, `prompt`) and emit Gemini's
+output schema (`hookSpecificOutput.additionalContext` for context,
+`systemMessage` for the user-visible cheat-sheet). The same silence gates as
+the Claude hooks apply unchanged: no `.specship/` index → silent;
+`SPECSHIP_NO_STEERING=1` → silent; `SPECSHIP_NO_CHEATSHEET` → no
+cheat-sheet. Default-on for `--target gemini`. Sibling hooks the user wrote
+MUST survive install and uninstall byte-identical.
+
+implementations:
+  - src/installer/targets/gemini.ts:GeminiCliTarget.install
+  - src/activation/steering.ts:buildSteeringNudge
+  - src/activation/cheatsheet.ts:buildCheatsheetPayload
+
+## Acceptance
+<!-- id: REQ-GEMINI-010.A1 -->
+- After install, Gemini's settings `hooks` block contains the BeforeAgent,
+  SessionStart and AfterTool entries above, each a `type: "command"` hook,
+  and re-running install reports the settings file `unchanged`.
+<!-- id: REQ-GEMINI-010.A2 -->
+- Fed a Gemini `BeforeAgent` payload with a flow-shaped prompt in an indexed
+  project, the nudge command prints JSON whose
+  `hookSpecificOutput.additionalContext` names `specship_explore`; in an
+  unindexed project or with `SPECSHIP_NO_STEERING=1` it prints nothing.
+<!-- id: REQ-GEMINI-010.A3 -->
+- Fed a Gemini `SessionStart` payload, the cheat-sheet command emits a
+  `systemMessage` and never `additionalContext`.
+<!-- id: REQ-GEMINI-010.A4 -->
+- Uninstall removes exactly the SpecShip hook entries; user-written hooks and
+  other settings keys survive byte-identical.
+<!-- id: REQ-GEMINI-010.A5 -->
+- The Claude target's hook output for the same prompts is unchanged (the
+  existing steering tests pass unmodified).
+
+<!-- id: REQ-GEMINI-011 -->
+## A BeforeTool search interceptor MUST redirect Gemini searches to SpecShip
+
+The Gemini install MUST add a `BeforeTool` hook matching `grep_search`,
+`glob` and `run_shell_command`. For `run_shell_command` it MUST act only when
+the command is search-shaped — its first program is a code-search tool
+(`grep`, `rg`, `ag`, `ack`, `git grep`, `find`, `fd`) — and MUST ignore a
+search tool used as a filter on another command's output (e.g.
+`npm test | grep FAIL`). [needs review: whether read-shaped commands such as
+`cat`/`head` belong in the advisory set]
+
+Two modes (resolved 2026-10-26):
+
+- **Advisory (default)** — identical contract to the Claude interceptor
+  (REQ-STEER-004/005): emit one `additionalContext` line pointing at
+  `specship_explore`, never a decision; at most once per session; silent once
+  the session has used a specship tool. The search still runs.
+- **Strict (opt-in, `SPECSHIP_GEMINI_STRICT=1`, env > project > install
+  settings)** — for a search-shaped call in an indexed project, return
+  `decision: "deny"` with a `reason` telling the agent to call
+  `specship_explore` (naming the symbols from the search pattern) and that a
+  search the index cannot answer may be retried by asking the user. Strict is
+  a deliberate, Gemini-only exception to the advisory rule, chosen by the
+  user; it is never on by default and never applies to the Claude target.
+
+Session-use detection MUST be host-aware: Gemini's transcript format and its
+MCP tool naming (`specship__<tool>`) differ from Claude's, and a parser that
+cannot read the transcript MUST fail toward silence in advisory mode and
+toward ALLOW in strict mode (never deny on a parse failure).
+
+implementations:
+  - src/activation/search-intercept.ts:buildSearchIntercept
+  - src/installer/targets/gemini.ts:GeminiCliTarget.install
+
+## Acceptance
+<!-- id: REQ-GEMINI-011.A1 -->
+- Advisory: a Gemini `BeforeTool` payload for `grep_search` in an indexed
+  project yields one `additionalContext` line and no `decision`; the second
+  call in the same session yields nothing.
+<!-- id: REQ-GEMINI-011.A2 -->
+- `run_shell_command` with `rg "renderScene" src/` is treated as a search;
+  `npm test | grep FAIL`, `git status` and `ls` are not, in both modes.
+<!-- id: REQ-GEMINI-011.A3 -->
+- Strict: the same search-shaped call returns `decision: "deny"` with a
+  reason naming `specship_explore`; in an unindexed project, or when the
+  transcript cannot be read, the call is allowed (no decision).
+<!-- id: REQ-GEMINI-011.A4 -->
+- With strict unset, no code path emits a `deny`/`block` decision (test
+  asserts across all fixtures).
+<!-- id: REQ-GEMINI-011.A5 -->
+- Docs claim strict mode avoids the shell confirmation prompt only if a test
+  against Gemini CLI proves `BeforeTool` runs before policy confirmation.
+  [needs review: verify hook-vs-confirmation ordering in Gemini CLI before
+  making that claim]
+
