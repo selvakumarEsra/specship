@@ -20,6 +20,12 @@ jira_issue_REQ-GEMINI-007: SSHIP-68
 jira_fingerprint_REQ-GEMINI-007: 761be48e4b321386
 jira_issue_REQ-GEMINI-008: SSHIP-73
 jira_fingerprint_REQ-GEMINI-008: 4d4e35f023392939
+jira_issue_REQ-GEMINI-009: SSHIP-64
+jira_fingerprint_REQ-GEMINI-009: 4fc822fee7260a63
+jira_issue_REQ-GEMINI-010: SSHIP-70
+jira_fingerprint_REQ-GEMINI-010: e21277e9ac5e73b8
+jira_issue_REQ-GEMINI-011: SSHIP-76
+jira_fingerprint_REQ-GEMINI-011: ceb5d564ce8e42b3
 ---
 
 <!-- id: GEMINI-TARGET-DOC -->

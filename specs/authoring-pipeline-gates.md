@@ -4,6 +4,20 @@ title: Review remediation Wave 3 — authoring quality & pipeline gates
 owner: specship-core
 priority: medium
 version: 1
+jira_issue_REQ-AUTHG-001: SSHIP-98
+jira_fingerprint_REQ-AUTHG-001: c65731a9838ea3d4
+jira_issue_REQ-AUTHG-002: SSHIP-103
+jira_fingerprint_REQ-AUTHG-002: ca7014085df4469b
+jira_issue_REQ-AUTHG-003: SSHIP-106
+jira_fingerprint_REQ-AUTHG-003: d9344944a94fa644
+jira_issue_REQ-AUTHG-004: SSHIP-110
+jira_fingerprint_REQ-AUTHG-004: f57d391c646a8dc1
+jira_issue_REQ-AUTHG-005: SSHIP-113
+jira_fingerprint_REQ-AUTHG-005: c116b6374c9939a6
+jira_issue_REQ-AUTHG-006: SSHIP-117
+jira_fingerprint_REQ-AUTHG-006: 00ba93f9613e1127
+jira_issue_REQ-AUTHG-007: SSHIP-121
+jira_fingerprint_REQ-AUTHG-007: 7b9e1e577166e565
 ---
 
 <!-- id: AUTHG-DOC -->

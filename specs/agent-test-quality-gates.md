@@ -4,6 +4,14 @@ title: Agent-test quality gates — property lane, mutation gate, contract fuzzi
 owner: specship-core
 priority: high
 version: 1
+jira_issue_REQ-QGATE-001: SSHIP-82
+jira_fingerprint_REQ-QGATE-001: ef4c4282b29b7e0e
+jira_issue_REQ-QGATE-002: SSHIP-86
+jira_fingerprint_REQ-QGATE-002: 506a581e74a72549
+jira_issue_REQ-QGATE-003: SSHIP-90
+jira_fingerprint_REQ-QGATE-003: 7341b1ab98ebb9a9
+jira_issue_REQ-QGATE-004: SSHIP-94
+jira_fingerprint_REQ-QGATE-004: 0f182d48b250fccd
 ---
 
 <!-- id: QGATE-DOC -->

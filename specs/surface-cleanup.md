@@ -4,6 +4,24 @@ title: Review remediation — surface removal & cleanup lane
 owner: specship-core
 priority: high
 version: 1
+jira_issue_REQ-SURF-001: SSHIP-255
+jira_fingerprint_REQ-SURF-001: 7675e251bfbe151f
+jira_issue_REQ-SURF-002: SSHIP-259
+jira_fingerprint_REQ-SURF-002: 3180b564201b2521
+jira_issue_REQ-SURF-003: SSHIP-262
+jira_fingerprint_REQ-SURF-003: 7cc7b29bf6544259
+jira_issue_REQ-SURF-004: SSHIP-265
+jira_fingerprint_REQ-SURF-004: 5af9960fd859292e
+jira_issue_REQ-SURF-005: SSHIP-268
+jira_fingerprint_REQ-SURF-005: d2123d453aefdb86
+jira_issue_REQ-SURF-006: SSHIP-271
+jira_fingerprint_REQ-SURF-006: b5b01808463fee8e
+jira_issue_REQ-SURF-007: SSHIP-275
+jira_fingerprint_REQ-SURF-007: e42604d1807d10f1
+jira_issue_REQ-SURF-008: SSHIP-278
+jira_fingerprint_REQ-SURF-008: 348b324a3d15746e
+jira_issue_REQ-SURF-009: SSHIP-281
+jira_fingerprint_REQ-SURF-009: ebb57479f9cd02bc
 ---
 
 <!-- id: SURF-DOC -->

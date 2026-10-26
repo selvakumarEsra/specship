@@ -4,6 +4,24 @@ title: Review remediation Wave 1 — truth & integrity fixes
 owner: specship-core
 priority: high
 version: 1
+jira_issue_REQ-REVINT-001: SSHIP-220
+jira_fingerprint_REQ-REVINT-001: fa63b289b0c5165f
+jira_issue_REQ-REVINT-002: SSHIP-223
+jira_fingerprint_REQ-REVINT-002: 3eafbfa4ee842799
+jira_issue_REQ-REVINT-003: SSHIP-227
+jira_fingerprint_REQ-REVINT-003: e35e4d91f2202972
+jira_issue_REQ-REVINT-004: SSHIP-231
+jira_fingerprint_REQ-REVINT-004: d3cef8d453a34534
+jira_issue_REQ-REVINT-005: SSHIP-235
+jira_fingerprint_REQ-REVINT-005: cde195b42df543d2
+jira_issue_REQ-REVINT-006: SSHIP-239
+jira_fingerprint_REQ-REVINT-006: 6af5569e0cf11bce
+jira_issue_REQ-REVINT-007: SSHIP-244
+jira_fingerprint_REQ-REVINT-007: 8c4027b5a637aa75
+jira_issue_REQ-REVINT-008: SSHIP-249
+jira_fingerprint_REQ-REVINT-008: cd7bcf5515fa110e
+jira_issue_REQ-REVINT-009: SSHIP-252
+jira_fingerprint_REQ-REVINT-009: 7c5469b0ec6374c5
 ---
 
 <!-- id: REVINT-DOC -->

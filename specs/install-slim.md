@@ -4,6 +4,12 @@ title: Slim package & simplified install
 owner: specship-core
 priority: high
 version: 1
+jira_issue_REQ-SLIM-001: SSHIP-175
+jira_fingerprint_REQ-SLIM-001: ab582b894f16b0bc
+jira_issue_REQ-SLIM-002: SSHIP-179
+jira_fingerprint_REQ-SLIM-002: 41a768735930fe7f
+jira_issue_REQ-SLIM-003: SSHIP-184
+jira_fingerprint_REQ-SLIM-003: 0833fb499b079a39
 ---
 
 <!-- id: SLIM-DOC -->
