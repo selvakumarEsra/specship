@@ -4919,6 +4919,66 @@ jira
   });
 
 /**
+ * specship jira publish --pending — the explicit, one-batch publish of every
+ * requirement sync held back (REQ-THRU-006). Sync only publishes when
+ * `jira.autoPublish: true` is set in specship.config.json; otherwise it
+ * reports the pending count and points here.
+ */
+jira
+  .command('publish')
+  .description('Publish specs to the bound JIRA project in one explicit batch (--pending: every requirement sync held back).')
+  .option('--pending', 'publish every requirement with no JIRA issue yet or whose content changed')
+  .option('--dry-run', 'list what would be published without writing to JIRA')
+  .option('--path <projectRoot>', 'project root (default: cwd)')
+  .action(async (options: { pending?: boolean; dryRun?: boolean; path?: string }) => {
+    const projectRoot = path.resolve(options.path ?? process.cwd());
+    if (!options.pending) {
+      error('Nothing to publish: pass --pending to publish every requirement sync held back.');
+      process.exit(1);
+    }
+    if (!isInitialized(projectRoot)) {
+      error(`SpecShip not initialized in ${projectRoot}. Run \`specship init -i\` first.`);
+      process.exit(1);
+    }
+    const { SpecShip } = await loadSpecShip();
+    const { publishPendingSpecs, runAutoPublish, summarizeAutoPublishReport, countAutoPublishReport } =
+      await import('../jira/auto-publish');
+    const cg = await SpecShip.open(projectRoot);
+    try {
+      const deps = { specQueries: cg.getSpecQueries(), projectRoot };
+      const report = options.dryRun
+        ? await runAutoPublish(deps, { explicit: true, dryRun: true })
+        : await publishPendingSpecs(deps);
+      if (report.skipped === 'unbound') {
+        error('No JIRA binding in specship.config.json — run `specship jira bind` first.');
+        process.exit(1);
+      }
+      if (options.dryRun) {
+        const pending = report.results.filter((r) => r.status === 'pending');
+        // eslint-disable-next-line no-console
+        console.log(`${pending.length} spec(s) would be published:`);
+        // eslint-disable-next-line no-console
+        for (const r of pending) console.log(`  ${r.specId}${r.jiraKey ? ` (${r.jiraKey})` : ''}`);
+        return;
+      }
+      const line = summarizeAutoPublishReport(report);
+      // eslint-disable-next-line no-console
+      if (line) console.log(line.replace(/^JIRA auto-publish/, 'JIRA publish'));
+      for (const r of report.results) {
+        if (r.status === 'failed') {
+          // eslint-disable-next-line no-console
+          console.log(`JIRA: ${r.specId} failed — ${r.note ?? 'unknown error'}`);
+        }
+      }
+      if (report.skipped === 'no-credentials' || countAutoPublishReport(report).failed > 0) {
+        process.exitCode = 1;
+      }
+    } finally {
+      cg.close();
+    }
+  });
+
+/**
  * specship jira reconcile — detect JIRA-side edits and (with --apply) fold
  * them back into the spec (REQ-JIRATEAM-005). Preview is read-only and the
  * default; --apply must be paired with --issue plus the confirmed accept

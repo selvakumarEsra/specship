@@ -56,6 +56,7 @@ description: Every SpecShip command and the flags it accepts.
 | `specship jira transition <key> [state]` | Transition a JIRA issue to <state>, or list its available transitions when <state> is omitted (or with --list). |
 | `specship jira track` | Show each picked JIRA issue with its SpecShip work-state + live JIRA status. |
 | `specship jira coverage` | Sprint coverage report joining JIRA sprint issues to spec truth (read-only unless --post). |
+| `specship jira publish` | Publish specs to the bound JIRA project in one explicit batch (--pending: every requirement sync held back). |
 | `specship jira reconcile` | Detect JIRA-side edits to published specs; --apply folds a confirmed diff back into the spec. |
 | `specship jira release <version>` | Set <version> as fixVersion on JIRA issues (creating the project version if missing) with a shipped-in comment. |
 | `specship jira regression-pack` | Generate / refresh the SpecShip Regression Pack in the bound JIRA project. |

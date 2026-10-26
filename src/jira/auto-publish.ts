@@ -17,7 +17,7 @@
 
 import * as path from 'path';
 import { resolveJiraCredentials } from './config';
-import { bindingIssueTypes, loadRepoJiraBinding } from './repo-config';
+import { bindingIssueTypes, readRepoJiraBinding } from './repo-config';
 import { JiraClient } from './client';
 import {
   buildIssueFields,
@@ -33,7 +33,13 @@ import { readSpecJiraKey } from './spec-writer';
 import { postMilestoneComment, type MilestoneJiraClient } from './milestone-comment';
 import * as fs from 'fs';
 
-export type AutoPublishStatus = 'published' | 'unchanged' | 'opted_out' | 'failed';
+export type AutoPublishStatus =
+  | 'published'
+  | 'unchanged'
+  | 'opted_out'
+  | 'failed'
+  /** Would be published, but the pass ran in plan-only mode (REQ-THRU-006). */
+  | 'pending';
 
 export interface AutoPublishResultRow {
   specId: string;
@@ -48,8 +54,13 @@ export interface AutoPublishReport {
    * Present when the pass short-circuited before touching JIRA:
    *   - 'unbound'         → no repo binding (A5)
    *   - 'no-credentials'  → binding present but user credentials missing (A4-like)
+   *   - 'not-opted-in'    → bound, but `jira.autoPublish` is not `true`
+   *                         (REQ-THRU-006): nothing was written; `pending`
+   *                         counts what an explicit publish would push
    */
-  skipped?: 'unbound' | 'no-credentials';
+  skipped?: 'unbound' | 'no-credentials' | 'not-opted-in';
+  /** Requirements that would be published/refreshed (plan-only passes). */
+  pending?: number;
   /** Human-readable note when `skipped` is set (surfaced by the caller). */
   note?: string;
   results: AutoPublishResultRow[];
@@ -79,14 +90,47 @@ export interface AutoPublishDeps {
   makeClient?: (creds: ReturnType<typeof resolveJiraCredentials>) => PublishJiraClient;
 }
 
+export interface RunAutoPublishOptions {
+  /**
+   * The user explicitly asked to publish (`specship jira publish --pending`):
+   * bypass the `jira.autoPublish` opt-in. Sync never sets this.
+   */
+  explicit?: boolean;
+  /** Plan only: compute what would publish, construct no client, write nothing. */
+  dryRun?: boolean;
+}
+
+/** The CLI hint shown when sync holds back pending publications. */
+export const PUBLISH_PENDING_COMMAND = 'specship jira publish --pending';
+
 /**
- * Publish/refresh every requirement spec to JIRA when a repo binding is
- * present. Never throws — every failure lands in the returned report.
+ * Sync's JIRA pass. Publishes only when the repo opted in with
+ * `jira.autoPublish: true` (REQ-THRU-006); otherwise it reports the pending
+ * count without any JIRA write. Never throws — every failure lands in the
+ * returned report.
  */
 export async function autoPublishSpecsOnSync(
   deps: AutoPublishDeps,
 ): Promise<AutoPublishReport> {
-  const report = await runAutoPublish(deps);
+  return runAndPersist(deps, {});
+}
+
+/**
+ * Explicit one-shot publish of every pending requirement
+ * (`specship jira publish --pending`, REQ-THRU-006) — the same pass sync
+ * runs when opted in, regardless of `jira.autoPublish`.
+ */
+export async function publishPendingSpecs(
+  deps: AutoPublishDeps,
+): Promise<AutoPublishReport> {
+  return runAndPersist(deps, { explicit: true });
+}
+
+async function runAndPersist(
+  deps: AutoPublishDeps,
+  opts: RunAutoPublishOptions,
+): Promise<AutoPublishReport> {
+  const report = await runAutoPublish(deps, opts);
   // Persist the last report so the failure count is readable without
   // re-running the pass (REQ-PIPETRUST-007). Unbound repos write nothing.
   if (report.skipped !== 'unbound') {
@@ -99,14 +143,37 @@ export async function autoPublishSpecsOnSync(
   return report;
 }
 
-async function runAutoPublish(
+/**
+ * The publish pass. With a repo binding it publishes/refreshes every
+ * requirement — but only when the repo opted in (`jira.autoPublish: true`)
+ * or the call is `explicit`. Without the opt-in it runs plan-only and
+ * returns `skipped: 'not-opted-in'` with the pending count (REQ-THRU-006):
+ * no credential read, no client, no JIRA write.
+ */
+export async function runAutoPublish(
   deps: AutoPublishDeps,
+  opts: RunAutoPublishOptions = {},
 ): Promise<AutoPublishReport> {
   // A5: no repo binding → do NOTHING. No client construction, no credential
   // read, no JIRA call.
-  const binding = loadRepoJiraBinding(deps.projectRoot);
+  const binding = readRepoJiraBinding(deps.projectRoot);
   if (!binding.binding) {
     return { skipped: 'unbound', results: [] };
+  }
+
+  const optedIn = binding.binding.autoPublish === true || opts.explicit === true;
+  if (!optedIn || opts.dryRun) {
+    const planned = planAutoPublish(deps);
+    const pending = planned.filter((r) => r.status === 'pending').length;
+    if (!optedIn) {
+      return {
+        skipped: 'not-opted-in',
+        pending,
+        note: pendingPublicationNote(pending),
+        results: planned,
+      };
+    }
+    return { pending, results: planned };
   }
 
   // Bound repo without user credentials: one per-sync note, never a crash.
@@ -275,6 +342,80 @@ async function runAutoPublish(
   return { results };
 }
 
+/** "N spec(s) pending JIRA publication — run `specship jira publish --pending`". */
+export function pendingPublicationNote(pending: number): string {
+  return `${pending} spec(s) pending JIRA publication — run \`${PUBLISH_PENDING_COMMAND}\``;
+}
+
+/**
+ * Plan-only twin of the publish loop: classify every requirement as
+ * `opted_out`, `unchanged` (fingerprint matches the last publish) or
+ * `pending` (no JIRA key yet, or content changed) — touching neither JIRA
+ * nor any file.
+ */
+function planAutoPublish(deps: AutoPublishDeps): AutoPublishResultRow[] {
+  const rows: AutoPublishResultRow[] = [];
+  const requirements = deps.specQueries.getAllSpecs().filter(
+    (s) => s.kind === 'requirement',
+  );
+  const reqsPerFile = new Map<string, number>();
+  for (const s of requirements) {
+    reqsPerFile.set(s.sourcePath, (reqsPerFile.get(s.sourcePath) ?? 0) + 1);
+  }
+  for (const spec of requirements) {
+    const absPath = path.isAbsolute(spec.sourcePath)
+      ? spec.sourcePath
+      : path.join(deps.projectRoot, spec.sourcePath);
+    let fileContent: string;
+    try {
+      fileContent = fs.readFileSync(absPath, 'utf8');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      rows.push({ specId: spec.id, status: 'failed', note: msg });
+      continue;
+    }
+    const optOut = readFrontmatterValue(fileContent, 'jira_publish');
+    if (optOut !== null && optOut.toLowerCase() === 'false') {
+      rows.push({ specId: spec.id, status: 'opted_out' });
+      continue;
+    }
+    const soleRequirement = (reqsPerFile.get(spec.sourcePath) ?? 1) === 1;
+    const perKeys = perSpecFrontmatterKeys(spec.id);
+    const existingKey =
+      readFrontmatterValue(fileContent, perKeys.issueKey) ??
+      (soleRequirement ? readSpecJiraKey(absPath) : null);
+    if (existingKey) {
+      const priorFp =
+        readFrontmatterValue(fileContent, perKeys.fingerprintKey) ??
+        (soleRequirement ? readFrontmatterValue(fileContent, 'jira_fingerprint') : null);
+      if (priorFp) {
+        const acceptance = deps.specQueries
+          .getSpecsByParent(spec.id)
+          .filter((c) => c.kind === 'acceptance')
+          .map((c) => ({ id: c.id, text: (c.title || c.body || '').trim() }))
+          .filter((c) => c.text.length > 0);
+        const fields = buildIssueFields({
+          specId: spec.id,
+          title: spec.title,
+          body: spec.body ?? '',
+          specRelPath: spec.sourcePath,
+          acceptance,
+        });
+        if (priorFp === issueContentFingerprint(fields.summary, fields.description)) {
+          rows.push({ specId: spec.id, status: 'unchanged', jiraKey: existingKey });
+          continue;
+        }
+      }
+    }
+    rows.push({
+      specId: spec.id,
+      status: 'pending',
+      ...(existingKey ? { jiraKey: existingKey } : {}),
+    });
+  }
+  return rows;
+}
+
 /**
  * Best-effort spec_published milestone comment. A fake `PublishJiraClient`
  * (some tests) doesn't implement the milestone methods — probe first and
@@ -308,16 +449,18 @@ export interface AutoPublishCounts {
   unchanged: number;
   optedOut: number;
   failed: number;
+  pending: number;
 }
 
 /** Tally a report's rows by status. */
 export function countAutoPublishReport(report: AutoPublishReport): AutoPublishCounts {
-  const counts: AutoPublishCounts = { published: 0, unchanged: 0, optedOut: 0, failed: 0 };
+  const counts: AutoPublishCounts = { published: 0, unchanged: 0, optedOut: 0, failed: 0, pending: 0 };
   for (const r of report.results) {
     if (r.status === 'published') counts.published++;
     else if (r.status === 'unchanged') counts.unchanged++;
     else if (r.status === 'opted_out') counts.optedOut++;
     else if (r.status === 'failed') counts.failed++;
+    else if (r.status === 'pending') counts.pending++;
   }
   return counts;
 }
@@ -381,6 +524,10 @@ export function readLastAutoPublishReport(projectRoot: string): LastAutoPublishR
 /** One-line summary suitable for CLI output. */
 export function summarizeAutoPublishReport(report: AutoPublishReport): string {
   if (report.skipped === 'unbound') return '';
+  if (report.skipped === 'not-opted-in') {
+    // Nothing held back → nothing to say; sync stays quiet.
+    return report.pending ? pendingPublicationNote(report.pending) : '';
+  }
   if (report.skipped === 'no-credentials') {
     return `JIRA auto-publish skipped: ${report.note ?? 'no credentials'}`;
   }

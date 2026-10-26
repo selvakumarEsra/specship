@@ -99,6 +99,13 @@ export interface JiraRepoBinding {
    * unless the spec's frontmatter names a different `epicKey`.
    */
   epicKey?: string;
+  /**
+   * Explicit opt-in for publishing to JIRA during `specship sync`
+   * (REQ-THRU-006). Absent or anything but `true` → sync publishes nothing
+   * and only reports the pending count; `specship jira publish --pending`
+   * publishes explicitly.
+   */
+  autoPublish?: boolean;
 }
 
 /**

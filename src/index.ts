@@ -1432,7 +1432,9 @@ export class SpecShip {
 
         // JIRA auto-publish (REQ-JIRATEAM-002). Gated on a repo-committed
         // binding: on an unbound repo this is a no-op and constructs no
-        // client. Best-effort — a JIRA fault never fails the sync.
+        // client; a bound repo publishes only with `jira.autoPublish: true`
+        // (REQ-THRU-006), otherwise it reports the pending count. Best-effort
+        // — a JIRA fault never fails the sync.
         try {
           const { autoPublishSpecsOnSync } = await import('./jira/auto-publish');
           result.jiraAutoPublish = await autoPublishSpecsOnSync({

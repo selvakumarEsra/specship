@@ -83,6 +83,17 @@ export function assertNoCredentialsInRepoConfig(
 export function loadRepoJiraBinding(
   cwd: string,
 ): { binding: JiraRepoBinding | null; path: string | null } {
+  return readRepoJiraBinding(cwd);
+}
+
+/**
+ * Read and validate the repo-committed JIRA binding, including the
+ * `jira.autoPublish` opt-in (REQ-THRU-006): only a literal `true` enables
+ * publishing on `sync`; any other value (or absence) leaves it off.
+ */
+export function readRepoJiraBinding(
+  cwd: string,
+): { binding: JiraRepoBinding | null; path: string | null } {
   const root = findRepoRoot(cwd);
   if (!root) return { binding: null, path: null };
   const configPath = path.join(root, ENFORCE_CONFIG_FILE);
@@ -126,6 +137,7 @@ export function loadRepoJiraBinding(
     binding.sprint = j.sprint;
   if (typeof j.epicKey === 'string' && j.epicKey.trim())
     binding.epicKey = j.epicKey.trim();
+  if (j.autoPublish === true) binding.autoPublish = true;
   return { binding, path: configPath };
 }
 

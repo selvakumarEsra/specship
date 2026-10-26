@@ -16,7 +16,7 @@ import type SpecShip from '../index';
 import type { Spec, SpecLink, SpecLinkState, SpecLinkKind, NodeKind } from '../types';
 import type { SpecQueries } from '../db/spec-queries';
 import { renderBehaviourSurface } from '../behaviour/behaviour-surface';
-import { writeBackImplementation } from '../extraction/specs/spec-file-writeback';
+import { persistLinkToSpecFile } from '../spec-quality/link-persist';
 import type { ToolDefinition, ToolResult } from './tools';
 import { canonicalQualifiedName } from '../resolution/spec-link-resolver';
 import { isNonTestEvidence } from '../resolution/test-title-links';
@@ -988,24 +988,29 @@ export async function handleSpecshipLinkAssert(
     updatedAt: now,
   });
 
-  // Persist the assertion into the spec file's `implementations:` block —
-  // the file is the source of truth; the DB row alone would vanish on a full
-  // reindex (LINK-TRUTH-DOC, REQ-LINKWB-001). `implements` only: `verifies`
-  // evidence has its own block (VERIFY-EVID-DOC).
+  // Persist the assertion into the spec file — the file is the source of
+  // truth; the DB row alone would vanish on a full reindex (LINK-TRUTH-DOC,
+  // REQ-THRU-005). `implements` → `implementations:`, `tests` → `verifies:`;
+  // a criterion id persists into its parent requirement's block. The graph
+  // already resolved the target above, so the textual check is skipped.
   let writeBackNote = '';
-  if (kind === 'implements') {
-    const wb = writeBackImplementation(
-      cg.getProjectRoot(),
-      spec.sourcePath,
+  if (kind === 'implements' || kind === 'tests') {
+    const persisted = persistLinkToSpecFile({
+      projectRoot: cg.getProjectRoot(),
       specId,
-      targetFilePath,
-      targetQualifiedName
-    );
-    writeBackNote = wb.changed
-      ? ` — persisted to ${spec.sourcePath}`
-      : wb.ok
-        ? '' // already present in the file: nothing to add
-        : `\n⚠ Link stored in the index but NOT persisted to the spec file (${wb.detail}). It will not survive a full reindex — add \`- ${targetFilePath}:${targetQualifiedName}\` under \`implementations:\` in ${spec.sourcePath}.`;
+      kind,
+      filePath: targetFilePath,
+      symbol: targetQualifiedName,
+      specSourcePath: spec.sourcePath,
+      symbolResolved: true,
+    });
+    const blockName = kind === 'tests' ? 'verifies' : 'implementations';
+    writeBackNote =
+      persisted.status === 'persisted'
+        ? ` — persisted to ${persisted.specFile ?? spec.sourcePath} (${blockName}: under ${persisted.requirementId})`
+        : persisted.status === 'unchanged'
+          ? ` — already persisted in ${persisted.specFile ?? spec.sourcePath}`
+          : `\n⚠ Link stored in the index but NOT persisted to the spec file (${persisted.detail}). It will not survive a full reindex — add \`- ${targetFilePath}:${targetQualifiedName}\` under \`${blockName}:\` for ${persisted.requirementId} in ${spec.sourcePath}.`;
   }
 
   return text(
