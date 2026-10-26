@@ -387,6 +387,22 @@ describe('bundled implement workflows — pipeline quality gates (REQ-AUTHG-004/
     expect(nodeOf(wf, 'adversarial_review').depends_on).toContain('coverage');
   }
 
+  function qualityBaselineRunsBeforeImplement(name: string): void {
+    const wf = load(name);
+    const base = nodeOf(wf, 'quality_baseline');
+    expect(base.kind).toBe('bash');
+    expect(base.depends_on).toContain('approve_plan');
+    // implement waits for the baseline, so the baseline sees the untouched tree.
+    expect(nodeOf(wf, 'implement').depends_on).toContain('quality_baseline');
+    const ids = wf.nodes.map((n) => n.id);
+    expect(ids.indexOf('quality_baseline')).toBeLessThan(ids.indexOf('implement'));
+    // Stored under the git dir — never in the tracked tree / the diff.
+    expect(base.bash).toContain('git rev-parse --git-dir');
+    // Gate and recheck both consult the same baseline file.
+    expect(nodeOf(wf, 'quality_gate').bash).toContain('specship-quality-baseline.txt');
+    expect(nodeOf(wf, 'quality_recheck').bash).toContain('specship-quality-baseline.txt');
+  }
+
   function qualityGateRunsBeforeVerify(name: string): void {
     const wf = load(name);
     const gate = nodeOf(wf, 'quality_gate');
@@ -454,6 +470,10 @@ describe('bundled implement workflows — pipeline quality gates (REQ-AUTHG-004/
   it.each(['spec-implement', 'spec-implement-mixed'])(
     '%s runs lint/typecheck between implement and verify (REQ-AUTHG-005.A1)',
     qualityGateRunsBeforeVerify);
+
+  it.each(['spec-implement', 'spec-implement-mixed'])(
+    '%s captures a quality baseline before implement (REQ-AUTHG-008.A1)',
+    qualityBaselineRunsBeforeImplement);
 
   it.each(['spec-implement', 'spec-implement-mixed'])(
     'a %s quality failure feeds the revise loop and halts if unfixed (REQ-AUTHG-005.A1)',

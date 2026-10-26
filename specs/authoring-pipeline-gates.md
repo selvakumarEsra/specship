@@ -17,7 +17,9 @@ jira_fingerprint_REQ-AUTHG-005: c116b6374c9939a6
 jira_issue_REQ-AUTHG-006: SSHIP-117
 jira_fingerprint_REQ-AUTHG-006: 00ba93f9613e1127
 jira_issue_REQ-AUTHG-007: SSHIP-121
-jira_fingerprint_REQ-AUTHG-007: 7b9e1e577166e565
+jira_fingerprint_REQ-AUTHG-007: d0690a42ee1d4b9f
+jira_issue_REQ-AUTHG-008: SSHIP-357
+jira_fingerprint_REQ-AUTHG-008: 60a88c1a2ed52f18
 ---
 
 <!-- id: AUTHG-DOC -->
@@ -147,3 +149,47 @@ implementations:
 - The shipped gap catalog includes a SpecShip-invariants section keyed by surface (MCP change → budget monotonicity + server-instructions.ts; installer change → targets/markers/CHANGELOG; retrieval change → call-count/latency budget; extraction change → NodeKind/EdgeKind + copy-assets).
 <!-- id: REQ-AUTHG-007.A3 -->
 - Uninstall removes the skill; an installer test covers install + uninstall round-trip.
+
+<!-- id: REQ-AUTHG-008 -->
+## The quality gate MUST judge only errors the change introduced
+
+A worktree is rarely a perfect build environment: optional sub-packages may
+lack dependencies or a built parent (`file:..` links), and some projects
+carry known lint debt. Today the gate runs the project's lint/typecheck after
+`implement` and halts on ANY failure, so pre-existing errors in files the
+change never touched block every run (observed 2026-10-26: three
+`spec-implement` runs halted on `server/` typecheck errors that reproduce on
+the untouched base). A gate that fails regardless of the change teaches
+people to ignore it.
+
+The bundled implement workflows MUST capture a baseline — the same quality
+command, run in the worktree after plan approval and before `implement`
+edits anything — and the gate and its recheck MUST fail only on error lines
+absent from that baseline. Error lines are compared with line/column numbers
+removed, so a pre-existing error that merely shifts position inside an edited
+file is not counted as new. The baseline is stored outside the tracked tree
+so it never appears in the diff. Pre-existing errors MUST still be reported
+(count + a short sample) so they are visible, never silently dropped.
+
+implementations:
+  - src/workflows/defaults/spec-implement.yaml
+  - src/workflows/defaults/spec-implement-mixed.yaml
+
+verifies:
+  - __tests__/workflow-discovery.test.ts:qualityBaselineRunsBeforeImplement
+  - __tests__/workflow-quality-baseline.test.ts:preExistingErrorsDoNotFailTheGate
+  - __tests__/workflow-quality-baseline.test.ts:newErrorsStillFailTheGate
+  - __tests__/workflow-quality-baseline.test.ts:shiftedErrorInEditedFileIsNotNew
+  - __tests__/workflow-quality-baseline.test.ts:missingBaselineFallsBackToFullGate
+
+## Acceptance
+<!-- id: REQ-AUTHG-008.A1 -->
+- A `quality_baseline` node runs the project's quality command after `approve_plan` and before `implement` (which depends on it), storing the error lines under the worktree's git directory, never in the tracked tree.
+<!-- id: REQ-AUTHG-008.A2 -->
+- When every error line the gate sees is already in the baseline, the gate reports `QUALITY_GATE=passed` with a `QUALITY_PREEXISTING=<n>` count and a sample, and `quality_recheck` reports clean.
+<!-- id: REQ-AUTHG-008.A3 -->
+- An error line absent from the baseline still yields `QUALITY_GATE=failed` (gate) and halts `quality_recheck`, listing only the new lines.
+<!-- id: REQ-AUTHG-008.A4 -->
+- An error that exists in the baseline but moved to a different line/column in an edited file is not treated as new.
+<!-- id: REQ-AUTHG-008.A5 -->
+- If no baseline file exists (e.g. a run resumed from before this change), the gate falls back to today's behaviour — any failure fails — never to "clean".

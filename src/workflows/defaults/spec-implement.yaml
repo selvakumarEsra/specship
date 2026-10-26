@@ -82,9 +82,53 @@ nodes:
       revises: plan
       max_attempts: 3
 
+  - id: quality_baseline
+    kind: bash
+    depends_on: [approve_plan]
+    output_type: quality_report
+    timeout: 600000
+    bash: |
+      # REQ-AUTHG-008.A1 — run the project's quality command BEFORE implement
+      # edits anything, so the gate can tell errors this change introduced
+      # from errors the worktree already had (a sub-package with no built
+      # parent, known lint debt). The baseline lives under the worktree's git
+      # dir, so it never shows up in the diff. It is written ONLY when the
+      # pre-change command fails: a clean baseline means any later failure is
+      # the change's, so the gate keeps its full strictness (A5 fallback).
+      qnorm() { sed -E 's/\([0-9]+,[0-9]+\)//g; s/:[0-9]+:[0-9]+/:/g; s/:[0-9]+:/:/g' | sed -E '/^[[:space:]]*$/d' | sort -u; }
+      BASELINE="$(git rev-parse --git-dir 2>/dev/null)/specship-quality-baseline.txt"
+      rm -f "$BASELINE"
+      QUALITY_CMD=""
+      if [ -f package.json ]; then
+        if [ ! -d node_modules ]; then
+          npm ci --no-audit --no-fund >/dev/null 2>&1 || npm install --no-audit --no-fund >/dev/null 2>&1 || true
+        fi
+        if node -e 'const s=(require("./package.json").scripts)||{};process.exit(s.lint?0:1)' 2>/dev/null; then
+          QUALITY_CMD="npm run lint --if-present"
+        elif [ -f tsconfig.json ]; then
+          QUALITY_CMD="npx --no-install tsc --noEmit"
+        fi
+      elif [ -f Cargo.toml ]; then
+        if command -v cargo >/dev/null 2>&1; then QUALITY_CMD="cargo clippy --no-deps"; fi
+      elif [ -f pyproject.toml ] || [ -f requirements.txt ]; then
+        if command -v ruff >/dev/null 2>&1; then QUALITY_CMD="ruff check ."; fi
+      fi
+      if [ -z "$QUALITY_CMD" ]; then
+        echo "QUALITY_BASELINE=skipped"
+        exit 0
+      fi
+      if OUT=$($QUALITY_CMD 2>&1); then
+        echo "QUALITY_BASELINE=clean"
+      else
+        printf '%s\n' "$OUT" | qnorm > "$BASELINE"
+        echo "QUALITY_BASELINE=recorded"
+        echo "QUALITY_BASELINE_LINES=$(wc -l < "$BASELINE" | tr -d ' ')"
+      fi
+      exit 0
+
   - id: implement
     kind: prompt
-    depends_on: [approve_plan]
+    depends_on: [approve_plan, quality_baseline]
     output_type: diff
     allowed_tools:
       - Read
@@ -140,8 +184,26 @@ nodes:
         exit 0
       fi
       echo "QUALITY_CMD=$QUALITY_CMD"
+      qnorm() { sed -E 's/\([0-9]+,[0-9]+\)//g; s/:[0-9]+:[0-9]+/:/g; s/:[0-9]+:/:/g' | sed -E '/^[[:space:]]*$/d' | sort -u; }
+      BASELINE="$(git rev-parse --git-dir 2>/dev/null)/specship-quality-baseline.txt"
       if OUT=$($QUALITY_CMD 2>&1); then
         echo "QUALITY_GATE=passed"
+      elif [ -f "$BASELINE" ]; then
+        # REQ-AUTHG-008.A2/A3 — judge only error lines absent from the
+        # pre-change baseline; report pre-existing ones, never hide them.
+        NEW=$(printf '%s\n' "$OUT" | qnorm | comm -13 "$BASELINE" - | grep -iE 'error' || true)
+        PRE=$(printf '%s\n' "$OUT" | qnorm | comm -12 "$BASELINE" - | grep -ciE 'error' || true)
+        if [ -z "$NEW" ]; then
+          echo "QUALITY_GATE=passed"
+          echo "QUALITY_PREEXISTING=$PRE"
+          echo "Pre-existing errors (already failing before implement; not caused by this change), sample:"
+          printf '%s\n' "$OUT" | grep -iE 'error' | head -n 5
+        else
+          echo "QUALITY_GATE=failed"
+          echo "QUALITY_PREEXISTING=$PRE"
+          echo "New errors introduced by this change:"
+          printf '%s\n' "$NEW" | tail -n 80
+        fi
       else
         echo "QUALITY_GATE=failed"
         printf '%s\n' "$OUT" | tail -n 80
@@ -199,8 +261,22 @@ nodes:
         echo "QUALITY_RESULT=clean"
         exit 0
       fi
-      echo "QUALITY_RESULT=failed"
-      printf '%s\n' "$OUT" | tail -n 80
+      qnorm() { sed -E 's/\([0-9]+,[0-9]+\)//g; s/:[0-9]+:[0-9]+/:/g; s/:[0-9]+:/:/g' | sed -E '/^[[:space:]]*$/d' | sort -u; }
+      BASELINE="$(git rev-parse --git-dir 2>/dev/null)/specship-quality-baseline.txt"
+      if [ -f "$BASELINE" ]; then
+        # REQ-AUTHG-008.A2/A3 — only errors absent from the baseline halt.
+        NEW=$(printf '%s\n' "$OUT" | qnorm | comm -13 "$BASELINE" - | grep -iE 'error' || true)
+        if [ -z "$NEW" ]; then
+          echo "QUALITY_RESULT=clean"
+          echo "QUALITY_PREEXISTING=$(printf '%s\n' "$OUT" | qnorm | comm -12 "$BASELINE" - | grep -ciE 'error' || true)"
+          exit 0
+        fi
+        echo "QUALITY_RESULT=failed"
+        printf '%s\n' "$NEW" | tail -n 80
+      else
+        echo "QUALITY_RESULT=failed"
+        printf '%s\n' "$OUT" | tail -n 80
+      fi
       echo "HALT_CAUSE=lint/typecheck still fails after the fix attempt — the change is not reviewable yet"
       exit 1
 
