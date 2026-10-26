@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SpecShip for Developers</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; background: #0B0F14; }
+  body { -webkit-font-smoothing: antialiased; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif; }
+  .deck { position: relative; width: 100vw; height: 100vh; overflow: hidden; }
+  .deck > section {
+    position: absolute; top: 50%; left: 50%;
+    width: 1920px; height: 1080px; overflow: hidden;
+    transform-origin: center center; visibility: hidden;
+    box-shadow: 0 20px 60px rgba(0,0,0,.45);
+  }
+  .deck > section.active { visibility: visible; }
+  h1, h2, h3 { font-weight: 600; }
+  ul, ol { padding-left: 1.2em; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { padding: 0.35em 0.6em; text-align: left; vertical-align: top;
+            border-bottom: 1px solid rgba(128,128,128,.35); }
+  th { font-weight: 600; opacity: .75; }
+  x-shape { display: block; flex: none; }
+  x-shape[kind="arrow-right"] {
+    clip-path: polygon(0 30%, 60% 30%, 60% 0, 100% 50%, 60% 100%, 60% 70%, 0 70%);
+  }
+  aside.notes { display: none; }
+  .nav-hint { position: fixed; bottom: 12px; right: 18px; color: #6B7480; font-size: 12px; }
+  .progress { position: fixed; left: 0; bottom: 0; height: 3px; background: #F2A541; transition: width .2s; }
+  @media print {
+    @page { size: 1920px 1080px; margin: 0; }
+    html, body { height: auto; background: none; }
+    .deck { width: auto; height: auto; overflow: visible; }
+    .deck > section { position: relative; top: 0; left: 0; transform: none !important;
+      visibility: visible; box-shadow: none; break-after: page; page-break-after: always; }
+    .nav-hint, .progress { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="deck">
+<section id="cover" data-transition="fade" style="background:#121A24;color:#F4F1EA;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;padding:128px;display:flex;flex-direction:column;justify-content:center;gap:40px">
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:28px;color:#F2A541;letter-spacing:2px">$ specship · for developers</p>
+<h1 style="font-size:112px;font-weight:700;line-height:1.05;color:#F4F1EA">The software factory<br>for Claude Code</h1>
+<p style="font-size:36px;line-height:1.4;color:#B9C3CE;width:1300px">Map the code. Contract the intent. Build, prove and watch every requirement — one line, on your machine.</p>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#8693A1">SpecShip v0.27 · @specship/specship · MIT</p>
+<aside class="notes">SpecShip for developers. This deck is about how you use SpecShip day to day as a production line: map, spec, implement, prove, gate.</aside>
+</section>
+<section id="line" data-transition="fade" style="background:#F5F3EE;color:#17202B;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:56px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;color:#A8530E;letter-spacing:2px">THE LINE</p>
+<h2 style="font-size:64px;font-weight:600;line-height:1.1">Six stations from intent to proven code</h2>
+</div>
+<div style="display:flex;gap:16px">
+<div style="flex:1;display:flex;flex-direction:column;gap:12px;background:#FFFFFF;padding:32px;border:1px solid #DCD8CE;border-top:6px solid #2C6E8F;border-radius:12px">
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;color:#2C6E8F">01</p>
+<h3 style="font-size:36px;font-weight:600">Map</h3>
+<p style="font-size:24px;line-height:1.4;color:#4A5563">Index the repo into a code graph</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:12px;background:#FFFFFF;padding:32px;border:1px solid #DCD8CE;border-top:6px solid #2C6E8F;border-radius:12px">
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;color:#2C6E8F">02</p>
+<h3 style="font-size:36px;font-weight:600">Spec</h3>
+<p style="font-size:24px;line-height:1.4;color:#4A5563">Intent as testable criteria</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:12px;background:#FFF6EA;padding:32px;border:2px dashed #A8530E;border-top:6px solid #A8530E;border-radius:12px">
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;color:#A8530E">03 · GATE</p>
+<h3 style="font-size:36px;font-weight:600">Plan</h3>
+<p style="font-size:24px;line-height:1.4;color:#4A5563">You approve or reject</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:12px;background:#FFFFFF;padding:32px;border:1px solid #DCD8CE;border-top:6px solid #2C6E8F;border-radius:12px">
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;color:#2C6E8F">04</p>
+<h3 style="font-size:36px;font-weight:600">Build</h3>
+<p style="font-size:24px;line-height:1.4;color:#4A5563">In an isolated worktree</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:12px;background:#FFFFFF;padding:32px;border:1px solid #DCD8CE;border-top:6px solid #2C6E8F;border-radius:12px">
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;color:#2C6E8F">05</p>
+<h3 style="font-size:36px;font-weight:600">Prove</h3>
+<p style="font-size:24px;line-height:1.4;color:#4A5563">Tests plus an independent critic</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:12px;background:#FFFFFF;padding:32px;border:1px solid #DCD8CE;border-top:6px solid #2C6E8F;border-radius:12px">
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;color:#2C6E8F">06</p>
+<h3 style="font-size:36px;font-weight:600">Watch</h3>
+<p style="font-size:24px;line-height:1.4;color:#4A5563">Drift alerts and CI gates</p>
+</div>
+</div>
+<p style="font-size:32px;line-height:1.4;color:#17202B;width:1400px">Deterministic tooling at every station; a human at the two gates that matter — the plan and the final diff.</p>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#6B7480">SpecShip for developers · 2</p>
+<aside class="notes">The whole deck follows this line. Map and spec are inputs, plan and final review are your gates, build and prove are automated, and watch keeps it true after merge.</aside>
+</section>
+<section id="install" data-transition="fade" style="background:#F5F3EE;color:#17202B;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:48px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;color:#A8530E;letter-spacing:2px">SET UP</p>
+<h2 style="font-size:64px;font-weight:600;line-height:1.1">Three commands and a restart</h2>
+</div>
+<div style="display:flex;gap:48px">
+<div style="flex:3;display:flex;flex-direction:column;gap:20px;background:#17202B;padding:48px;border-radius:12px">
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:28px;line-height:1.5;color:#8693A1"># 1 · get the CLI (Node 22.5–24)</p>
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:28px;line-height:1.5;color:#F4F1EA">npm i -g @specship/specship@latest</p>
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:28px;line-height:1.5;color:#8693A1"># 2 · wire Claude Code + index the repo</p>
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:28px;line-height:1.5;color:#F4F1EA">specship install</p>
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:28px;line-height:1.5;color:#8693A1"># 3 · check runtime, FTS5, MCP, index</p>
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:28px;line-height:1.5;color:#F4F1EA">specship doctor</p>
+</div>
+<div style="flex:2;display:flex;flex-direction:column;gap:20px">
+<h3 style="font-size:32px;font-weight:600">Install writes</h3>
+<ul style="font-size:28px;line-height:1.5;color:#4A5563">
+<li>MCP server entry</li>
+<li><span style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">/specship:*</span> commands</li>
+<li>spec-author skill + steering</li>
+<li>hooks, status line, permissions</li>
+</ul>
+<p style="font-size:24px;line-height:1.4;color:#4A5563"><b>Flags:</b> <span style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">--no-sdd</span> retrieval only · <span style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">--with-jira</span> · <span style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">--with-designer</span></p>
+</div>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#6B7480">SpecShip for developers · 3</p>
+<aside class="notes">Install is wiring-only: it never installs the binary. It writes the MCP server to ~/.claude.json or ./.mcp.json, the slash commands, the spec-author skill and spec-driven steering. JIRA and Designer talk to external services, so they are strictly opt-in. Run the tests and the CLI on Node 24; Node 22 built-in SQLite lacks FTS5.</aside>
+</section>
+<section id="map" data-transition="fade" style="background:#121A24;color:#F4F1EA;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:56px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;color:#F2A541;letter-spacing:2px">STATION 01 · THE MAP</p>
+<h2 style="font-size:64px;font-weight:600;line-height:1.1;color:#F4F1EA">A deterministic code graph, not a summary</h2>
+</div>
+<div style="display:flex;align-items:center;gap:24px">
+<div style="flex:1;display:flex;flex-direction:column;gap:8px;background:#1C2734;padding:32px;border:1px solid #2E3B4A;border-radius:12px">
+<h3 style="font-size:32px;font-weight:600;color:#F4F1EA">Files</h3>
+<p style="font-size:24px;color:#B9C3CE">20 languages</p>
+</div>
+<x-shape kind="arrow-right" style="background:#F2A541;width:56px;height:32px"></x-shape>
+<div style="flex:1;display:flex;flex-direction:column;gap:8px;background:#1C2734;padding:32px;border:1px solid #2E3B4A;border-radius:12px">
+<h3 style="font-size:32px;font-weight:600;color:#F4F1EA">Extract</h3>
+<p style="font-size:24px;color:#B9C3CE">tree-sitter AST</p>
+</div>
+<x-shape kind="arrow-right" style="background:#F2A541;width:56px;height:32px"></x-shape>
+<div style="flex:1;display:flex;flex-direction:column;gap:8px;background:#1C2734;padding:32px;border:1px solid #2E3B4A;border-radius:12px">
+<h3 style="font-size:32px;font-weight:600;color:#F4F1EA">Resolve</h3>
+<p style="font-size:24px;color:#B9C3CE">imports, routes, dispatch</p>
+</div>
+<x-shape kind="arrow-right" style="background:#F2A541;width:56px;height:32px"></x-shape>
+<div style="flex:1;display:flex;flex-direction:column;gap:8px;background:#1C2734;padding:32px;border:1px solid #2E3B4A;border-radius:12px">
+<h3 style="font-size:32px;font-weight:600;color:#F4F1EA">Store</h3>
+<p style="font-size:24px;color:#B9C3CE">SQLite + FTS5</p>
+</div>
+</div>
+<div style="display:flex;gap:48px">
+<p style="flex:1;font-size:28px;line-height:1.45;color:#B9C3CE"><b style="color:#F4F1EA">Local.</b> Lives in <span style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">.specship/</span>; no network, no telemetry.</p>
+<p style="flex:1;font-size:28px;line-height:1.45;color:#B9C3CE"><b style="color:#F4F1EA">Fresh.</b> File watcher + git hooks; the index trails edits by about a second.</p>
+<p style="flex:1;font-size:28px;line-height:1.45;color:#B9C3CE"><b style="color:#F4F1EA">Honest.</b> Unsure edges stay silent rather than guess.</p>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#8693A1">SpecShip for developers · 4</p>
+<aside class="notes">Nodes are symbols such as functions, classes, routes and components; edges are calls, imports, extends, implements, references and more. Resolution adds framework patterns and dynamic-dispatch hops like callbacks and React re-renders. Everything comes from the AST, nothing is LLM-summarized.</aside>
+</section>
+<section id="tools" data-transition="fade" style="background:#F5F3EE;color:#17202B;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:40px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;color:#A8530E;letter-spacing:2px">MCP TOOLS</p>
+<h2 style="font-size:64px;font-weight:600;line-height:1.1">Pick the tool by the question</h2>
+</div>
+<table style="font-size:28px;color:#17202B">
+<tr><th style="width:55%">You ask</th><th style="width:45%">Claude calls</th></tr>
+<tr><td>How does X work? Trace X → Y</td><td style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;color:#A8530E">specship_explore</td></tr>
+<tr><td>Where is X? Full source of X</td><td style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">specship_search · _node</td></tr>
+<tr><td>Who calls it? What does it call?</td><td style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">specship_callers · _callees</td></tr>
+<tr><td>What breaks if I change it?</td><td style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">specship_impact</td></tr>
+<tr><td>What’s in this directory?</td><td style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">specship_files</td></tr>
+<tr><td>Healthy? Breaks our rules?</td><td style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">specship_health</td></tr>
+<tr><td>What does REQ-X say? Status?</td><td style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">specship_spec</td></tr>
+<tr><td>Index ready? Which version?</td><td style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">specship_status</td></tr>
+</table>
+<p style="font-size:28px;line-height:1.4;color:#4A5563"><b style="color:#17202B">Target:</b> a flow question answered in one <span style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">explore</span> call, zero Read/Grep.</p>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#6B7480">SpecShip for developers · 5</p>
+<aside class="notes">specship_explore is primary: it returns verbatim source of the relevant symbols grouped by file, including dynamic-dispatch hops grep can’t follow. You rarely call these yourself; install steers Claude to them with a per-prompt nudge. Also available: link_assert and link_verify for spec links, drifted, and the specship_jira_* family when JIRA is enabled.</aside>
+</section>
+<section id="commands" data-transition="fade" style="background:#F5F3EE;color:#17202B;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:40px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;color:#A8530E;letter-spacing:2px">SLASH COMMANDS</p>
+<h2 style="font-size:64px;font-weight:600;line-height:1.1">Six doors cover the daily flow</h2>
+</div>
+<table style="font-size:28px;color:#17202B">
+<tr><th style="width:36%">Command</th><th style="width:64%">What it opens</th></tr>
+<tr><td style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;color:#A8530E">/specship:explore</td><td>Read code: a region, a flow, a change’s blast radius</td></tr>
+<tr><td style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;color:#A8530E">/specship:spec</td><td>Intent: idea, new, fast, design, implement, review</td></tr>
+<tr><td style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;color:#A8530E">/specship:check</td><td>Gate, drift queue, fix / relink, code health</td></tr>
+<tr><td style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;color:#A8530E">/specship:day</td><td>Your sprint issues → pick one → start</td></tr>
+<tr><td style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;color:#A8530E">/specship:jira</td><td>Bind the board, choose an epic, pick work</td></tr>
+<tr><td style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;color:#A8530E">/specship:learn</td><td>Turn a good session into a skill proposal</td></tr>
+</table>
+<p style="font-size:28px;line-height:1.4;color:#4A5563">No argument opens the door’s default view — the funnel, the gate, the menu.</p>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#6B7480">SpecShip for developers · 6</p>
+<aside class="notes">Each door takes a sub-verb. /specship:spec with no argument shows the spec funnel; with a spec ID it shows that spec’s detail. /specship:check with no argument runs the enforcement gate. /specship:day and /specship:jira need the JIRA integration. /specship:learn is human-gated: nothing lands until you apply it.</aside>
+</section>
+<section id="s-spec" data-transition="fade" style="background:#A8530E;color:#FBF4EA;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;padding:128px;display:flex;flex-direction:column;justify-content:center;gap:40px">
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:28px;color:#FBE3C6;letter-spacing:2px">STATIONS 02 – 06</p>
+<h1 style="font-size:112px;font-weight:700;line-height:1.05;color:#FBF4EA">The spec is the contract.<br>Code follows it.</h1>
+<p style="font-size:36px;line-height:1.4;color:#FBE3C6;width:1300px">Drift from the spec is a bug — and SpecShip tells you the second it happens.</p>
+<aside class="notes">Section break: from the map to the contract and the line built on it.</aside>
+</section>
+<section id="spec" data-transition="fade" style="background:#F5F3EE;color:#17202B;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:40px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;color:#A8530E;letter-spacing:2px">STATION 02 · THE SPEC</p>
+<h2 style="font-size:64px;font-weight:600;line-height:1.1">Markdown with IDs, criteria and links</h2>
+</div>
+<div style="display:flex;gap:48px">
+<div style="flex:3;display:flex;flex-direction:column;gap:4px;background:#17202B;padding:40px;border-radius:12px">
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;line-height:1.5;color:#8693A1">specs/auth.md</p>
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;line-height:1.5;color:#8693A1">&lt;!-- id: REQ-AUTH-001 --&gt;</p>
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;line-height:1.5;color:#F4F1EA"><b>## Failed logins MUST be rate-limited</b></p>
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;line-height:1.5;color:#F2A541">implementations:</p>
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;line-height:1.5;color:#F2A541">  - src/auth/login.ts:LoginService.attempt</p>
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;line-height:1.5;color:#F4F1EA"><b>## Acceptance</b></p>
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;line-height:1.5;color:#8693A1">&lt;!-- id: REQ-AUTH-001.A1 --&gt;</p>
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;line-height:1.5;color:#F4F1EA">- 6th failed attempt in 60 s is refused</p>
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;line-height:1.5;color:#8693A1">&lt;!-- id: REQ-AUTH-001.A2 --&gt;</p>
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;line-height:1.5;color:#F4F1EA">- A successful login resets the count</p>
+</div>
+<div style="flex:2;display:flex;flex-direction:column;gap:28px">
+<p style="font-size:28px;line-height:1.4;color:#4A5563"><b style="color:#17202B">Stable IDs</b> for every requirement and criterion</p>
+<p style="font-size:28px;line-height:1.4;color:#4A5563"><b style="color:#17202B">RFC 2119</b> keywords: MUST, SHOULD, MAY</p>
+<p style="font-size:28px;line-height:1.4;color:#4A5563"><b style="color:#17202B">path:Symbol</b> links become real graph edges</p>
+<p style="font-size:28px;line-height:1.4;color:#4A5563"><b style="color:#17202B">In the repo</b>, reviewed in PRs like code</p>
+</div>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#6B7480">SpecShip for developers · 8</p>
+<aside class="notes">Links must name a symbol, qualified for methods (Class.method). A bare file path creates no edge. Links asserted at runtime with specship_link_assert can drop on a full reindex, so durable links belong in the implementations block or in an @implements comment on the symbol itself.</aside>
+</section>
+<section id="author" data-transition="fade" style="background:#F5F3EE;color:#17202B;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:48px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;color:#A8530E;letter-spacing:2px">AUTHORING</p>
+<h2 style="font-size:64px;font-weight:600;line-height:1.1">Describe it; the spec-author drafts it</h2>
+</div>
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:24px">
+<div style="display:flex;flex-direction:column;gap:12px;background:#FFFFFF;padding:32px;border:1px solid #DCD8CE;border-radius:12px">
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;color:#A8530E">spec idea</p>
+<p style="font-size:28px;line-height:1.4;color:#4A5563">Capture a one-liner so it isn’t lost</p>
+</div>
+<div style="display:flex;flex-direction:column;gap:12px;background:#FFFFFF;padding:32px;border:1px solid #DCD8CE;border-radius:12px">
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;color:#A8530E">spec new</p>
+<p style="font-size:28px;line-height:1.4;color:#4A5563">Draft from the graph; asks only the gaps</p>
+</div>
+<div style="display:flex;flex-direction:column;gap:12px;background:#FFFFFF;padding:32px;border:1px solid #DCD8CE;border-radius:12px">
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;color:#A8530E">spec fast</p>
+<p style="font-size:28px;line-height:1.4;color:#4A5563">Fast path for a small, clear change</p>
+</div>
+<div style="display:flex;flex-direction:column;gap:12px;background:#FFFFFF;padding:32px;border:1px solid #DCD8CE;border-radius:12px">
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;color:#A8530E">spec design</p>
+<p style="font-size:28px;line-height:1.4;color:#4A5563">Claude Design link → snapshot → spec</p>
+</div>
+<div style="display:flex;flex-direction:column;gap:12px;background:#FFFFFF;padding:32px;border:1px solid #DCD8CE;border-radius:12px">
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;color:#A8530E">spec review</p>
+<p style="font-size:28px;line-height:1.4;color:#4A5563">Quality pass: every criterion testable</p>
+</div>
+<div style="display:flex;flex-direction:column;gap:12px;background:#FFFFFF;padding:32px;border:1px solid #DCD8CE;border-radius:12px">
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;color:#A8530E">specship lint</p>
+<p style="font-size:28px;line-height:1.4;color:#4A5563">Deterministic checks; non-zero exit on errors</p>
+</div>
+</div>
+<p style="font-size:28px;line-height:1.4;color:#4A5563"><b style="color:#17202B">Domain facts</b> — confirmed business terms and rules ride along with every spec lookup.</p>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#6B7480">SpecShip for developers · 9</p>
+<aside class="notes">All of these are /specship:spec sub-verbs except lint, which is a CLI command and runs in CI. Lint flags missing IDs, criteria with no parent, requirements with zero acceptance criteria and review markers left in acceptance bullets. Domain facts are captured with /specship:spec domain and returned inline whenever a spec or term is looked up.</aside>
+</section>
+<section id="implement" data-transition="fade" style="background:#121A24;color:#F4F1EA;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:48px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;color:#F2A541;letter-spacing:2px">STATIONS 03 – 05 · IMPLEMENT</p>
+<h2 style="font-size:64px;font-weight:600;line-height:1.1;color:#F4F1EA">One command, two human gates</h2>
+</div>
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:32px;color:#F4F1EA;background:#1C2734;padding:24px 32px;border-radius:12px">&gt; /specship:spec implement REQ-AUTH-001</p>
+<div style="display:flex;align-items:center;gap:16px">
+<div style="flex:1;display:flex;flex-direction:column;gap:8px;background:#1C2734;padding:28px;border:1px solid #2E3B4A;border-radius:12px">
+<h3 style="font-size:32px;font-weight:600;color:#F4F1EA">Plan</h3>
+<p style="font-size:24px;line-height:1.4;color:#B9C3CE">Spec + map → a plan</p>
+</div>
+<x-shape kind="arrow-right" style="background:#8693A1;width:40px;height:24px"></x-shape>
+<div style="flex:1;display:flex;flex-direction:column;gap:8px;background:#2A2116;padding:28px;border:2px dashed #F2A541;border-radius:12px">
+<h3 style="font-size:32px;font-weight:600;color:#F2A541">You</h3>
+<p style="font-size:24px;line-height:1.4;color:#E9D9C2">Approve, or reject with notes</p>
+</div>
+<x-shape kind="arrow-right" style="background:#8693A1;width:40px;height:24px"></x-shape>
+<div style="flex:1;display:flex;flex-direction:column;gap:8px;background:#1C2734;padding:28px;border:1px solid #2E3B4A;border-radius:12px">
+<h3 style="font-size:32px;font-weight:600;color:#F4F1EA">Build</h3>
+<p style="font-size:24px;line-height:1.4;color:#B9C3CE">Isolated worktree + gates</p>
+</div>
+<x-shape kind="arrow-right" style="background:#8693A1;width:40px;height:24px"></x-shape>
+<div style="flex:1;display:flex;flex-direction:column;gap:8px;background:#1C2734;padding:28px;border:1px solid #2E3B4A;border-radius:12px">
+<h3 style="font-size:32px;font-weight:600;color:#F4F1EA">Prove</h3>
+<p style="font-size:24px;line-height:1.4;color:#B9C3CE">Tests + critic per criterion</p>
+</div>
+<x-shape kind="arrow-right" style="background:#8693A1;width:40px;height:24px"></x-shape>
+<div style="flex:1;display:flex;flex-direction:column;gap:8px;background:#2A2116;padding:28px;border:2px dashed #F2A541;border-radius:12px">
+<h3 style="font-size:32px;font-weight:600;color:#F2A541">You</h3>
+<p style="font-size:24px;line-height:1.4;color:#E9D9C2">Review the real diff</p>
+</div>
+</div>
+<p style="font-size:28px;line-height:1.4;color:#B9C3CE">The critic grades each criterion <b style="color:#F4F1EA">satisfied</b>, <b style="color:#F4F1EA">partial</b> or <b style="color:#F4F1EA">unaddressed</b>. Nothing merges without you.</p>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#8693A1">SpecShip for developers · 10</p>
+<aside class="notes">Also runnable from the CLI as specship workflow, and from the dashboard with approve and reject buttons. A rejected run is parked rather than thrown away, so it can be resumed. Tests and quality gates compute pass or fail; the critic is a separate reviewer pass.</aside>
+</section>
+<section id="status" data-transition="fade" style="background:#F5F3EE;color:#17202B;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:40px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;color:#A8530E;letter-spacing:2px">STATION 06 · LINK STATE</p>
+<h2 style="font-size:64px;font-weight:600;line-height:1.1">Every link carries an honest state</h2>
+</div>
+<table style="font-size:28px;color:#17202B">
+<tr><th style="width:24%">State</th><th style="width:76%">Means</th></tr>
+<tr><td><b>Implemented</b></td><td>Code claims the requirement. Not proven yet.</td></tr>
+<tr style="background:#E4F0E8"><td><b>Verified ✓</b></td><td>A linked test ran and passed. The only “done”.</td></tr>
+<tr style="background:#FBEBD3"><td><b>Drifted</b></td><td>Code or spec changed after linking. Re-check it.</td></tr>
+<tr><td><b>Broken</b></td><td>Verification ran and failed.</td></tr>
+<tr><td><b>Orphaned</b></td><td>The linked symbol was renamed or deleted.</td></tr>
+</table>
+<p style="font-size:28px;line-height:1.4;color:#4A5563"><b style="color:#17202B">Drift is automatic:</b> the file watcher re-checks linked code on every edit, so a refactor flips the state in seconds.</p>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#6B7480">SpecShip for developers · 11</p>
+<aside class="notes">Drifted items land in the drift queue: /specship:check drifted to review it, fix or relink to repair a single spec. A requirement only clears when someone re-checks it or a test re-proves it.</aside>
+</section>
+<section id="proof" data-transition="fade" style="background:#F5F3EE;color:#17202B;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:48px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;color:#A8530E;letter-spacing:2px">PROOF</p>
+<h2 style="font-size:64px;font-weight:600;line-height:1.1">“Verified” needs test evidence</h2>
+</div>
+<div style="display:flex;gap:32px">
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#FFFFFF;padding:40px;border:1px solid #DCD8CE;border-radius:12px">
+<h3 style="font-size:36px;font-weight:600">1 · Link</h3>
+<p style="font-size:28px;line-height:1.4;color:#4A5563"><span style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;color:#A8530E">implementations:</span> block, or <span style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;color:#A8530E">@implements</span> on the symbol</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#FFFFFF;padding:40px;border:1px solid #DCD8CE;border-radius:12px">
+<h3 style="font-size:36px;font-weight:600">2 · Test</h3>
+<p style="font-size:28px;line-height:1.4;color:#4A5563">Write tests per criterion: <span style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;color:#A8530E">spec behaviour</span></p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#FFFFFF;padding:40px;border:1px solid #DCD8CE;border-radius:12px">
+<h3 style="font-size:36px;font-weight:600">3 · Ingest</h3>
+<p style="font-size:28px;line-height:1.4;color:#4A5563"><span style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;color:#A8530E">specship verify</span> reads the vitest report, promotes or demotes</p>
+</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:12px;background:#17202B;padding:32px 40px;border-radius:12px">
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:28px;line-height:1.5;color:#F4F1EA">$ specship coverage REQ-AUTH-001</p>
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:28px;line-height:1.5;color:#8693A1"># per criterion: test-link state + verdict</p>
+</div>
+<p style="font-size:28px;line-height:1.4;color:#4A5563">No passing test, no Verified — an agent can’t self-award it.</p>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#6B7480">SpecShip for developers · 12</p>
+<aside class="notes">Method links must be qualified (Class.method); a bare method name stays orphaned. specship_link_assert works in-session, but those links can drop on a full reindex, so make durable links in the spec or on the symbol. /specship:spec behaviour authors end-to-end tests for a requirement’s criteria.</aside>
+</section>
+<section id="gates" data-transition="fade" style="background:#F5F3EE;color:#17202B;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:40px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;color:#A8530E;letter-spacing:2px">QUALITY GATES · CI</p>
+<h2 style="font-size:64px;font-weight:600;line-height:1.1">The same checks on every commit</h2>
+</div>
+<table style="font-size:28px;color:#17202B">
+<tr><th style="width:36%">Command</th><th style="width:64%">What it does</th></tr>
+<tr><td style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;color:#A8530E">specship check</td><td>Fails on drift, fitness, health or behaviour</td></tr>
+<tr><td style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;color:#A8530E">specship lint</td><td>Fails on malformed specs or missing criteria</td></tr>
+<tr><td style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;color:#A8530E">specship fitness</td><td>Fails on an architecture-rule violation</td></tr>
+<tr><td style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;color:#A8530E">specship suppressions</td><td>Fails when the diff adds <span style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">@ts-ignore</span>, <span style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">noqa</span> and friends</td></tr>
+<tr><td style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;color:#A8530E">specship affected</td><td>Lists only the tests your diff touches</td></tr>
+</table>
+<p style="font-size:28px;line-height:1.4;color:#4A5563">Start advisory; switch gates to blocking one at a time.</p>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#6B7480">SpecShip for developers · 13</p>
+<aside class="notes">specship check is the umbrella gate and exits non-zero on a gating failure. Locally the same thing is /specship:check with no argument. specship affected is not a gate itself; it narrows the test run to what the diff touches so the gate stays fast enough for every commit. Health detail: specship maintainability for coupling, oversized symbols, god-files, cycles and dead code.</aside>
+</section>
+<section id="integrations" data-transition="fade" style="background:#F5F3EE;color:#17202B;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:48px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;color:#A8530E;letter-spacing:2px">AROUND THE LINE</p>
+<h2 style="font-size:64px;font-weight:600;line-height:1.1">One source of truth, four surfaces</h2>
+</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px">
+<div style="display:flex;flex-direction:column;gap:12px;background:#FFFFFF;padding:36px;border:1px solid #DCD8CE;border-radius:12px">
+<h3 style="font-size:36px;font-weight:600">Dashboard</h3>
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;color:#A8530E">specship desktop · 127.0.0.1</p>
+<p style="font-size:28px;line-height:1.4;color:#4A5563">Traceability, drift queue, workflow approve/reject</p>
+</div>
+<div style="display:flex;flex-direction:column;gap:12px;background:#FFFFFF;padding:36px;border:1px solid #DCD8CE;border-radius:12px">
+<h3 style="font-size:36px;font-weight:600">JIRA</h3>
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;color:#A8530E">opt-in · --with-jira</p>
+<p style="font-size:28px;line-height:1.4;color:#4A5563">Specs as stories, sprint coverage, regression packs</p>
+</div>
+<div style="display:flex;flex-direction:column;gap:12px;background:#FFFFFF;padding:36px;border:1px solid #DCD8CE;border-radius:12px">
+<h3 style="font-size:36px;font-weight:600">Designer</h3>
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;color:#A8530E">experimental · --with-designer</p>
+<p style="font-size:28px;line-height:1.4;color:#4A5563">Claude Design project → snapshot → spec</p>
+</div>
+<div style="display:flex;flex-direction:column;gap:12px;background:#FFFFFF;padding:36px;border:1px solid #DCD8CE;border-radius:12px">
+<h3 style="font-size:36px;font-weight:600">Gemini CLI</h3>
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;color:#A8530E">opt-in · --target gemini</p>
+<p style="font-size:28px;line-height:1.4;color:#4A5563">MCP tools only; no hooks or slash commands</p>
+</div>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#6B7480">SpecShip for developers · 14</p>
+<aside class="notes">Integrations that talk to an external service are off until you switch them on, and a later plain re-install keeps them. JIRA edits are proposed back to the spec for approval rather than applied silently. The dashboard also shows the spec funnel and Claude Code session analytics, and binds to loopback only.</aside>
+</section>
+<section id="day" data-transition="fade" style="background:#121A24;color:#F4F1EA;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:40px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;color:#F2A541;letter-spacing:2px">A DAY ON THE LINE</p>
+<h2 style="font-size:64px;font-weight:600;line-height:1.1;color:#F4F1EA">Ticket to green PR in five moves</h2>
+</div>
+<table style="font-size:28px;color:#B9C3CE">
+<tr><th style="width:52%">You run</th><th style="width:48%">You get</th></tr>
+<tr><td style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;color:#F4F1EA">/specship:day</td><td>Pick and start [PROJ-142]</td></tr>
+<tr><td style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;color:#F4F1EA">/specship:spec new …</td><td>REQ-REFUND-004, reviewed</td></tr>
+<tr><td style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;color:#F4F1EA">/specship:spec implement …</td><td>Approve plan, review diff</td></tr>
+<tr><td style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;color:#F4F1EA">/specship:check</td><td>Gate green, Verified ✓</td></tr>
+<tr><td style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;color:#F4F1EA">git push</td><td>CI re-runs specship check</td></tr>
+</table>
+<p style="font-size:28px;line-height:1.4;color:#B9C3CE">Weeks later a refactor touches refunds → <b style="color:#F2A541">Drifted</b> → re-prove → Verified again.</p>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#8693A1">SpecShip for developers · 15</p>
+<aside class="notes">PROJ-142 and REQ-REFUND-004 are placeholders. Without JIRA, start at /specship:spec new. For small changes, /specship:spec fast skips the full authoring pass.</aside>
+</section>
+<section id="ex-cmd" data-transition="fade" style="background:#F5F3EE;color:#17202B;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:40px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;color:#A8530E;letter-spacing:2px">WORKED EXAMPLE · 1/5 · ASK</p>
+<h2 style="font-size:64px;font-weight:600;line-height:1.1">Start with one command</h2>
+</div>
+<div style="display:flex;flex-direction:column;gap:4px;background:#17202B;padding:40px 48px;border-radius:12px">
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:26px;line-height:1.6;color:#F4F1EA"><b>&gt; /specship:spec new "Lock out repeated failed logins"</b></p>
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:26px;line-height:1.6;color:#8693A1">● specship_explore LoginService.attempt</p>
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:26px;line-height:1.6;color:#B9C3CE">Two gaps before I draft:</p>
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:26px;line-height:1.6;color:#B9C3CE">&#160;&#160;1. Count per account or per IP?</p>
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:26px;line-height:1.6;color:#B9C3CE">&#160;&#160;2. What does the blocked attempt return?</p>
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:26px;line-height:1.6;color:#F4F1EA"><b>&gt; Per IP, 5 per minute. 429 with Retry-After.</b></p>
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:26px;line-height:1.6;color:#7BC88F">✓ Wrote specs/auth-rate-limit.md · REQ-AUTH-001</p>
+</div>
+<p style="font-size:28px;line-height:1.4;color:#4A5563">The spec-author reads the real code first, then asks only what the graph can’t answer.</p>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#6B7480">SpecShip for developers · 16 · session abridged</p>
+<aside class="notes">One feature, end to end, over the next five slides. The developer types one command. The spec-author skill grounds the draft in the existing login code via specship_explore, walks a gap checklist and asks only the questions the code can’t answer: edge cases, failure behaviour, ownership. The spec lands under specs/.</aside>
+</section>
+<section id="ex-spec" data-transition="fade" style="background:#F5F3EE;color:#17202B;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:40px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;color:#A8530E;letter-spacing:2px">WORKED EXAMPLE · 2/5 · SPEC</p>
+<h2 style="font-size:64px;font-weight:600;line-height:1.1">The spec it writes — three testable criteria</h2>
+</div>
+<div style="display:flex;gap:40px">
+<div style="flex:3;display:flex;flex-direction:column;gap:2px;background:#17202B;padding:40px;border-radius:12px">
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;line-height:1.5;color:#8693A1">specs/auth-rate-limit.md</p>
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;line-height:1.5;color:#8693A1">&lt;!-- id: REQ-AUTH-001 --&gt;</p>
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;line-height:1.5;color:#F4F1EA"><b>## Failed logins MUST be rate-limited per IP</b></p>
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;line-height:1.5;color:#F4F1EA"><b>## Acceptance</b></p>
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;line-height:1.5;color:#F2A541">- A1 6th failure in 60 s → 429 + Retry-After</p>
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;line-height:1.5;color:#F2A541">- A2 A successful login resets the count</p>
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;line-height:1.5;color:#F2A541">- A3 Other IPs are unaffected</p>
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;line-height:1.5;color:#8693A1">(each criterion carries its own id comment)</p>
+</div>
+<div style="flex:2;display:flex;flex-direction:column;gap:24px">
+<div style="display:flex;flex-direction:column;gap:4px;background:#17202B;padding:32px;border-radius:12px">
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;line-height:1.5;color:#F4F1EA">$ specship lint specs/</p>
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;line-height:1.5;color:#7BC88F">✓ no errors</p>
+</div>
+<p style="font-size:28px;line-height:1.4;color:#4A5563"><b style="color:#17202B">Review it like code.</b> It’s a markdown file in the PR.</p>
+<p style="font-size:28px;line-height:1.4;color:#4A5563"><b style="color:#17202B">No code linked yet</b> — the spec exists before the implementation.</p>
+</div>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#6B7480">SpecShip for developers · 17</p>
+<aside class="notes">Every criterion is observable and testable, including a negative case (A3). The file passes specship lint, which is what CI runs. Optionally run /specship:spec review REQ-AUTH-001 for the quality pass before implementing.</aside>
+</section>
+<section id="ex-code" data-transition="fade" style="background:#F5F3EE;color:#17202B;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:36px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;color:#A8530E;letter-spacing:2px">WORKED EXAMPLE · 3/5 · IMPLEMENT</p>
+<h2 style="font-size:64px;font-weight:600;line-height:1.1">Approve the plan, get linked code</h2>
+</div>
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:28px;color:#F4F1EA;background:#17202B;padding:20px 32px;border-radius:12px">&gt; /specship:spec implement REQ-AUTH-001</p>
+<div style="display:flex;gap:32px">
+<div style="flex:2;display:flex;flex-direction:column;gap:12px;background:#FFF6EA;padding:32px;border:2px dashed #A8530E;border-radius:12px">
+<h3 style="font-size:32px;font-weight:600;color:#A8530E">Plan · you approve</h3>
+<ol style="font-size:26px;line-height:1.5;color:#4A5563">
+<li>RateLimiter keyed by IP</li>
+<li>Call it from LoginService.attempt</li>
+<li>Reset on success</li>
+<li>One test per criterion</li>
+</ol>
+</div>
+<div style="flex:3;display:flex;flex-direction:column;gap:2px;background:#17202B;padding:32px 40px;border-radius:12px">
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;line-height:1.5;color:#8693A1">src/auth/rate-limiter.ts</p>
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;line-height:1.5;color:#F2A541"><b>/** @implements REQ-AUTH-001 */</b></p>
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;line-height:1.5;color:#F4F1EA">export class RateLimiter {</p>
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;line-height:1.5;color:#F4F1EA">&#160;&#160;check(ip: string): Verdict {</p>
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;line-height:1.5;color:#F4F1EA">&#160;&#160;&#160;&#160;if (this.fails(ip) &gt;= 5)</p>
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;line-height:1.5;color:#F4F1EA">&#160;&#160;&#160;&#160;&#160;&#160;return blocked(this.resetIn(ip));</p>
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;line-height:1.5;color:#F4F1EA">&#160;&#160;&#160;&#160;return ALLOW;</p>
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;line-height:1.5;color:#F4F1EA">&#160;&#160;}</p>
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;line-height:1.5;color:#F4F1EA">}</p>
+</div>
+</div>
+<p style="font-size:28px;line-height:1.4;color:#4A5563">The <span style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;color:#A8530E">@implements</span> comment makes the link: REQ-AUTH-001 is now <b style="color:#17202B">Implemented</b>.</p>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#6B7480">SpecShip for developers · 18 · code abridged</p>
+<aside class="notes">The workflow reads the spec and the map, proposes a plan and stops for approval. Reject with notes and it revises. After approval it builds in an isolated worktree and runs the gates before you see the diff. The link can be an @implements comment on the symbol, as here, or an implementations: path:Symbol block in the spec. Implemented is not done: nothing proves it yet.</aside>
+</section>
+<section id="ex-test" data-transition="fade" style="background:#F5F3EE;color:#17202B;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:40px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;color:#A8530E;letter-spacing:2px">WORKED EXAMPLE · 4/5 · PROVE</p>
+<h2 style="font-size:64px;font-weight:600;line-height:1.1">One test per criterion, then Verified</h2>
+</div>
+<div style="display:flex;gap:32px">
+<div style="flex:1;display:flex;flex-direction:column;gap:2px;background:#17202B;padding:32px 40px;border-radius:12px">
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;line-height:1.5;color:#8693A1">tests/auth/rate-limit.test.ts</p>
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;line-height:1.5;color:#F2A541"><b>/** @verifies REQ-AUTH-001.A1 */</b></p>
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;line-height:1.5;color:#F4F1EA">function blocksSixthFailure() {</p>
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;line-height:1.5;color:#F4F1EA">&#160;&#160;fail(5, ip);</p>
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;line-height:1.5;color:#F4F1EA">&#160;&#160;const res = login(BAD, ip);</p>
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;line-height:1.5;color:#F4F1EA">&#160;&#160;expect(res.status).toBe(429);</p>
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;line-height:1.5;color:#F4F1EA">&#160;&#160;expect(res.retryAfter).toBeDefined();</p>
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;line-height:1.5;color:#F4F1EA">}</p>
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;line-height:1.5;color:#F4F1EA">it('blocks 6th failure', blocksSixthFailure);</p>
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;line-height:1.5;color:#8693A1">// …same for A2, A3</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:2px;background:#17202B;padding:32px 40px;border-radius:12px">
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;line-height:1.5;color:#F4F1EA">$ npx vitest run --reporter=json \</p>
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;line-height:1.5;color:#F4F1EA">&#160;&#160;&#160;&#160;--outputFile=report.json</p>
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;line-height:1.5;color:#F4F1EA">$ specship verify --report report.json</p>
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;line-height:1.5;color:#F4F1EA">$ specship coverage REQ-AUTH-001</p>
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;line-height:1.5;color:#7BC88F">✔ REQ-AUTH-001 verified</p>
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;line-height:1.5;color:#7BC88F">&#160;&#160;✔ .A1 verified · tests:1</p>
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;line-height:1.5;color:#7BC88F">&#160;&#160;✔ .A2 verified · tests:1</p>
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;line-height:1.5;color:#7BC88F">&#160;&#160;✔ .A3 verified · tests:1</p>
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;line-height:1.5;color:#B9C3CE">3 of 3 criteria have linked tests.</p>
+</div>
+</div>
+<p style="font-size:28px;line-height:1.4;color:#4A5563"><span style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;color:#A8530E">@verifies</span> links the test as evidence; a passing run promotes it to <b style="color:#17202B">Verified</b>.</p>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#6B7480">SpecShip for developers · 19 · output abridged</p>
+<aside class="notes">@verifies must sit on a named function in a recognised test file; that is why the test body is a hoisted function handed to it(). A test title that names the criterion ID also links automatically. /specship:spec behaviour REQ-AUTH-001 can author these tests from the criteria. specship verify ingests the vitest JSON report and promotes or demotes each test link; without a passing run nothing becomes Verified.</aside>
+</section>
+<section id="ex-watch" data-transition="fade" style="background:#121A24;color:#F4F1EA;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:40px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;color:#F2A541;letter-spacing:2px">WORKED EXAMPLE · 5/5 · WATCH</p>
+<h2 style="font-size:64px;font-weight:600;line-height:1.1;color:#F4F1EA">Six weeks later, a “harmless” refactor</h2>
+</div>
+<div style="display:flex;gap:32px">
+<div style="flex:1;display:flex;flex-direction:column;gap:2px;background:#0C1219;padding:32px 40px;border:1px solid #2E3B4A;border-radius:12px">
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;line-height:1.5;color:#8693A1">src/auth/rate-limiter.ts</p>
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;line-height:1.5;color:#F08A7E">- if (this.fails(ip) &gt;= 5)</p>
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;line-height:1.5;color:#7BC88F">+ if (this.fails(ip) &gt; 5)</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:2px;background:#0C1219;padding:32px 40px;border:1px solid #2E3B4A;border-radius:12px">
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;line-height:1.5;color:#F4F1EA">$ specship drifted</p>
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;line-height:1.5;color:#F2A541">⚠ REQ-AUTH-001 drifted</p>
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:24px;line-height:1.5;color:#B9C3CE">&#160;&#160;RateLimiter.check changed</p>
+</div>
+</div>
+<div style="display:flex;align-items:center;gap:20px">
+<p style="flex:1;font-size:28px;font-weight:600;color:#7BC88F;background:#16271E;padding:20px 24px;border-radius:12px">Verified ✓</p>
+<x-shape kind="arrow-right" style="background:#8693A1;width:48px;height:28px"></x-shape>
+<p style="flex:1;font-size:28px;font-weight:600;color:#F2A541;background:#2A2116;padding:20px 24px;border-radius:12px">Drifted · edit seen</p>
+<x-shape kind="arrow-right" style="background:#8693A1;width:48px;height:28px"></x-shape>
+<p style="flex:1;font-size:28px;font-weight:600;color:#F08A7E;background:#2E1A1A;padding:20px 24px;border-radius:12px">Broken · A1 fails</p>
+<x-shape kind="arrow-right" style="background:#8693A1;width:48px;height:28px"></x-shape>
+<p style="flex:1;font-size:28px;font-weight:600;color:#7BC88F;background:#16271E;padding:20px 24px;border-radius:12px">Verified · fixed</p>
+</div>
+<p style="font-size:28px;line-height:1.4;color:#B9C3CE">CI’s <span style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;color:#F4F1EA">specship check</span> fails the PR — the off-by-one never reaches production.</p>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#8693A1">SpecShip for developers · 20 · output abridged</p>
+<aside class="notes">Nobody had to remember that the rate limiter belongs to REQ-AUTH-001. The file watcher sees the linked symbol change and flips the link to Drifted within seconds. Re-running the tests shows A1 now fails, so the requirement is Broken. Fixing the comparison and re-running verify returns it to Verified, and the history shows why. In CI, specship check, or specship drifted --fail-on drifted,broken, blocks the merge.</aside>
+</section>
+<section id="close" data-transition="fade" style="background:#121A24;color:#F4F1EA;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;padding:128px;display:flex;flex-direction:column;justify-content:center;gap:48px">
+<h1 style="font-size:112px;font-weight:700;line-height:1.05;color:#F4F1EA">Map it. Spec it.<br><span style="color:#F2A541">Ship it. Prove it.</span></h1>
+<p style="font-size:36px;line-height:1.4;color:#B9C3CE;width:1300px">Start with the map — no process change. Add specs and gates where proof matters most.</p>
+<p style="font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:28px;color:#B9C3CE">npm i -g @specship/specship@latest &amp;&amp; specship install</p>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#8693A1">github.com/selvakumarEsra/specship · 21</p>
+<aside class="notes">Adoption ladder: the map on day one, then health and impact, then specs and proof, then team traceability through the dashboard and JIRA.</aside>
+</section>
+</div>
+<div class="nav-hint">← → to navigate · F for fullscreen · speaker notes in source</div>
+<div class="progress" id="progress"></div>
+<script>
+  const slides = Array.from(document.querySelectorAll('.deck > section'));
+  let i = Math.max(0, Math.min(slides.length - 1, (parseInt(location.hash.slice(1), 10) || 1) - 1));
+  function fit() {
+    const s = Math.min(window.innerWidth / 1920, window.innerHeight / 1080) * 0.96;
+    slides.forEach(el => el.style.transform = `translate(-50%, -50%) scale(${s})`);
+  }
+  function show(n) {
+    i = Math.max(0, Math.min(slides.length - 1, n));
+    slides.forEach((el, k) => el.classList.toggle('active', k === i));
+    document.getElementById('progress').style.width = ((i + 1) / slides.length * 100) + '%';
+    history.replaceState(null, '', '#' + (i + 1));
+  }
+  document.addEventListener('keydown', e => {
+    if (['ArrowRight', 'PageDown', ' ', 'Enter'].includes(e.key)) { e.preventDefault(); show(i + 1); }
+    if (['ArrowLeft', 'PageUp', 'Backspace'].includes(e.key)) { e.preventDefault(); show(i - 1); }
+    if (e.key === 'Home') show(0);
+    if (e.key === 'End') show(slides.length - 1);
+    if (e.key === 'f' || e.key === 'F') document.documentElement.requestFullscreen?.();
+  });
+  document.addEventListener('click', e => { if (e.target.closest('a')) return; show(e.clientX > window.innerWidth / 2 ? i + 1 : i - 1); });
+  window.addEventListener('resize', fit);
+  fit(); show(i);
+</script>
+</body>
+</html>
