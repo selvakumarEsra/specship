@@ -53,7 +53,13 @@ const IMPL_REF = /^[-*]\s+([^\s:]+)\s*:\s*([A-Za-z0-9_$.]+)\s*$/;
 const BULLET = /^\s*[-*]\s+(.*\S)\s*$/;
 
 /** The four recognized domain-fact `type` values (REQ-DOMAIN-001). */
-const DOMAIN_TYPES = new Set(['term', 'rule', 'decision', 'constraint']);
+/**
+ * Recognized domain-fact types. `external` (REQ-KNOW-001) is a fact about a
+ * third-party tool or library, pinned to the dependency version it was
+ * verified against; its provenance (`dependency` / `version` / `source`) is
+ * checked by the spec lint, not here, so a fact missing it still indexes.
+ */
+const DOMAIN_TYPES = new Set(['term', 'rule', 'decision', 'constraint', 'external']);
 
 /**
  * Derive an acceptance criterion's parent requirement from its id suffix
@@ -563,12 +569,21 @@ export class MarkdownSpecExtractor {
     const type = meta.type;
     if (typeof type === 'string' && !DOMAIN_TYPES.has(type)) {
       errors.push({
-        message: `Domain fact "${id}" has unknown type "${type}" (expected one of: term, rule, decision, constraint)`,
+        message: `Domain fact "${id}" has unknown type "${type}" (expected one of: ${[...DOMAIN_TYPES].join(', ')})`,
         filePath: this.filePath,
         line: 1,
         severity: 'warning',
         code: 'spec_unknown_domain_type',
       });
+    }
+
+    // An external fact's `version` is the dependency version it was verified
+    // against (REQ-KNOW-001), not the document revision — `version` is a known
+    // frontmatter key, so carry it into metadata (as a string) where the rest of
+    // the fact's provenance lives. The spec revision then falls back to 1
+    // unless it was a plain integer.
+    if (type === 'external' && frontmatter.version !== undefined) {
+      meta.version = String(frontmatter.version);
     }
 
     // Title: frontmatter `title`, else the first heading, else the id.
