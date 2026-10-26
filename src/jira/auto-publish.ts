@@ -86,6 +86,22 @@ export interface AutoPublishDeps {
 export async function autoPublishSpecsOnSync(
   deps: AutoPublishDeps,
 ): Promise<AutoPublishReport> {
+  const report = await runAutoPublish(deps);
+  // Persist the last report so the failure count is readable without
+  // re-running the pass (REQ-PIPETRUST-007). Unbound repos write nothing.
+  if (report.skipped !== 'unbound') {
+    try {
+      writeLastAutoPublishReport(deps.projectRoot, report);
+    } catch {
+      /* persistence is best-effort */
+    }
+  }
+  return report;
+}
+
+async function runAutoPublish(
+  deps: AutoPublishDeps,
+): Promise<AutoPublishReport> {
   // A5: no repo binding → do NOTHING. No client construction, no credential
   // read, no JIRA call.
   const binding = loadRepoJiraBinding(deps.projectRoot);
@@ -287,22 +303,88 @@ async function postMilestoneOnSuccess(
   );
 }
 
+export interface AutoPublishCounts {
+  published: number;
+  unchanged: number;
+  optedOut: number;
+  failed: number;
+}
+
+/** Tally a report's rows by status. */
+export function countAutoPublishReport(report: AutoPublishReport): AutoPublishCounts {
+  const counts: AutoPublishCounts = { published: 0, unchanged: 0, optedOut: 0, failed: 0 };
+  for (const r of report.results) {
+    if (r.status === 'published') counts.published++;
+    else if (r.status === 'unchanged') counts.unchanged++;
+    else if (r.status === 'opted_out') counts.optedOut++;
+    else if (r.status === 'failed') counts.failed++;
+  }
+  return counts;
+}
+
+/**
+ * The persisted shape of the last auto-publish pass
+ * (`.specship/jira-publish-last.json`, REQ-PIPETRUST-007.A3).
+ */
+export interface LastAutoPublishReport {
+  /** Epoch ms when the report was produced. */
+  at: number;
+  skipped?: AutoPublishReport['skipped'];
+  note?: string;
+  counts: AutoPublishCounts;
+  failures: Array<{ specId: string; note?: string }>;
+  /** The same one-line summary the CLI prints. */
+  summary: string;
+}
+
+export function lastAutoPublishReportPath(projectRoot: string): string {
+  return path.join(projectRoot, '.specship', 'jira-publish-last.json');
+}
+
+/** Persist a report as the "last auto-publish" record. */
+export function writeLastAutoPublishReport(
+  projectRoot: string,
+  report: AutoPublishReport,
+  now: number = Date.now(),
+): LastAutoPublishReport {
+  const record: LastAutoPublishReport = {
+    at: now,
+    ...(report.skipped ? { skipped: report.skipped } : {}),
+    ...(report.note ? { note: report.note } : {}),
+    counts: countAutoPublishReport(report),
+    failures: report.results
+      .filter((r) => r.status === 'failed')
+      .map((r) => ({ specId: r.specId, ...(r.note ? { note: r.note } : {}) })),
+    summary: summarizeAutoPublishReport(report),
+  };
+  const file = lastAutoPublishReportPath(projectRoot);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const tmp = `${file}.tmp.${process.pid}`;
+  fs.writeFileSync(tmp, JSON.stringify(record, null, 2));
+  fs.renameSync(tmp, file);
+  return record;
+}
+
+/** Read the last persisted auto-publish record; null when absent/corrupt. */
+export function readLastAutoPublishReport(projectRoot: string): LastAutoPublishReport | null {
+  try {
+    const raw = JSON.parse(
+      fs.readFileSync(lastAutoPublishReportPath(projectRoot), 'utf-8'),
+    ) as LastAutoPublishReport;
+    if (!raw || typeof raw.at !== 'number' || !raw.counts || !Array.isArray(raw.failures)) return null;
+    return raw;
+  } catch {
+    return null;
+  }
+}
+
 /** One-line summary suitable for CLI output. */
 export function summarizeAutoPublishReport(report: AutoPublishReport): string {
   if (report.skipped === 'unbound') return '';
   if (report.skipped === 'no-credentials') {
     return `JIRA auto-publish skipped: ${report.note ?? 'no credentials'}`;
   }
-  let published = 0;
-  let unchanged = 0;
-  let optedOut = 0;
-  let failed = 0;
-  for (const r of report.results) {
-    if (r.status === 'published') published++;
-    else if (r.status === 'unchanged') unchanged++;
-    else if (r.status === 'opted_out') optedOut++;
-    else if (r.status === 'failed') failed++;
-  }
+  const { published, unchanged, optedOut, failed } = countAutoPublishReport(report);
   return (
     `JIRA auto-publish: ${published} published, ${unchanged} unchanged, ` +
     `${optedOut} opted out, ${failed} failed`

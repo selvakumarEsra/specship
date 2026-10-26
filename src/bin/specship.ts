@@ -900,6 +900,17 @@ program
       } catch {
         /* surfacing is best-effort */
       }
+      // Pipeline pulse (REQ-PIPETRUST-007): one line per failing item from
+      // the CACHED pulse only — no network on this path; silent when healthy.
+      try {
+        const { readCachedPulse, formatPulseLines } = require('../pulse/pulse') as typeof import('../pulse/pulse');
+        const cached = readCachedPulse(projectPath);
+        if (cached) {
+          for (const line of formatPulseLines(cached.items)) console.log(line);
+        }
+      } catch {
+        /* surfacing is best-effort */
+      }
     };
 
     try {
@@ -3573,6 +3584,76 @@ program
     } finally {
       cg.close();
     }
+  });
+
+// @implements REQ-PIPETRUST-007
+// Pipeline health: release run, npm lag, last JIRA auto-publish, merged run
+// worktrees. Network checks are time-bounded and skip offline; results are
+// cached to .specship/pulse.json for the session-start summary.
+program
+  .command('pulse [path]')
+  .description('Report pipeline health (release run, npm lag, JIRA auto-publish, merged run worktrees); exits non-zero on any failure.')
+  .option('--refresh', 'ignore the cache and re-run every check')
+  .option('--max-age <minutes>', 'serve the cached result when younger than this (default: always re-run)')
+  .option('--json', 'emit JSON')
+  .action(async (
+    pathArg: string | undefined,
+    options: { refresh?: boolean; maxAge?: string; json?: boolean }
+  ) => {
+    const projectRoot = path.resolve(pathArg ?? process.cwd());
+    const { computePulse } = await import('../pulse/pulse');
+
+    // Resolve a run worktree back to its full run id for the purge hint
+    // (best-effort; falls back to the short id from the branch name).
+    let runIdForWorktree: ((p: string) => string | undefined) | undefined;
+    let close: (() => void) | undefined;
+    if (isInitialized(projectRoot)) {
+      try {
+        const { SpecShip } = await loadSpecShip();
+        const cg = await SpecShip.open(projectRoot);
+        close = () => cg.close();
+        const byPath = new Map<string, string>();
+        const sq = cg.getSpecQueries();
+        for (const run of sq.getAllWorkflowRuns(500)) {
+          if (!run.isolationEnvId) continue;
+          const env = sq.getIsolationEnvById(run.isolationEnvId);
+          if (env?.workingPath) byPath.set(path.resolve(env.workingPath), run.id);
+        }
+        runIdForWorktree = (p) => byPath.get(path.resolve(p));
+      } catch {
+        /* hint falls back to the short id */
+      }
+    }
+
+    const maxAgeMin = options.maxAge !== undefined ? Number(options.maxAge) : NaN;
+    let result: Awaited<ReturnType<typeof computePulse>>;
+    try {
+      result = await computePulse({
+        projectRoot,
+        refresh: options.refresh,
+        maxAgeMs: Number.isFinite(maxAgeMin) ? maxAgeMin * 60_000 : undefined,
+        writeCache: fs.existsSync(path.join(projectRoot, '.specship')),
+        runIdForWorktree,
+      });
+    } finally {
+      close?.();
+    }
+
+    if (options.json) {
+      // eslint-disable-next-line no-console
+      console.log(JSON.stringify(result, null, 2));
+    } else {
+      const tag = { ok: 'ok  ', fail: 'FAIL', skipped: 'skip' } as const;
+      for (const item of result.items) {
+        // eslint-disable-next-line no-console
+        console.log(`[${tag[item.status]}] ${item.message}${item.hint ? ` — ${item.hint}` : ''}`);
+      }
+      if (result.fromCache) {
+        // eslint-disable-next-line no-console
+        console.log(`(cached ${new Date(result.checkedAt).toISOString()}; --refresh to re-run)`);
+      }
+    }
+    if (result.items.some((i) => i.status === 'fail')) process.exit(1);
   });
 
 program
