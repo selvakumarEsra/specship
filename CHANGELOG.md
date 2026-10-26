@@ -11,6 +11,16 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### New Features
 
+- New `specship workflow run-batch spec-implement --specs <ids>` implements several requirements at once, each in its own worktree. Requirements that change the same files wait for each other.
+- New `specship workflow merge-queue <run ids>` merges finished runs one at a time and re-runs your lint or type check after each. It stops at the first conflict or failure and keeps the last good merge.
+- New `specship workflow gc` deletes the worktrees of runs that are already merged and keeps their records; `--dry-run` only lists them.
+- Projects can let small changes skip the plan approval by setting `workflow.autoApproveSmallPlans` in `specship.config.json`. A plan qualifies when it only touches files the requirement already lists and the requirement has three or fewer acceptance criteria. The final review always waits for you.
+- After its review, the implement workflow now tries to break the change: it writes a small test for each acceptance criterion and reports whether the change held, broke, or the test could not be run. The run stops if this step edits any of your project files.
+- Custom workflows can now build on another workflow with `extends:` and override individual steps, so a variant only states its differences. The bundled mixed-model workflow now works this way.
+- `specship postcheck` also checks mutation scores when `enforce.mutation` is configured.
+- `specship jira reconcile` now reports acceptance criteria with no matching sub-task and criteria matched by more than one, as well as sub-tasks with no matching criterion.
+- Gemini CLI installs now include the `/specship:*` slash commands, generated from the same source as the Claude Code commands.
+
 - Domain facts can now record facts about the tools and libraries you depend on, as `type: external` with the dependency, the version it was checked against, and where it was checked. `specship knowledge stale` lists facts whose dependency has changed version since, along with the tests to re-run, and the start of each session mentions any stale facts.
 - A domain fact can carry rules that are checked automatically. For example, an `## Enforced` section can say that certain files must never contain a given pattern. `specship knowledge check` reports any violations, and `specship postcheck` fails on them.
 - The implement workflow now suggests new domain knowledge it relied on, such as terms, rules and facts about external tools, for you to confirm. Nothing is added automatically: review suggestions with `specship knowledge proposals` and accept or discard each one with `apply` or `reject`.
@@ -43,6 +53,9 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixes
 
+- `specship sync` no longer publishes to JIRA on its own. Set `jira.autoPublish: true` to turn automatic publishing back on, or publish explicitly with `specship jira publish --pending`; until then, sync tells you how many specs are waiting.
+- Links created by the assistant's link tool are now also written into the spec file, so they are no longer lost when the project is reindexed.
+- The mixed-model implement workflow now gets the same instructions as the standard one; it had been missing the rule about prefixing commits with the JIRA issue key.
 - When a workflow step fails, its full output is now kept and the error shows the end of the log, where test runners print their summary. Previously the summary was cut off and a failed test step showed no output at all.
 - Workflow steps now use the same SpecShip version that is running the workflow, instead of whichever `specship` is installed globally.
 - The implement workflow now records links in the spec file instead of a session-only link that was lost on reindexing, and keeps a test report you can import with `specship verify --report` after merging.

@@ -24,6 +24,7 @@ description: Every SpecShip command and the flags it accepts.
 | `specship coverage [spec]` | Show spec test-coverage: per requirement and criterion, tests-link state and verdict |
 | `specship lint [paths...]` | Lint spec files for authoring problems (exits non-zero on an error finding) |
 | `specship knowledge <action> [id]` | Knowledge layer: stale \| check \| proposals \| apply <id> \| reject <id> |
+| `specship plan-scope <specId>` | Decide whether a plan may skip the plan gate (opt-in; prints AUTO_APPROVE=yes\|no) |
 | `specship ready <specId>` | Check a requirement is ready to implement and print its evidence plan (exits non-zero when not ready) |
 | `specship postcheck <specId>` | Mechanically check an implemented requirement: verifies coverage, CHANGELOG, configured checks (exits non-zero on fai… |
 | `specship verify` | Ingest a test report (vitest JSON) and promote/demote spec test links from it |
