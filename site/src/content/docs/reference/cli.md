@@ -23,6 +23,8 @@ description: Every SpecShip command and the flags it accepts.
 | `specship maintainability [path]` | Report graph-derived maintainability signals (coupling, size, cycles, dead code) |
 | `specship coverage [spec]` | Show spec test-coverage: per requirement and criterion, tests-link state and verdict |
 | `specship lint [paths...]` | Lint spec files for authoring problems (exits non-zero on an error finding) |
+| `specship ready <specId>` | Check a requirement is ready to implement and print its evidence plan (exits non-zero when not ready) |
+| `specship postcheck <specId>` | Mechanically check an implemented requirement: verifies coverage, CHANGELOG, configured checks (exits non-zero on fai… |
 | `specship verify` | Ingest a test report (vitest JSON) and promote/demote spec test links from it |
 | `specship fitness [path]` | Check architecture-fitness rules against the code graph (CI gate; exits non-zero on violation) |
 | `specship check [path]` | Run the enforcement gate (drift + fitness + maintainability + behaviour); exits non-zero on a gating failure |
@@ -292,10 +294,14 @@ Every `SPECSHIP_*` variable the shipped code reads:
 <!-- GENERATED:env-vars START — derived from source by scripts/generate-reference-docs.mjs; do not edit by hand -->
 - `SPECSHIP_ADAPTIVE_EXPLORE`
 - `SPECSHIP_ALLOW_UNSAFE_NODE`
+- `SPECSHIP_ARTIFACTS_DIR`
 - `SPECSHIP_ASCII`
 - `SPECSHIP_BIN_DIR`
 - `SPECSHIP_BUN_BIN`
 - `SPECSHIP_CLAUDE_BIN`
+- `SPECSHIP_CLI`
+- `SPECSHIP_CLI_NODE`
+- `SPECSHIP_CLI_SCRIPT`
 - `SPECSHIP_COMPACT`
 - `SPECSHIP_CTX_WARN_PCT`
 - `SPECSHIP_DAEMON_IDLE_TIMEOUT_MS`
@@ -334,6 +340,7 @@ Every `SPECSHIP_*` variable the shipped code reads:
 - `SPECSHIP_MODEL`
 - `SPECSHIP_NO_CHEATSHEET`
 - `SPECSHIP_NO_DAEMON`
+- `SPECSHIP_NO_PULSE`
 - `SPECSHIP_NO_RELAUNCH`
 - `SPECSHIP_NO_STATUSLINE_TIPS`
 - `SPECSHIP_NO_STEERING`

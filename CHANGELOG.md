@@ -11,6 +11,11 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### New Features
 
+- Acceptance criteria now say what kind of test proves them — unit, property, end-to-end or contract. Add `(evidence: e2e)` to a criterion to choose, or let SpecShip pick from the wording ("never" and "always" mean a property test). `specship coverage` shows, for each criterion, the kind it needs and the kinds its tests provide, and `--require-kinds` fails when one is missing.
+- New `specship ready <REQ-ID>` checks that a requirement can be implemented before work starts — no spec errors, at least one acceptance criterion, nothing still marked for review — and prints the test plan: which kind of test each criterion needs and what to name it. The implement workflow now runs it first.
+- New `specship postcheck <REQ-ID>` checks finished work the way a reviewer would: every criterion has a test that is actually linked, source changes come with a CHANGELOG entry, and any checks you list in `specship.config.json` pass (with optional automatic fixes). The implement workflow runs it after the lint step, fixes what it finds, and stops if anything is left.
+- New `specship pulse` reports problems that used to go unnoticed: a failed release run, npm falling behind your latest release, JIRA publish failures, and finished workflow worktrees still on disk. Failing items also appear at the start of each session, and the check refreshes itself in the background.
+
 - Installing SpecShip into Gemini CLI with the new `--trust` flag writes an opt-in, user-tier policy file at `~/.gemini/policies/specship.toml` that auto-allows SpecShip's read-only tools (explore, search, node, callers, callees, impact, files, status, health, spec, drifted) so those calls stop raising Gemini's per-tool confirmation. Write-capable tools (link assertions, JIRA, Designer) are deliberately left to confirm, the MCP server entry is never given blanket `trust`, an administrator policy still overrides this file, and `run_shell_command` confirmations are unaffected. Omitting `--trust` writes no policy file; a later install without `--trust` preserves one a prior `--trust` install wrote; uninstall removes `specship.toml` only when it carries SpecShip's own header marker, so a user-authored file of the same name is left untouched.
 
 - Gemini CLI installs now nudge the assistant toward SpecShip when it reaches for a code search: the first time a session uses Gemini's own file-search tools or a search command like `grep` or `rg` in the shell, it gets a one-line pointer to SpecShip's explore tool, and the search still runs. Set `SPECSHIP_GEMINI_STRICT=1` to have Gemini's built-in file-search tools redirected to SpecShip instead; shell commands are never blocked. Neither mode removes Gemini's own confirmation prompt for shell commands.
@@ -32,6 +37,9 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixes
 
+- When a workflow step fails, its full output is now kept and the error shows the end of the log, where test runners print their summary. Previously the summary was cut off and a failed test step showed no output at all.
+- Workflow steps now use the same SpecShip version that is running the workflow, instead of whichever `specship` is installed globally.
+- The implement workflow now records links in the spec file instead of a session-only link that was lost on reindexing, and keeps a test report you can import with `specship verify --report` after merging.
 - In Gemini CLI, SpecShip's per-prompt reminder told the assistant to call the explore tool by Claude Code's name for it. It now uses the name Gemini CLI actually gives the tool; Claude Code sessions see exactly the same reminder as before.
 - The implement workflow's quality gate no longer halts a run over lint or type errors that were already there before the change. It now records the project's errors before implementing and fails only on errors the change introduced; errors that were already present are still listed in the run's output.
 - `specship install --skip-index` now actually skips indexing on a project-local install. Previously the flag only worked for global installs; a local install always built the index anyway. The install summary lists the skip as your choice and tells you how to index later.

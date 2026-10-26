@@ -908,6 +908,19 @@ program
         if (cached) {
           for (const line of formatPulseLines(cached.items)) console.log(line);
         }
+        // Keep the cache warm without blocking the session: when it is missing
+        // or older than six hours, refresh it in a detached child (bounded by
+        // pulse's own time budget). This session prints what was cached; the
+        // next one sees the refreshed result.
+        const SIX_HOURS = 6 * 60 * 60 * 1000;
+        if ((!cached || Date.now() - cached.checkedAt > SIX_HOURS) && !process.env.SPECSHIP_NO_PULSE) {
+          const { spawn } = require('child_process') as typeof import('child_process');
+          const child = spawn(process.execPath, [process.argv[1]!, 'pulse', projectPath, '--refresh', '--json'], {
+            detached: true,
+            stdio: 'ignore',
+          });
+          child.unref();
+        }
       } catch {
         /* surfacing is best-effort */
       }

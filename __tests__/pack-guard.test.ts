@@ -22,7 +22,10 @@ import * as path from 'path';
  */
 const MAX_PACKED_BYTES = 2_400_000;
 const MAX_UNPACKED_BYTES = 6_200_000;
-const MAX_FILE_COUNT = 530;
+// Raised 530 → 560 (2026-10-26) after investigating a 531-file build: no stale
+// dist assets; the growth is new feature modules (dist/spec-quality/,
+// dist/pulse/, and the 0.30/0.31 knowledge + throughput modules that follow).
+const MAX_FILE_COUNT = 560;
 
 /** REQ-SLIM-002.A4's own ceiling, independent of the ratchet above. */
 const SLIM_A4_UNPACKED_CEILING = 7_000_000;

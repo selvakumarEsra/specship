@@ -17,7 +17,7 @@ jira_fingerprint_REQ-PIPETRUST-005: d24a3e404a4393c2
 jira_issue_REQ-PIPETRUST-006: SSHIP-398
 jira_fingerprint_REQ-PIPETRUST-006: 2aa81c3b8fb6454c
 jira_issue_REQ-PIPETRUST-007: SSHIP-402
-jira_fingerprint_REQ-PIPETRUST-007: 0d4156ce25a82c73
+jira_fingerprint_REQ-PIPETRUST-007: 1cca1c3b70ec59ec
 ---
 
 <!-- id: PIPETRUST-DOC -->
@@ -236,8 +236,10 @@ failures in the last JIRA auto-publish, and worktrees of merged runs still
 on disk. Results MUST be cached under `.specship/` with network checks
 bounded in time and skipped offline. The SessionStart summary MUST print one
 line per failing item from the cache and stay silent when everything is
-healthy. JIRA auto-publish MUST persist its last report so the failure count
-is readable without re-running it.
+healthy, and SHOULD refresh a missing or stale cache in a detached
+background process so it never delays the session. JIRA auto-publish MUST
+persist its last report so the failure count is readable without re-running
+it.
 
 implementations:
   - src/pulse/pulse.ts:computePulse
