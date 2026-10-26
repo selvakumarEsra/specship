@@ -141,10 +141,30 @@ function allChecksPass(): void {
   expect(r.ok).toBe(true);
 }
 
+function postcheckRunsKnowledgeCheck(): void {
+  testFile(GOOD_TESTS);
+  spec(['__tests__/rate.test.ts:refusesSixth', '__tests__/rate.test.ts:resetsOnSuccess']);
+  fs.mkdirSync(path.join(root, 'specs', 'domain'));
+  fs.writeFileSync(
+    path.join(root, 'specs', 'domain', 'acme.md'),
+    ['---', 'id: DOM-X-001', 'title: Acme tables', 'type: rule', '---', '', '# Acme tables', '', '## Enforced',
+      '- `src/**/*.ts` must not match `/\\[\\[rules\\]\\]/`', ''].join('\n'),
+  );
+  fs.mkdirSync(path.join(root, 'src'));
+  fs.writeFileSync(path.join(root, 'src', 'policy.ts'), "export const T = '[[rules]]';\n");
+  const r = runPostcheck({ projectRoot: root, requirementId: 'REQ-DEMO-001', ...noChanges });
+  expect(r.ok).toBe(false);
+  expect(r.findings.map((f) => f.check)).toEqual(['knowledge']);
+  expect(r.findings[0]!.message).toMatch(/^src\/policy\.ts:1 violates DOM-X-001/);
+  fs.writeFileSync(path.join(root, 'src', 'policy.ts'), "export const T = '[[rule]]';\n");
+  expect(runPostcheck({ projectRoot: root, requirementId: 'REQ-DEMO-001', ...noChanges }).ok).toBe(true);
+}
+
 describe('mechanical postcheck (REQ-PIPETRUST-005)', () => {
   it('a title-string or missing verifies symbol fails (REQ-PIPETRUST-005.A1)', titleStringVerifiesFails);
   it('a criterion without test evidence fails (REQ-PIPETRUST-005.A2)', uncoveredCriterionFails);
   it('a src change without a CHANGELOG entry fails (REQ-PIPETRUST-005.A3)', sourceChangeWithoutChangelogFails);
   it('a configured fix runs before its check (REQ-PIPETRUST-005.A4)', configuredCommandFixRunsFirst);
   it('a fully covered, documented change passes', allChecksPass);
+  it('postcheck fails on an enforced domain-fact rule violation (REQ-KNOW-003.A4)', postcheckRunsKnowledgeCheck);
 });

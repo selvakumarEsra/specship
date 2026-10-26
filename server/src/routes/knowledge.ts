@@ -110,7 +110,11 @@ export async function registerKnowledgeRoutes(app: FastifyInstance): Promise<voi
           typeof meta.version === 'string'
             ? meta.version
             : frontmatterValue(path.join(projectRoot, f.sourcePath), 'version');
-        // TODO(coordinator): switch to findStaleExternalFacts
+        // Freshness from the project's own node_modules only. The CLI's
+        // `specship knowledge stale` (findStaleExternalFacts) also consults the
+        // global npm root; the server stays local-only and never imports the
+        // engine package directly (DOM-SPECSHIP-004), so a dependency installed
+        // only globally reads `unverifiable` here — never `fresh`.
         const installed = dependency ? installedVersion(projectRoot, dependency) : undefined;
         fact.dependency = dependency;
         fact.version = version;

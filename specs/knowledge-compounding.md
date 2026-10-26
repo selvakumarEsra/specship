@@ -11,7 +11,7 @@ jira_fingerprint_REQ-KNOW-002: 03b15afa1d03b5ab
 jira_issue_REQ-KNOW-003: SSHIP-416
 jira_fingerprint_REQ-KNOW-003: 1a074edba59e3a15
 jira_issue_REQ-KNOW-004: SSHIP-421
-jira_fingerprint_REQ-KNOW-004: f3ba5aae363eda0e
+jira_fingerprint_REQ-KNOW-004: effc45a02df96608
 jira_issue_REQ-KNOW-005: SSHIP-426
 jira_fingerprint_REQ-KNOW-005: bca8faccb8648e10
 jira_issue_REQ-KNOW-006: SSHIP-429
@@ -144,9 +144,9 @@ implementations:
   - src/workflows/defaults/spec-implement-mixed.yaml
 
 verifies:
-  - __tests__/knowledge.test.ts:applyMovesProposalWithNextFreeId
-  - __tests__/knowledge.test.ts:rejectDeletesProposal
-  - __tests__/knowledge.test.ts:invalidProposalIsNotApplied
+  - __tests__/knowledge-proposals.test.ts:applyMovesProposalWithNextFreeId
+  - __tests__/knowledge-proposals.test.ts:rejectDeletesProposal
+  - __tests__/knowledge-proposals.test.ts:invalidProposalIsNotApplied
   - __tests__/workflow-discovery.test.ts:workflowProposesKnowledgeButNeverWritesDomain
 
 ## Acceptance

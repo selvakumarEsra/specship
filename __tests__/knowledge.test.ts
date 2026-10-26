@@ -22,6 +22,7 @@ import {
   formatEnforceReport,
   exitCodeForEnforce,
 } from '../src/knowledge/enforce';
+import { renderDomainFactsInline } from '../src/mcp/spec-tools';
 
 const tmpDirs: string[] = [];
 function tmpProject(): string {
@@ -208,4 +209,47 @@ describe('fixtures (REQ-KNOW-006)', () => {
     expect(report).toContain('geminiPolicyUsesRuleTables');
     expect(report).toContain('geminiDenyDecisionIsTopLevel');
   });
+});
+
+/**
+ * REQ-KNOW-005.A1 — an external fact linked to a requirement renders inline
+ * with its dependency, verified version, a stale marker when stale, and its
+ * enforced rules, so the agent never has to rediscover them.
+ */
+function inlineFactShowsProvenanceAndRules(): void {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'inline-fact-'));
+  try {
+    fs.mkdirSync(path.join(root, 'node_modules', 'acme-cli'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'node_modules', 'acme-cli', 'package.json'), JSON.stringify({ version: '2.0.0' }));
+    const now = Date.now();
+    const fact = {
+      id: 'DOM-X-001',
+      kind: 'domain' as const,
+      title: 'Acme config tables',
+      body: '# Acme config tables\n\nAcme reads [[rule]] tables.\n\n## Enforced\n- `src/**/*.ts` must not match `/\\[\\[rules\\]\\]/`\n',
+      format: 'markdown' as const,
+      sourcePath: 'specs/domain/acme.md',
+      contentHash: '',
+      createdAt: now,
+      updatedAt: now,
+      metadata: { type: 'external', dependency: 'acme-cli', version: '1.0.0', source: 'acme/loader.js' },
+    };
+    const out = renderDomainFactsInline([fact], root).join('\n');
+    expect(out).toContain('### DOM-X-001 — Acme config tables · external');
+    expect(out).toContain('acme-cli — verified against 1.0.0; installed 2.0.0 (STALE)');
+    expect(out).toContain('re-check it against the installed version');
+    expect(out).toContain('source: acme/loader.js');
+    expect(out).toContain('Enforced (hard constraints');
+    expect(out).toContain('`src/**/*.ts` must not match');
+    // Fresh when the installed version matches; no stale warning.
+    const fresh = renderDomainFactsInline([{ ...fact, metadata: { ...fact.metadata, version: '2.0.0' } }], root).join('\n');
+    expect(fresh).toContain('installed 2.0.0 (fresh)');
+    expect(fresh).not.toContain('re-check it');
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+}
+
+describe('knowledge reaches the agent with provenance (REQ-KNOW-005)', () => {
+  it('an inline external fact shows provenance, staleness and rules (REQ-KNOW-005.A1)', inlineFactShowsProvenanceAndRules);
 });

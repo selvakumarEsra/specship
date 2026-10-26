@@ -900,6 +900,18 @@ program
       } catch {
         /* surfacing is best-effort */
       }
+      // Stale external facts (REQ-KNOW-002): one line when any dependency
+      // moved past the version a fact was verified against. Local
+      // node_modules only on this path — no `npm root -g` spawn at session start.
+      try {
+        const { findStaleExternalFacts } = require('../knowledge/stale') as typeof import('../knowledge/stale');
+        const stale = findStaleExternalFacts(projectPath, { globalRoot: () => null }).stale;
+        if (stale.length > 0) {
+          console.log(`⚠ ${stale.length} external fact(s) stale (dependency changed since verified) — review with: specship knowledge stale`);
+        }
+      } catch {
+        /* surfacing is best-effort */
+      }
       // Pipeline pulse (REQ-PIPETRUST-007): one line per failing item from
       // the CACHED pulse only — no network on this path; silent when healthy.
       try {
@@ -2038,6 +2050,70 @@ program
       if (exitCode !== 0) process.exit(exitCode);
     } catch (err) {
       error(`lint failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(1);
+    }
+  });
+
+/**
+ * specship knowledge <action> — the knowledge layer (KNOWLEDGE-DOC).
+ *   stale            external facts whose dependency version changed (REQ-KNOW-002/006)
+ *   check            enforced rules → violations (REQ-KNOW-003)
+ *   proposals        pending proposals drafted by the implement workflow (REQ-KNOW-004)
+ *   apply <id>       move a confirmed proposal into specs/domain/ (human-only)
+ *   reject <id>      delete a proposal
+ * File-based: needs no index, so it runs in CI and inside run worktrees.
+ */
+program
+  .command('knowledge <action> [id]')
+  .description('Knowledge layer: stale | check | proposals | apply <id> | reject <id>')
+  .option('-p, --path <path>', 'Project path (defaults to cwd)')
+  .option('-j, --json', 'Output as JSON')
+  .action(async (action: string, id: string | undefined, options: { path?: string; json?: boolean }) => {
+    const projectRoot = options.path ? path.resolve(options.path) : process.cwd();
+    const out = (value: unknown, textOut: string) => console.log(options.json ? JSON.stringify(value, null, 2) : textOut);
+    try {
+      if (action === 'stale') {
+        const { findStaleExternalFacts, formatStaleReport, exitCodeForStale } = await import('../knowledge/stale');
+        const result = findStaleExternalFacts(projectRoot);
+        out(result, formatStaleReport(result));
+        process.exit(exitCodeForStale(result));
+      } else if (action === 'check') {
+        const { checkEnforcedRules, formatEnforceReport, exitCodeForEnforce } = await import('../knowledge/enforce');
+        const result = checkEnforcedRules(projectRoot);
+        out(result, formatEnforceReport(result));
+        process.exit(exitCodeForEnforce(result));
+      } else if (action === 'proposals') {
+        const { listProposals, formatProposalList } = await import('../knowledge/proposals');
+        const list = listProposals(projectRoot);
+        out(list, formatProposalList(list));
+      } else if (action === 'apply' || action === 'reject') {
+        if (!id) {
+          error(`knowledge ${action} needs a proposal id — see \`specship knowledge proposals\``);
+          process.exit(1);
+        }
+        const { applyProposal, rejectProposal, ProposalRefusedError } = await import('../knowledge/proposals');
+        if (action === 'reject') {
+          rejectProposal(projectRoot, id);
+          out({ rejected: id }, `Rejected proposal ${id} — nothing was written to specs/domain/.`);
+        } else {
+          try {
+            const applied = applyProposal(projectRoot, id);
+            out(applied, `Applied ${id} as ${applied.id} → ${applied.path}. Run \`specship sync\` to index it.`);
+          } catch (err) {
+            if (err instanceof ProposalRefusedError) {
+              error(`Refused to apply ${id} — fix the proposal first:`);
+              for (const f of err.findings) console.log(`  ${f.severity} ${f.code}: ${f.message}`);
+              process.exit(1);
+            }
+            throw err;
+          }
+        }
+      } else {
+        error(`unknown knowledge action "${action}" — expected stale | check | proposals | apply | reject`);
+        process.exit(1);
+      }
+    } catch (err) {
+      error(`knowledge ${action} failed: ${err instanceof Error ? err.message : String(err)}`);
       process.exit(1);
     }
   });

@@ -23,9 +23,10 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { execSync, spawnSync } from 'child_process';
+import { checkEnforcedRules } from '../knowledge/enforce';
 
 export interface PostcheckFinding {
-  check: 'verifies' | 'changelog' | 'command';
+  check: 'verifies' | 'changelog' | 'command' | 'knowledge' | 'mutation';
   message: string;
 }
 
@@ -307,6 +308,18 @@ export function runPostcheck(opts: PostcheckOptions): PostcheckResult {
   findings.push(...c);
 
   findings.push(...checkConfiguredCommands(opts, ran));
+
+  // REQ-KNOW-003.A4 — enforced domain-fact rules are a built-in check.
+  const enforced = checkEnforcedRules(opts.projectRoot);
+  if (enforced.rulesChecked > 0) {
+    ran.push(`knowledge check: ${enforced.violations.length === 0 ? 'ok' : `${enforced.violations.length} violation(s)`} (${enforced.rulesChecked} enforced rule(s))`);
+  }
+  for (const v of enforced.violations) {
+    findings.push({
+      check: 'knowledge',
+      message: `${v.file}:${v.line} violates ${v.factId} (${v.rule}): ${v.text.trim()}`,
+    });
+  }
 
   return { ok: findings.length === 0, findings, ran };
 }

@@ -11,6 +11,12 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### New Features
 
+- Domain facts can now record facts about the tools and libraries you depend on, as `type: external` with the dependency, the version it was checked against, and where it was checked. `specship knowledge stale` lists facts whose dependency has changed version since, along with the tests to re-run, and the start of each session mentions any stale facts.
+- A domain fact can carry rules that are checked automatically. For example, an `## Enforced` section can say that certain files must never contain a given pattern. `specship knowledge check` reports any violations, and `specship postcheck` fails on them.
+- The implement workflow now suggests new domain knowledge it relied on, such as terms, rules and facts about external tools, for you to confirm. Nothing is added automatically: review suggestions with `specship knowledge proposals` and accept or discard each one with `apply` or `reject`.
+- When the assistant looks up a requirement, linked facts about external tools now include their version, whether that version is out of date, and any enforced rules, so it doesn't have to rediscover them.
+- The dashboard API has a read-only knowledge endpoint that lists domain facts with their type, the requirements they relate to, and whether external facts are up to date.
+
 - Acceptance criteria now say what kind of test proves them — unit, property, end-to-end or contract. Add `(evidence: e2e)` to a criterion to choose, or let SpecShip pick from the wording ("never" and "always" mean a property test). `specship coverage` shows, for each criterion, the kind it needs and the kinds its tests provide, and `--require-kinds` fails when one is missing.
 - New `specship ready <REQ-ID>` checks that a requirement can be implemented before work starts — no spec errors, at least one acceptance criterion, nothing still marked for review — and prints the test plan: which kind of test each criterion needs and what to name it. The implement workflow now runs it first.
 - New `specship postcheck <REQ-ID>` checks finished work the way a reviewer would: every criterion has a test that is actually linked, source changes come with a CHANGELOG entry, and any checks you list in `specship.config.json` pass (with optional automatic fixes). The implement workflow runs it after the lint step, fixes what it finds, and stops if anything is left.
