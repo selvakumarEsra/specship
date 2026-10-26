@@ -90,13 +90,13 @@ needs; Gemini Pro gets full output. Set `SPECSHIP_MODEL` to force a tier. See
 | Steering block (retrieval preference + spec-first rule) | ✓ `CLAUDE.md` | ✓ `GEMINI.md` |
 | Hooks: per-prompt reminder, session cheat-sheet, sync after edits, search pointer | ✓ | ✓ (project hooks run only in trusted folders) |
 | `/specship:*` slash commands | ✓ | ✓ rendered as Gemini TOML commands |
-| Workflow prompt steps (`specship workflow run`, `/specship:spec implement`) | ✓ | ✓ with `--agent gemini`, or automatically when launched from Gemini CLI — not yet run end-to-end against a live Gemini model |
+| Workflow prompt steps (`specship workflow run`, `/specship:spec implement`) | ✓ | ✓ with `--agent gemini`, or automatically when launched from Gemini CLI — single steps checked live; a full implement run has not been measured |
 | Auto-approved SpecShip tools | ✓ | ✓ read-only tools only, opt-in with `--trust`; an administrator policy still wins |
 | `specship-explorer` subagent | ✓ | — |
 | Status-line segment | ✓ | — |
 <!-- capability-matrix:end -->
 
-Retrieval benchmarks (one-call answers, no file reads) were measured on Claude Code only; no Gemini CLI results have been recorded yet.
+Retrieval benchmarks (one-call answers, no file reads) were measured on Claude Code. A first Gemini CLI comparison (one question, two runs per arm) is in `docs/benchmarks/call-sequence-analysis.md`; it shows fewer file reads with SpecShip but does not yet meet the Claude Code bar.
 
 ## Workflows on Gemini CLI
 
