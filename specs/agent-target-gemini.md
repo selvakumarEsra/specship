@@ -511,11 +511,14 @@ implementations:
   - src/installer/targets/gemini.ts:GeminiCliTarget.install
 
 verifies:
-  - __tests__/search-intercept.test.ts:classifyShellCommand splits on top-level pipeline operators only
-  - __tests__/search-intercept.test.ts:denies grep_search / glob with a reason naming specship_explore
-  - __tests__/search-intercept.test.ts:ALLOWs when the transcript cannot be parsed
-  - __tests__/search-intercept.test.ts:ALLOWs when the project is unindexed
-  - __tests__/search-intercept.test.ts:across every tool/command combination
+  - __tests__/search-intercept.test.ts:geminiAdvisoryFiresOncePerSession
+  - __tests__/search-intercept.test.ts:geminiNonSearchShellCommandsAreIgnored
+  - __tests__/search-intercept.test.ts:geminiShellSearchIsAdvisoryOnly
+  - __tests__/search-intercept.test.ts:geminiStrictDeniesBuiltinSearch
+  - __tests__/search-intercept.test.ts:geminiStrictAllowsUnindexedProject
+  - __tests__/search-intercept.test.ts:geminiStrictAllowsUnreadableTranscript
+  - __tests__/search-intercept.test.ts:geminiNoDecisionWithoutStrict
+  - __tests__/search-intercept.test.ts:geminiDocsStateShellPromptRemains
   - __tests__/installer-targets.test.ts:geminiInstallWritesHookEntries
 
 ## Acceptance

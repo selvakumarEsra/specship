@@ -168,12 +168,13 @@ describe('buildSearchIntercept — Gemini host', () => {
   });
 
   describe('advisory (REQ-GEMINI-011.A1)', () => {
-    it('fires once per session on grep_search in an indexed project', () => {
+    function geminiAdvisoryFiresOncePerSession(): void {
       expect(buildSearchIntercept(input({ denyEligible: true }))).toEqual({
         additionalContext: SEARCH_INTERCEPT_TEXT,
       });
       expect(buildSearchIntercept(input({ denyEligible: true }))).toBeNull();
-    });
+    }
+    it('fires once per session on grep_search in an indexed project (REQ-GEMINI-011.A1)', geminiAdvisoryFiresOncePerSession);
 
     it('reads Gemini single-json transcripts for specship use', () => {
       fs.writeFileSync(
@@ -194,20 +195,33 @@ describe('buildSearchIntercept — Gemini host', () => {
     });
   });
 
+  describe('Gemini bare tool names (REQ-GEMINI-011)', () => {
+    it('counts a bare specship_* tool call in a Gemini transcript as specship use', () => {
+      fs.writeFileSync(
+        transcript,
+        JSON.stringify({ messages: [{ role: 'gemini', toolCalls: [{ name: 'specship_explore' }] }] }, null, 2),
+      );
+      expect(
+        buildSearchIntercept(input({ denyEligible: true, transcriptPath: transcript })),
+      ).toBeNull();
+    });
+  });
+
   describe('shell classification (REQ-GEMINI-011.A2)', () => {
     const nulls = ['npm test | grep FAIL', 'git status', 'ls -la', 'cat file', 'sed -n 1,10p file'];
     const searches = ['rg "renderScene" src/', 'grep -r foo .', 'git grep bar', 'find . -name "*.ts"'];
 
-    it('returns null for non-search shell commands (advisory + strict)', () => {
+    function geminiNonSearchShellCommandsAreIgnored(): void {
       for (const cmd of nulls) {
         expect(buildSearchIntercept(input({ shellCommand: cmd }))).toBeNull();
         expect(
           buildSearchIntercept(input({ shellCommand: cmd, strict: true, denyEligible: false })),
         ).toBeNull();
       }
-    });
+    }
+    it('returns null for non-search shell commands (advisory + strict) (REQ-GEMINI-011.A2)', geminiNonSearchShellCommandsAreIgnored);
 
-    it('search-shaped shell commands get the advisory line, NEVER a deny', () => {
+    function geminiShellSearchIsAdvisoryOnly(): void {
       for (const cmd of searches) {
         const r = buildSearchIntercept(
           input({ shellCommand: cmd, sessionId: `s-${cmd}` }),
@@ -221,7 +235,8 @@ describe('buildSearchIntercept — Gemini host', () => {
         );
         if (r) expect('decision' in r).toBe(false);
       }
-    });
+    }
+    it('search-shaped shell commands get the advisory line, NEVER a deny (REQ-GEMINI-011.A3)', geminiShellSearchIsAdvisoryOnly);
 
     it('classifyShellCommand splits on top-level pipeline operators only', () => {
       expect(classifyShellCommand('rg foo')).toBe('search');
@@ -235,7 +250,7 @@ describe('buildSearchIntercept — Gemini host', () => {
   });
 
   describe('strict mode (REQ-GEMINI-011.A3)', () => {
-    it('denies grep_search / glob with a reason naming specship_explore', () => {
+    function geminiStrictDeniesBuiltinSearch(): void {
       fs.writeFileSync(transcript, JSON.stringify({ messages: [] }));
       const r = buildSearchIntercept(
         input({ strict: true, denyEligible: true, transcriptPath: transcript, searchPattern: 'renderScene' }),
@@ -248,9 +263,10 @@ describe('buildSearchIntercept — Gemini host', () => {
       } else {
         throw new Error('expected deny result');
       }
-    });
+    }
+    it('denies grep_search / glob with a reason naming specship_explore (REQ-GEMINI-011.A3)', geminiStrictDeniesBuiltinSearch);
 
-    it('ALLOWs when the project is unindexed', () => {
+    function geminiStrictAllowsUnindexedProject(): void {
       const bare = fs.mkdtempSync(path.join(os.tmpdir(), 'search-intercept-gemini-bare-'));
       try {
         fs.writeFileSync(path.join(bare, 'chat.json'), JSON.stringify({ messages: [] }));
@@ -267,16 +283,18 @@ describe('buildSearchIntercept — Gemini host', () => {
       } finally {
         fs.rmSync(bare, { recursive: true, force: true });
       }
-    });
+    }
+    it('ALLOWs when the project is unindexed (REQ-GEMINI-011.A3)', geminiStrictAllowsUnindexedProject);
 
-    it('ALLOWs when the transcript cannot be parsed', () => {
+    function geminiStrictAllowsUnreadableTranscript(): void {
       fs.writeFileSync(transcript, '{ not json');
       expect(
         buildSearchIntercept(
           input({ strict: true, denyEligible: true, transcriptPath: transcript }),
         ),
       ).toBeNull();
-    });
+    }
+    it('ALLOWs when the transcript cannot be parsed (REQ-GEMINI-011.A3)', geminiStrictAllowsUnreadableTranscript);
 
     it('ALLOWs when the transcript shows the session already used specship', () => {
       fs.writeFileSync(
@@ -292,7 +310,7 @@ describe('buildSearchIntercept — Gemini host', () => {
   });
 
   describe('no decision when strict is unset (REQ-GEMINI-011.A4)', () => {
-    it('across every tool/command combination', () => {
+    function geminiNoDecisionWithoutStrict(): void {
       fs.writeFileSync(transcript, JSON.stringify({ messages: [] }));
       const fixtures = [
         { denyEligible: true },
@@ -305,6 +323,26 @@ describe('buildSearchIntercept — Gemini host', () => {
         const r = buildSearchIntercept(input({ ...f, sessionId: `s-${JSON.stringify(f)}` }));
         if (r) expect('decision' in r).toBe(false);
       }
-    });
+    }
+    it('across every tool/command combination (REQ-GEMINI-011.A4)', geminiNoDecisionWithoutStrict);
   });
+});
+
+/**
+ * REQ-GEMINI-011.A5 — the docs must not promise that either mode removes
+ * Gemini's shell confirmation prompt (BeforeTool fires after it), and must
+ * scope strict mode to the built-in search tools.
+ */
+function geminiDocsStateShellPromptRemains(): void {
+  const doc = fs.readFileSync(
+    path.join(__dirname, '..', 'site', 'src', 'content', 'docs', 'claude-code', 'steering.md'),
+    'utf-8',
+  );
+  expect(doc).toMatch(/Neither mode suppresses Gemini's shell confirmation prompt/);
+  expect(doc).toMatch(/SPECSHIP_GEMINI_STRICT/);
+  expect(doc).toMatch(/grep_search/);
+}
+
+describe('Gemini interceptor docs (REQ-GEMINI-011)', () => {
+  it('docs say the shell confirmation prompt remains (REQ-GEMINI-011.A5)', geminiDocsStateShellPromptRemains);
 });

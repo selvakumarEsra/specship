@@ -137,9 +137,12 @@ function scanTranscript(
     for (const c of calls) {
       const name = (c as { name?: unknown })?.name;
       if (typeof name === 'string') {
-        // Gemini namespaces `specship` MCP tools as `specship__<tool>`;
-        // tolerate the Claude form if a transcript carries both.
-        if (name.startsWith('specship__') || name.startsWith('mcp__specship__')) {
+        // Gemini records the function name the model called, which for an
+        // MCP tool is its bare name (`specship_explore`); the composite
+        // `specship__<tool>` form appears only when a name collision forces
+        // qualification (verified in 0.28.0 DiscoveredMCPTool). `specship_`
+        // covers both; tolerate the Claude form if a transcript carries it.
+        if (name.startsWith('specship_') || name.startsWith('mcp__specship__')) {
           return 'used';
         }
       }

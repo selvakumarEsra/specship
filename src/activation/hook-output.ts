@@ -74,8 +74,9 @@ export function buildHookAdditionalContext(
  * project's agent-agnostic rule.
  *
  *   - `specshipToolMarkers` — substrings naming a specship tool_use record.
- *     Claude exposes our server as `mcp__specship__<tool>`; Gemini namespaces
- *     the SAME MCP server (name `specship`) as `specship__<tool>`.
+ *     Claude exposes our server as `mcp__specship__<tool>`; Gemini shows
+ *     the model the bare tool name (`specship_explore`), qualifying it as
+ *     `specship__<tool>` only on a name collision.
  *   - `transcriptFormat` — Claude writes JSONL (one record per line); Gemini's
  *     `ChatRecordingService` writes one pretty-printed JSON doc with
  *     `messages[].toolCalls[].name`.
@@ -95,7 +96,7 @@ const GEMINI_EVENTS = new Set(['BeforeAgent', 'BeforeTool', 'AfterTool']);
 export function deriveHostTraits(payload: HookPayload): HostTraits {
   if (payload.hookEventName && GEMINI_EVENTS.has(payload.hookEventName)) {
     return {
-      specshipToolMarkers: ['"name":"specship__', '"name": "specship__'],
+      specshipToolMarkers: ['"name":"specship_', '"name": "specship_'],
       transcriptFormat: 'single-json',
       supportsBeforeToolDeny: true,
     };
