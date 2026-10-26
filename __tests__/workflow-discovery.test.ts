@@ -593,7 +593,7 @@ describe('bundled implement workflows — pipeline quality gates (REQ-AUTHG-004/
     'the %s final review is never auto-approved (REQ-THRU-003.A4)', finalReviewIsNeverSkipped);
 
   it.each(['spec-implement', 'spec-implement-mixed'])(
-    'the %s probe step writes probes, never tracked files (REQ-THRU-008.A1/A2)', reviewWritesProbesNotTrackedFiles);
+    'the %s probe step writes probes, never tracked files (REQ-THRU-008.A1, REQ-THRU-008.A2)', reviewWritesProbesNotTrackedFiles);
 
   it.each(['spec-implement', 'spec-implement-mixed'])(
     '%s proposes knowledge but never writes specs/domain (REQ-KNOW-004.A1)',
