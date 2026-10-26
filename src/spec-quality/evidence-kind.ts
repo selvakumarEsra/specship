@@ -88,12 +88,27 @@ const E2E_SOURCE = [/['"]@playwright\/test['"]/, /['"]cypress['"]/, /\bcy\.(visi
 
 /** Contract / API-schema testing tools. */
 const CONTRACT_SOURCE = [
-  /\bschemathesis\b/i,
+  // Case-sensitive: the package and CLI are lowercase in real use, and an
+  // upper-case identifier (a constant named SCHEMATHESIS) is not a use.
+  /\bschemathesis\b/,
   /@pact-foundation\//,
   /\b(from|import)\s+pact\b/,
   /\bnew\s+Pact(V\d)?\s*\(/,
   /\bau\.com\.dius\.pact\b/,
 ];
+
+/**
+ * Remove block comments, `//` line comments and `#` line comments (Python /
+ * shell test files). Deliberately simple: a `//` inside a string literal also
+ * ends the line's code, which can only make classification more conservative.
+ */
+export function stripComments(source: string): string {
+  return source
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .split('\n')
+    .map((line) => line.replace(/(^|\s)\/\/.*$/, '$1').replace(/^\s*#(?!!).*$/, ''))
+    .join('\n');
+}
 
 function pathSegments(filePath: string): string[] {
   return filePath
@@ -118,6 +133,9 @@ export function classifyTestEvidence(filePath: string, source?: string): Evidenc
       text = '';
     }
   }
+  // A tool named in prose (a doc comment explaining the classifier, say) is
+  // not a use of it — match against code with comments removed.
+  text = stripComments(text);
   try {
     if (PROPERTY_SOURCE.some((re) => re.test(text!))) return 'property';
     if (E2E_SOURCE.some((re) => re.test(text!))) return 'e2e';

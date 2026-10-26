@@ -75,7 +75,7 @@ const FAST_CHECK = q(j('fast', '-check'));
 const PLAYWRIGHT = q(j('@playwright', '/test'));
 const FC_BODY = j('f', 'c.assert(f', 'c.property(f', 'c.integer(), () => true));\n');
 const HYPOTHESIS = j('from hypo', 'thesis import given\n@giv', 'en(st.integers())\ndef test_x(n): ...');
-const SCHEMATHESIS = j('// run via schema', 'thesis against openapi.json');
+const SCHEMATHESIS = j('schema = schema', 'thesis.from_path("openapi.json")');
 const PACT = j("import { PactV3 } from '@pact", "-foundation/pact';");
 
 function declaredKindWins(): void {
@@ -142,6 +142,10 @@ function classifiesTestFilesByKind(): void {
   expect(classifyTestEvidence('tests/login.spec.ts', `import { test } from ${PLAYWRIGHT};\n`)).toBe('e2e');
   expect(classifyTestEvidence('tests/api.test.ts', SCHEMATHESIS)).toBe('contract');
   expect(classifyTestEvidence('tests/api.test.ts', PACT)).toBe('contract');
+  // A tool named only in a comment is not a use of it (found dogfooding: this
+  // very file's doc comment mentions the contract tools).
+  expect(classifyTestEvidence('tests/a.test.ts', j('/** classifies Schema', 'thesis and Pact users */\nit("x", () => {});'))).toBe('unit');
+  expect(classifyTestEvidence('tests/a.test.ts', j('// uses fast-', 'check later\nit("x", () => {});'))).toBe('unit');
   expect(classifyTestEvidence('tests/plain.test.ts', "import { it } from 'vitest';")).toBe('unit');
   // From path.
   expect(classifyTestEvidence('e2e/checkout.test.ts', '')).toBe('e2e');
