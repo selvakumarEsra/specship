@@ -15,7 +15,7 @@ jira_fingerprint_REQ-GEMINI-004: 5429f748c21a6d3f
 jira_issue_REQ-GEMINI-005: SSHIP-61
 jira_fingerprint_REQ-GEMINI-005: dde32fd0d774fa74
 jira_issue_REQ-GEMINI-006: SSHIP-64
-jira_fingerprint_REQ-GEMINI-006: 6485925b440c7179
+jira_fingerprint_REQ-GEMINI-006: 8a77a08526473c9d
 jira_issue_REQ-GEMINI-007: SSHIP-68
 jira_fingerprint_REQ-GEMINI-007: 761be48e4b321386
 jira_issue_REQ-GEMINI-008: SSHIP-73
@@ -283,6 +283,7 @@ implementations:
 
 verifies:
   - __tests__/installer-targets.test.ts:geminiInstallNotesUnsupportedSurfaces
+  - __tests__/docs-claims.test.ts:capabilityMatrixMatchesTheInstaller
 
 ## Acceptance
 <!-- id: REQ-GEMINI-006.A1 -->
