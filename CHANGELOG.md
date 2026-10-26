@@ -9,6 +9,9 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+
+## [0.28.0] - 2026-10-26
+
 ### New Features
 
 - Workflows can now run on Gemini CLI. `specship workflow run` (and `/specship:spec implement`) runs each step on Gemini when you launch it from inside Gemini CLI, pass `--agent gemini`, set `SPECSHIP_WORKFLOW_AGENT=gemini`, or set `workflow.agent` in `specship.config.json`; otherwise it uses Claude Code as before. A run keeps the agent it started with through approvals and resumes. Map the `haiku` / `sonnet` / `opus` step models to Gemini models under `workflow.agents.gemini.models`; without a mapping Gemini's default model runs. A step Gemini can't run as written fails with the reason instead of running without the missing piece, and an unknown agent name is refused before the run starts.
@@ -892,3 +895,4 @@ Thanks @andreinknv for the substantive draft this release was based on.
 [0.24.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.24.0
 [0.25.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.25.0
 [0.26.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.26.0
+[0.28.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.28.0
