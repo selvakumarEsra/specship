@@ -19,6 +19,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { MarkdownSpecExtractor, parseAcceptanceParentId } from '../extraction/specs/markdown-spec-extractor';
 import { Spec } from '../types';
+import { parseDeclaredEvidenceKind, EVIDENCE_KINDS } from '../spec-quality/evidence-kind';
 
 export type LintSeverity = 'error' | 'warning';
 
@@ -33,6 +34,7 @@ export type LintCode =
   | 'spec_orphan_acceptance_parent'
   | 'spec_requirement_without_acceptance'
   | 'spec_needs_review_marker'
+  | 'spec_unknown_evidence_kind'
   // warnings
   | 'spec_no_negative_case'
   | 'spec_missing_non_goals'
@@ -232,6 +234,22 @@ export function lintSpecSource(filePath: string, source: string): LintFinding[] 
         line: a.startLine,
         specId: a.id,
         message: `${a.id} still carries a [needs review] marker.`,
+      });
+    }
+  }
+
+  // 5b. An `(evidence: <kind>)` tag naming a kind outside the four
+  //     (REQ-PIPETRUST-001.A3). Resolution would silently fall back to the
+  //     derived kind, so the author's intent would be lost — an error.
+  for (const a of acceptance) {
+    const { invalid } = parseDeclaredEvidenceKind(a.body);
+    if (invalid !== undefined) {
+      add({
+        code: 'spec_unknown_evidence_kind',
+        severity: 'error',
+        line: a.startLine,
+        specId: a.id,
+        message: `${a.id} declares unknown evidence kind "${invalid}" — use one of ${EVIDENCE_KINDS.join(', ')}.`,
       });
     }
   }

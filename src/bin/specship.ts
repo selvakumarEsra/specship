@@ -1907,25 +1907,35 @@ program
   .option('-p, --path <path>', 'Project path')
   .option('-j, --json', 'Output as JSON')
   .option('--line', 'Print only the one-line "N of M acceptance criteria …" summary')
-  .action(async (specArg: string | undefined, options: { path?: string; json?: boolean; line?: boolean }) => {
+  .option('--require-kinds', 'Exit non-zero when any criterion in scope lacks its required evidence kind')
+  .action(async (
+    specArg: string | undefined,
+    options: { path?: string; json?: boolean; line?: boolean; requireKinds?: boolean }
+  ) => {
     const projectPath = resolveProjectPath(options.path);
     try {
       if (!isInitialized(projectPath)) {
         error(`SpecShip not initialized in ${projectPath}`);
         process.exit(1);
       }
-      const { default: SpecShip, formatCoverageLine } = await loadSpecShip();
+      const { default: SpecShip, formatCoverageLine, requireKindsExitCode, criteriaMissingKind } =
+        await loadSpecShip();
       const cg = await SpecShip.open(projectPath);
       const report = cg.getSpecCoverage(specArg);
+      // REQ-PIPETRUST-003.A2: --require-kinds gates on evidence kind; the
+      // verdicts themselves are unchanged.
+      const kindsExit = requireKindsExitCode(report, !!options.requireKinds);
 
       if (options.json) {
         console.log(JSON.stringify(report, null, 2));
         cg.destroy();
+        if (kindsExit !== 0) process.exit(kindsExit);
         return;
       }
       if (options.line) {
         console.log(formatCoverageLine(report));
         cg.destroy();
+        if (kindsExit !== 0) process.exit(kindsExit);
         return;
       }
 
@@ -1944,21 +1954,34 @@ program
         untested: chalk.dim('·'),
         broken: chalk.red('✗'),
       };
+      // Evidence kind per criterion (REQ-PIPETRUST-003.A1): required vs present,
+      // flagged `needs <kind>` when the tests don't include the required kind.
+      const kindNote = (c: { requiredKind: string; presentKinds: string[]; kindSatisfied: boolean }) => {
+        const present = c.presentKinds.length > 0 ? c.presentKinds.join(',') : 'none';
+        const base = `kind: requires ${c.requiredKind}, has ${present}`;
+        return c.kindSatisfied ? chalk.dim(base) : `${chalk.dim(base)} ${chalk.yellow(`needs ${c.requiredKind}`)}`;
+      };
       for (const req of report.requirements) {
         console.log(
-          `${mark[req.verdict]} ${chalk.bold(req.specId)} ${chalk.dim(req.verdict)} — ${req.title}`
+          `${mark[req.verdict]} ${chalk.bold(req.specId)} ${chalk.dim(req.verdict)} — ${req.title}` +
+            (req.criteria.length === 0 ? ` ${kindNote(req)}` : '')
         );
         for (const c of req.criteria) {
           console.log(
             `    ${mark[c.verdict]} ${c.specId} ${chalk.dim(
               `${c.verdict} · implements:${c.implementsLinks.count} tests:${c.testsLinks.count}`
-            )}`
+            )} · ${kindNote(c)}`
           );
         }
       }
       console.log();
       console.log(formatCoverageLine(report));
+      const missing = criteriaMissingKind(report);
+      if (missing.length > 0) {
+        console.log(`${missing.length} criteria lack their required evidence kind.`);
+      }
       cg.destroy();
+      if (kindsExit !== 0) process.exit(kindsExit);
     } catch (err) {
       error(`coverage failed: ${err instanceof Error ? err.message : String(err)}`);
       process.exit(1);

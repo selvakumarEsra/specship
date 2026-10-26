@@ -150,7 +150,14 @@ export type {
 } from './resolution/brief-link-resolver';
 export { computeDomainGapSeed } from './resolution/domain-gap-seed';
 // Spec coverage rollup + test-report ingestion (VSTATE-DOC).
-export { computeSpecCoverage, formatCoverageLine, verdictFor } from './graph/spec-coverage';
+export {
+  computeSpecCoverage,
+  formatCoverageLine,
+  verdictFor,
+  evidenceKindCoverage,
+  criteriaMissingKind,
+  requireKindsExitCode,
+} from './graph/spec-coverage';
 export type {
   SpecCoverageReport,
   RequirementCoverage,
@@ -382,7 +389,7 @@ export class SpecShip {
    * workflow is this function's output, not an LLM's count (REQ-VSTATE-005.A2).
    */
   getSpecCoverage(specId?: string): SpecCoverageReport {
-    return computeSpecCoverage(this.specQueries, specId);
+    return computeSpecCoverage(this.specQueries, specId, { projectRoot: this.projectRoot });
   }
 
   /**
