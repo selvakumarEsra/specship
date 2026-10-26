@@ -1680,7 +1680,7 @@ describe('Gemini target — specifics', () => {
   it('preserves sibling servers and unrelated keys across install + uninstall (REQ-GEMINI-002.A2 / 003.A1)', geminiPreservesSiblingServersAndKeys);
   it('uninstall on a virgin home returns not-found without throwing (REQ-GEMINI-002.A2)', geminiUninstallOnVirginHomeIsNotFound);
   it('re-install preserves an integration a previous install enabled (REQ-GEMINI-003.A2)', geminiReinstallPreservesIntegrations);
-  it('names every unsupported surface in one note and writes nothing else (REQ-GEMINI-006.A1/A2)', geminiInstallNotesUnsupportedSurfaces);
+  it('names every unsupported surface in one note and writes nothing else (REQ-GEMINI-006.A1, REQ-GEMINI-006.A2)', geminiInstallNotesUnsupportedSurfaces);
   it('never installs the spec-author skill (REQ-AUTHG-007.A1)', geminiInstallWritesNoSkill);
   it('npm-uninstall sweeps the Gemini entry too (REQ-GEMINI-008)', geminiEntrySweptByRegistryUninstall);
   it('install preserves user content outside the markers (REQ-GEMINI-004.A1)', geminiInstallPreservesUserGeminiMdContent);
