@@ -40,7 +40,14 @@ import {
   renderGeminiPolicyToml,
   writeGeminiPolicyEntry,
   removeGeminiPolicyEntry,
+  writeGeminiCommandsEntries,
 } from '../src/installer/targets/gemini';
+import {
+  GEMINI_COMMAND_HEADER_MARKER,
+  GeminiCommandUnsupported,
+  geminiCommandSet,
+  renderGeminiCommand,
+} from '../src/installer/gemini-commands';
 import {
   getGeminiRetrievalBlock,
   getSddRuleBlock,
@@ -1179,10 +1186,12 @@ describe('GeminiCliTarget.printConfig', () => {
     expect(geminiTarget.describePaths('global')).toEqual([
       path.join(os.homedir(), '.gemini', 'settings.json'),
       path.join(os.homedir(), '.gemini', 'GEMINI.md'),
+      path.join(os.homedir(), '.gemini', 'commands'),
     ]);
     expect(geminiTarget.describePaths('local')).toEqual([
       path.join(process.cwd(), '.gemini', 'settings.json'),
       path.join(process.cwd(), 'GEMINI.md'),
+      path.join(process.cwd(), '.gemini', 'commands'),
     ]);
   }
 
@@ -1320,19 +1329,26 @@ describe('Gemini target — specifics', () => {
       installStatusLine: true,
     });
 
-    // Writes exactly the MCP settings entry (with hooks block) and the
-    // GEMINI.md steering file — nothing matching Claude's commands /
-    // subagent / status line.
+    // Writes the MCP settings entry (with hooks block), the GEMINI.md
+    // steering file and the rendered Gemini command TOMLs (REQ-GEMINI-005) —
+    // nothing matching Claude's subagent / status line.
+    const commandsDir = path.join(process.cwd(), '.gemini', 'commands', 'specship');
     expect(new Set(result.files.map((f) => f.path))).toEqual(
-      new Set([settingsFile('local'), path.join(process.cwd(), 'GEMINI.md')]),
+      new Set([
+        settingsFile('local'),
+        path.join(process.cwd(), 'GEMINI.md'),
+        ...['explore', 'spec', 'check', 'learn', 'day'].map((n) => path.join(commandsDir, `${n}.toml`)),
+      ]),
     );
     const note = (result.notes ?? []).join('\n');
     // REQ-GEMINI-006.A1: the capability note no longer lists hooks (hooks
-    // are installed now, REQ-GEMINI-010); the still-unsupported surfaces
-    // remain called out.
-    for (const surface of ['slash command', 'specship-explorer', 'status line']) {
+    // are installed now, REQ-GEMINI-010) nor slash commands (REQ-GEMINI-005);
+    // the still-unsupported surfaces remain called out.
+    for (const surface of ['specship-explorer', 'status line']) {
       expect(note).toContain(surface);
     }
+    expect(note).not.toMatch(/no slash commands/i);
+    expect(note).not.toMatch(/skipped \/specship/);
     // Local install also carries the trusted-folder note so a user whose
     // hooks appear inert knows where to look.
     expect(note).toContain('trusted');
@@ -1368,10 +1384,17 @@ describe('Gemini target — specifics', () => {
     const reports = uninstallTargets(ALL_TARGETS, 'global');
     const gemini = reports.find((r) => r.id === 'gemini');
     expect(gemini?.status).toBe('removed');
-    // Sweeps both the MCP settings entry and the GEMINI.md steering file.
+    // Sweeps the MCP settings entry, the GEMINI.md steering file and the
+    // rendered command TOMLs (REQ-GEMINI-005).
     expect(new Set(gemini?.removedPaths)).toEqual(
-      new Set([settingsFile('global'), path.join(tmpHome, '.gemini', 'GEMINI.md')]),
+      new Set([
+        settingsFile('global'),
+        path.join(tmpHome, '.gemini', 'GEMINI.md'),
+        ...['explore', 'spec', 'check', 'learn', 'day'].map((n) =>
+          path.join(tmpHome, '.gemini', 'commands', 'specship', `${n}.toml`)),
+      ]),
     );
+    expect(fs.existsSync(path.join(tmpHome, '.gemini', 'commands', 'specship'))).toBe(false);
     expect(geminiTarget.detect('global').alreadyConfigured).toBe(false);
     expect(fs.existsSync(path.join(tmpHome, '.gemini', 'GEMINI.md'))).toBe(false);
   }
@@ -1666,6 +1689,177 @@ describe('Gemini target — specifics', () => {
   it('SDD portion is byte-identical to Claude; --no-sdd strips it (REQ-GEMINI-004.A4)', geminiSddBlockIsByteIdenticalToClaudeAndOptOutStrips);
   it('re-install reports unchanged; an older block is replaced in place (REQ-GEMINI-004.A5)', geminiReinstallIsUnchangedAndReplacesOldBlockInPlace);
   it('global vs local write ~/.gemini/GEMINI.md and <cwd>/GEMINI.md respectively (REQ-GEMINI-004)', geminiRetrievalBlockHonoursGlobalVsLocalPath);
+
+  // ---- REQ-GEMINI-005: slash commands rendered from the Claude source ----
+
+  const repoCommandsDir = path.resolve(__dirname, '..', 'commands');
+  const geminiCmdDir = (loc: 'global' | 'local') =>
+    path.join(loc === 'global' ? os.homedir() : process.cwd(), '.gemini', 'commands');
+  const SHIPPED = ['explore', 'spec', 'check', 'learn', 'day'];
+  /** The prompt body of a rendered TOML (multi-line literal form). */
+  const promptOf = (toml: string): string => {
+    const m = /prompt = '''\n([\s\S]*)'''\n$/.exec(toml);
+    if (!m) throw new Error('rendered prompt is not a multi-line literal');
+    return m[1]!;
+  };
+
+  /**
+   * REQ-GEMINI-005.A1 — both surfaces derive from the SAME source files: the
+   * Gemini set is exactly the Claude installer's set, each TOML is the render
+   * of the file Claude copies verbatim, and editing a source command changes
+   * the rendered Gemini output.
+   */
+  function geminiCommandsDeriveFromClaudeSource(): void {
+    claudeTarget.install('local', { autoAllow: false });
+    const result = geminiTarget.install('local', { autoAllow: true });
+
+    const claudeNames = fs.readdirSync(path.join(process.cwd(), '.claude', 'commands', 'specship'))
+      .map((f) => f.replace(/\.md$/, '')).sort();
+    const geminiNames = fs.readdirSync(path.join(geminiCmdDir('local'), 'specship'))
+      .map((f) => f.replace(/\.toml$/, '')).sort();
+    expect(geminiNames).toEqual(claudeNames);
+    expect(geminiNames).toEqual([...SHIPPED].sort());
+    expect(result.notes?.join('\n')).not.toMatch(/skipped/);
+
+    for (const name of SHIPPED) {
+      const source = fs.readFileSync(path.join(repoCommandsDir, 'specship', `${name}.md`), 'utf-8');
+      // Claude side: a verbatim copy of the source.
+      expect(fs.readFileSync(path.join(process.cwd(), '.claude', 'commands', 'specship', `${name}.md`), 'utf-8'))
+        .toBe(source);
+      // Gemini side: the render of that same source.
+      expect(fs.readFileSync(path.join(geminiCmdDir('local'), 'specship', `${name}.toml`), 'utf-8'))
+        .toBe(renderGeminiCommand(source, `specship/${name}.md`));
+    }
+
+    // Edit a temp copy of the source dir: the rendered output follows.
+    const srcCopy = mkTmpDir('gemini-cmd-src');
+    try {
+      fs.cpSync(repoCommandsDir, srcCopy, { recursive: true });
+      const before = geminiCommandSet(srcCopy, ['specship/explore.md'])[0]!.toml!;
+      const file = path.join(srcCopy, 'specship', 'explore.md');
+      fs.writeFileSync(
+        file,
+        fs.readFileSync(file, 'utf-8')
+          .replace(/^description: .*$/m, 'description: Edited door')
+          + '\nEDITED-MARKER: call `mcp__specship__specship_node` on $ARGUMENTS.\n',
+      );
+      const after = geminiCommandSet(srcCopy, ['specship/explore.md'])[0]!.toml!;
+      expect(after).not.toBe(before);
+      expect(after).toContain('description = "Edited door"');
+      expect(promptOf(after)).toContain('EDITED-MARKER: call `specship_node` on {{args}}.');
+
+      // And the installer writes the edited render (updated in place).
+      const written = writeGeminiCommandsEntries('local', true, srcCopy);
+      expect(written.files.find((f) => f.path.endsWith(path.join('specship', 'explore.toml')))?.action)
+        .toBe('updated');
+      expect(fs.readFileSync(path.join(geminiCmdDir('local'), 'specship', 'explore.toml'), 'utf-8')).toBe(after);
+    } finally {
+      fs.rmSync(srcCopy, { recursive: true, force: true });
+    }
+  }
+
+  /**
+   * REQ-GEMINI-005.A2 — uninstall removes exactly the shipped TOMLs; user
+   * commands beside them (in `specship/` or the commands root) and a
+   * user-authored file at one of our paths survive byte-identical.
+   */
+  function geminiUninstallKeepsUserCommands(): void {
+    const dir = geminiCmdDir('global');
+    const userRoot = path.join(dir, 'mine.toml');
+    const userSibling = path.join(dir, 'specship', 'custom.toml');
+    const userAtOurPath = path.join(dir, 'specship', 'learn.toml');
+    fs.mkdirSync(path.join(dir, 'specship'), { recursive: true });
+    fs.writeFileSync(userRoot, 'prompt = "mine"\n');
+    fs.writeFileSync(userSibling, 'description = "custom"\nprompt = "custom {{args}}"\n');
+    fs.writeFileSync(userAtOurPath, 'prompt = "my own learn"\n');
+
+    const installed = geminiTarget.install('global', { autoAllow: true });
+    // Never overwrites a user-authored file at one of our paths.
+    expect(installed.files.find((f) => f.path === userAtOurPath)?.action).toBe('kept');
+    expect(fs.readFileSync(userAtOurPath, 'utf-8')).toBe('prompt = "my own learn"\n');
+
+    const result = geminiTarget.uninstall('global');
+    for (const name of SHIPPED.filter((n) => n !== 'learn')) {
+      const p = path.join(dir, 'specship', `${name}.toml`);
+      expect(fs.existsSync(p)).toBe(false);
+      expect(result.files.find((f) => f.path === p)?.action).toBe('removed');
+    }
+    expect(fs.readFileSync(userRoot, 'utf-8')).toBe('prompt = "mine"\n');
+    expect(fs.readFileSync(userSibling, 'utf-8')).toBe('description = "custom"\nprompt = "custom {{args}}"\n');
+    expect(fs.readFileSync(userAtOurPath, 'utf-8')).toBe('prompt = "my own learn"\n');
+
+    // With nothing user-authored inside, the specship/ subdir is dropped.
+    geminiTarget.install('local', { autoAllow: true });
+    geminiTarget.uninstall('local');
+    expect(fs.existsSync(path.join(geminiCmdDir('local'), 'specship'))).toBe(false);
+  }
+
+  /** Byte-identical re-install reports `unchanged`; `--no-sdd` ships only the reads door. */
+  function geminiCommandInstallIsIdempotent(): void {
+    geminiTarget.install('global', { autoAllow: true });
+    const second = geminiTarget.install('global', { autoAllow: true });
+    const cmdEntries = second.files.filter((f) => f.path.startsWith(geminiCmdDir('global')));
+    expect(cmdEntries).toHaveLength(SHIPPED.length);
+    expect(cmdEntries.every((f) => f.action === 'unchanged')).toBe(true);
+
+    geminiTarget.install('local', { autoAllow: true, sdd: false });
+    expect(fs.readdirSync(path.join(geminiCmdDir('local'), 'specship'))).toEqual(['explore.toml']);
+  }
+
+  /** `$ARGUMENTS` → `{{args}}`, `mcp__specship__x` → `x`, Claude tool names → Gemini's; TOML escaping holds. */
+  function geminiCommandRendersArgsAndBareToolNames(): void {
+    const explore = fs.readFileSync(path.join(repoCommandsDir, 'specship', 'explore.md'), 'utf-8');
+    const toml = renderGeminiCommand(explore, 'specship/explore.md');
+    expect(toml.startsWith(GEMINI_COMMAND_HEADER_MARKER)).toBe(true);
+    const prompt = promptOf(toml);
+    expect(prompt).toContain('{{args}}');
+    expect(prompt).toContain('`specship_explore`');
+    expect(prompt).not.toMatch(/\$ARGUMENTS|mcp__|allowed-tools|^---/m);
+    // The description escapes its double quotes as a TOML basic string.
+    expect(toml).toMatch(/^description = "Reads door — .*ask \\"what breaks if I change X\\"\."$/m);
+
+    const spec = promptOf(renderGeminiCommand(
+      fs.readFileSync(path.join(repoCommandsDir, 'specship', 'spec.md'), 'utf-8'),
+    ));
+    expect(spec).toContain('`write_file`');
+    expect(spec).toContain('gemini mcp add --transport http figma');
+    expect(spec).not.toMatch(/\.claude\/skills|`designer-loop` skill|claude mcp add/);
+
+    // A body containing ''' falls back to an escaped basic multi-line string.
+    const tricky = renderGeminiCommand('---\ndescription: d\n---\nuse \'\'\' and """ and \\ here\n');
+    expect(tricky).toContain('prompt = """\nuse \'\'\' and \\"\\"\\" and \\\\ here\n"""');
+  }
+
+  /** Claude-only machinery the rewrites can't map is excluded with a note — never shipped broken. */
+  function geminiCommandExcludesClaudeOnlyMachinery(): void {
+    expect(() => renderGeminiCommand('---\ndescription: d\n---\nDispatch the `specship-explorer` subagent.\n'))
+      .toThrow(GeminiCommandUnsupported);
+    expect(() => renderGeminiCommand('---\ndescription: d\n---\nRun !{git status} first.\n'))
+      .toThrow(GeminiCommandUnsupported);
+
+    const srcCopy = mkTmpDir('gemini-cmd-excl');
+    try {
+      fs.cpSync(repoCommandsDir, srcCopy, { recursive: true });
+      geminiTarget.install('local', { autoAllow: true });
+      const specToml = path.join(geminiCmdDir('local'), 'specship', 'spec.toml');
+      expect(fs.existsSync(specToml)).toBe(true);
+
+      fs.appendFileSync(path.join(srcCopy, 'specship', 'spec.md'), '\nDispatch the `specship-explorer` subagent.\n');
+      const { files, notes } = writeGeminiCommandsEntries('local', true, srcCopy);
+      expect(notes.join('\n')).toMatch(/skipped \/specship:spec — depends on the specship-explorer subagent/);
+      // The stale copy an earlier install wrote is removed, not left broken.
+      expect(files.find((f) => f.path === specToml)?.action).toBe('removed');
+      expect(fs.existsSync(specToml)).toBe(false);
+    } finally {
+      fs.rmSync(srcCopy, { recursive: true, force: true });
+    }
+  }
+
+  it('Gemini command set renders from the same sources Claude copies; edits flow through (REQ-GEMINI-005.A1)', geminiCommandsDeriveFromClaudeSource);
+  it('uninstall removes only shipped command TOMLs; user commands survive (REQ-GEMINI-005.A2)', geminiUninstallKeepsUserCommands);
+  it('command install is idempotent and --no-sdd ships only the reads door (REQ-GEMINI-005)', geminiCommandInstallIsIdempotent);
+  it('rewrites $ARGUMENTS to {{args}} and mcp__specship__ names to bare names (REQ-GEMINI-005)', geminiCommandRendersArgsAndBareToolNames);
+  it('excludes a command with Claude-only machinery and says so (REQ-GEMINI-005)', geminiCommandExcludesClaudeOnlyMachinery);
 
   // ---- REQ-GEMINI-009: opt-in read-only auto-approval policy TOML ----
 
