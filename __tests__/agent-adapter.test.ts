@@ -148,6 +148,37 @@ function sharedCodeHasNoHostSpecificNames(): void {
   }
 }
 
+/** Allowlist entries whose reason is missing or too thin to explain the exemption. */
+export function allowlistEntriesWithoutReason(allow: Record<string, string>): string[] {
+  return Object.entries(allow)
+    .filter(([, reason]) => reason.trim().length <= 10)
+    .map(([prefix]) => prefix);
+}
+
+function allowlistEntriesCarryReasons(): void {
+  expect(allowlistEntriesWithoutReason(HOST_SPECIFIC_ALLOWLIST)).toEqual([]);
+  expect(allowlistEntriesWithoutReason({ 'src/x/': '', 'src/y/': 'because reasons are documented here' })).toEqual([
+    'src/x/',
+  ]);
+}
+
+function claudeScopedModulesAreDeclared(): void {
+  for (const prefix of ['src/analytics/', 'src/db/migrations.ts', 'src/claudemd/', 'src/reflect/']) {
+    expect(HOST_SPECIFIC_ALLOWLIST[prefix], `${prefix} must be declared Claude-scoped`).toBeTruthy();
+  }
+}
+
+function unusedAllowlistEntryDoesNotFail(): void {
+  const fake = fs.mkdtempSync(path.join(os.tmpdir(), 'agentadapt-unused-'));
+  try {
+    fs.mkdirSync(path.join(fake, 'src', 'reflect'), { recursive: true });
+    fs.writeFileSync(path.join(fake, 'src', 'reflect', 'clean.ts'), 'export const x = 1;\n');
+    expect(findHostSpecificViolations(fake, { 'src/reflect/': 'Claude-scoped, now migrated' })).toEqual([]);
+  } finally {
+    fs.rmSync(fake, { recursive: true, force: true });
+  }
+}
+
 describe('agent-adapter layer (AGENTADAPT-DOC)', () => {
   it('Claude steering text stays byte-identical (REQ-AGENTADAPT-001.A1)', claudeSteeringTextIsByteIdentical);
   it('Gemini steering names the bare specship_explore (REQ-AGENTADAPT-001.A2)', geminiSteeringNamesTheBareTool);
@@ -155,4 +186,7 @@ describe('agent-adapter layer (AGENTADAPT-DOC)', () => {
   it('host traits come only from the adapter (REQ-AGENTADAPT-002.A1)', traitsComeOnlyFromTheAdapter);
   it('a payload without an event name gets the legacy traits (REQ-AGENTADAPT-002.A2)', payloadWithoutEventNameGetsLegacyTraits);
   it('shared code names no host outside the allowlist (REQ-AGENTADAPT-003.A1)', sharedCodeHasNoHostSpecificNames);
+  it('every allowlist entry carries a reason (REQ-AGENTADAPT-003.A2)', allowlistEntriesCarryReasons);
+  it('Claude-scoped modules are declared in the allowlist (REQ-AGENTADAPT-004.A1)', claudeScopedModulesAreDeclared);
+  it('an allowlist entry with no remaining matches does not fail (REQ-AGENTADAPT-004.A2)', unusedAllowlistEntryDoesNotFail);
 });

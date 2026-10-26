@@ -10,9 +10,9 @@ jira_fingerprint_REQ-AGENTADAPT-001: 087cbddde8c81133
 jira_issue_REQ-AGENTADAPT-002: SSHIP-367
 jira_fingerprint_REQ-AGENTADAPT-002: e5906fcf8305f685
 jira_issue_REQ-AGENTADAPT-003: SSHIP-370
-jira_fingerprint_REQ-AGENTADAPT-003: 0aba1c90126042ab
+jira_fingerprint_REQ-AGENTADAPT-003: f87fbd428ce0788b
 jira_issue_REQ-AGENTADAPT-004: SSHIP-373
-jira_fingerprint_REQ-AGENTADAPT-004: dc6d9b21971f48c1
+jira_fingerprint_REQ-AGENTADAPT-004: 2e1173ee995d06d3
 ---
 
 <!-- id: AGENTADAPT-DOC -->
@@ -107,6 +107,7 @@ implementations:
 
 verifies:
   - __tests__/agent-adapter.test.ts:sharedCodeHasNoHostSpecificNames
+  - __tests__/agent-adapter.test.ts:allowlistEntriesCarryReasons
 
 ## Acceptance
 <!-- id: REQ-AGENTADAPT-003.A1 -->
@@ -129,6 +130,10 @@ spec. `.claude/` config-path users are inventoried here
 `src/reflect/*`, `src/claudemd/audit.ts`, `src/installer/*`) but are not yet
 guarded. [needs review: extend the guard to config paths once reflect and
 claudemd are host-parameterized]
+
+verifies:
+  - __tests__/agent-adapter.test.ts:claudeScopedModulesAreDeclared
+  - __tests__/agent-adapter.test.ts:unusedAllowlistEntryDoesNotFail
 
 ## Acceptance
 <!-- id: REQ-AGENTADAPT-004.A1 -->
