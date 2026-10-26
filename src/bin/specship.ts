@@ -3253,8 +3253,9 @@ program
       for await (const c of process.stdin) chunks.push(c as Buffer);
     } catch { /* no stdin — nothing to nudge */ }
     const raw = Buffer.concat(chunks).toString('utf-8').trim();
-    const { parseHookPayload, buildHookAdditionalContext } = await import('../activation/hook-output');
+    const { parseHookPayload, buildHookAdditionalContext, deriveHostTraits } = await import('../activation/hook-output');
     const payload = parseHookPayload(raw);
+    const traits = deriveHostTraits(payload);
 
     if (shouldNudge(payload.prompt || raw)) {
       const additionalContext =
@@ -3262,7 +3263,7 @@ program
         'planning skill, FIRST invoke spec-author to author the spec under specs/ for this ' +
         'work — the spec is the contract; implement from it with /specship:spec implement.';
       process.stdout.write(
-        buildHookAdditionalContext(additionalContext, payload.hookEventName, 'UserPromptSubmit'),
+        buildHookAdditionalContext(additionalContext, payload.hookEventName, traits.fallbackPromptEvent),
       );
     }
     process.exit(0);
@@ -3288,8 +3289,9 @@ program
       for await (const c of process.stdin) chunks.push(c as Buffer);
     } catch { /* no stdin — fall back to process.cwd() */ }
     const raw = Buffer.concat(chunks).toString('utf-8').trim();
-    const { parseHookPayload, buildHookAdditionalContext } = await import('../activation/hook-output');
+    const { parseHookPayload, buildHookAdditionalContext, deriveHostTraits } = await import('../activation/hook-output');
     const payload = parseHookPayload(raw);
+    const traits = deriveHostTraits(payload);
     const cwd = payload.cwd ?? process.cwd();
 
     // Record the session's model from the transcript tail (MODCTX-DOC,
@@ -3306,10 +3308,10 @@ program
     }
 
     const { buildSteeringNudge } = await import('../activation/steering');
-    const additionalContext = buildSteeringNudge(cwd);
+    const additionalContext = buildSteeringNudge(cwd, process.env, undefined, traits.toolPrefix);
     if (additionalContext) {
       process.stdout.write(
-        buildHookAdditionalContext(additionalContext, payload.hookEventName, 'UserPromptSubmit'),
+        buildHookAdditionalContext(additionalContext, payload.hookEventName, traits.fallbackPromptEvent),
       );
     }
     process.exit(0);
@@ -3352,9 +3354,9 @@ program
         }
       } catch { /* not JSON — strict path stays off, advisory still works via payload */ }
 
-      const DENY_TOOLS = new Set(['grep_search', 'glob']);
+      const DENY_TOOLS = new Set(traits.denyEligibleTools);
       const shellCommand =
-        toolName === 'run_shell_command' && typeof toolInput.command === 'string'
+        traits.shellTool !== null && toolName === traits.shellTool && typeof toolInput.command === 'string'
           ? (toolInput.command as string)
           : null;
 
@@ -3388,7 +3390,7 @@ program
           process.stdout.write(JSON.stringify({ decision: 'deny', reason: result.reason }) + '\n');
         } else {
           process.stdout.write(
-            buildHookAdditionalContext(result.additionalContext, payload.hookEventName, 'PreToolUse'),
+            buildHookAdditionalContext(result.additionalContext, payload.hookEventName, traits.fallbackToolEvent),
           );
         }
       }

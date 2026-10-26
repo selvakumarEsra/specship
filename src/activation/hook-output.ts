@@ -89,21 +89,53 @@ export interface HostTraits {
   specshipToolMarkers: string[];
   transcriptFormat: 'jsonl' | 'single-json';
   supportsBeforeToolDeny: boolean;
+  /**
+   * Prefix the host puts in front of a SpecShip tool name when the model
+   * calls it (AGENTADAPT-DOC, REQ-AGENTADAPT-001): agent-facing text renders
+   * `${toolPrefix}specship_explore` so each host sees its own tool name.
+   */
+  toolPrefix: string;
+  /** Event names to answer with when the payload names none (REQ-AGENTADAPT-002). */
+  fallbackPromptEvent: string;
+  fallbackToolEvent: string;
+  /** The host's own built-in search tools a strict interceptor may redirect. */
+  denyEligibleTools: readonly string[];
+  /** The host's shell tool, whose `command` the interceptor classifies. */
+  shellTool: string | null;
 }
+
+/**
+ * Claude Code — also the legacy default for payloads that name no event, so
+ * every pre-adapter install keeps its exact behaviour (REQ-AGENTADAPT-002.A2).
+ */
+export const CLAUDE_CODE_TRAITS: HostTraits = {
+  specshipToolMarkers: ['"name":"mcp__specship__'],
+  transcriptFormat: 'jsonl',
+  supportsBeforeToolDeny: false,
+  toolPrefix: 'mcp__specship__',
+  fallbackPromptEvent: 'UserPromptSubmit',
+  fallbackToolEvent: 'PreToolUse',
+  denyEligibleTools: [],
+  shellTool: null,
+};
+
+/** Gemini CLI (verified against 0.28.0). */
+export const GEMINI_CLI_TRAITS: HostTraits = {
+  specshipToolMarkers: ['"name":"specship_', '"name": "specship_'],
+  transcriptFormat: 'single-json',
+  supportsBeforeToolDeny: true,
+  toolPrefix: '',
+  fallbackPromptEvent: 'BeforeAgent',
+  fallbackToolEvent: 'BeforeTool',
+  denyEligibleTools: ['grep_search', 'glob'],
+  shellTool: 'run_shell_command',
+};
 
 const GEMINI_EVENTS = new Set(['BeforeAgent', 'BeforeTool', 'AfterTool']);
 
 export function deriveHostTraits(payload: HookPayload): HostTraits {
   if (payload.hookEventName && GEMINI_EVENTS.has(payload.hookEventName)) {
-    return {
-      specshipToolMarkers: ['"name":"specship_', '"name": "specship_'],
-      transcriptFormat: 'single-json',
-      supportsBeforeToolDeny: true,
-    };
+    return GEMINI_CLI_TRAITS;
   }
-  return {
-    specshipToolMarkers: ['"name":"mcp__specship__'],
-    transcriptFormat: 'jsonl',
-    supportsBeforeToolDeny: false,
-  };
+  return CLAUDE_CODE_TRAITS;
 }

@@ -31,6 +31,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { resolveSetting } from '../config/runtime-settings';
+import { CLAUDE_CODE_TRAITS } from './hook-output';
 
 /**
  * The one redirect line. Explicitly advisory ("your search still runs") so
@@ -142,7 +143,7 @@ function scanTranscript(
         // `specship__<tool>` form appears only when a name collision forces
         // qualification (verified in 0.28.0 DiscoveredMCPTool). `specship_`
         // covers both; tolerate the Claude form if a transcript carries it.
-        if (name.startsWith('specship_') || name.startsWith('mcp__specship__')) {
+        if (name.startsWith('specship_') || name.startsWith(CLAUDE_CODE_TRAITS.toolPrefix)) {
           return 'used';
         }
       }
@@ -252,7 +253,7 @@ export function buildSearchIntercept(input: SearchInterceptInput): SearchInterce
     env = process.env,
     homedir,
     now = new Date(),
-    specshipToolMarkers = ['"name":"mcp__specship__'],
+    specshipToolMarkers = CLAUDE_CODE_TRAITS.specshipToolMarkers,
     transcriptFormat = 'jsonl',
     strict = false,
     denyEligible = false,

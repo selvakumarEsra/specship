@@ -30,6 +30,7 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixes
 
+- In Gemini CLI, SpecShip's per-prompt reminder told the assistant to call the explore tool by Claude Code's name for it. It now uses the name Gemini CLI actually gives the tool; Claude Code sessions see exactly the same reminder as before.
 - The implement workflow's quality gate no longer halts a run over lint or type errors that were already there before the change. It now records the project's errors before implementing and fails only on errors the change introduced; errors that were already present are still listed in the run's output.
 - `specship install --skip-index` now actually skips indexing on a project-local install. Previously the flag only worked for global installs; a local install always built the index anyway. The install summary lists the skip as your choice and tells you how to index later.
 - You can now act on learned proposals from the command line: `specship reflect apply <hash>` previews the change and writes it with `--yes`, `specship reflect undo <hash>` reverses it, and `specship reflect dismiss <hash>` hides it for good. The session-start and sync messages no longer send you to a dashboard page that doesn't exist.
