@@ -65,3 +65,44 @@ export function buildHookAdditionalContext(
     '\n'
   );
 }
+
+/**
+ * Host-shaped traits derived from a hook payload — the one place that peeks
+ * at `hook_event_name` to decide whether we're serving Claude Code or Gemini
+ * CLI. Shared code (`search-intercept`, `bin/specship`) consumes the traits
+ * and never event-name-sniffs itself, keeping it host-agnostic per the
+ * project's agent-agnostic rule.
+ *
+ *   - `specshipToolMarkers` — substrings naming a specship tool_use record.
+ *     Claude exposes our server as `mcp__specship__<tool>`; Gemini namespaces
+ *     the SAME MCP server (name `specship`) as `specship__<tool>`.
+ *   - `transcriptFormat` — Claude writes JSONL (one record per line); Gemini's
+ *     `ChatRecordingService` writes one pretty-printed JSON doc with
+ *     `messages[].toolCalls[].name`.
+ *   - `supportsBeforeToolDeny` — whether the host reads a top-level
+ *     `{decision:'deny'}` on its BeforeTool-equivalent. Gemini 0.28.0+
+ *     `BeforeToolHookOutput.isBlockingDecision` does; Claude's PreToolUse
+ *     uses a different shape so we never emit deny for Claude.
+ */
+export interface HostTraits {
+  specshipToolMarkers: string[];
+  transcriptFormat: 'jsonl' | 'single-json';
+  supportsBeforeToolDeny: boolean;
+}
+
+const GEMINI_EVENTS = new Set(['BeforeAgent', 'BeforeTool', 'AfterTool']);
+
+export function deriveHostTraits(payload: HookPayload): HostTraits {
+  if (payload.hookEventName && GEMINI_EVENTS.has(payload.hookEventName)) {
+    return {
+      specshipToolMarkers: ['"name":"specship__', '"name": "specship__'],
+      transcriptFormat: 'single-json',
+      supportsBeforeToolDeny: true,
+    };
+  }
+  return {
+    specshipToolMarkers: ['"name":"mcp__specship__'],
+    transcriptFormat: 'jsonl',
+    supportsBeforeToolDeny: false,
+  };
+}

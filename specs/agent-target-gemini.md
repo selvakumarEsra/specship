@@ -506,7 +506,17 @@ toward ALLOW in strict mode (never deny on a parse failure).
 
 implementations:
   - src/activation/search-intercept.ts:buildSearchIntercept
+  - src/activation/search-intercept.ts:classifyShellCommand
+  - src/activation/hook-output.ts:deriveHostTraits
   - src/installer/targets/gemini.ts:GeminiCliTarget.install
+
+verifies:
+  - __tests__/search-intercept.test.ts:classifyShellCommand splits on top-level pipeline operators only
+  - __tests__/search-intercept.test.ts:denies grep_search / glob with a reason naming specship_explore
+  - __tests__/search-intercept.test.ts:ALLOWs when the transcript cannot be parsed
+  - __tests__/search-intercept.test.ts:ALLOWs when the project is unindexed
+  - __tests__/search-intercept.test.ts:across every tool/command combination
+  - __tests__/installer-targets.test.ts:geminiInstallWritesHookEntries
 
 ## Acceptance
 <!-- id: REQ-GEMINI-011.A1 -->

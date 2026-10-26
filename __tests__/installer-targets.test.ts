@@ -1518,8 +1518,19 @@ describe('Gemini target — specifics', () => {
     // AfterTool matcher is scoped to the write-surface tools, not every tool.
     const afterTool = hooks.AfterTool[0];
     expect(afterTool.matcher).toBe('write_file|replace');
+    // REQ-GEMINI-011: BeforeTool search-intercept wired on grep_search, glob,
+    // and run_shell_command — each as its own matcher group.
+    expect(commandsFor('BeforeTool')).toEqual([
+      'specship search-intercept',
+      'specship search-intercept',
+      'specship search-intercept',
+    ]);
+    const beforeToolMatchers = (hooks.BeforeTool as any[]).map((g) => g.matcher);
+    expect(new Set(beforeToolMatchers)).toEqual(
+      new Set(['grep_search', 'glob', 'run_shell_command']),
+    );
     // Every entry is a command-type hook.
-    for (const event of ['BeforeAgent', 'SessionStart', 'AfterTool']) {
+    for (const event of ['BeforeAgent', 'SessionStart', 'AfterTool', 'BeforeTool']) {
       for (const group of hooks[event]) {
         for (const h of group.hooks) expect(h.type).toBe('command');
       }
@@ -1604,7 +1615,12 @@ describe('Gemini target — specifics', () => {
     expect(commands).toEqual(['my-own-hook.sh']);
     // The specship commands are gone from every event.
     const all = JSON.stringify(afterUninstall.hooks ?? {});
-    for (const forbidden of ['specship steer-nudge', 'specship spec-nudge', 'specship cheatsheet']) {
+    for (const forbidden of [
+      'specship steer-nudge',
+      'specship spec-nudge',
+      'specship cheatsheet',
+      'specship search-intercept',
+    ]) {
       expect(all).not.toContain(forbidden);
     }
   }

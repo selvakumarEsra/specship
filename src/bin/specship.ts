@@ -3316,47 +3316,81 @@ program
   });
 
 /**
- * specship search-intercept (STEER-HOOK-DOC, REQ-STEER-004/005)
+ * specship search-intercept (STEER-HOOK-DOC, REQ-STEER-004/005, REQ-GEMINI-011)
  *
- * Internal PreToolUse hook command on search-shaped tools (Grep/Glob): emit
- * the point-of-use redirect to specship_explore, at most once per session and
- * only when the session hasn't used specship yet. STRICTLY ADVISORY — the
- * output is additionalContext, never a permission decision, and the command
- * exits 0 on every path (including internal errors) so the matched call
- * always proceeds (REQ-STEER-004.A2).
+ * Internal hook on search-shaped tools. For Claude's PreToolUse (Grep/Glob)
+ * and Gemini's BeforeTool (grep_search / glob / run_shell_command), emit the
+ * point-of-use redirect to specship_explore. Host-aware traits are derived
+ * from the payload in `activation/hook-output.ts`; shared code never sniffs
+ * event names. Advisory for Claude; Gemini also supports strict mode
+ * (`SPECSHIP_GEMINI_STRICT=1`) which denies grep_search / glob — never
+ * run_shell_command (REQ-GEMINI-011.A3). Exits 0 on every path.
  */
 program
   .command('search-intercept')
-  .description('Internal hook: point-of-use redirect from search tools to specship_explore (PreToolUse)')
+  .description('Internal hook: point-of-use redirect from search tools to specship_explore (PreToolUse / BeforeTool)')
   .action(async () => {
     try {
-      let cwd = process.cwd();
-      let sessionId: string | null = null;
-      let transcriptPath: string | null = null;
       const chunks: Buffer[] = [];
       try {
         for await (const c of process.stdin) chunks.push(c as Buffer);
-      } catch { /* no stdin — fall back to process.cwd(), untracked session */ }
-      const raw = Buffer.concat(chunks).toString('utf-8').trim();
-      if (raw) {
-        try {
-          const parsed = JSON.parse(raw);
-          if (typeof parsed?.cwd === 'string' && parsed.cwd.length > 0) cwd = parsed.cwd;
-          if (typeof parsed?.session_id === 'string' && parsed.session_id.length > 0) {
-            sessionId = parsed.session_id;
-          }
-          if (typeof parsed?.transcript_path === 'string' && parsed.transcript_path.length > 0) {
-            transcriptPath = parsed.transcript_path;
-          }
-        } catch { /* not JSON — keep defaults */ }
-      }
+      } catch { /* no stdin — fall through with empty payload */ }
+      const raw = Buffer.concat(chunks).toString('utf-8');
+      const { parseHookPayload, deriveHostTraits, buildHookAdditionalContext } =
+        await import('../activation/hook-output');
+      const payload = parseHookPayload(raw);
+      const traits = deriveHostTraits(payload);
+      const cwd = payload.cwd ?? process.cwd();
+
+      let toolName = '';
+      let toolInput: Record<string, unknown> = {};
+      try {
+        const parsed = JSON.parse(raw);
+        if (typeof parsed?.tool_name === 'string') toolName = parsed.tool_name;
+        if (parsed?.tool_input && typeof parsed.tool_input === 'object' && !Array.isArray(parsed.tool_input)) {
+          toolInput = parsed.tool_input as Record<string, unknown>;
+        }
+      } catch { /* not JSON — strict path stays off, advisory still works via payload */ }
+
+      const DENY_TOOLS = new Set(['grep_search', 'glob']);
+      const shellCommand =
+        toolName === 'run_shell_command' && typeof toolInput.command === 'string'
+          ? (toolInput.command as string)
+          : null;
+
+      const { resolveSetting } = await import('../config/runtime-settings');
+      const strict =
+        traits.supportsBeforeToolDeny &&
+        resolveSetting('SPECSHIP_GEMINI_STRICT', cwd, process.env, os.homedir()) === '1';
+
+      const searchPattern =
+        (typeof toolInput.pattern === 'string' && (toolInput.pattern as string)) ||
+        (typeof toolInput.query === 'string' && (toolInput.query as string)) ||
+        null;
 
       const { buildSearchIntercept } = await import('../activation/search-intercept');
-      const additionalContext = buildSearchIntercept({ cwd, sessionId, transcriptPath });
-      if (additionalContext) {
-        process.stdout.write(
-          JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext } }) + '\n',
-        );
+      const result = buildSearchIntercept({
+        cwd,
+        sessionId: payload.sessionId,
+        transcriptPath: payload.transcriptPath,
+        specshipToolMarkers: traits.specshipToolMarkers,
+        transcriptFormat: traits.transcriptFormat,
+        strict,
+        denyEligible: DENY_TOOLS.has(toolName),
+        shellCommand,
+        searchPattern,
+      });
+
+      if (result) {
+        if ('decision' in result) {
+          // Gemini BeforeToolHookOutput reads `decision` at the top level
+          // (isBlockingDecision), not inside hookSpecificOutput.
+          process.stdout.write(JSON.stringify({ decision: 'deny', reason: result.reason }) + '\n');
+        } else {
+          process.stdout.write(
+            buildHookAdditionalContext(result.additionalContext, payload.hookEventName, 'PreToolUse'),
+          );
+        }
       }
     } catch { /* advisory only — never block the matched call (REQ-STEER-004.A2) */ }
     process.exit(0);

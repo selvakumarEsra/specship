@@ -252,6 +252,26 @@ const GEMINI_HOOKS: GeminiHookSpec = [
     matcher: 'write_file|replace',
     hook: { type: 'command', command: 'specship sync --quiet' },
   },
+  // Search-intercept — REQ-GEMINI-011. Advisory redirect on built-in
+  // grep_search / glob, plus run_shell_command (which gets classified
+  // search-vs-other at hook time; non-search shell commands pass through
+  // silently). In strict mode (`SPECSHIP_GEMINI_STRICT=1`) grep_search and
+  // glob are denied; run_shell_command NEVER denies.
+  {
+    event: 'BeforeTool',
+    matcher: 'grep_search',
+    hook: { type: 'command', command: 'specship search-intercept' },
+  },
+  {
+    event: 'BeforeTool',
+    matcher: 'glob',
+    hook: { type: 'command', command: 'specship search-intercept' },
+  },
+  {
+    event: 'BeforeTool',
+    matcher: 'run_shell_command',
+    hook: { type: 'command', command: 'specship search-intercept' },
+  },
 ];
 
 /** SDD governance tier — opt-out via `--no-sdd`, matching the Claude install. */

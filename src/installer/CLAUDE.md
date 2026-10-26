@@ -21,7 +21,11 @@ new file + one registry entry.
   `getSddRuleBlock` the Claude target uses so the two surfaces cannot drift),
   and the settings `hooks` block (REQ-GEMINI-010: `BeforeAgent` /
   `SessionStart` / `AfterTool` wired to the same `specship` hook commands the
-  Claude target uses; those commands echo the payload's `hook_event_name`).
+  Claude target uses; those commands echo the payload's `hook_event_name`;
+  REQ-GEMINI-011 adds `BeforeTool` matchers on `grep_search` / `glob` /
+  `run_shell_command` for the search interceptor, with opt-in strict mode
+  via `SPECSHIP_GEMINI_STRICT=1` that denies built-in search tools only —
+  never `run_shell_command`).
   Being in `ALL_TARGETS` does NOT make it install by default:
   `resolveInstallTargets` maps absent / `claude` / `auto` / `all` to Claude
   alone, so Gemini is reachable only by naming it (`--target gemini`,
