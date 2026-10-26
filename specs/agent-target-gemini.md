@@ -11,11 +11,11 @@ jira_fingerprint_REQ-GEMINI-002: 80f873d64381857c
 jira_issue_REQ-GEMINI-003: SSHIP-55
 jira_fingerprint_REQ-GEMINI-003: 7512a4f8dbe0f3fe
 jira_issue_REQ-GEMINI-004: SSHIP-58
-jira_fingerprint_REQ-GEMINI-004: 8c670887ce8247da
+jira_fingerprint_REQ-GEMINI-004: 5429f748c21a6d3f
 jira_issue_REQ-GEMINI-005: SSHIP-61
 jira_fingerprint_REQ-GEMINI-005: dde32fd0d774fa74
 jira_issue_REQ-GEMINI-006: SSHIP-64
-jira_fingerprint_REQ-GEMINI-006: 3f684dd984a9a430
+jira_fingerprint_REQ-GEMINI-006: c2a163b53ec930df
 jira_issue_REQ-GEMINI-007: SSHIP-68
 jira_fingerprint_REQ-GEMINI-007: 761be48e4b321386
 jira_issue_REQ-GEMINI-008: SSHIP-73
