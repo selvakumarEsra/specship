@@ -19,7 +19,7 @@ jira_fingerprint_REQ-THRU-006: 536d23ddd86596bb
 jira_issue_REQ-THRU-007: SSHIP-460
 jira_fingerprint_REQ-THRU-007: 149ea3e3adc3e502
 jira_issue_REQ-THRU-008: SSHIP-464
-jira_fingerprint_REQ-THRU-008: ba664d3440547212
+jira_fingerprint_REQ-THRU-008: b7fd7e38b6c57d01
 jira_issue_REQ-THRU-009: SSHIP-467
 jira_fingerprint_REQ-THRU-009: 7e23c433eff7772b
 jira_issue_REQ-THRU-010: SSHIP-471
@@ -241,11 +241,11 @@ verifies:
 <!-- id: REQ-THRU-008 -->
 ## The adversarial reviewer MUST try to break the change, without touching it
 
-The implement workflows' adversarial review MUST attempt at least one failing
-probe per acceptance criterion — a small test written under
-`.specship/review-probes/` and run — and report each probe as `held` or
-`broke` in the final review. A bash step after the review MUST fail the run
-if the review modified any tracked file.
+After the (read-only) adversarial review, the implement workflows MUST run a
+probe step that attempts at least one failing probe per acceptance criterion
+— a small test written under `.specship/review-probes/` and run — and report
+each probe as `held`, `broke` or `unrun` in the final review. A bash step
+after the probe step MUST fail the run if any tracked file changed during it.
 
 implementations:
   - src/workflows/defaults/spec-implement.yaml
@@ -255,9 +255,9 @@ verifies:
 
 ## Acceptance
 <!-- id: REQ-THRU-008.A1 -->
-- The adversarial review prompt requires a probe per criterion under `.specship/review-probes/` and a held/broke verdict for each.
+- The probe step requires a probe per criterion under `.specship/review-probes/` and a held/broke/unrun verdict for each, and the final review shows them.
 <!-- id: REQ-THRU-008.A2 -->
-- A guard step after the review fails when tracked files differ from before the review.
+- A guard step after the probe step fails when tracked files differ from before it.
 
 <!-- id: REQ-THRU-009 -->
 ## The story↔criterion trace MUST be checked in both directions

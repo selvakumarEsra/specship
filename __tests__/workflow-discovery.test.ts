@@ -442,7 +442,10 @@ describe('bundled implement workflows — pipeline quality gates (REQ-AUTHG-004/
     const wf = load(name);
     const propose = nodeOf(wf, 'knowledge_proposals');
     expect(propose.kind).toBe('prompt');
-    expect(propose.depends_on).toContain('adversarial_review');
+    // After the adversarial review stage — which now ends with the probe guard (REQ-THRU-008).
+    expect(propose.depends_on).toContain('review_guard');
+    const ids = wf.nodes.map((n) => n.id);
+    expect(ids.indexOf('adversarial_review')).toBeLessThan(ids.indexOf('knowledge_proposals'));
     expect(propose.prompt).toContain('.specship/knowledge/proposals/');
     expect(propose.prompt).toContain('NEVER edit');
     const publish = nodeOf(wf, 'knowledge_publish');
@@ -473,6 +476,26 @@ describe('bundled implement workflows — pipeline quality gates (REQ-AUTHG-004/
     // The final human review never auto-approves, under any configuration.
     expect((nodeOf(wf, 'final_review') as { auto_approve?: unknown }).auto_approve).toBeUndefined();
     expect(nodeOf(wf, 'final_review').kind).toBe('approval');
+  }
+
+  function reviewWritesProbesNotTrackedFiles(name: string): void {
+    const wf = load(name);
+    // The scoring review stays read-only (REQ-AUTHG-005.A3) …
+    expect(nodeOf(wf, 'adversarial_review').allowed_tools ?? []).not.toContain('Write');
+    // … the probe step writes only probes, one per criterion, with a verdict each.
+    const probes = nodeOf(wf, 'review_probes');
+    expect(probes.kind).toBe('prompt');
+    expect(probes.prompt).toContain('.specship/review-probes/');
+    expect(probes.prompt).toContain('held | broke | unrun');
+    expect(probes.prompt).toContain('EACH acceptance criterion');
+    expect(nodeOf(wf, 'probe_baseline').depends_on).toContain('adversarial_review');
+    const guard = nodeOf(wf, 'review_guard');
+    expect(guard.kind).toBe('bash');
+    expect(guard.depends_on).toContain('review_probes');
+    expect(guard.bash).toContain('specship-probe-baseline');
+    expect(guard.bash).toContain('exit 1');
+    expect(nodeOf(wf, 'knowledge_proposals').depends_on).toContain('review_guard');
+    expect(nodeOf(wf, 'final_review').message).toContain('$review_probes.output');
   }
 
   function qualityBaselineRunsBeforeImplement(name: string): void {
@@ -568,6 +591,9 @@ describe('bundled implement workflows — pipeline quality gates (REQ-AUTHG-004/
 
   it.each(['spec-implement', 'spec-implement-mixed'])(
     'the %s final review is never auto-approved (REQ-THRU-003.A4)', finalReviewIsNeverSkipped);
+
+  it.each(['spec-implement', 'spec-implement-mixed'])(
+    'the %s probe step writes probes, never tracked files (REQ-THRU-008.A1/A2)', reviewWritesProbesNotTrackedFiles);
 
   it.each(['spec-implement', 'spec-implement-mixed'])(
     '%s proposes knowledge but never writes specs/domain (REQ-KNOW-004.A1)',

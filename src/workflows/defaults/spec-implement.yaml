@@ -679,9 +679,65 @@ nodes:
       3. `Verdict:` one line — the most serious gap a reviewer should look at
          first, or `no gaps found`.
 
+  - id: probe_baseline
+    kind: bash
+    depends_on: [adversarial_review]
+    output_type: probe_baseline
+    bash: |
+      # REQ-THRU-008 — fingerprint every tracked change before the probe step,
+      # so the guard can prove the probes touched nothing tracked.
+      git add -A -N >/dev/null 2>&1 || true
+      git --no-pager diff HEAD | git hash-object --stdin > "$(git rev-parse --git-dir)/specship-probe-baseline"
+      echo "PROBE_BASELINE=recorded"
+
+  - id: review_probes
+    kind: prompt
+    depends_on: [probe_baseline]
+    output_type: review_probes
+    allowed_tools:
+      - Read
+      - Write
+      - Bash
+      - mcp__specship__specship_spec
+    prompt: |
+      Try to BREAK the change for $INPUT.SPEC_ID (REQ-THRU-008). You are not
+      the implementer. For EACH acceptance criterion write at least one small
+      probe test that would fail if the criterion were not really met — an
+      edge case, a boundary, a negative case — ONLY under
+      `.specship/review-probes/` (create it). NEVER edit any tracked file: a
+      guard step fails the run if you do.
+
+      Run each probe with the project's test runner. Report one line per
+      criterion: `<AC id>: held | broke | unrun — <probe file> — <one
+      sentence>`. `unrun` means the probe could not be executed (say why);
+      never report a probe you did not run as held.
+
+      The read-only review already found:
+      $adversarial_review.output
+
+      The change (from git):
+      $diff.output
+
+  - id: review_guard
+    kind: bash
+    depends_on: [review_probes]
+    output_type: review_guard
+    bash: |
+      # REQ-THRU-008.A2 — the probe step may not change tracked files.
+      git add -A -N >/dev/null 2>&1 || true
+      NOW=$(git --no-pager diff HEAD | git hash-object --stdin)
+      BEFORE=$(cat "$(git rev-parse --git-dir)/specship-probe-baseline" 2>/dev/null)
+      if [ -n "$BEFORE" ] && [ "$NOW" != "$BEFORE" ]; then
+        echo "REVIEW_GUARD=failed"
+        echo "HALT_CAUSE=the probe step changed tracked files — probes belong under .specship/review-probes/"
+        git --no-pager diff --stat HEAD
+        exit 1
+      fi
+      echo "REVIEW_GUARD=clean"
+
   - id: knowledge_proposals
     kind: prompt
-    depends_on: [adversarial_review]
+    depends_on: [review_guard]
     output_type: knowledge_proposals
     allowed_tools:
       - Read
@@ -785,6 +841,9 @@ nodes:
 
       Adversarial review:
       $adversarial_review.output
+
+      Review probes (held | broke | unrun per criterion):
+      $review_probes.output
 
       Knowledge proposals (nothing is applied until you run
       `specship knowledge apply <id>`):
