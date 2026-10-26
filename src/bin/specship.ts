@@ -2119,6 +2119,27 @@ program
   });
 
 /**
+ * specship plan-scope <SPEC_ID> --plan-file <f> — small-plan auto-approval
+ * check (THROUGHPUT-DOC, REQ-THRU-003). Always exits 0; the AUTO_APPROVE
+ * marker is what the plan gate reads.
+ */
+program
+  .command('plan-scope <specId>')
+  .description('Decide whether a plan may skip the plan gate (opt-in; prints AUTO_APPROVE=yes|no)')
+  .requiredOption('--plan-file <file>', 'File holding the plan text')
+  .option('-p, --path <path>', 'Project path (defaults to cwd)')
+  .action(async (specId: string, options: { planFile: string; path?: string }) => {
+    const projectRoot = options.path ? path.resolve(options.path) : process.cwd();
+    try {
+      const { assessPlanScopeFromFile, formatPlanScope } = await import('../spec-quality/plan-scope');
+      const planText = fs.readFileSync(path.resolve(options.planFile), 'utf8');
+      console.log(formatPlanScope(assessPlanScopeFromFile(projectRoot, specId, planText)));
+    } catch (err) {
+      console.log(`AUTO_APPROVE=no\n- plan-scope failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  });
+
+/**
  * specship ready <SPEC_ID> — readiness gate (PIPETRUST-DOC, REQ-PIPETRUST-004).
  * File-based (no index needed), so it runs inside a workflow worktree. Exits
  * non-zero when the requirement is not ready; prints the evidence plan.

@@ -17,12 +17,21 @@ import { ApprovalContext } from '../../types';
 export class ApprovalRunner implements NodeRunner {
   readonly kind = 'approval' as const;
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async run(rawNode: DagNode, _ctx: RunnerContext): Promise<NodeRunResult> {
+  async run(rawNode: DagNode, ctx: RunnerContext): Promise<NodeRunResult> {
     if (rawNode.kind !== 'approval') {
       return { status: 'failed', error: `ApprovalRunner received ${rawNode.kind} node` };
     }
     const node = rawNode as ApprovalNode;
+    // REQ-THRU-003 — a deterministic upstream check may approve this gate.
+    if (node.auto_approve) {
+      const upstream = ctx.outputs?.get(node.auto_approve.from)?.text ?? '';
+      if (upstream.includes(node.auto_approve.marker)) {
+        return {
+          status: 'completed',
+          output: { text: `auto-approved: ${node.auto_approve.from} reported ${node.auto_approve.marker}` },
+        };
+      }
+    }
 
     const approval: ApprovalContext = {
       type: 'approval',

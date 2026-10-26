@@ -96,9 +96,30 @@ nodes:
 
       Keep it tight (≤500 words). Do NOT edit code in this step.
 
+  - id: plan_scope
+    kind: bash
+    depends_on: [plan]
+    output_type: plan_scope
+    bash: |
+      # REQ-THRU-003 — opt-in auto-approval of a small, in-scope plan. Prints
+      # AUTO_APPROVE=yes only when specship.config.json opts in, the plan
+      # names only the requirement's implementation files (plus tests, its
+      # spec and CHANGELOG.md), and the requirement has few criteria.
+      PLAN=$plan.output
+      F="$(mktemp)"
+      printf '%s\n' "$PLAN" > "$F"
+      if [ -n "$SPECSHIP_CLI_SCRIPT" ]; then "$SPECSHIP_CLI_NODE" "$SPECSHIP_CLI_SCRIPT" plan-scope $INPUT.SPEC_ID --plan-file "$F" --path .
+      elif command -v specship >/dev/null 2>&1; then specship plan-scope $INPUT.SPEC_ID --plan-file "$F" --path . || echo "AUTO_APPROVE=no"
+      else echo "AUTO_APPROVE=no"; echo "- specship CLI not found"
+      fi
+      rm -f "$F"
+
   - id: approve_plan
     kind: approval
-    depends_on: [plan]
+    depends_on: [plan, plan_scope]
+    auto_approve:
+      from: plan_scope
+      marker: AUTO_APPROVE=yes
     message: |
       Plan ready for $INPUT.SPEC_ID. Review the plan output and approve
       to proceed with implementation, or reject with feedback to revise.

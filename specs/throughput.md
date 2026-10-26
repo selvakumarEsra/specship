@@ -9,7 +9,7 @@ jira_fingerprint_REQ-THRU-001: a9e0550adb32d4ee
 jira_issue_REQ-THRU-002: SSHIP-438
 jira_fingerprint_REQ-THRU-002: f2d697869491548b
 jira_issue_REQ-THRU-003: SSHIP-443
-jira_fingerprint_REQ-THRU-003: 78b4275a7b1dc945
+jira_fingerprint_REQ-THRU-003: 8257c5338cf0fe74
 jira_issue_REQ-THRU-004: SSHIP-448
 jira_fingerprint_REQ-THRU-004: a9c074de75af0dce
 jira_issue_REQ-THRU-005: SSHIP-452
@@ -112,7 +112,9 @@ verifies:
 
 When `specship.config.json` sets `workflow.autoApproveSmallPlans: true`, the
 implement workflows MUST skip the plan approval for a plan that touches only
-files already named in the requirement's `implementations:` blocks and whose
+files already named in the requirement's `implementations:` blocks (test
+files, the requirement's own spec file and CHANGELOG.md never count against
+it) and whose
 requirement has at most `workflow.smallPlanMaxCriteria` (default 3)
 criteria. Every other plan, and every final review, still waits for a human.
 Without the setting, behaviour is unchanged.

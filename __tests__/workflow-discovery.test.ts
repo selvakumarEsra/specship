@@ -464,6 +464,17 @@ describe('bundled implement workflows — pipeline quality gates (REQ-AUTHG-004/
     }
   }
 
+  function finalReviewIsNeverSkipped(name: string): void {
+    const wf = load(name);
+    const plan = nodeOf(wf, 'approve_plan') as { auto_approve?: { from: string; marker: string }; depends_on?: string[] };
+    expect(plan.auto_approve).toEqual({ from: 'plan_scope', marker: 'AUTO_APPROVE=yes' });
+    expect(plan.depends_on).toContain('plan_scope');
+    expect(nodeOf(wf, 'plan_scope').bash).toContain('plan-scope $INPUT.SPEC_ID');
+    // The final human review never auto-approves, under any configuration.
+    expect((nodeOf(wf, 'final_review') as { auto_approve?: unknown }).auto_approve).toBeUndefined();
+    expect(nodeOf(wf, 'final_review').kind).toBe('approval');
+  }
+
   function qualityBaselineRunsBeforeImplement(name: string): void {
     const wf = load(name);
     const base = nodeOf(wf, 'quality_baseline');
@@ -554,6 +565,9 @@ describe('bundled implement workflows — pipeline quality gates (REQ-AUTHG-004/
 
   it.each(['spec-implement', 'spec-implement-mixed'])(
     '%s runs the readiness gate before planning (REQ-PIPETRUST-004.A3)', readinessGatesThePlan);
+
+  it.each(['spec-implement', 'spec-implement-mixed'])(
+    'the %s final review is never auto-approved (REQ-THRU-003.A4)', finalReviewIsNeverSkipped);
 
   it.each(['spec-implement', 'spec-implement-mixed'])(
     '%s proposes knowledge but never writes specs/domain (REQ-KNOW-004.A1)',
