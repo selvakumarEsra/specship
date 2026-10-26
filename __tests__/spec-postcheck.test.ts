@@ -160,6 +160,50 @@ function postcheckRunsKnowledgeCheck(): void {
   expect(runPostcheck({ projectRoot: root, requirementId: 'REQ-DEMO-001', ...noChanges }).ok).toBe(true);
 }
 
+/** A spec whose requirement names an implementation file, for the mutation gate. */
+function specWithImplementation(): void {
+  testFile(GOOD_TESTS);
+  spec(['__tests__/rate.test.ts:refusesSixth', '__tests__/rate.test.ts:resetsOnSuccess']);
+  const p = path.join(root, 'specs', 'demo.md');
+  fs.writeFileSync(p, fs.readFileSync(p, 'utf8').replace('verifies:\n', 'implementations:\n  - src/rate.ts:RateLimiter\n\nverifies:\n'));
+}
+
+function mutationReport(statuses: string[]): void {
+  fs.mkdirSync(path.join(root, 'reports'), { recursive: true });
+  fs.writeFileSync(
+    path.join(root, 'reports', 'm.json'),
+    JSON.stringify({ files: { 'src/rate.ts': { mutants: statuses.map((status) => ({ status })) } } }),
+  );
+}
+
+function lowMutationScoreFailsPostcheck(): void {
+  specWithImplementation();
+  fs.writeFileSync(
+    path.join(root, 'specship.config.json'),
+    JSON.stringify({ enforce: { mutation: { report: 'reports/m.json', threshold: 0.8 } } }),
+  );
+  mutationReport(['Killed', 'Survived', 'Survived']);
+  const r = runPostcheck({ projectRoot: root, requirementId: 'REQ-DEMO-001', ...noChanges });
+  expect(r.ok).toBe(false);
+  expect(r.findings.map((f) => f.check)).toEqual(['mutation']);
+  expect(r.findings[0]!.message).toMatch(/^src\/rate\.ts mutant kill rate 33% < 80% threshold \(1\/3 killed\)/);
+  mutationReport(['Killed', 'Killed', 'Killed', 'Killed', 'Survived']);
+  expect(runPostcheck({ projectRoot: root, requirementId: 'REQ-DEMO-001', ...noChanges }).ok).toBe(true);
+}
+
+function noMutationConfigSkipsTheCheck(): void {
+  specWithImplementation();
+  mutationReport(['Survived', 'Survived']); // a terrible report, but no config → no check
+  const r = runPostcheck({ projectRoot: root, requirementId: 'REQ-DEMO-001', ...noChanges });
+  expect(r.ok).toBe(true);
+  expect(r.ran.some((line) => line.startsWith('mutation'))).toBe(false);
+  // Configured but unreadable report → reported as skipped, not a failure.
+  fs.writeFileSync(path.join(root, 'specship.config.json'), JSON.stringify({ enforce: { mutation: { report: 'missing.json' } } }));
+  const r2 = runPostcheck({ projectRoot: root, requirementId: 'REQ-DEMO-001', ...noChanges });
+  expect(r2.ok).toBe(true);
+  expect(r2.ran.find((line) => line.startsWith('mutation'))).toMatch(/^mutation: skipped/);
+}
+
 describe('mechanical postcheck (REQ-PIPETRUST-005)', () => {
   it('a title-string or missing verifies symbol fails (REQ-PIPETRUST-005.A1)', titleStringVerifiesFails);
   it('a criterion without test evidence fails (REQ-PIPETRUST-005.A2)', uncoveredCriterionFails);
@@ -167,4 +211,6 @@ describe('mechanical postcheck (REQ-PIPETRUST-005)', () => {
   it('a configured fix runs before its check (REQ-PIPETRUST-005.A4)', configuredCommandFixRunsFirst);
   it('a fully covered, documented change passes', allChecksPass);
   it('postcheck fails on an enforced domain-fact rule violation (REQ-KNOW-003.A4)', postcheckRunsKnowledgeCheck);
+  it('a low mutation score fails postcheck when configured (REQ-THRU-010.A1)', lowMutationScoreFailsPostcheck);
+  it('without mutation configuration there is no mutation check (REQ-THRU-010.A2)', noMutationConfigSkipsTheCheck);
 });

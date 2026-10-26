@@ -24,6 +24,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { execSync, spawnSync } from 'child_process';
 import { checkEnforcedRules } from '../knowledge/enforce';
+import { loadEnforceConfig } from '../enforce/enforce';
+import { loadMutationDeps } from '../enforce/mutation';
 
 export interface PostcheckFinding {
   check: 'verifies' | 'changelog' | 'command' | 'knowledge' | 'mutation';
@@ -266,6 +268,45 @@ export function checkConfiguredCommands(opts: PostcheckOptions, ran: string[]): 
   return findings;
 }
 
+/**
+ * REQ-THRU-010 — when `enforce.mutation` is configured, the requirement's
+ * implementation files must clear the mutant kill-rate threshold in the
+ * project's mutation report. Without configuration the check does not exist;
+ * an unreadable report is reported as skipped (never a pass, never a failure),
+ * matching the enforcement gate (REQ-QGATE-002.A3).
+ */
+export function checkMutation(opts: PostcheckOptions, specFile: string | null, ran: string[]): PostcheckFinding[] {
+  const cfg = loadEnforceConfig(opts.projectRoot);
+  if (cfg.mutation === undefined) return [];
+  const deps = loadMutationDeps(opts.projectRoot, cfg.mutation);
+  if (deps.stats === null) {
+    ran.push(`mutation: skipped — ${deps.reason ?? 'no report'}`);
+    return [];
+  }
+  const block = specFile ? requirementBlock(fs.readFileSync(specFile, 'utf8'), opts.requirementId) : null;
+  const files = new Set(
+    (block ? linkBullets(block, 'implementations') : []).map((b) => {
+      const idx = b.lastIndexOf(':');
+      return (idx > 0 ? b.slice(0, idx) : b).replace(/\\/g, '/');
+    }),
+  );
+  const findings: PostcheckFinding[] = [];
+  const pct = (n: number) => `${Math.round(n * 100)}%`;
+  for (const file of files) {
+    const st = deps.stats.get(file);
+    if (!st || st.total === 0) continue;
+    const rate = st.killed / st.total;
+    if (rate < deps.threshold) {
+      findings.push({
+        check: 'mutation',
+        message: `${file} mutant kill rate ${pct(rate)} < ${pct(deps.threshold)} threshold (${st.killed}/${st.total} killed) — the tests would not notice this code breaking`,
+      });
+    }
+  }
+  ran.push(`mutation: ${findings.length === 0 ? 'ok' : `${findings.length} weak file(s)`} (threshold ${pct(deps.threshold)})`);
+  return findings;
+}
+
 /** Locate the spec file declaring `requirementId` under specs/. */
 export function findSpecFile(projectRoot: string, requirementId: string): string | null {
   const marker = `<!-- id: ${requirementId} -->`;
@@ -308,6 +349,9 @@ export function runPostcheck(opts: PostcheckOptions): PostcheckResult {
   findings.push(...c);
 
   findings.push(...checkConfiguredCommands(opts, ran));
+
+  // REQ-THRU-010 — the mutation gate, when the project configured one.
+  findings.push(...checkMutation(opts, specFile, ran));
 
   // REQ-KNOW-003.A4 — enforced domain-fact rules are a built-in check.
   const enforced = checkEnforcedRules(opts.projectRoot);
