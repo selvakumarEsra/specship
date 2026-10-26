@@ -23,7 +23,7 @@ jira_fingerprint_REQ-GEMINI-008: 4d4e35f023392939
 jira_issue_REQ-GEMINI-009: SSHIP-64
 jira_fingerprint_REQ-GEMINI-009: 4fc822fee7260a63
 jira_issue_REQ-GEMINI-010: SSHIP-70
-jira_fingerprint_REQ-GEMINI-010: e21277e9ac5e73b8
+jira_fingerprint_REQ-GEMINI-010: c6eadc7467e6773f
 jira_issue_REQ-GEMINI-011: SSHIP-76
 jira_fingerprint_REQ-GEMINI-011: ceb5d564ce8e42b3
 ---
@@ -444,6 +444,7 @@ verifies:
   - __tests__/installer-targets.test.ts:geminiSessionStartCheatsheetEmitsSystemMessage
   - __tests__/installer-targets.test.ts:geminiUninstallPreservesUserHooks
   - __tests__/installer-targets.test.ts:geminiNoSddOmitsSpecNudge
+  - __tests__/steering-nudge.test.ts:claudeHookOutputIsUnchanged
 
 ## Acceptance
 <!-- id: REQ-GEMINI-010.A1 -->

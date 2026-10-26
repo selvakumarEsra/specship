@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { buildSteeringNudge, STEERING_TEXT } from '../src/activation/steering';
+import { parseHookPayload, buildHookAdditionalContext } from '../src/activation/hook-output';
 
 /**
  * STEER-HOOK-DOC (specs/retrieval-steering-hook.md) — the steer-nudge hook
@@ -43,4 +44,28 @@ describe('buildSteeringNudge (REQ-STEER-002)', () => {
     fs.writeFileSync(path.join(dir, '.specship'), 'not a dir');
     expect(buildSteeringNudge(dir, {})).toBeNull();
   });
+});
+
+/**
+ * REQ-GEMINI-010.A5 — routing the hook commands through the shared
+ * hook-output helper must leave Claude Code's output byte-identical: a Claude
+ * payload (or one with no event name) still yields the exact
+ * `UserPromptSubmit` JSON line the commands emitted before the helper existed.
+ */
+function claudeHookOutputIsUnchanged(): void {
+  const legacy = (ctx: string) =>
+    JSON.stringify({ hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: ctx } }) + '\n';
+  const claudePayload = parseHookPayload(
+    JSON.stringify({ hook_event_name: 'UserPromptSubmit', prompt: 'how does X reach Y', cwd: '/repo', session_id: 's1' }),
+  );
+  expect(buildHookAdditionalContext(STEERING_TEXT, claudePayload.hookEventName, 'UserPromptSubmit')).toBe(
+    legacy(STEERING_TEXT),
+  );
+  const bare = parseHookPayload('how does X reach Y');
+  expect(bare.prompt).toBe('how does X reach Y');
+  expect(buildHookAdditionalContext(STEERING_TEXT, bare.hookEventName, 'UserPromptSubmit')).toBe(legacy(STEERING_TEXT));
+}
+
+describe('shared hook output (REQ-GEMINI-010)', () => {
+  it('Claude hook output stays byte-identical through the shared helper (REQ-GEMINI-010.A5)', claudeHookOutputIsUnchanged);
 });
