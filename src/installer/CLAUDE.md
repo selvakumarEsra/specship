@@ -31,11 +31,14 @@ new file + one registry entry.
 - Any installer change needs matching coverage in
   `__tests__/installer-targets.test.ts` and a CHANGELOG entry — installer
   regressions break every new install silently.
-- `instructions-template.ts` exports only the `<!-- SPECSHIP_START -->` /
-  `<!-- SPECSHIP_END -->` markers. The installer **stopped writing** the
-  legacy `## SpecShip` block into CLAUDE.md (issue #529); `install`
-  (self-heal) and `uninstall` use the markers only to **strip** a block a
-  previous install left behind.
+- `instructions-template.ts` holds three marker pairs. The legacy
+  `<!-- SPECSHIP_START -->` / `<!-- SPECSHIP_END -->` pair is strip-only: the
+  installer **stopped writing** the `## SpecShip` block into CLAUDE.md
+  (issue #529), and `install` (self-heal) and `uninstall` use it only to
+  **strip** a block a previous install left behind. The SDD pair wraps
+  `getSddRuleBlock` (shared by both targets), and the Gemini retrieval pair
+  wraps `getGeminiRetrievalBlock` — an ordering rule only, never a copy of
+  the tool playbook in `server-instructions.ts`.
 
 ## Where things live
 
