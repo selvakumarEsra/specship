@@ -21,7 +21,7 @@ jira_fingerprint_REQ-GEMINI-007: 761be48e4b321386
 jira_issue_REQ-GEMINI-008: SSHIP-73
 jira_fingerprint_REQ-GEMINI-008: 4d4e35f023392939
 jira_issue_REQ-GEMINI-009: SSHIP-64
-jira_fingerprint_REQ-GEMINI-009: 4fc822fee7260a63
+jira_fingerprint_REQ-GEMINI-009: 9f8dff27b8e0a631
 jira_issue_REQ-GEMINI-010: SSHIP-70
 jira_fingerprint_REQ-GEMINI-010: c6eadc7467e6773f
 jira_issue_REQ-GEMINI-011: SSHIP-76
@@ -386,7 +386,11 @@ implementations:
 <!-- id: REQ-GEMINI-009.A1 -->
 - With `--trust`, the written TOML parses under Gemini CLI's policy schema
   (`mcpName = "specship"`, `toolName` list, `decision = "allow"`, integer
-  `priority` in 0–999) and lists exactly the read-only tool set above.
+  `priority` in 0–999) and lists exactly the read-only tool set above. Each
+  `toolName` is the bare server tool name (`specship_explore`), never
+  prefixed: Gemini's loader composes `specship__<tool>` from `mcpName`
+  itself (verified in 0.28.0 `loadPoliciesFromToml`), so a prefixed name
+  would match nothing.
 <!-- id: REQ-GEMINI-009.A2 -->
 - No write-capable tool (link_assert, link_verify, any jira_*, any designer_*)
   appears in an allow rule, and the settings entry never carries `trust`.
