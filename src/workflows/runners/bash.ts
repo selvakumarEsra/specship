@@ -12,6 +12,22 @@ import { DagNode, BashNode } from '../schemas/workflow';
 import { NodeRunner, NodeRunResult, RunnerContext } from './types';
 
 const DEFAULT_TIMEOUT_MS = 60_000;
+/** How much of a failed step's output the one-line `error` keeps. */
+const ERROR_TAIL_CHARS = 4000;
+
+/**
+ * Keep the LAST `max` chars — test runners and compilers print their summary
+ * at the end, so the head is the least useful part (REQ-PIPETRUST-006.A1).
+ */
+export function tailForError(text: string, max = ERROR_TAIL_CHARS): string {
+  return text.length > max ? `…${text.slice(text.length - max)}` : text;
+}
+
+/** Combined output of a failed step, stdout first then stderr. */
+function combinedOutput(stdout: string, stderr: string): string {
+  if (stdout && stderr) return `${stdout}${stdout.endsWith('\n') ? '' : '\n'}${stderr}`;
+  return stdout || stderr;
+}
 
 export class BashRunner implements NodeRunner {
   readonly kind = 'bash' as const;
@@ -109,18 +125,21 @@ export class BashRunner implements NodeRunner {
           });
           return;
         }
+        const combined = combinedOutput(stdout, stderr);
         if (signal === 'SIGTERM') {
           resolve({
             status: 'failed',
             error: `bash node timed out after ${timeout}ms`,
             transient: true,
+            ...(combined ? { output: { text: combined } } : {}),
           });
           return;
         }
-        const errMsg = (stderr || stdout || '').slice(0, 4000);
+        const errMsg = tailForError(stderr || stdout || '');
         resolve({
           status: 'failed',
           error: `bash exited with code ${code}: ${errMsg}`,
+          output: { text: combined },
         });
       });
     });

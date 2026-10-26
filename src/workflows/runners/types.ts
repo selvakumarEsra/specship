@@ -51,7 +51,18 @@ export interface NodeRunStats {
 
 export type NodeRunResult =
   | { status: 'completed'; output: NodeOutput; stats?: NodeRunStats }
-  | { status: 'failed'; error: string; transient?: boolean }
+  | {
+      status: 'failed';
+      error: string;
+      transient?: boolean;
+      /**
+       * What the step printed before it failed (e.g. a bash step's combined
+       * stdout+stderr). The executor stores it in the run's outputs and writes
+       * it as the step's artifact so a failure keeps its evidence
+       * (REQ-PIPETRUST-006). Does NOT make the node count as completed.
+       */
+      output?: NodeOutput;
+    }
   | { status: 'paused'; approval: ApprovalContext }
   | { status: 'cancelled'; reason: string };
 

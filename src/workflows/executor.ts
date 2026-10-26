@@ -650,6 +650,14 @@ export class WorkflowExecutor {
         }
         case 'failed': {
           nodeStates.set(nodeId, 'failed');
+          // Keep what the failed step printed as evidence (REQ-PIPETRUST-006.A2):
+          // stored in the run's outputs + written as its artifact. The node
+          // stays `failed`, so resume still re-runs it (resetFailedNodes is
+          // state-driven) and a successful re-run overwrites this output.
+          if (result.output) {
+            outputs.set(nodeId, result.output);
+            await this.writeArtifact(artifactsDir, node, result.output);
+          }
           this.event(run.id, 'step_failed', { stepId: nodeId, error: result.error });
           await this.finalize(run, workflow, nodeStates, outputs, 'failed', result.error);
           return { run, nodeStates, outputs };
