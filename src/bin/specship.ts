@@ -3253,23 +3253,16 @@ program
       for await (const c of process.stdin) chunks.push(c as Buffer);
     } catch { /* no stdin — nothing to nudge */ }
     const raw = Buffer.concat(chunks).toString('utf-8').trim();
-    let prompt = '';
-    if (raw) {
-      try {
-        const parsed = JSON.parse(raw);
-        prompt = typeof parsed?.prompt === 'string' ? parsed.prompt : raw;
-      } catch {
-        prompt = raw; // not JSON — treat as the raw prompt text
-      }
-    }
+    const { parseHookPayload, buildHookAdditionalContext } = await import('../activation/hook-output');
+    const payload = parseHookPayload(raw);
 
-    if (shouldNudge(prompt)) {
+    if (shouldNudge(payload.prompt || raw)) {
       const additionalContext =
         'This repo uses spec-driven development (SpecShip). Before any brainstorming or ' +
         'planning skill, FIRST invoke spec-author to author the spec under specs/ for this ' +
         'work — the spec is the contract; implement from it with /specship:spec implement.';
       process.stdout.write(
-        JSON.stringify({ hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext } }) + '\n',
+        buildHookAdditionalContext(additionalContext, payload.hookEventName, 'UserPromptSubmit'),
       );
     }
     process.exit(0);
@@ -3287,35 +3280,27 @@ program
   .command('steer-nudge')
   .description('Internal hook: steer flow/structure questions to specship_explore (UserPromptSubmit)')
   .action(async () => {
-    // Prefer the hook payload's cwd (Claude Code sends it on stdin) so the
-    // check targets the project the prompt belongs to, not wherever the hook
-    // process happened to spawn.
-    let cwd = process.cwd();
-    let transcriptPath: string | null = null;
+    // Prefer the hook payload's cwd (Claude Code / Gemini CLI both send it
+    // on stdin) so the check targets the project the prompt belongs to, not
+    // wherever the hook process happened to spawn.
     const chunks: Buffer[] = [];
     try {
       for await (const c of process.stdin) chunks.push(c as Buffer);
     } catch { /* no stdin — fall back to process.cwd() */ }
     const raw = Buffer.concat(chunks).toString('utf-8').trim();
-    if (raw) {
-      try {
-        const parsed = JSON.parse(raw);
-        if (typeof parsed?.cwd === 'string' && parsed.cwd.length > 0) cwd = parsed.cwd;
-        if (typeof parsed?.transcript_path === 'string' && parsed.transcript_path.length > 0) {
-          transcriptPath = parsed.transcript_path;
-        }
-      } catch { /* not JSON — keep process.cwd() */ }
-    }
+    const { parseHookPayload, buildHookAdditionalContext } = await import('../activation/hook-output');
+    const payload = parseHookPayload(raw);
+    const cwd = payload.cwd ?? process.cwd();
 
     // Record the session's model from the transcript tail (MODCTX-DOC,
     // REQ-MODCTX-001.A4) — the primary detection channel, present on every
     // default install. Fires per prompt so mid-session /model switches
     // track; runs even when the steering text is suppressed, but only in
     // initialized projects. Best-effort: never fails the hook.
-    if (transcriptPath && fs.existsSync(path.join(cwd, '.specship'))) {
+    if (payload.transcriptPath && fs.existsSync(path.join(cwd, '.specship'))) {
       try {
         const { readModelFromTranscript, recordSessionModel } = await import('../mcp/model-context');
-        const model = readModelFromTranscript(transcriptPath);
+        const model = readModelFromTranscript(payload.transcriptPath);
         if (model) recordSessionModel(cwd, model);
       } catch { /* telemetry must never break the hook */ }
     }
@@ -3324,7 +3309,7 @@ program
     const additionalContext = buildSteeringNudge(cwd);
     if (additionalContext) {
       process.stdout.write(
-        JSON.stringify({ hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext } }) + '\n',
+        buildHookAdditionalContext(additionalContext, payload.hookEventName, 'UserPromptSubmit'),
       );
     }
     process.exit(0);

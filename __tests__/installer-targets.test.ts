@@ -1317,15 +1317,22 @@ describe('Gemini target — specifics', () => {
       installStatusLine: true,
     });
 
-    // Writes exactly the MCP settings entry and the GEMINI.md steering file —
-    // nothing matching Claude's hooks / commands / subagent / status line.
+    // Writes exactly the MCP settings entry (with hooks block) and the
+    // GEMINI.md steering file — nothing matching Claude's commands /
+    // subagent / status line.
     expect(new Set(result.files.map((f) => f.path))).toEqual(
       new Set([settingsFile('local'), path.join(process.cwd(), 'GEMINI.md')]),
     );
     const note = (result.notes ?? []).join('\n');
-    for (const surface of ['hook', 'command', 'specship-explorer', 'status line']) {
+    // REQ-GEMINI-006.A1: the capability note no longer lists hooks (hooks
+    // are installed now, REQ-GEMINI-010); the still-unsupported surfaces
+    // remain called out.
+    for (const surface of ['slash command', 'specship-explorer', 'status line']) {
       expect(note).toContain(surface);
     }
+    // Local install also carries the trusted-folder note so a user whose
+    // hooks appear inert knows where to look.
+    expect(note).toContain('trusted');
     // Nothing under .claude/ — not even with sdd + statusline requested.
     expect(fs.existsSync(path.join(tmpCwd, '.claude'))).toBe(false);
     expect(fs.existsSync(path.join(tmpHome, '.claude'))).toBe(false);
@@ -1484,7 +1491,149 @@ describe('Gemini target — specifics', () => {
     expect(fs.existsSync(path.join(tmpCwd, 'GEMINI.md'))).toBe(false);
   }
 
+  // ---- REQ-GEMINI-010: prompt / session / tool hooks on Gemini's settings surface ----
+
+  /** REQ-GEMINI-010.A1 — install writes the expected hook events and re-install is unchanged. */
+  function geminiInstallWritesHookEntries(): void {
+    geminiTarget.install('global', { autoAllow: true });
+    const hooks = readSettings('global').hooks;
+    expect(hooks).toBeDefined();
+
+    const commandsFor = (event: string): string[] => {
+      const groups = hooks[event] ?? [];
+      return (groups as any[]).flatMap((g) =>
+        (g.hooks ?? []).map((h: any) => h.command),
+      );
+    };
+    expect(commandsFor('BeforeAgent')).toEqual(
+      expect.arrayContaining(['specship steer-nudge', 'specship spec-nudge']),
+    );
+    expect(commandsFor('SessionStart')).toEqual(
+      expect.arrayContaining([
+        'specship cheatsheet',
+        'specship sync --quiet --drift-summary',
+      ]),
+    );
+    expect(commandsFor('AfterTool')).toEqual(['specship sync --quiet']);
+    // AfterTool matcher is scoped to the write-surface tools, not every tool.
+    const afterTool = hooks.AfterTool[0];
+    expect(afterTool.matcher).toBe('write_file|replace');
+    // Every entry is a command-type hook.
+    for (const event of ['BeforeAgent', 'SessionStart', 'AfterTool']) {
+      for (const group of hooks[event]) {
+        for (const h of group.hooks) expect(h.type).toBe('command');
+      }
+    }
+  }
+
+  /** REQ-GEMINI-010.A1 — a re-run with nothing changed reports settings `unchanged`. */
+  function geminiHookInstallIsIdempotent(): void {
+    geminiTarget.install('global', { autoAllow: true });
+    const second = geminiTarget.install('global', { autoAllow: true });
+    expect(second.files.every((f) => f.action === 'unchanged')).toBe(true);
+  }
+
+  /**
+   * REQ-GEMINI-010.A2 — the retrieval nudge, driven directly from the shared
+   * emitter + `buildSteeringNudge` the CLI command uses, yields a Gemini-shaped
+   * payload with the event name echoed back. Spawns no subprocess — dist/ is
+   * absent in the worktree and would false-fail the test either way.
+   */
+  async function geminiBeforeAgentNudgeEmitsAdditionalContext(): Promise<void> {
+    // Indexed project (the silence gate).
+    fs.mkdirSync(path.join(tmpCwd, '.specship'), { recursive: true });
+    const { buildSteeringNudge } = await import('../src/activation/steering');
+    const { buildHookAdditionalContext, parseHookPayload } = await import('../src/activation/hook-output');
+
+    const payload = parseHookPayload(
+      JSON.stringify({ hook_event_name: 'BeforeAgent', cwd: tmpCwd, prompt: 'how does X reach Y' }),
+    );
+    const nudge = buildSteeringNudge(payload.cwd ?? tmpCwd, { ...process.env });
+    expect(nudge).toBeTruthy();
+    const line = buildHookAdditionalContext(nudge as string, payload.hookEventName, 'UserPromptSubmit');
+    const out = JSON.parse(line);
+    expect(out.hookSpecificOutput.hookEventName).toBe('BeforeAgent');
+    expect(out.hookSpecificOutput.additionalContext).toContain('specship_explore');
+
+    // Opt-out: SPECSHIP_NO_STEERING=1 silences the nudge.
+    expect(buildSteeringNudge(tmpCwd, { SPECSHIP_NO_STEERING: '1' })).toBeNull();
+    // Unindexed cwd: silent.
+    expect(buildSteeringNudge(tmpHome, {})).toBeNull();
+  }
+
+  /** REQ-GEMINI-010.A3 — SessionStart cheat-sheet emits `systemMessage` only. */
+  async function geminiSessionStartCheatsheetEmitsSystemMessage(): Promise<void> {
+    const { buildCheatsheetPayload } = await import('../src/activation/cheatsheet');
+    const payload = buildCheatsheetPayload({});
+    expect(payload).not.toBeNull();
+    expect((payload as any).systemMessage).toContain('SpecShip');
+    expect((payload as any).additionalContext).toBeUndefined();
+    expect(buildCheatsheetPayload({ SPECSHIP_NO_CHEATSHEET: '1' })).toBeNull();
+  }
+
+  /** REQ-GEMINI-010.A4 — uninstall strips our hook entries; user-written hooks survive. */
+  function geminiUninstallPreservesUserHooks(): void {
+    const file = settingsFile('local');
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(
+      file,
+      JSON.stringify(
+        {
+          hooks: {
+            BeforeAgent: [
+              { matcher: '', hooks: [{ type: 'command', command: 'my-own-hook.sh' }] },
+            ],
+          },
+        },
+        null,
+        2,
+      ) + '\n',
+    );
+
+    geminiTarget.install('local', { autoAllow: true });
+    // Our commands are in alongside the user's — no clobber.
+    const afterInstall = readSettings('local').hooks.BeforeAgent[0].hooks.map((h: any) => h.command);
+    expect(afterInstall).toContain('my-own-hook.sh');
+    expect(afterInstall).toContain('specship steer-nudge');
+
+    geminiTarget.uninstall('local');
+    const afterUninstall = readSettings('local');
+    const commands = (afterUninstall.hooks?.BeforeAgent ?? []).flatMap(
+      (g: any) => g.hooks.map((h: any) => h.command),
+    );
+    expect(commands).toEqual(['my-own-hook.sh']);
+    // The specship commands are gone from every event.
+    const all = JSON.stringify(afterUninstall.hooks ?? {});
+    for (const forbidden of ['specship steer-nudge', 'specship spec-nudge', 'specship cheatsheet']) {
+      expect(all).not.toContain(forbidden);
+    }
+  }
+
+  /** REQ-GEMINI-010 — `--no-sdd` writes no `spec-nudge`; a prior governance install self-heals. */
+  function geminiNoSddOmitsSpecNudge(): void {
+    // First install with governance writes spec-nudge.
+    geminiTarget.install('local', { autoAllow: true, sdd: true });
+    const governanceCommands = readSettings('local').hooks.BeforeAgent.flatMap(
+      (g: any) => g.hooks.map((h: any) => h.command),
+    );
+    expect(governanceCommands).toContain('specship spec-nudge');
+
+    // Re-run with --no-sdd strips the spec-nudge entry (self-heal).
+    geminiTarget.install('local', { autoAllow: true, sdd: false });
+    const afterNoSdd = readSettings('local').hooks.BeforeAgent.flatMap(
+      (g: any) => g.hooks.map((h: any) => h.command),
+    );
+    expect(afterNoSdd).not.toContain('specship spec-nudge');
+    expect(afterNoSdd).toContain('specship steer-nudge');
+  }
+
   it('writes a stdio entry with no `type` key (Gemini allows only sse|http)', geminiInstallWritesTypelessStdioEntry);
+  it('install writes BeforeAgent / SessionStart / AfterTool hook entries (REQ-GEMINI-010.A1)', geminiInstallWritesHookEntries);
+  it('re-running install reports every file unchanged, hooks included (REQ-GEMINI-010.A1)', geminiHookInstallIsIdempotent);
+  it('BeforeAgent nudge echoes hookEventName and names specship_explore (REQ-GEMINI-010.A2)', geminiBeforeAgentNudgeEmitsAdditionalContext);
+  it('SessionStart cheat-sheet emits systemMessage, never additionalContext (REQ-GEMINI-010.A3)', geminiSessionStartCheatsheetEmitsSystemMessage);
+  it('uninstall preserves user-written sibling hooks byte-identical (REQ-GEMINI-010.A4)', geminiUninstallPreservesUserHooks);
+  it('--no-sdd omits spec-nudge and self-heals an earlier governance install (REQ-GEMINI-010)', geminiNoSddOmitsSpecNudge);
   it('detect reports installed once the .gemini dir exists (REQ-GEMINI-002.A1)', geminiDetectReportsInstalledAndConfigured);
   it('preserves sibling servers and unrelated keys across install + uninstall (REQ-GEMINI-002.A2 / 003.A1)', geminiPreservesSiblingServersAndKeys);
   it('uninstall on a virgin home returns not-found without throwing (REQ-GEMINI-002.A2)', geminiUninstallOnVirginHomeIsNotFound);

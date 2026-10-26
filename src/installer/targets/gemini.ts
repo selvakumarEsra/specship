@@ -188,15 +188,196 @@ export function writeGeminiMcpEntry(
 
 /**
  * What a Claude install provides that this one does not (REQ-GEMINI-006.A1).
- * One note, naming every unsupported surface, so the gap is explicit at
- * install time instead of discovered as a missing feature later.
+ * One note, naming every still-unsupported surface. As of REQ-GEMINI-010 the
+ * prompt / session / tool hooks DO have Gemini equivalents and are installed,
+ * so the note no longer lists them; what remains is slash commands (until
+ * REQ-GEMINI-005), the specship-explorer subagent, the status line, and the
+ * permissions auto-allow list (REQ-GEMINI-009 covers the opt-in policy file).
  */
 const CAPABILITY_NOTE =
-  'Gemini CLI install wires the MCP server and writes a GEMINI.md steering ' +
-  'block. No auto-sync/steering hooks, no slash commands, no ' +
+  'Gemini CLI install wires the MCP server, writes a GEMINI.md steering ' +
+  'block, and installs prompt/session/tool hooks. No slash commands, no ' +
   'specship-explorer subagent, no status line, and no permissions auto-allow ' +
   '— Gemini CLI has no equivalent surface. The tool playbook itself still ' +
   'lives in the MCP server instructions.';
+
+/**
+ * Gemini's project-level hooks only run when the user has marked the folder
+ * as trusted — a local install points the user at that gate so hooks silently
+ * failing to run isn't the first evidence something's off.
+ */
+const LOCAL_TRUST_NOTE =
+  'Gemini CLI runs project-level hooks only in folders you have marked as ' +
+  'trusted. If the SpecShip hooks seem inert in this project, open it once in ' +
+  'Gemini CLI and accept the trust prompt.';
+
+/**
+ * SpecShip's prompt / session hooks for Gemini CLI (REQ-GEMINI-010). The
+ * schema mirrors Claude's `settings.hooks[event]`: an array of
+ * `{ matcher, hooks: [{ type:'command', command }] }` groups. Verified
+ * against Gemini CLI 0.28.0 `HookEventName` (BeforeAgent / SessionStart /
+ * AfterTool). The commands are byte-identical to the Claude installs — the
+ * handlers echo the payload's `hook_event_name` back on their output so one
+ * binary serves both hosts.
+ */
+type GeminiHookSpec = ReadonlyArray<{
+  event: string;
+  matcher: string;
+  hook: { type: 'command'; command: string };
+}>;
+
+const GEMINI_HOOKS: GeminiHookSpec = [
+  // Prompt-level retrieval nudge — mirror of Claude's UserPromptSubmit.
+  {
+    event: 'BeforeAgent',
+    matcher: '',
+    hook: { type: 'command', command: 'specship steer-nudge' },
+  },
+  // SessionStart cheat-sheet (human-facing, systemMessage).
+  {
+    event: 'SessionStart',
+    matcher: '',
+    hook: { type: 'command', command: 'specship cheatsheet' },
+  },
+  // SessionStart sync + drift summary — one-shot catch-up at session start.
+  {
+    event: 'SessionStart',
+    matcher: '',
+    hook: { type: 'command', command: 'specship sync --quiet --drift-summary' },
+  },
+  // Post-edit sync — Gemini's `write_file` / `replace` tools are the write
+  // surface, so matcher is scoped there (parity with Claude's Edit|Write).
+  {
+    event: 'AfterTool',
+    matcher: 'write_file|replace',
+    hook: { type: 'command', command: 'specship sync --quiet' },
+  },
+];
+
+/** SDD governance tier — opt-out via `--no-sdd`, matching the Claude install. */
+const GEMINI_SDD_HOOKS: GeminiHookSpec = [
+  {
+    event: 'BeforeAgent',
+    matcher: '',
+    hook: { type: 'command', command: 'specship spec-nudge' },
+  },
+];
+
+/**
+ * Idempotently merge Gemini hook entries into `settings.hooks`. Mirrors the
+ * Claude target's `writeHooksFor`: a matcher group sharing our exact matcher
+ * string is reused, sibling matchers / events are untouched, a byte-equal
+ * command is skipped. Returns `unchanged` when nothing was added.
+ */
+function writeGeminiHooksFor(
+  loc: Location,
+  hooks: GeminiHookSpec,
+): WriteResult['files'][number] {
+  const file = settingsPath(loc);
+  const created = !fs.existsSync(file);
+  const settings = readJsonFile(file);
+  const beforeJson = JSON.stringify(settings);
+
+  if (!settings.hooks || typeof settings.hooks !== 'object' || Array.isArray(settings.hooks)) {
+    settings.hooks = {};
+  }
+  for (const { event, matcher, hook } of hooks) {
+    if (!Array.isArray(settings.hooks[event])) settings.hooks[event] = [];
+    let group = settings.hooks[event].find((g: any) => g && g.matcher === matcher);
+    if (!group) {
+      group = { matcher, hooks: [] };
+      settings.hooks[event].push(group);
+    }
+    if (!Array.isArray(group.hooks)) group.hooks = [];
+    if (!group.hooks.some((h: any) => h && h.command === hook.command)) {
+      group.hooks.push({ ...hook });
+    }
+  }
+
+  const afterJson = JSON.stringify(settings);
+  if (beforeJson === afterJson && !created) {
+    return { path: file, action: 'unchanged' };
+  }
+  writeJsonFile(file, settings);
+  return { path: file, action: created ? 'created' : 'updated' };
+}
+
+/**
+ * Surgically remove a predicate-matched set of commands from `settings.hooks`,
+ * then prune empty matcher groups / events / the top-level `hooks` map.
+ * Mirrors Claude's `stripHooksMatching` so sibling user-written hooks survive
+ * byte-identical.
+ */
+function stripGeminiHooksMatching(
+  loc: Location,
+  predicate: (command: unknown) => boolean,
+): WriteResult['files'][number] {
+  const file = settingsPath(loc);
+  if (!fs.existsSync(file)) return { path: file, action: 'not-found' };
+
+  const settings = readJsonFile(file);
+  const hooks = settings.hooks;
+  if (!hooks || typeof hooks !== 'object' || Array.isArray(hooks)) {
+    return { path: file, action: 'unchanged' };
+  }
+
+  let removedAny = false;
+  for (const event of Object.keys(hooks)) {
+    const groups = hooks[event];
+    if (!Array.isArray(groups)) continue;
+    for (const group of groups) {
+      if (!group || !Array.isArray(group.hooks)) continue;
+      const before = group.hooks.length;
+      group.hooks = group.hooks.filter((h: any) => !predicate(h?.command));
+      if (group.hooks.length !== before) removedAny = true;
+    }
+  }
+
+  if (!removedAny) return { path: file, action: 'unchanged' };
+
+  for (const event of Object.keys(hooks)) {
+    const groups = hooks[event];
+    if (!Array.isArray(groups)) continue;
+    hooks[event] = groups.filter(
+      (g: any) => !(g && Array.isArray(g.hooks) && g.hooks.length === 0),
+    );
+    if (hooks[event].length === 0) delete hooks[event];
+  }
+  if (Object.keys(hooks).length === 0) delete settings.hooks;
+
+  writeJsonFile(file, settings);
+  return { path: file, action: 'removed' };
+}
+
+/** Write the default (retrieval + sync + cheatsheet) hook set. */
+export function writeGeminiHooksEntry(loc: Location): WriteResult['files'][number] {
+  return writeGeminiHooksFor(loc, GEMINI_HOOKS);
+}
+
+/** Write the governance-tier SDD nudge hook. */
+export function writeGeminiSddHooksEntry(loc: Location): WriteResult['files'][number] {
+  return writeGeminiHooksFor(loc, GEMINI_SDD_HOOKS);
+}
+
+function isGeminiHookCommand(command: unknown): boolean {
+  if (typeof command !== 'string') return false;
+  return GEMINI_HOOKS.some(({ hook }) => command === hook.command);
+}
+
+function isGeminiSddHookCommand(command: unknown): boolean {
+  if (typeof command !== 'string') return false;
+  return GEMINI_SDD_HOOKS.some(({ hook }) => command === hook.command);
+}
+
+/** Inverse of `writeGeminiHooksEntry`. */
+export function removeGeminiHooksEntry(loc: Location): WriteResult['files'][number] {
+  return stripGeminiHooksMatching(loc, isGeminiHookCommand);
+}
+
+/** Inverse of `writeGeminiSddHooksEntry`. */
+export function removeGeminiSddHooksEntry(loc: Location): WriteResult['files'][number] {
+  return stripGeminiHooksMatching(loc, isGeminiSddHookCommand);
+}
 
 export class GeminiCliTarget implements AgentTarget {
   readonly id = 'gemini' as const;
@@ -242,7 +423,14 @@ export class GeminiCliTarget implements AgentTarget {
     // governance install.
     const includeGovernance = opts.sdd !== false;
     files.push(includeGovernance ? writeGeminiSddEntry(loc) : removeGeminiSddEntry(loc));
-    return { files, notes: [CAPABILITY_NOTE] };
+    // Prompt / session / tool hooks (REQ-GEMINI-010). Default retrieval tier
+    // is always written; the governance SDD nudge rides `--sdd` and
+    // self-heals (strip on `--no-sdd`).
+    files.push(writeGeminiHooksEntry(loc));
+    files.push(includeGovernance ? writeGeminiSddHooksEntry(loc) : removeGeminiSddHooksEntry(loc));
+    const notes: string[] = [CAPABILITY_NOTE];
+    if (loc === 'local') notes.push(LOCAL_TRUST_NOTE);
+    return { files, notes };
   }
 
   /**
@@ -263,6 +451,13 @@ export class GeminiCliTarget implements AgentTarget {
       writeJsonFile(file, config);
       files.push({ path: file, action: 'removed' });
     }
+    // Hooks (REQ-GEMINI-010.A4) — strip both tiers so uninstall reverses
+    // either install path. Each helper is surgical: user-written sibling
+    // hooks survive byte-identical.
+    const hookCleanup = removeGeminiHooksEntry(loc);
+    if (hookCleanup.action === 'removed') files.push(hookCleanup);
+    const sddHookCleanup = removeGeminiSddHooksEntry(loc);
+    if (sddHookCleanup.action === 'removed') files.push(sddHookCleanup);
     // Strip both GEMINI.md blocks regardless of which tier was selected on
     // install, so uninstall fully reverses either install path
     // (REQ-GEMINI-004.A2). `removeMarkedSection` deletes the file iff
