@@ -24,11 +24,17 @@ const MAX_PACKED_BYTES = 2_400_000;
 // Raised 6.20 MB → 6.25 MB and 560 → 580 files (2026-10-27): the headless-agent
 // adapters (dist/workflows/agents/, REQ-AGENTADAPT-005–007) and the shared
 // criterion-id parser add 10 files / ~23 KB; no stale dist assets.
-const MAX_UNPACKED_BYTES = 6_250_000;
+// Raised 6.25 MB → 6.35 MB (2026-10-27): the design.md extractor/checker
+// (dist/design-md/, DESIGNMD-DOC) and the shipped design-md skill add ~46 KB;
+// checked for stale dist files first — none.
+const MAX_UNPACKED_BYTES = 6_350_000;
 // Raised 530 → 560 (2026-10-26) after investigating a 531-file build: no stale
 // dist assets; the growth is new feature modules (dist/spec-quality/,
 // dist/pulse/, and the 0.30/0.31 knowledge + throughput modules that follow).
-const MAX_FILE_COUNT = 580;
+// Raised 580 → 600 (2026-10-27): the design.md modules (dist/design-md/:
+// extractor, checker, upkeep gate, build verifier — DESIGNMD-DOC) and the
+// design-md skill add 17 files; checked for stale dist files first — none.
+const MAX_FILE_COUNT = 600;
 
 /** REQ-SLIM-002.A4's own ceiling, independent of the ratchet above. */
 const SLIM_A4_UNPACKED_CEILING = 7_000_000;

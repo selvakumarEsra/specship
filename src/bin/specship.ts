@@ -2055,6 +2055,44 @@ program
   });
 
 /**
+ * design.md (DESIGNMD-DOC). `extract` turns a Claude Design snapshot or a
+ * Figma export into a pixel-exact reference; `check` fails one that is
+ * incomplete, stale or vague. File-based, needs no index.
+ */
+program
+  .command('design <action> [paths...]')
+  .description('design.md reference: extract <source...> [--out|--update <design.md>] | check <design.md> | verify <build.html> --against <design.md>')
+  .option('-p, --path <path>', 'Project path (paths are resolved against it; defaults to cwd)')
+  .option('-o, --out <file>', 'extract: write a new design.md')
+  .option('-u, --update <file>', 'extract: refresh the generated block of an existing design.md')
+  .option('-t, --title <title>', 'extract --out: the design title')
+  .option('--origin <link>', 'extract --out: where the design came from (claude.ai/design or figma.com link)')
+  .option('-j, --json', 'check: output as JSON')
+  .option('-a, --against <file>', 'verify: the design.md to compare the build with')
+  .action(async (action: string, paths: string[], options: { path?: string; out?: string; update?: string; title?: string; origin?: string; json?: boolean; against?: string }) => {
+    const projectRoot = resolveProjectPath(options.path);
+    const { runDesignExtractCli, runDesignCheckCli, runDesignVerifyCli } = await import('../design-md/check');
+    const flags = (pairs: [string, string | undefined][]): string[] =>
+      pairs.flatMap(([k, v]) => (v ? [k, v] : []));
+    let result: { output: string; exitCode: number };
+    if (action === 'extract') {
+      result = runDesignExtractCli(
+        [...(paths ?? []), ...flags([['--out', options.out], ['--update', options.update], ['--title', options.title], ['--origin', options.origin]])],
+        { projectRoot },
+      );
+    } else if (action === 'check') {
+      result = runDesignCheckCli([...(paths ?? []), ...(options.json ? ['--json'] : [])], { projectRoot });
+    } else if (action === 'verify') {
+      result = runDesignVerifyCli([...(paths ?? []), ...flags([['--against', options.against]])], { projectRoot });
+    } else {
+      error(`unknown design action "${action}" — use extract, check or verify`);
+      process.exit(1);
+    }
+    console.log(result.output);
+    if (result.exitCode !== 0) process.exit(result.exitCode);
+  });
+
+/**
  * specship knowledge <action> — the knowledge layer (KNOWLEDGE-DOC).
  *   stale            external facts whose dependency version changed (REQ-KNOW-002/006)
  *   check            enforced rules → violations (REQ-KNOW-003)

@@ -92,6 +92,13 @@ const REWRITES: ReadonlyArray<readonly [RegExp, string]> = [
     /Follow the \*\*`designer-loop` skill\*\* \(`~\/\.claude\/skills\/designer-loop\/SKILL\.md`\)\s*—\s*it is the authority\. In brief:/g,
     'Run the taste loop inline:',
   ],
+  // The design-md skill is a Claude skills-dir asset too; Gemini users drive
+  // the same `specship design` CLI directly (DESIGNMD-DOC).
+  [/; follow the \*\*`design-md` skill\*\*\)/g, ')'],
+  [
+    /To capture or refresh a design reference without authoring a spec, use that skill directly\./g,
+    'To refresh it after the design changes, re-run `specship design extract <sources> --update specs/<slug>/design.md`, then `specship design check`.',
+  ],
   // `claude mcp add` → the verified Gemini equivalent.
   [/\bclaude mcp add\b/g, 'gemini mcp add'],
 ];

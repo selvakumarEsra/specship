@@ -27,9 +27,10 @@ import { checkEnforcedRules } from '../knowledge/enforce';
 import { criterionIdsInText } from './criterion-ids';
 import { loadEnforceConfig } from '../enforce/enforce';
 import { loadMutationDeps } from '../enforce/mutation';
+import { checkDesignUpkeep } from '../design-md/upkeep';
 
 export interface PostcheckFinding {
-  check: 'verifies' | 'changelog' | 'command' | 'knowledge' | 'mutation';
+  check: 'verifies' | 'changelog' | 'command' | 'knowledge' | 'mutation' | 'design';
   message: string;
 }
 
@@ -234,6 +235,32 @@ export function checkChangelog(opts: PostcheckOptions): PostcheckFinding[] {
   return [];
 }
 
+/**
+ * REQ-DESIGNMD-007 — a change to UI code a design-backed spec governs must
+ * update that spec's design.md (a new Change log entry) and leave it passing
+ * `specship design check`. No design-backed spec, or no UI change → no finding.
+ */
+export function checkDesign(opts: PostcheckOptions, specFile: string | null, ran: string[]): PostcheckFinding[] {
+  const base = resolveBaseRef(opts.projectRoot, opts.base);
+  if (!base) return [];
+  const changed =
+    opts.changedFiles?.(base) ??
+    git(opts.projectRoot, `diff --name-only ${base}`).split('\n').filter(Boolean);
+  const baseContent = (relPath: string): string | null => {
+    if (opts.baseFile) return opts.baseFile(base, relPath);
+    try {
+      return git(opts.projectRoot, `show ${base}:${relPath}`);
+    } catch {
+      return null;
+    }
+  };
+  const { findings, checked } = checkDesignUpkeep({ projectRoot: opts.projectRoot, changed, baseContent, specFile });
+  if (checked.length > 0) {
+    ran.push(`design.md upkeep (${checked.join(', ')}): ${findings.length === 0 ? 'ok' : `${findings.length} finding(s)`}`);
+  }
+  return findings.map((f) => ({ check: 'design', message: f.message }));
+}
+
 /** `postcheck.commands` from specship.config.json (empty when absent or malformed). */
 export function readPostcheckCommands(projectRoot: string): PostcheckCommand[] {
   try {
@@ -351,6 +378,9 @@ export function runPostcheck(opts: PostcheckOptions): PostcheckResult {
   const c = checkChangelog(opts);
   ran.push(`changelog: ${c.length === 0 ? 'ok' : 'missing entry'}`);
   findings.push(...c);
+
+  // REQ-DESIGNMD-007 — UI changes keep their design.md current.
+  findings.push(...checkDesign(opts, specFile, ran));
 
   findings.push(...checkConfiguredCommands(opts, ran));
 

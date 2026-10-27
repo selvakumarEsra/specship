@@ -223,6 +223,10 @@ const SHIPPED_SKILLS = [
   'spec-author/references/quality-rubric.md',
   'spec-author/references/gap-questions.md',
   'spec-author/references/review-checklist.md',
+  // design.md: pixel-exact design reference from Claude Design / Figma (DESIGNMD-DOC, REQ-DESIGNMD-005).
+  'design-md/SKILL.md',
+  'design-md/references/sources.md',
+  'design-md/references/authored-sections.md',
 ] as const;
 
 /** The PostToolUse + SessionStart hooks the installer writes. */
@@ -1085,7 +1089,7 @@ export function writeAgentsEntries(loc: Location): WriteResult['files'] {
 }
 
 /**
- * Copy our shipped skills (skills/spec-author/**) into the user's skills dir
+ * Copy our shipped skills (skills/spec-author/**, skills/design-md/**) into the user's skills dir
  * (REQ-AUTHG-007.A1). Same idempotency contract as writeCommandsEntries: a
  * destination with identical bytes reports `unchanged`, and sibling
  * user-authored skills in the same dir are never touched.
@@ -1106,7 +1110,8 @@ export function removeSkillsEntries(loc: Location): WriteResult['files'] {
   // Deepest-first so a parent is only considered after its children are gone.
   const dirs = [...new Set(SHIPPED_SKILLS.map((name) => path.dirname(path.join(skillsDir(loc), name))))]
     .sort((a, b) => b.split(path.sep).length - a.split(path.sep).length);
-  for (const dir of [...dirs, path.join(skillsDir(loc), 'spec-author')]) {
+  const skillRoots = [...new Set(SHIPPED_SKILLS.map((name) => path.join(skillsDir(loc), name.split('/')[0]!)))];
+  for (const dir of [...dirs, ...skillRoots]) {
     try {
       if (fs.existsSync(dir) && fs.readdirSync(dir).length === 0) fs.rmdirSync(dir);
     } catch {

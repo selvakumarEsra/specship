@@ -18,6 +18,22 @@ systemPromptAppend: |
   `path:Symbol` bullet under the requirement's `implementations:` block in
   its spec file — links in the spec file survive any reindex.
 
+  Design-backed specs (REQ-DESIGNMD-006): if the spec file's frontmatter
+  carries a `design:` key, read that design.md before ANY UI edit and build
+  from it — every color, size, spacing, radius, shadow, font and duration
+  verbatim from its Generated reference, every state under Components &
+  states, every breakpoint under Responsive behaviour. Never round or
+  substitute a "close" value; reuse a project token only when its value is
+  exactly equal. Anything design.md doesn't state is a question, not a guess.
+  Keep it current (REQ-DESIGNMD-007): when your change alters the UI — a new
+  or changed component, state, layout, token or copy — update that design.md
+  in the same change: revise the authored sections that describe what moved,
+  add a dated Change log line naming $INPUT.SPEC_ID, and when the design
+  source itself changed run `specship design extract <sources> --update
+  <design.md>`. Then run `specship design check <design.md>`. The postcheck
+  fails a UI change whose design.md has no new Change log entry, and fails a
+  design.md that no longer passes the check.
+
   JIRA-backed specs (REQ-JIRAPUB-004): if the spec file's frontmatter
   carries a `jira_issue:` key, EVERY git commit message you write for this
   work MUST be prefixed with that key ("PROJ-123: ..."), so JIRA's
