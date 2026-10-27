@@ -9,6 +9,9 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### New Features
+
+- New `design.md` design reference. When you import a design from Claude Design or Figma, SpecShip now writes `specs/<slug>/design.md`. It lists every color, font, size, spacing, radius, shadow, transition, breakpoint and style rule (including hover, focus and disabled states) exactly as the design has them, in the same layout every time, so even a small model like Haiku or Gemini Flash can build the UI without guessing. `specship design extract` writes it from a Claude Design snapshot or the files saved from Figma. `specship design check` fails it when a section is missing or empty, the wording is approximate ("roughly 12px"), the design has changed since it was extracted, or a color or token in the design is missing from it. Re-running with `--update` refreshes the values, keeps what you wrote, and logs every changed value. A new `design-md` skill, installed for Claude Code, runs the whole capture for a `claude.ai/design` or `figma.com` link, and `/specship:spec implement` now builds UI from the spec's `design.md`. design.md stays current as the UI changes: when a change touches UI files covered by a spec with a `design.md`, `specship postcheck` (and so `/specship:spec implement`) fails until that design.md records the change in its Change log and still passes `specship design check`. `specship design verify <build.html> --against <design.md>` checks a built page against design.md's structure (element nesting, classes, attributes, text, icons, and the order of style rules that override each other) and names each line that differs, so a builder can fix its own mistakes before finishing.
 
 ## [0.28.0] - 2026-10-26
 

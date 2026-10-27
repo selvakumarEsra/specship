@@ -53,7 +53,9 @@ systemPromptAppend: |
 
   The fidelity principle: never paraphrase or summarise design content
   when capturing it. The snapshot HTML and tokens.css are the
-  zero-loss reference layer; the spec captures contract only (behaviour,
+  zero-loss reference layer, and design.md states every value from them
+  verbatim in a fixed layout (written by `specship design extract`, never
+  transcribed by hand); the spec captures contract only (behaviour,
   accessibility, responsive, interaction states, data shape).
 
   There are two import shapes — exactly one source input is non-empty:
@@ -73,6 +75,7 @@ nodes:
     allowed_tools:
       - Read
       - Write
+      - Edit
       - Bash
       - mcp__specship__specship_explore
       - mcp__specship__specship_search
@@ -160,7 +163,29 @@ nodes:
 
       ── BOTH BRANCHES ──
 
-      4. Extract CSS custom properties + literal token-like values
+      4. Write the pixel-exact design reference (DESIGNMD-DOC). The values
+         come from the extractor, never from you:
+
+           specship design extract specs/$INPUT.SLUG/snapshot.html \
+             --out specs/$INPUT.SLUG/design.md --title "$INPUT.FILE_LABEL"
+
+         (If design.md already exists from an earlier import, use
+         `--update specs/$INPUT.SLUG/design.md` instead of `--out`.)
+         If the generated block reports a "Missing linked stylesheet",
+         copy that file next to the snapshot and re-run with `--update`.
+         Then fill design.md's authored sections — Screens & layout,
+         Components & states, Interactions & motion, Responsive behaviour,
+         Assets — following the design-md skill
+         (~/.claude/skills/design-md/SKILL.md and its
+         references/authored-sections.md): every value copied verbatim
+         from the generated block with its selector, every styled state
+         listed, no approximate wording. Run
+
+           specship design check specs/$INPUT.SLUG/design.md
+
+         and fix findings until it passes.
+
+      5. Extract CSS custom properties + literal token-like values
          (colors, spacing, font sizes, radii, transitions) from the
          snapshot to `specs/$INPUT.SLUG/tokens.css`. Use
          `specship_explore` first to find the project's existing token
@@ -175,6 +200,7 @@ nodes:
         - Any visible interaction or state cues in the CSS (`:hover`,
           `:focus`, `:disabled`, `[aria-*]` selectors) the spec
           author should be aware of.
+        - Whether `specship design check` passes on design.md.
         - For Branch A: note that source.md carries the verbatim decision
           record — the draft step should mine it for stated behaviour.
 
@@ -196,6 +222,7 @@ nodes:
         - specs/$INPUT.SLUG/snapshot.html  (visual + structural source)
         - specs/$INPUT.SLUG/tokens.css     (design tokens)
         - specs/$INPUT.SLUG/source.md      (audit record)
+        - specs/$INPUT.SLUG/design.md      (pixel-exact design reference)
 
       Spec scope: $INPUT.FILE_LABEL component(s).
       Optional inputs: owner=$INPUT.OWNER  priority=$INPUT.PRIORITY
@@ -236,6 +263,7 @@ nodes:
       source: specs/<SLUG>/source.md
       snapshot: specs/<SLUG>/snapshot.html
       tokens: specs/<SLUG>/tokens.css
+      design: specs/<SLUG>/design.md
       ---
       ```
 
@@ -322,14 +350,15 @@ nodes:
         1. The path of the spec file: `specs/$INPUT.SLUG.md`.
         2. The full list of REQ IDs the spec defines, one per line.
         3. The reference files the implementation phase should read:
+             - specs/$INPUT.SLUG/design.md (read first: every value verbatim)
              - specs/$INPUT.SLUG/snapshot.html
              - specs/$INPUT.SLUG/tokens.css
              - specs/$INPUT.SLUG/source.md
         4. The exact next command:
              /specship:spec implement <first REQ ID>
-        5. A one-line reminder that the implementation step should
-           load the snapshot for visual fidelity — the spec covers
-           contract only.
+        5. A one-line reminder that the implementation step builds the UI
+           from design.md (values verbatim) — the spec covers contract
+           only.
 
       Keep the message ≤200 words. The user is about to switch from
       this workflow to the implement workflow; this is the bridge.

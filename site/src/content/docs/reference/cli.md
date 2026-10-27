@@ -23,6 +23,7 @@ description: Every SpecShip command and the flags it accepts.
 | `specship maintainability [path]` | Report graph-derived maintainability signals (coupling, size, cycles, dead code) |
 | `specship coverage [spec]` | Show spec test-coverage: per requirement and criterion, tests-link state and verdict |
 | `specship lint [paths...]` | Lint spec files for authoring problems (exits non-zero on an error finding) |
+| `specship design <action> [paths...]` | design.md reference: extract <source...> [--out\|--update <design.md>] \| check <design.md> \| verify <build.html> --aga… |
 | `specship knowledge <action> [id]` | Knowledge layer: stale \| check \| proposals \| apply <id> \| reject <id> |
 | `specship plan-scope <specId>` | Decide whether a plan may skip the plan gate (opt-in; prints AUTO_APPROVE=yes\|no) |
 | `specship ready <specId>` | Check a requirement is ready to implement and print its evidence plan (exits non-zero when not ready) |

@@ -397,8 +397,14 @@ workflow and the `designer-loop` skill rather than re-explaining either.
     --input SLUG="<slug>"
   ```
 
+Every path also writes `specs/<slug>/design.md` — the pixel-exact design
+reference (every value verbatim, extracted by `specship design extract`, checked
+by `specship design check`; follow the **`design-md` skill**). To capture or
+refresh a design reference without authoring a spec, use that skill directly.
+
 When the workflow finishes it hands off with `/specship:spec implement <first REQ ID>`;
-the implementer reads `specs/<slug>/snapshot.html` for visual fidelity. After the
+the implementer builds the UI from `specs/<slug>/design.md` (the spec's `design:`
+frontmatter), with `snapshot.html` as the raw source. After the
 spec is written and synced, the shared **Post-write review** (above) runs like any
 other authoring path.
 
