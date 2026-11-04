@@ -111,3 +111,19 @@ export function workingTreeDiffText(projectRoot: string, ref = 'HEAD'): string {
   }
   return parts.join('\n');
 }
+
+/**
+ * The content of `file` (project-relative) at `ref`, or null when the file did
+ * not exist there (REQ-MULTIDEV-002). Reads git's object store only — no index
+ * or checkout of the ref is needed, so it works in a fresh CI clone. Callers
+ * validate the ref first (`changedFilesSince` throws `InvalidRefError`).
+ */
+export function existedAtRef(projectRoot: string, ref: string, file: string): string | null {
+  try {
+    // `<ref>:./<path>` resolves relative to cwd, so a project root that sits
+    // below the repository root still addresses the right blob.
+    return git(projectRoot, ['show', `${ref}:./${normalizePath(file)}`]);
+  } catch {
+    return null;
+  }
+}

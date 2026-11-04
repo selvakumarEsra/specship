@@ -95,7 +95,7 @@ The enforcement gate MUST gain merge checks that work on the checked-out tree
 alone, with no developer index needed:
 
 - **undeclared links:** a link whose relationship exists only in the index (an
-  `agent-asserted` or `resolver` link) and is not declared in any spec file's
+  `agent-asserted` link) and is not declared in any spec file's
   `implementations:` / `verifies:` block or by an `@implements` /
   `@verifies` code comment. A fresh clone would never see it.
 - **branch-broken links:** with `--since <ref>`, a link that resolved at
@@ -110,6 +110,21 @@ reason.
 implementations:
   - src/enforce/enforce.ts:evaluateEnforcement
   - src/enforce/changed-files.ts:changedFilesSince
+  - src/enforce/enforce.ts:undeclaredLinkFindings
+  - src/enforce/enforce.ts:branchBrokenFindings
+  - src/enforce/changed-files.ts:existedAtRef
+  - src/index.ts:SpecShip.getEnforce
+  - src/index.ts:SpecShip.prepareEnforce
+
+verifies:
+  - __tests__/multidev-merge-checks.test.ts:reqMultidev002A1
+  - __tests__/multidev-merge-checks.test.ts:reqMultidev002A2
+  - __tests__/multidev-merge-checks.test.ts:reqMultidev002A2Method
+  - __tests__/multidev-merge-checks.test.ts:reqMultidev002A3
+  - __tests__/multidev-merge-checks.test.ts:reqMultidev002A3Repo
+  - __tests__/multidev-merge-checks.test.ts:reqMultidev002A4
+  - __tests__/multidev-merge-checks.test.ts:reqMultidev002A5
+  - __tests__/multidev-merge-checks.test.ts:reqMultidev002A6
 
 ## Acceptance
 <!-- id: REQ-MULTIDEV-002.A1 -->
