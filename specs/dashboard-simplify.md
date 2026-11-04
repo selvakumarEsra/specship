@@ -158,6 +158,11 @@ implementations:
   - ui/src/pages/plan.tsx:PlanReader
   - ui/src/pages/plan.tsx:JiraKey
   - ui/src/pages/plan.tsx:storyStatus
+  - ui/src/pages/plan.tsx:filterEpics
+  - ui/src/pages/plan.tsx:EpicSection
+  - ui/src/pages/plan.tsx:StorySection
+  - ui/src/pages/plan.tsx:TaskItem
+  - ui/src/pages/plan.tsx:reviewHref
   - ui/src/prefs.ts:getPlanLevel
   - ui/src/prefs.ts:setPlanLevel
 
