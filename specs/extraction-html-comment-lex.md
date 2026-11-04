@@ -103,6 +103,19 @@ fix MAY be re-extracted too. Correctness wins over the one-off cost.
 
 implementations:
   - src/extraction/index.ts:ExtractionOrchestrator
+  - src/extraction/index.ts:ExtractionOrchestrator.sync
+  - src/extraction/index.ts:ExtractionOrchestrator.indexAll
+  - src/extraction/index.ts:ExtractionOrchestrator.isExtractionStale
+  - src/extraction/index.ts:ExtractionOrchestrator.stampExtractionVersion
+  - src/extraction/index.ts:ExtractionOrchestrator.storeExtractionResult
+  - src/extraction/index.ts:EXTRACTION_VERSION
+
+verifies:
+  - __tests__/htmllex-recovery.test.ts:reqHtmllex002A1
+  - __tests__/htmllex-recovery.test.ts:reqHtmllex002A2
+  - __tests__/htmllex-recovery.test.ts:reqHtmllex002A3
+  - __tests__/htmllex-recovery.test.ts:reqHtmllex002A4
+  - __tests__/htmllex-recovery.test.ts:reqHtmllex002ScopedSyncDoesNotStamp
 
 ## Acceptance
 <!-- id: REQ-HTMLLEX-002.A1 -->

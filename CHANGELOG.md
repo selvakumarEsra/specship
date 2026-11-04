@@ -9,6 +9,9 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixes
+
+- Functions containing HTML-comment text such as `-->` in a regex were missing from the index; they are now restored automatically on the next sync, with no reindex needed.
 
 ## [0.29.0] - 2026-10-27
 
