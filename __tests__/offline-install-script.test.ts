@@ -1,5 +1,5 @@
 /**
- * Repurposed offline installer — REQ-OFFLINE-003.
+ * Repurposed offline installer — REQ-OFFINSTALL-003.
  *
  * `scripts/offline-install.sh` must no longer build from source. It consumes a
  * PRE-BUILT self-contained bundle (an extracted specship-<target>/ directory or
@@ -66,8 +66,8 @@ exec "$DIR/node" --liftoff-only "$DIR/lib/dist/bin/specship.js" "$@"
   fs.chmodSync(path.join(dir, 'install.sh'), 0o755);
 }
 
-describe('REQ-OFFLINE-003 — offline-install.sh consumes a pre-built bundle, never compiles', () => {
-  // REQ-OFFLINE-003.A2: "no longer contains npm ci / install / link / build".
+describe('REQ-OFFINSTALL-003 — offline-install.sh consumes a pre-built bundle, never compiles', () => {
+  // REQ-OFFINSTALL-003.A2: "no longer contains npm ci / install / link / build".
   const NPM_INVOCATIONS = /npm\s+(ci|install|link|run\s+build)\b/;
 
   it('invokes no npm (ci/install/link/build) and no compiler (A2)', () => {
@@ -82,7 +82,7 @@ describe('REQ-OFFLINE-003 — offline-install.sh consumes a pre-built bundle, ne
   });
 });
 
-describe('REQ-OFFLINE-003 — installing from a pre-built bundle (no npm/compile/network)', () => {
+describe('REQ-OFFINSTALL-003 — installing from a pre-built bundle (no npm/compile/network)', () => {
   let work: string;
   let bundleDir: string;
   let installDir: string;

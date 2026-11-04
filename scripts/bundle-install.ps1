@@ -8,7 +8,7 @@
   own Node. No package manager, no compiler, no network access.
 
   Requires Node >= 22.5.0 and < 25.0.0 on PATH — the bundle ships no runtime
-  (REQ-OFFLINE-006).
+  (REQ-OFFINSTALL-006).
 
 .PARAMETER SkipClaude
   Install onto PATH only; leave Claude Code config untouched.
@@ -42,7 +42,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-# Resolve the machine's Node and gate its version (REQ-OFFLINE-006). The floor
+# Resolve the machine's Node and gate its version (REQ-OFFINSTALL-006). The floor
 # guarantees the built-in node:sqlite (FTS5); the ceiling matches the Node 25
 # hard exit in the CLI. Run before anything is installed or wired, so an
 # unsuitable machine is left untouched.
@@ -81,7 +81,7 @@ if ($Uninstall) {
   exit 0
 }
 
-# Gate on the machine's Node before touching anything (REQ-OFFLINE-006.A3):
+# Gate on the machine's Node before touching anything (REQ-OFFINSTALL-006.A3):
 # an unsupported machine gets no install dir, no PATH entry, and no wiring.
 $nodeExe = Resolve-NodeExe
 
@@ -104,7 +104,7 @@ if (($userPath -split ';') -notcontains $binDir) {
 }
 
 # 3. Wire Claude Code via the machine's resolved Node (no npm, no network).
-#    REQ-OFFLINE-005: the wiring target is asked, never assumed — a blind
+#    REQ-OFFINSTALL-005: the wiring target is asked, never assumed — a blind
 #    project-local install from here would land in the bundle directory.
 if (-not $SkipClaude) {
   if (-not $Global -and -not $Path) {
@@ -122,7 +122,7 @@ if (-not $SkipClaude) {
       }
     } else {
       # No interactive console, no flags: global is the only safe default —
-      # never local into the bundle directory (REQ-OFFLINE-005.A2).
+      # never local into the bundle directory (REQ-OFFINSTALL-005.A2).
       $Global = $true
     }
   }

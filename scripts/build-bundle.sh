@@ -3,7 +3,7 @@
 # Build a SpecShip bundle: the compiled app + its production deps, run by the
 # machine's own Node (>= 22.5, < 25) — NO vendored runtime and NO native build.
 # node:sqlite, which replaced better-sqlite3, is built into that Node.
-# One archive per platform (REQ-OFFLINE-006).
+# One archive per platform (REQ-OFFINSTALL-006).
 #
 # Because dropping better-sqlite3 left zero native addons, the recipe is pure
 # file-packaging (copy the app, archive) — so any platform's bundle can be
@@ -47,7 +47,7 @@ echo "[bundle] installing production dependencies"
 rm -f "$STAGE/lib/package-lock.json"
 
 # 3. Launcher. It resolves `node` from PATH at run time and gates the version
-#    to >= 22.5 < 25 (REQ-OFFLINE-006) — no runtime is vendored or downloaded.
+#    to >= 22.5 < 25 (REQ-OFFINSTALL-006) — no runtime is vendored or downloaded.
 #
 # `--liftoff-only`: keep tree-sitter's large WASM grammars on V8's Liftoff
 # baseline compiler so they never reach the turboshaft optimizing tier, whose
@@ -109,7 +109,7 @@ while [ -L "$SELF" ]; do
 done
 DIR="$(cd "$(dirname "$SELF")/.." && pwd)"
 
-# Resolve the machine's Node and gate its version (REQ-OFFLINE-006): the
+# Resolve the machine's Node and gate its version (REQ-OFFINSTALL-006): the
 # bundle ships no runtime, so a missing or unsupported node must fail loudly
 # rather than crash deep inside the app.
 NODE="$(command -v node 2>/dev/null || true)"

@@ -1,5 +1,5 @@
 /**
- * Offline / air-gapped bundle installer — REQ-OFFLINE-001.
+ * Offline / air-gapped bundle installer — REQ-OFFINSTALL-001.
  *
  * The release bundle (compiled app, produced by scripts/build-bundle.sh) must
  * be *self-installing offline*: an installer baked into the archive that puts
@@ -12,7 +12,7 @@
  *   - A1/A4: running the installer against a STUB bundle (the real launcher +
  *     a stub `node` on PATH) symlinks the launcher onto PATH, `specship` runs,
  *     re-running is idempotent, and `--uninstall` reverses it.
- *   - REQ-OFFLINE-006: the launcher/installer resolve Node from PATH and
+ *   - REQ-OFFINSTALL-006: the launcher/installer resolve Node from PATH and
  *     refuse to install when it is missing or out of range.
  *
  * HOME / install + bin dirs are redirected to tmpdirs; no real ~/.specship or
@@ -37,7 +37,7 @@ function stripComments(sh: string): string {
     .join('\n');
 }
 
-describe('REQ-OFFLINE-001 — build-bundle stages a self-installing offline installer', () => {
+describe('REQ-OFFINSTALL-001 — build-bundle stages a self-installing offline installer', () => {
   it('build-bundle.sh stages install.sh (unix) and install.ps1 (win32) into the archive (A3)', () => {
     const src = fs.readFileSync(BUILD_BUNDLE, 'utf8');
     // The unix bundle gets a bundle-local install.sh at its root.
@@ -93,7 +93,7 @@ esac
 /**
  * Build a fake extracted bundle: the real launcher, a stub compiled app, and a
  * copy of the bundle installer as `install.sh`. No `node` binary is staged —
- * bundles ship none (REQ-OFFLINE-006).
+ * bundles ship none (REQ-OFFINSTALL-006).
  */
 function makeStubBundle(dir: string): void {
   fs.mkdirSync(path.join(dir, 'bin'), { recursive: true });
@@ -107,7 +107,7 @@ function makeStubBundle(dir: string): void {
   fs.chmodSync(path.join(dir, 'install.sh'), 0o755);
 }
 
-describe('REQ-OFFLINE-001 — installing from an extracted bundle (no npm/compile/network)', () => {
+describe('REQ-OFFINSTALL-001 — installing from an extracted bundle (no npm/compile/network)', () => {
   let work: string;
   let bundle: string;
   let installDir: string;
@@ -172,23 +172,23 @@ describe('REQ-OFFLINE-001 — installing from an extracted bundle (no npm/compil
     expect(fs.existsSync(installDir)).toBe(false);
   });
 
-  // REQ-OFFLINE-002 — Claude wiring via the machine's Node, with an opt-out.
+  // REQ-OFFINSTALL-002 — Claude wiring via the machine's Node, with an opt-out.
   // The stub `node` prints "claude wired (stub)" when invoked with `install`,
   // so its presence in the output proves the resolved Node ran the wiring.
-  it('a default install wires Claude Code via the resolved Node (REQ-OFFLINE-002 A1/A3)', () => {
+  it('a default install wires Claude Code via the resolved Node (REQ-OFFINSTALL-002 A1/A3)', () => {
     const out = runInstaller([]);
     expect(out).toMatch(/claude wired \(stub\)/);
   });
 
-  it('--skip-claude installs onto PATH but does not wire Claude Code (REQ-OFFLINE-002 A2)', () => {
+  it('--skip-claude installs onto PATH but does not wire Claude Code (REQ-OFFINSTALL-002 A2)', () => {
     const out = runInstaller(['--skip-claude']);
     expect(out).not.toMatch(/claude wired \(stub\)/);
     expect(fs.existsSync(path.join(binDir, 'specship'))).toBe(true);
   });
 
-  // REQ-OFFLINE-006.A2 — the launcher runs the app through the PATH node,
+  // REQ-OFFINSTALL-006.A2 — the launcher runs the app through the PATH node,
   // with `--liftoff-only` on node's own command line.
-  it('the launcher execs the on-PATH node with --liftoff-only (REQ-OFFLINE-006 A2)', () => {
+  it('the launcher execs the on-PATH node with --liftoff-only (REQ-OFFINSTALL-006 A2)', () => {
     const log = path.join(work, 'argv.log');
     const recorder = path.join(work, 'recorder');
     fs.mkdirSync(recorder, { recursive: true });
@@ -211,10 +211,10 @@ describe('REQ-OFFLINE-001 — installing from an extracted bundle (no npm/compil
 });
 
 /**
- * REQ-OFFLINE-006 — no runtime is vendored, so a missing or out-of-range Node
+ * REQ-OFFINSTALL-006 — no runtime is vendored, so a missing or out-of-range Node
  * must fail loudly and leave the machine untouched (A3/A4).
  */
-describe('REQ-OFFLINE-006 — the installer gates on the machine Node', () => {
+describe('REQ-OFFINSTALL-006 — the installer gates on the machine Node', () => {
   let work: string;
   let bundle: string;
   let installDir: string;

@@ -4,7 +4,7 @@
 // npm thin-installer launcher for SpecShip.
 //
 // The heavy artifact (the compiled app + its deps — no bundled runtime as of
-// REQ-OFFLINE-006) ships as a per-platform optionalDependency:
+// REQ-OFFINSTALL-006) ships as a per-platform optionalDependency:
 // @specship/specship-<platform>-<arch>. npm installs only the one matching the
 // host, via each package's `os`/`cpu` fields (the esbuild pattern). This shim —
 // run by the user's OWN Node — locates that bundle and runs it on the machine's
@@ -71,7 +71,7 @@ function resolveInstalledBundle() {
   }
 }
 
-// REQ-OFFLINE-006: when this shim's own Node is what will run the app (the
+// REQ-OFFINSTALL-006: when this shim's own Node is what will run the app (the
 // Windows paths — unix goes through bin/specship, which gates the PATH node
 // itself), enforce the supported range before launching.
 function assertRuntimeVersion() {
