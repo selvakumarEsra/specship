@@ -325,7 +325,30 @@ session that never runs SpecShip, cannot be detected, and the documentation
 MUST say so rather than promise more.
 
 implementations:
-  - src/installer/index.ts:resolveInstallTargets
+  - src/installer/auto-migrate.ts:maybeAutoMigrate
+  - src/installer/auto-migrate.ts:autoMigrateEnabled
+  - src/installer/auto-migrate.ts:migrationScope
+  - src/installer/auto-migrate.ts:takePendingMigrationFailure
+  - src/installer/auto-migrate.ts:migrationLine
+  - src/installer/targets/shared.ts:beginWriteJournal
+  - src/installer/targets/shared.ts:endWriteJournal
+  - src/installer/targets/shared.ts:rollbackJournal
+  - src/installer/targets/shared.ts:removeFileSync
+  - src/installer/targets/shared.ts:atomicWriteFileSync
+  - src/mcp/session.ts:MCPSession.handleInitialize
+  - src/mcp/session.ts:MCPSession.runAutoMigrate
+  - src/mcp/session.ts:MCPSession.handleToolsCall
+verifies:
+  - __tests__/auto-migrate.test.ts:reqAgentswitch008A1
+  - __tests__/auto-migrate.test.ts:reqAgentswitch008A2
+  - __tests__/auto-migrate.test.ts:reqAgentswitch008A3
+  - __tests__/auto-migrate.test.ts:reqAgentswitch008A4
+  - __tests__/auto-migrate.test.ts:reqAgentswitch008A4Config
+  - __tests__/auto-migrate.test.ts:reqAgentswitch008A5
+  - __tests__/auto-migrate.test.ts:reqAgentswitch008A5Pending
+  - __tests__/auto-migrate.test.ts:journalRollsBackWrites
+  - __tests__/auto-migrate.test.ts:hotPathCost
+  - __tests__/auto-migrate.test.ts:cliTriggerAndUndo
 
 ## Acceptance
 <!-- id: REQ-AGENTSWITCH-008.A1 -->
