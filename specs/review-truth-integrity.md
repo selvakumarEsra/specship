@@ -171,7 +171,6 @@ drift of 0 asserted as ", no drifted links.", and byte counts labeled "tokens"
 
 implementations:
   - ui/src/components/ui.tsx:Delta
-  - ui/src/pages/compare.tsx:driftPhrase
 
 ## Acceptance
 <!-- id: REQ-REVINT-007.A1 -->

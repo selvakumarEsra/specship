@@ -122,7 +122,7 @@ NOT offer in-place spec editing and MUST NOT ship a heavyweight embedded code
 editor. This removes both the editing affordance and its largest dependency.
 
 implementations:
-  - ui/src/pages/specs.tsx:SpecsPage
+  - ui/src/pages/review.tsx:ReviewPage
   - ui/src/components/spec-detail.tsx:SpecDetail
 
 ## Acceptance

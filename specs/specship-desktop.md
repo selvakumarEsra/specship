@@ -606,7 +606,6 @@ implementations:
   - ui/src/App.tsx:ProjectSwitcher
   - ui/src/App.tsx:StatusStrip
   - ui/src/App.tsx:TopBar
-  - ui/src/App.tsx:ThemeToggle
   - ui/src/components/command-palette.tsx:CommandPalette
   - server/src/routes/projects.ts:attachDriftCounts
 
@@ -715,6 +714,8 @@ implementations:
 <!-- id: REQ-DESKTOP-022 -->
 ## The Specs screen shell and Drift queue MUST render the live spec inventory
 
+> **SUPERSEDED 2026-11-04** by REQ-DASHSIMPLE-004 — the Specs screen and Drift queue are replaced by Review. Kept for history.
+
 The Specs screen renders the document-grouped requirement tree with
 per-requirement state pills and filters; selecting a requirement loads the
 detail contract (REQ-DESKTOP-001…016). The Drift queue screen lists every
@@ -722,9 +723,6 @@ drifted, broken, and orphaned link with its axis pill and the
 workflow-gated repair actions (REQ-DESKTOP-005), and its count matches the
 sidebar badge.
 
-implementations:
-  - ui/src/pages/specs.tsx:SpecsPage
-  - ui/src/pages/drift.tsx:DriftPage
 
 ## Acceptance
 <!-- id: REQ-DESKTOP-022.A1 -->
@@ -768,6 +766,8 @@ implementations:
 <!-- id: REQ-DESKTOP-024 -->
 ## The Claude Code analytics screens MUST render ingested transcript data per the snapshot
 
+> **SUPERSEDED 2026-11-04** by REQ-DASHSIMPLE-001 — the agent-specific analytics screens are removed. Kept for history.
+
 Sessions, Heatmap, Costs, Compare projects, and Tips render from ingested
 Claude Code transcript data: the sessions list and per-session detail
 with prompts and quality signals; the busiest-file / tool-call heatmap;
@@ -776,12 +776,6 @@ cross-project comparison table; and the tips list with severity grouping
 and Apply / Dismiss. Model and project filters apply across these
 screens.
 
-implementations:
-  - ui/src/pages/sessions.tsx:SessionsPage
-  - ui/src/pages/heatmap.tsx:HeatmapPage
-  - ui/src/pages/costs.tsx:CostsPage
-  - ui/src/pages/compare.tsx:ComparePage
-  - ui/src/pages/tips.tsx:TipsPage
 
 ## Acceptance
 <!-- id: REQ-DESKTOP-024.A1 -->
@@ -799,13 +793,13 @@ implementations:
 <!-- id: REQ-DESKTOP-025 -->
 ## The Memory screen MUST render the effective memory and its sources
 
+> **SUPERSEDED 2026-11-04** by REQ-DASHSIMPLE-001 — the Memory screen is removed. Kept for history.
+
 The screen lists the memory sources in scope (global and project
 CLAUDE.md files and their imports) with per-file scope, line count, and
 modified time; renders the composed effective-memory view; and offers
 copy-contents and reload actions.
 
-implementations:
-  - ui/src/pages/memory.tsx:MemoryPage
 
 ## Acceptance
 <!-- id: REQ-DESKTOP-025.A1 -->
@@ -822,6 +816,8 @@ implementations:
 <!-- id: REQ-DESKTOP-026 -->
 ## The MCP screen MUST render the configured MCP servers with live status
 
+> **SUPERSEDED 2026-11-04** by REQ-DASHSIMPLE-001 — the MCP screen is removed. Kept for history.
+
 The screen inventories MCP servers from the machine's client
 configurations with per-server status (connected, active, idle, failed,
 disabled), configuration detail, call statistics, and an example call;
@@ -833,7 +829,6 @@ Desktop/Cursor readers, per this fork's Claude-Code-only house rule; the
 snapshot's multi-client column renders only the Claude Code client.
 
 implementations:
-  - ui/src/pages/mcp.tsx:McpPage
   - server/src/routes/mcp.ts:deriveState
 
 ## Acceptance

@@ -135,8 +135,6 @@ state with an explicit SAMPLE treatment on the data itself (badge on each
 seeded card/row), not only a dismissible banner, so a screenshot of the page
 cannot be mistaken for live data.
 
-implementations:
-  - ui/src/pages/mcp.tsx:McpPage
 
 ## Acceptance
 <!-- id: REQ-DASHINT-005.A1 -->
