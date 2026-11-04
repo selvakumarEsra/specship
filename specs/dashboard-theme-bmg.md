@@ -209,6 +209,11 @@ implementations:
   - ui/src/pages/designsystem.tsx:DesignSystemPage
   - ui/src/tokens.ts:KIT_COMPONENT_STATES
   - ui/src/tokens.ts:BUTTON_VARIANTS
+  - ui/src/tokens.ts:TYPE_SCALE
+  - ui/src/pages/designsystem.tsx:Gallery
+  - ui/src/pages/designsystem.tsx:Primitives
+  - ui/src/components/charts.tsx:LineChart
+  - ui/src/components/charts.tsx:Donut
   - ui/src/styles/app.css
   - ui/src/styles/tokens.css
 
@@ -217,6 +222,8 @@ verifies:
   - ui/src/__tests__/ui-kit.test.tsx:reqDashtheme004A2
   - ui/src/__tests__/ui-kit.test.tsx:reqDashtheme004A3
   - ui/src/__tests__/ui-kit.test.tsx:reqDashtheme004A4
+  - ui/src/__tests__/ui-kit.test.tsx:reqDashtheme004A5
+  - ui/src/__tests__/ui-kit.test.tsx:reqDashtheme004A6
 
 ## Acceptance
 <!-- id: REQ-DASHTHEME-004.A1 -->
