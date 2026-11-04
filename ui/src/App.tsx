@@ -269,7 +269,7 @@ function NavItem({ item, active, collapsed, counts }: { item: NavEntry; active: 
           style={{
             fontSize: 10, fontWeight: 700, padding: '1px 6px', minWidth: 18, justifyContent: 'center',
             color: bk === 'error' ? 'var(--error)' : bk === 'warn' ? 'var(--warn)' : 'var(--text-secondary)',
-            background: bk === 'error' ? 'var(--error-soft)' : bk === 'warn' ? 'var(--warn-soft)' : 'rgba(255,255,255,0.06)',
+            background: bk === 'error' ? 'var(--error-soft)' : bk === 'warn' ? 'var(--warn-soft)' : 'var(--fill)',
           }}
         >
           {badge}

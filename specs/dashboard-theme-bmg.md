@@ -76,6 +76,17 @@ raw colour literal.
 implementations:
   - ui/src/tokens.ts:SEMANTIC_TOKENS
   - ui/src/tokens.ts:SURFACE_TOKENS
+  - ui/src/tokens.ts:ADOPTED_BMG_TOKENS
+  - ui/src/tokens.ts:SPACE_TOKENS
+  - ui/src/tokens.ts:RADIUS_TOKENS
+  - ui/src/components/ui.tsx:STATE
+  - ui/src/styles/tokens.css
+
+verifies:
+  - ui/src/__tests__/theme-tokens.test.tsx:reqDashtheme001A1
+  - ui/src/__tests__/theme-tokens.test.tsx:reqDashtheme001A2
+  - ui/src/__tests__/theme-tokens.test.tsx:reqDashtheme001A3
+  - ui/src/__tests__/theme-tokens.test.tsx:reqDashtheme001A4
 
 ## Acceptance
 <!-- id: REQ-DASHTHEME-001.A1 -->

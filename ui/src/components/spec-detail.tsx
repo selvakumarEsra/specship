@@ -516,7 +516,7 @@ function SpecRead({ data, project, notice, onEdit, onReload }: {
           </div>
           {codeLinks.length ? linkRows(codeLinks) : (
             // Zero links is an alarm state, not a neutral empty (004.A3).
-            <div className="card card-pad" style={{ textAlign: 'center', color: 'var(--error)', borderColor: 'rgba(242,85,90,0.3)' }}>
+            <div className="card card-pad" style={{ textAlign: 'center', color: 'var(--error)', borderColor: 'var(--danger-line)' }}>
               <Icon name="drift" size={16} />
               <div style={{ marginTop: 6, fontSize: 12.5 }}>Orphaned — no code implements this requirement yet</div>
             </div>
@@ -530,7 +530,7 @@ function SpecRead({ data, project, notice, onEdit, onReload }: {
             {testLinks.length > 0 && <span className="ct">{testLinks.length + (testLinks.length === 1 ? ' test' : ' tests')}</span>}
           </div>
           {testLinks.length ? linkRows(testLinks) : (
-            <div className="card card-pad" style={{ textAlign: 'center', color: 'var(--warn)', borderColor: 'rgba(224,160,64,0.3)' }}>
+            <div className="card card-pad" style={{ textAlign: 'center', color: 'var(--warn)', borderColor: 'var(--warning-line)' }}>
               <Icon name="drift" size={16} />
               <div style={{ marginTop: 6, fontSize: 12.5 }}>
                 No proving test — declare one with a <code className="sp-code">verifies:</code> block in the spec.
@@ -877,7 +877,7 @@ function SpecEditor({ data, project, onCancel, onSaved }: {
         <div style={{ maxWidth: 780 }}>
 
           {saveError && (
-            <div className="card card-pad row gap-8" role="alert" style={{ color: 'var(--error)', borderColor: 'rgba(242,85,90,0.35)', marginBottom: 18, fontSize: 12.5 }}>
+            <div className="card card-pad row gap-8" role="alert" style={{ color: 'var(--error)', borderColor: 'var(--danger-line)', marginBottom: 18, fontSize: 12.5 }}>
               <Icon name="cancel" size={14} style={{ flexShrink: 0 }} />
               <span>Save failed — {saveError} Your draft is intact.</span>
             </div>

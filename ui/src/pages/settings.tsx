@@ -65,7 +65,7 @@ function ToggleRow({ label, desc, on, onClick, busy }: { label: string; desc: st
       >
         <span style={{
           position: 'absolute', top: 2, left: on ? 18 : 2, width: 18, height: 18, borderRadius: '50%',
-          background: '#fff', transition: 'left var(--motion-fast)',
+          background: 'var(--on-strong)', transition: 'left var(--motion-fast)',
         }} />
       </button>
     </div>

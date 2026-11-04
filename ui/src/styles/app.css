@@ -1,140 +1,9 @@
 /* ============================================================
    SpecShip Desktop — Design System
-   Dark-first (light theme below). Graph as hero. Geist + Geist Mono.
+   Dark-only (BookMyGame UI tokens, REQ-DASHTHEME-001). Graph as hero. Geist + Geist Mono.
    ============================================================ */
 
-/* [data-theme="dark"] is listed alongside :root so a scoped wrapper (the
-   design-system gallery renders both themes side by side) can re-assert the
-   dark tokens inside a light-themed app, not just inherit them. */
-:root, [data-theme="dark"] {
-  color-scheme: dark;
-  /* ---- Surfaces ---- */
-  --bg-canvas: #0E1014;
-  --bg-canvas-2: #0B0D11;        /* graph void, deepest */
-  --bg-panel: #161A21;
-  --bg-panel-2: #1A1F28;
-  --bg-elevated: #20262F;
-  --bg-hover: rgba(255,255,255,0.04);
-  --bg-active: rgba(255,255,255,0.07);
-
-  /* ---- Borders ---- */
-  --border-subtle: rgba(255,255,255,0.07);
-  --border-strong: rgba(255,255,255,0.12);
-  --border-focus: #3B82F6;
-
-  /* ---- Text ---- */
-  --text-primary: #E8EBF0;
-  --text-secondary: #9AA3B2;
-  --text-muted: #5C6573;
-  --text-faint: #424B59;
-
-  /* ---- Accent (primary / brand) ---- */
-  --accent: #3B82F6;
-  --accent-strong: #2563EB;
-  --accent-soft: rgba(59,130,246,0.14);
-  --accent-line: rgba(59,130,246,0.35);
-
-  /* ---- Node colors (must be distinct at 4px) ---- */
-  --node-code: #A586F5;      /* purple  — functions, classes */
-  --node-spec: #5B93F2;      /* blue    — requirements */
-  --node-test: #46C26B;      /* green   — tests */
-  --node-route: #29D2BE;     /* teal    — routes/endpoints */
-  --node-code-soft: rgba(165,134,245,0.14);
-  --node-spec-soft: rgba(91,147,242,0.14);
-  --node-test-soft: rgba(70,194,107,0.14);
-  --node-route-soft: rgba(41,210,190,0.14);
-  --node-text: #ffffff;          /* label text on graph node fills */
-  --dot-grid: rgba(255,255,255,0.045); /* graph canvas dot grid */
-
-  /* ---- Semantic states ---- */
-  --success: #46C26B;
-  --success-soft: rgba(70,194,107,0.13);
-  --warn: #E5A50A;
-  --warn-soft: rgba(229,165,10,0.14);
-  --error: #F2555A;
-  --error-soft: rgba(242,85,90,0.14);
-  --info: #58A6FF;
-  --info-soft: rgba(88,166,255,0.13);
-
-  /* ---- Typography ---- */
-  --font-ui: "Geist", system-ui, -apple-system, sans-serif;
-  --font-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
-  --fs-title: 22px;
-  --fs-base: 13px;
-  --fs-sm: 12px;
-  --fs-xs: 11px;
-  --fs-big: 28px;
-
-  /* ---- Radius ---- */
-  --r-sm: 5px;
-  --r-md: 8px;
-  --r-lg: 12px;
-  --r-pill: 999px;
-
-  /* ---- Motion (the ONLY control-state transition timing — REQ-DESKTOP-013) ---- */
-  --motion-fast: 100ms ease;
-
-  /* ---- Shadow ---- */
-  --shadow-pop: 0 12px 32px -8px rgba(0,0,0,0.6), 0 2px 8px rgba(0,0,0,0.4);
-  --shadow-panel: 0 1px 0 rgba(255,255,255,0.02) inset;
-
-  /* ---- Layout ---- */
-  --sidebar-w: 232px;
-  --sidebar-w-collapsed: 56px;
-  --status-h: 30px;
-}
-
-/* ============================================================
-   LIGHT THEME — devtool-grade, high contrast on white
-   ============================================================ */
-[data-theme="light"] {
-  color-scheme: light;
-  --bg-canvas: #F4F6F8;
-  --bg-canvas-2: #E9ECF1;        /* graph void */
-  --bg-panel: #FFFFFF;
-  --bg-panel-2: #F8FAFC;
-  --bg-elevated: #FFFFFF;
-  --bg-hover: rgba(15,23,42,0.045);
-  --bg-active: rgba(15,23,42,0.07);
-
-  --border-subtle: rgba(15,23,42,0.10);
-  --border-strong: rgba(15,23,42,0.18);
-  --border-focus: #2563EB;
-
-  --text-primary: #161B22;
-  --text-secondary: #4A5566;
-  --text-muted: #7B8696;
-  --text-faint: #A9B2C0;
-
-  --accent: #2563EB;
-  --accent-strong: #2563EB;
-  --accent-soft: rgba(37,99,235,0.10);
-  --accent-line: rgba(37,99,235,0.30);
-
-  /* nodes darkened for legibility on light fills */
-  --node-code: #7C56E0;
-  --node-spec: #2F6FE0;
-  --node-test: #1E9E4C;
-  --node-route: #0E9C8E;
-  --node-code-soft: rgba(124,86,224,0.12);
-  --node-spec-soft: rgba(47,111,224,0.12);
-  --node-test-soft: rgba(30,158,76,0.12);
-  --node-route-soft: rgba(14,156,142,0.12);
-  --node-text: #1A2230;
-  --dot-grid: rgba(15,23,42,0.07);
-
-  --success: #1E9E4C;
-  --success-soft: rgba(30,158,76,0.12);
-  --warn: #B27500;
-  --warn-soft: rgba(178,117,0,0.13);
-  --error: #DC4A4F;
-  --error-soft: rgba(220,74,79,0.12);
-  --info: #2563EB;
-  --info-soft: rgba(37,99,235,0.11);
-
-  --shadow-pop: 0 12px 32px -10px rgba(15,23,42,0.22), 0 2px 8px rgba(15,23,42,0.10);
-  --shadow-panel: 0 1px 0 rgba(15,23,42,0.02) inset;
-}
+/* Tokens live in tokens.css (REQ-DASHTHEME-001) — imported first by main.tsx. */
 
 /* ============================================================
    DENSITY — data-density="compact" on <html> tightens the shell
@@ -173,12 +42,12 @@ html, body {
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
-  background: rgba(255,255,255,0.08);
+  background: var(--fill-strong);
   border-radius: 999px;
   border: 2px solid transparent;
   background-clip: content-box;
 }
-::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.16); background-clip: content-box; }
+::-webkit-scrollbar-thumb:hover { background: var(--border-active); background-clip: content-box; }
 
 .mono { font-family: var(--font-mono); font-feature-settings: "zero"; }
 .tnum { font-variant-numeric: tabular-nums; }
@@ -206,7 +75,7 @@ html, body {
    the design-system gallery can render every state statically from the same
    single source (REQ-DESKTOP-028.A4) — they are gallery-only, never applied
    by app code. */
-.btn-primary { background: var(--accent-strong); color: #fff; }
+.btn-primary { background: var(--accent-strong); color: var(--on-accent); }
 .btn-primary.is-hover, .btn-primary:hover:not(:disabled) { background: var(--accent); }
 .btn-secondary { background: var(--bg-elevated); color: var(--text-primary); border-color: var(--border-subtle); }
 .btn-secondary.is-hover, .btn-secondary:hover:not(:disabled) { background: var(--bg-elevated); border-color: var(--border-strong); }
@@ -214,8 +83,8 @@ html, body {
 .btn-ghost { background: transparent; color: var(--text-secondary); }
 .btn-ghost.is-hover, .btn-ghost:hover:not(:disabled) { background: var(--bg-hover); color: var(--text-primary); }
 .btn-ghost.is-active, .btn-ghost:active:not(:disabled) { background: var(--bg-active); }
-.btn-destructive { background: var(--error-soft); color: var(--error); border-color: rgba(242,85,90,0.3); }
-.btn-destructive.is-hover, .btn-destructive:hover:not(:disabled) { background: rgba(242,85,90,0.22); }
+.btn-destructive { background: var(--error-soft); color: var(--error); border-color: var(--danger-line); }
+.btn-destructive.is-hover, .btn-destructive:hover:not(:disabled) { background: var(--danger-soft-strong); }
 .btn-sm { padding: 4px 9px; font-size: var(--fs-sm); }
 .btn-xs { padding: 2px 7px; font-size: var(--fs-xs); border-radius: 4px; }
 .btn:disabled { opacity: 0.4; cursor: not-allowed; }
@@ -287,7 +156,7 @@ html, body {
 .seg-btn:active { background: var(--bg-active); }
 .seg-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 /* Selected segment last: it survives hover and press. */
-.seg-btn.active { background: var(--bg-elevated); color: var(--text-primary); box-shadow: 0 1px 2px rgba(0,0,0,0.3); }
+.seg-btn.active { background: var(--bg-elevated); color: var(--text-primary); box-shadow: var(--shadow-seg); }
 
 /* ---- Inputs ---- */
 .input {
@@ -335,8 +204,7 @@ html, body {
 }
 .sp-kw-must   { color: var(--node-spec); background: var(--node-spec-soft); }
 .sp-kw-should { color: var(--warn);      background: var(--warn-soft); }
-.sp-kw-may    { color: var(--text-muted); background: rgba(255,255,255,0.05); }
-[data-theme="light"] .sp-kw-may { background: rgba(15,23,42,0.05); }
+.sp-kw-may    { color: var(--text-muted); background: var(--fill-soft); }
 
 /* Normative statement block */
 .sp-statement {

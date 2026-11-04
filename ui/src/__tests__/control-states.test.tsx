@@ -23,7 +23,9 @@ import { Segmented } from '../components/ui';
 // node:fs, not `app.css?raw`: vitest's CSS interception returns an empty
 // module for raw CSS imports (see node-builtins.d.ts for the local typings).
 const SRC = join(dirname(fileURLToPath(import.meta.url)), '..');
-const CSS = readFileSync(join(SRC, 'styles/app.css'), 'utf8');
+// tokens.css first (as main.tsx loads it): the token definitions moved there
+// with REQ-DASHTHEME-001; the rules stay in app.css.
+const CSS = readFileSync(join(SRC, 'styles/tokens.css'), 'utf8') + '\n' + readFileSync(join(SRC, 'styles/app.css'), 'utf8');
 
 /** Every non-test component source, path → raw text, for the bespoke-timing sweep. */
 const TSX_SOURCES: Record<string, string> = {};

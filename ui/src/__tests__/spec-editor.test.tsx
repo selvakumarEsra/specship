@@ -384,7 +384,7 @@ describe('SpecEditor (REQ-DESKTOP-006…011)', () => {
     // State picker changes only its own row's dot (010.A3).
     fireEvent.change(screen.getByLabelText('Criterion A1 state'), { target: { value: 'drifted' } });
     const dots = screen.getAllByTestId('crit-state-dot') as HTMLElement[];
-    expect(dots[0]!.style.background).toBe('var(--warn)');
+    expect(dots[0]!.style.background).toBe('var(--danger)'); // drifted → danger (REQ-DASHTHEME-001)
     expect((screen.getByLabelText('Criterion A2 state') as HTMLSelectElement).value).toBe('implemented');
 
     // Deleting a middle row renumbers from A1 (010.A2).

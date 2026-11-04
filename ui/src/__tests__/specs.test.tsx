@@ -216,7 +216,7 @@ describe('SpecsPage (REQ-DESKTOP-022)', () => {
 
     // Statement accent edge takes the state color token (REQ-DESKTOP-001.A3).
     const statement = container.querySelector('.sp-statement') as HTMLElement;
-    expect(statement.getAttribute('style')).toContain('--sp-accent: var(--success)');
+    expect(statement.getAttribute('style')).toContain('--sp-accent: var(--accent)'); // verified → accent (REQ-DASHTHEME-001)
 
     // Copy-id control confirms in the success token (REQ-DESKTOP-001.A2).
     const copy = within(container.querySelector('.sp-breadcrumb') as HTMLElement).getByTitle('Copy');
@@ -294,7 +294,7 @@ describe('SpecsPage (REQ-DESKTOP-022)', () => {
     expect(metaPill.textContent).toBe('Drifted');
     expect(metaPill.style.animation).toContain('pulsePill');
     const statement = container.querySelector('.sp-statement') as HTMLElement;
-    expect(statement.getAttribute('style')).toContain('--sp-accent: var(--warn)');
+    expect(statement.getAttribute('style')).toContain('--sp-accent: var(--danger)'); // drifted → danger (REQ-DASHTHEME-001)
     expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(2); // owner + verified placeholders
 
     // Axis pill on the drifted link (004.A2), and the unknown-state link
@@ -466,7 +466,7 @@ describe('SpecsPage funnel + coverage (REQ-TVIZ-007)', () => {
     // auth.md holds the drifted REQ-A-2; ingest.md holds nothing unhealthy.
     const auth = (screen.getByText('auth.md').closest('[data-drift]')) as HTMLElement;
     expect(auth.getAttribute('data-drift')).toBe('drifted');
-    expect(auth.style.background).toBe('var(--warn-soft)');
+    expect(auth.style.background).toBe('var(--danger-soft)'); // drifted → danger (REQ-DASHTHEME-001)
     expect(screen.getByText('ingest.md').closest('[data-drift]')).toBeNull();
     expect(container.querySelectorAll('[data-drift]')).toHaveLength(1);
   });

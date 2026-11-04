@@ -67,7 +67,7 @@ export function LineChart({ series, w = 640, h = 200, color = 'var(--accent)', x
         const yy = y(v);
         return (
           <g key={i}>
-            <line x1={pad.l} x2={w - pad.r} y1={yy} y2={yy} stroke="rgba(255,255,255,0.05)" />
+            <line x1={pad.l} x2={w - pad.r} y1={yy} y2={yy} stroke="var(--fill-soft)" />
             <text x={pad.l - 8} y={yy + 3} textAnchor="end" fontSize={10} fill="var(--text-muted)" fontFamily="var(--font-mono)">
               {'$' + v.toFixed(0)}
             </text>
@@ -115,7 +115,7 @@ export function Donut({ data, size = 140, thickness = 22, centerLabel, centerSub
   return (
     <div style={{ position: 'relative', width: size, height: size }}>
       <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
-        <circle cx={cx} cy={cy} r={r} fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth={thickness} />
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke="var(--fill-soft)" strokeWidth={thickness} />
         {data.map((d, i) => {
           const frac = d.cost / total;
           const dash = frac * circ;
@@ -309,17 +309,17 @@ export function Treemap({ items, height = 120, onPick, selKey }: {
           background: bg, borderRadius: 4, cursor: onPick ? 'pointer' : 'default', overflow: 'hidden',
           padding: big ? '5px 7px' : '0 5px', display: 'flex', flexDirection: 'column',
           justifyContent: big ? 'flex-start' : 'center',
-          border: on ? '1.5px solid var(--accent)' : '1px solid rgba(0,0,0,0.26)',
+          border: on ? '1.5px solid var(--accent)' : '1px solid var(--cell-border)',
         };
         return (
           <div key={c.key} onClick={onPick ? () => onPick(c) : undefined} title={c.title || c.label} style={cellStyle}>
             {mid && (
-              <span className="mono" style={{ fontSize: big ? 10 : 9, fontWeight: 500, color: t > 0.45 ? '#fff' : 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.25 }}>
+              <span className="mono" style={{ fontSize: big ? 10 : 9, fontWeight: 500, color: t > 0.45 ? 'var(--on-strong)' : 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.25 }}>
                 {c.label}
               </span>
             )}
             {big && c.sub && (
-              <span className="mono tabular" style={{ fontSize: 9, color: t > 0.45 ? 'rgba(255,255,255,0.8)' : 'var(--text-muted)', marginTop: 1 }}>
+              <span className="mono tabular" style={{ fontSize: 9, color: t > 0.45 ? 'var(--on-strong-muted)' : 'var(--text-muted)', marginTop: 1 }}>
                 {c.sub}
               </span>
             )}

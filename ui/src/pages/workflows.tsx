@@ -108,7 +108,7 @@ export function LaunchRunDialog({ wf, project, onClose }: {
   };
 
   return (
-    <div onMouseDown={onClose} role="dialog" aria-label={'Launch ' + wf.name} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 90, display: 'grid', placeItems: 'center' }}>
+    <div onMouseDown={onClose} role="dialog" aria-label={'Launch ' + wf.name} style={{ position: 'fixed', inset: 0, background: 'var(--overlay)', zIndex: 90, display: 'grid', placeItems: 'center' }}>
       <div onMouseDown={(e) => e.stopPropagation()} style={{ width: 460, maxWidth: '90vw', background: 'var(--bg-elevated)', border: '1px solid var(--border-strong)', borderRadius: 12, boxShadow: 'var(--shadow-pop)' }}>
         <div className="row gap-10" style={{ padding: '14px 16px', borderBottom: '1px solid var(--border-subtle)' }}>
           <Icon name="workflow" size={16} style={{ color: 'var(--accent)' }} />

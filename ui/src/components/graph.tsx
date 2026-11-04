@@ -382,7 +382,7 @@ export function GraphCanvas({ nodes: initialNodes, edges, selectedId, onSelect, 
       <svg width="100%" height="100%" style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
         <defs>
           <marker id="arrow" viewBox="0 0 10 10" refX={8} refY={5} markerWidth={6} markerHeight={6} orient="auto-start-reverse">
-            <path d="M0 0 L10 5 L0 10 z" fill="rgba(160,170,190,0.5)" />
+            <path d="M0 0 L10 5 L0 10 z" fill="var(--edge-arrow)" />
           </marker>
           <marker id="arrowHi" viewBox="0 0 10 10" refX={8} refY={5} markerWidth={7} markerHeight={7} orient="auto-start-reverse">
             <path d="M0 0 L10 5 L0 10 z" fill="var(--accent)" />
@@ -400,7 +400,7 @@ export function GraphCanvas({ nodes: initialNodes, edges, selectedId, onSelect, 
             const dimmed = hiddenIds && (hiddenIds.has(e.from) || hiddenIds.has(e.to));
             const hot = selectedId && (e.from === selectedId || e.to === selectedId);
             const tcol = bucket === 'implements' ? 'var(--node-spec)' : bucket === 'tests' ? 'var(--node-test)' : null;
-            const baseStroke = tcol ? `color-mix(in srgb, ${tcol} 62%, transparent)` : 'rgba(150,160,180,0.32)';
+            const baseStroke = tcol ? `color-mix(in srgb, ${tcol} 62%, transparent)` : 'var(--edge-line)';
             const mx = (A.cx + B.cx) / 2;
             const d = `M ${A.cx} ${A.cy} C ${mx} ${A.cy}, ${mx} ${B.cy}, ${B.cx} ${B.cy}`;
             return (
@@ -463,7 +463,7 @@ export function GraphCanvas({ nodes: initialNodes, edges, selectedId, onSelect, 
                   border: `1.5px solid ${sel ? col : drift ? col : `color-mix(in srgb, ${col} 45%, transparent)`}`,
                   color: 'var(--node-text)', fontSize: 12.5, fontWeight: 500, whiteSpace: 'nowrap',
                   fontFamily: 'var(--font-mono)',
-                  boxShadow: sel ? `0 0 0 4px ${col}33, 0 4px 16px ${col}44` : hov ? `0 0 0 3px ${col}22` : '0 2px 8px rgba(0,0,0,0.4)',
+                  boxShadow: sel ? `0 0 0 4px ${col}33, 0 4px 16px ${col}44` : hov ? `0 0 0 3px ${col}22` : 'var(--shadow-node)',
                 }}
               >
                 <span style={{ width: 7, height: 7, borderRadius: b.shape === 'rect' ? 2 : '50%', background: col, flexShrink: 0, boxShadow: `0 0 6px ${col}` }} />
@@ -486,7 +486,7 @@ export function GraphCanvas({ nodes: initialNodes, edges, selectedId, onSelect, 
       {interactive && (
         <div style={{ position: 'absolute', left: 14, bottom: 14, display: 'flex', flexDirection: 'column', gap: 6 }}>
           <Minimap nodes={nodes} view={view} size={size} />
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', background: 'rgba(0,0,0,0.4)', padding: '2px 7px', borderRadius: 5, alignSelf: 'flex-start' }}>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', background: 'var(--inset)', padding: '2px 7px', borderRadius: 5, alignSelf: 'flex-start' }}>
             {Math.round(view.k * 100) + '%'}
           </div>
         </div>
@@ -519,7 +519,7 @@ function Minimap({ nodes, view, size }: { nodes: CanvasNode[]; view: View; size:
   const vw = size.w / view.k;
   const vh = size.h / view.k;
   return (
-    <svg width={MW} height={MH} style={{ background: 'color-mix(in srgb, var(--bg-canvas-2) 92%, transparent)', border: '1px solid var(--border-subtle)', borderRadius: 7, boxShadow: '0 4px 12px rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)' }}>
+    <svg width={MW} height={MH} style={{ background: 'color-mix(in srgb, var(--bg-canvas-2) 92%, transparent)', border: '1px solid var(--border-subtle)', borderRadius: 7, boxShadow: 'var(--shadow-minimap)', backdropFilter: 'blur(4px)' }}>
       {nodes.map((n) => (
         <circle key={n.id} cx={mx(n.x)} cy={my(n.y)} r={n.kind === 'route' ? 1.6 : 2.1} fill={nodeColor(n.kind, n.state)} opacity={0.9} />
       ))}

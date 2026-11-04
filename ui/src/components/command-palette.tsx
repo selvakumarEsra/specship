@@ -127,7 +127,7 @@ export function CommandPalette({ open, onClose, pages, project = null }: {
   return (
     <div
       onMouseDown={onClose}
-      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(2px)', zIndex: 100, display: 'grid', placeItems: 'start center', paddingTop: '12vh', animation: 'fadeIn 100ms' }}
+      style={{ position: 'fixed', inset: 0, background: 'var(--overlay)', backdropFilter: 'blur(2px)', zIndex: 100, display: 'grid', placeItems: 'start center', paddingTop: '12vh', animation: 'fadeIn 100ms' }}
     >
       <div
         onMouseDown={(e) => e.stopPropagation()}
@@ -161,7 +161,7 @@ export function CommandPalette({ open, onClose, pages, project = null }: {
                 <div style={{ fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.label}</div>
                 <div className="mono muted" style={{ fontSize: 10.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.sublabel}</div>
               </div>
-              <span className="pill" style={{ fontSize: 9.5, color: 'var(--text-muted)', background: 'rgba(255,255,255,0.05)', flexShrink: 0 }}>{TYPE_BADGE[r.type]}</span>
+              <span className="pill" style={{ fontSize: 9.5, color: 'var(--text-muted)', background: 'var(--fill-soft)', flexShrink: 0 }}>{TYPE_BADGE[r.type]}</span>
             </div>
           ))}
         </div>

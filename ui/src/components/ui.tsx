@@ -13,27 +13,27 @@ export interface StateStyle {
 
 export const STATE: Record<string, StateStyle> = {
   // workflow run states
-  pending: { label: 'Pending', color: 'var(--text-muted)', bg: 'rgba(255,255,255,0.05)' },
+  pending: { label: 'Pending', color: 'var(--warning)', bg: 'var(--warning-soft)' },
   running: { label: 'Running', color: 'var(--info)', bg: 'var(--info-soft)' },
-  paused: { label: 'Paused', color: 'var(--warn)', bg: 'var(--warn-soft)' },
-  completed: { label: 'Completed', color: 'var(--success)', bg: 'var(--success-soft)' },
-  failed: { label: 'Failed', color: 'var(--error)', bg: 'var(--error-soft)' },
-  cancelled: { label: 'Cancelled', color: 'var(--text-muted)', bg: 'rgba(255,255,255,0.05)' },
+  paused: { label: 'Paused', color: 'var(--warning)', bg: 'var(--warning-soft)' },
+  completed: { label: 'Completed', color: 'var(--accent)', bg: 'var(--accent-soft)' },
+  failed: { label: 'Failed', color: 'var(--danger)', bg: 'var(--danger-soft)' },
+  cancelled: { label: 'Cancelled', color: 'var(--text-muted)', bg: 'var(--fill-soft)' },
   // Parked, not terminal (WF-REJECT-DOC): worktree + artifacts kept, resume revises.
-  rejected: { label: 'Rejected', color: 'var(--warn)', bg: 'var(--warn-soft)' },
-  skipped: { label: 'Skipped', color: 'var(--text-muted)', bg: 'rgba(255,255,255,0.05)' },
+  rejected: { label: 'Rejected', color: 'var(--warning)', bg: 'var(--warning-soft)' },
+  skipped: { label: 'Skipped', color: 'var(--text-muted)', bg: 'var(--fill-soft)' },
   // spec link states
-  drafted: { label: 'Drafted', color: 'var(--text-secondary)', bg: 'rgba(255,255,255,0.05)' },
+  drafted: { label: 'Drafted', color: 'var(--text-secondary)', bg: 'var(--fill-soft)' },
   implementing: { label: 'Implementing', color: 'var(--info)', bg: 'var(--info-soft)' },
   implemented: { label: 'Implemented', color: 'var(--node-spec)', bg: 'var(--node-spec-soft)' },
-  verified: { label: 'Verified', color: 'var(--success)', bg: 'var(--success-soft)' },
-  drifted: { label: 'Drifted', color: 'var(--warn)', bg: 'var(--warn-soft)' },
-  broken: { label: 'Broken', color: 'var(--error)', bg: 'var(--error-soft)' },
-  orphaned: { label: 'Orphaned', color: 'var(--error)', bg: 'var(--error-soft)' },
+  verified: { label: 'Verified', color: 'var(--accent)', bg: 'var(--accent-soft)' },
+  drifted: { label: 'Drifted', color: 'var(--danger)', bg: 'var(--danger-soft)' },
+  broken: { label: 'Broken', color: 'var(--danger)', bg: 'var(--danger-soft)' },
+  orphaned: { label: 'Orphaned', color: 'var(--danger)', bg: 'var(--danger-soft)' },
   // generic
   success: { label: 'Success', color: 'var(--success)', bg: 'var(--success-soft)' },
-  warn: { label: 'Warn', color: 'var(--warn)', bg: 'var(--warn-soft)' },
-  error: { label: 'Error', color: 'var(--error)', bg: 'var(--error-soft)' },
+  warn: { label: 'Warn', color: 'var(--warning)', bg: 'var(--warning-soft)' },
+  error: { label: 'Error', color: 'var(--danger)', bg: 'var(--danger-soft)' },
   info: { label: 'Info', color: 'var(--info)', bg: 'var(--info-soft)' },
 };
 
@@ -56,7 +56,7 @@ export function StatePill({ state, pulse, withDot }: { state: string; pulse?: bo
 
 export function Pill({ children, color, bg, dot }: { children: ReactNode; color?: string; bg?: string; dot?: boolean }) {
   return (
-    <span className="pill" style={{ color: color || 'var(--text-secondary)', background: bg || 'rgba(255,255,255,0.05)' }}>
+    <span className="pill" style={{ color: color || 'var(--text-secondary)', background: bg || 'var(--fill-soft)' }}>
       {dot && <span className="pill-dot" style={{ background: color }} />}
       {children}
     </span>
@@ -233,7 +233,7 @@ export function RangeSelector({ value, onChange }: { value: string; onChange: (v
 /** Mini horizontal bar (for cost rows etc.). */
 export function Bar({ frac, color, height }: { frac: number; color?: string; height?: number }) {
   return (
-    <div style={{ height: height || 4, background: 'rgba(255,255,255,0.06)', borderRadius: 999, overflow: 'hidden', width: '100%' }}>
+    <div style={{ height: height || 4, background: 'var(--fill)', borderRadius: 999, overflow: 'hidden', width: '100%' }}>
       <div style={{ width: Math.max(2, frac * 100) + '%', height: '100%', background: color || 'var(--accent)', borderRadius: 999 }} />
     </div>
   );

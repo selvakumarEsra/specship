@@ -16,7 +16,9 @@ import {
   FORCED_STATE_CLASS,
   NODE_TOKENS,
   PILL_GROUPS,
+  RADIUS_TOKENS,
   SEMANTIC_TOKENS,
+  SPACE_TOKENS,
   SURFACE_TOKENS,
   TYPE_SCALE,
   type TokenSwatch,
@@ -67,6 +69,30 @@ function Gallery() {
               </div>
               <div style={{ fontSize: 11, fontWeight: 500, marginTop: 4 }}>{s.state}</div>
               <div className="mono muted" style={{ fontSize: 10 }}>{s.varName}</div>
+            </div>
+          ))}
+        </div>
+      </DSBlock>
+
+      <DSBlock title="Spacing">
+        <div className="col" style={{ gap: 6 }}>
+          {SPACE_TOKENS.map((t) => (
+            <div key={t.varName} className="row" style={{ gap: 10, alignItems: 'center' }}>
+              <div style={{ width: `var(${t.varName})`, height: 12, background: 'var(--accent)', borderRadius: 2, flexShrink: 0 }} />
+              <div style={{ fontSize: 11, fontWeight: 500 }}>{t.name}</div>
+              <div className="mono muted" style={{ fontSize: 10 }}>{t.varName}</div>
+            </div>
+          ))}
+        </div>
+      </DSBlock>
+
+      <DSBlock title="Radius">
+        <div className="row gap-10" style={{ flexWrap: 'wrap' }}>
+          {RADIUS_TOKENS.map((t) => (
+            <div key={t.varName} style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 72 }}>
+              <div style={{ height: 40, borderRadius: `var(${t.varName})`, background: 'var(--fill)', border: '1px solid var(--border-strong)' }} />
+              <div style={{ fontSize: 11, fontWeight: 500 }}>{t.name}</div>
+              <div className="mono muted" style={{ fontSize: 10 }}>{t.varName}</div>
             </div>
           ))}
         </div>
