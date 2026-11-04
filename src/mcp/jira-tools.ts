@@ -1837,6 +1837,7 @@ interface PublishSpecQueries {
  * for a first publish of a link-less, single-requirement file — the safe case
  * where nothing references the old id yet.
  */
+// @implements REQ-JIRATEAM-011
 export async function handleSpecshipJiraPublish(
   args: Record<string, unknown>,
   deps: JiraPublishDeps,
@@ -1938,6 +1939,13 @@ export async function handleSpecshipJiraPublish(
     const existingKey =
       readFrontmatterValue(specContent, perSpecFrontmatterKeys(specId).issueKey) ??
       (soleRequirement ? readSpecJiraKey(absPath) : null);
+    // REQ-JIRATEAM-011: the same epic anchor auto-publish resolves
+    // (REQ-JIRATEAM-006) — frontmatter first, then the binding default. A
+    // re-publish never re-parents (publishSpecToJira only parents on create).
+    const epicKey =
+      readFrontmatterValue(specContent, 'epicKey') ??
+      loadRepoJiraBinding(deps.projectRoot).binding?.epicKey ??
+      undefined;
 
     const result = await publishSpecToJira(
       client,
@@ -1946,6 +1954,7 @@ export async function handleSpecshipJiraPublish(
         projectKey,
         // REQ-JIRATEAM-009: honor the binding's issue-type overrides.
         ...bindingIssueTypes(deps.projectRoot),
+        ...(epicKey ? { epicKey } : {}),
         // REQ-MULTIDEV-005.A5: find a prior CI-created issue by label.
         ...(ciPublish
           ? {
@@ -1979,6 +1988,8 @@ export async function handleSpecshipJiraPublish(
       !existingKey && links.length === 0 && sameFileReqs.length === 1;
     const written = writeBackJiraIdentity(absPath, result.key, {
       fingerprint: result.fingerprint,
+      // Record the epic a new Story was parented under (REQ-JIRATEAM-011.A2).
+      ...(result.epicKey ? { epicKey: result.epicKey } : {}),
       reId: reIdSafe ? { from: specId } : null,
       renameTo: reIdSafe ? publishedSpecFilename(result.key, spec.title) : null,
       // REQ-JIRATEAM-010.A2: per-requirement keys in multi-REQ files.

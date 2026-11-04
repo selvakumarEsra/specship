@@ -746,6 +746,70 @@ describe('handleSpecshipJiraPublish', () => {
     expect(fs.existsSync(specPath)).toBe(true);
   });
 
+  // REQ-JIRATEAM-011 — publishing on demand anchors a new Story under the
+  // spec's epic (frontmatter first, then the binding default).
+  const withEpic = (epic: string) => SPEC_MD.replace('format: markdown\n', `format: markdown\nepicKey: ${epic}\n`);
+  const bindEpic = (epic: string) =>
+    fs.writeFileSync(
+      path.join(tmp, 'specship.config.json'),
+      JSON.stringify({ jira: { projectKey: 'PROJ', epicKey: epic } }),
+    );
+
+  it('REQ-JIRATEAM-011.A1 parents a new Story under the frontmatter epic', reqJirateam011A1);
+  async function reqJirateam011A1(): Promise<void> {
+    const specPath = writeSpecFile(tmp, 'specs/foo.md', withEpic('PROJ-1'));
+    const { client, created } = makePublishFake();
+    await handleSpecshipJiraPublish(
+      { spec_id: 'REQ-FOO-001' },
+      { specQueries: specQueriesFor(specPath, { links: [{ id: 1 }] }), projectRoot: tmp, makeJiraClient: () => client },
+    );
+    expect(created[0]?.parentKey).toBe('PROJ-1');
+  }
+
+  it('REQ-JIRATEAM-011.A2 falls back to the binding epic and records it', reqJirateam011A2);
+  async function reqJirateam011A2(): Promise<void> {
+    bindEpic('PROJ-2');
+    const specPath = writeSpecFile(tmp, 'specs/foo.md', SPEC_MD);
+    const { client, created } = makePublishFake();
+    await handleSpecshipJiraPublish(
+      { spec_id: 'REQ-FOO-001' },
+      { specQueries: specQueriesFor(specPath, { links: [{ id: 1 }] }), projectRoot: tmp, makeJiraClient: () => client },
+    );
+    expect(created[0]?.parentKey).toBe('PROJ-2');
+    expect(fs.readFileSync(specPath, 'utf8')).toMatch(/^epicKey: PROJ-2$/m);
+  }
+
+  it('REQ-JIRATEAM-011.A3 the frontmatter epic wins over the binding', reqJirateam011A3);
+  async function reqJirateam011A3(): Promise<void> {
+    bindEpic('PROJ-2');
+    const specPath = writeSpecFile(tmp, 'specs/foo.md', withEpic('PROJ-1'));
+    const { client, created } = makePublishFake();
+    await handleSpecshipJiraPublish(
+      { spec_id: 'REQ-FOO-001' },
+      { specQueries: specQueriesFor(specPath, { links: [{ id: 1 }] }), projectRoot: tmp, makeJiraClient: () => client },
+    );
+    expect(created[0]?.parentKey).toBe('PROJ-1');
+  }
+
+  it('REQ-JIRATEAM-011.A4 a re-publish sends no parent', reqJirateam011A4);
+  async function reqJirateam011A4(): Promise<void> {
+    const specPath = writeSpecFile(
+      tmp,
+      'specs/foo.md',
+      withEpic('PROJ-1').replace('format: markdown\n', 'format: markdown\njira_issue: PROJ-50\n'),
+    );
+    const { client, created, updated } = makePublishFake();
+    await handleSpecshipJiraPublish(
+      { spec_id: 'REQ-FOO-001' },
+      { specQueries: specQueriesFor(specPath, { links: [{ id: 1 }] }), projectRoot: tmp, makeJiraClient: () => client },
+    );
+    expect(updated.map((u) => u.key)).toEqual(['PROJ-50']);
+    expect(updated[0]!.fields).not.toHaveProperty('parentKey');
+    expect(updated[0]!.fields).not.toHaveProperty('parent');
+    // Only Sub-tasks were created — never a parented Story.
+    expect(created.every((c) => c.parentKey === 'PROJ-50')).toBe(true);
+  }
+
   it('A4: a JIRA failure writes nothing to the spec file', async () => {
     const specPath = writeSpecFile(tmp, 'specs/foo.md', SPEC_MD);
     const { client } = makePublishFake({ failCreate: true });
