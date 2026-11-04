@@ -277,6 +277,8 @@ implementations:
   - src/agents/detect.ts:agentFromMcpClient
   - src/agents/detect.ts:agentFromHookEvent
   - src/agents/detect.ts:agentFromEnv
+  - src/agents/detect.ts:agentDisplayName
+  - src/workflows/agents/index.ts:headlessAgents
   - src/mcp/session.ts:MCPSession.getDetectedAgent
   - src/activation/hook-output.ts:detectHookAgent
 verifies:
