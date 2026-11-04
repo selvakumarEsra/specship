@@ -30,6 +30,27 @@ const SPEC = {
   parent: null, siblings: [], children: [], links: [LINK], childLinks: {}, source: null,
 };
 
+/** A raw requirement body as the spec file holds it — markers, link blocks, acceptance. */
+const RAW_BODY = [
+  '<!-- id: REQ-ORDERS-002 -->',
+  'Refunds MUST reverse the **original** charge via `refund()`.',
+  '',
+  'implementations:',
+  '  - src/refunds.ts:refund',
+  '',
+  'verifies:',
+  '  - src/__tests__/refunds.test.ts:refundsReverse',
+  '',
+  '## Acceptance',
+  '<!-- id: REQ-ORDERS-002.A1 -->',
+  '- A refund restores the balance.',
+].join('\n');
+
+const SPEC_RAW = {
+  spec: { id: 'REQ-ORDERS-002', kind: 'requirement', title: 'Refunds MUST reverse charges', body: RAW_BODY, sourcePath: 'specs/orders.md' },
+  parent: null, siblings: [], children: [], links: [], childLinks: {}, source: null,
+};
+
 const SEARCH: Record<string, unknown> = {
   'REQ-ORDERS-001': { specs: [{ id: 'REQ-ORDERS-001', title: SPEC.spec.title, kind: 'requirement', snippet: '' }], symbols: [] },
   createOrder: { specs: [], symbols: [{ id: 'fn-create', name: 'createOrder', kind: 'function', filePath: 'src/orders.ts', startLine: 3 }] },
@@ -47,6 +68,7 @@ function mockFetch(): string[] {
     if (u.pathname === '/api/graph/node') body = NODES[u.searchParams.get('id') ?? ''];
     else if (u.pathname === '/api/graph/split-search') body = SEARCH[u.searchParams.get('q') ?? ''] ?? { specs: [], symbols: [] };
     else if (u.pathname === '/api/spec/REQ-ORDERS-001') body = SPEC;
+    else if (u.pathname === '/api/spec/REQ-ORDERS-002') body = SPEC_RAW;
     else if (u.pathname === '/api/graph/full') body = GRAPH_FULL;
     else if (u.pathname === '/api/graph/health') body = HEALTH;
     if (body === undefined) return { ok: false, status: 404, statusText: 'Not Found', json: async () => ({ error: 'not found: ' + u.pathname }) };
@@ -180,10 +202,30 @@ async function reqDashsimple005A5(): Promise<void> {
   expect(screen.queryByRole('alert')).toBeNull();
 }
 
+// ---- A6 ----
+
+async function reqDashsimple005A6(): Promise<void> {
+  mockFetch();
+  history.replaceState(null, '', '/graph?req=REQ-ORDERS-002');
+  render(<Routed />);
+  const body = await within(left()).findByTestId('split-requirement-body');
+  const text = left().textContent ?? '';
+  expect(text).toContain('Refunds');
+  expect(text).toContain('reverse the original charge via refund().');
+  for (const raw of ['<!--', 'id:', 'implementations:', 'verifies:', 'Acceptance', 'src/refunds.ts:refund', 'restores the balance', '**']) {
+    expect(text).not.toContain(raw);
+  }
+  // Inline markdown renders as formatting, not raw characters.
+  expect(body.querySelector('strong')?.textContent).toBe('original');
+  expect(body.querySelector('code')?.textContent).toBe('refund()');
+  expect(body.querySelectorAll('p')).toHaveLength(1);
+}
+
 describe('Graph split spec/code view (REQ-DASHSIMPLE-005)', () => {
   it('REQ-DASHSIMPLE-005.A1: searching a requirement ID shows its text left and each linked symbol source right', reqDashsimple005A1);
   it('REQ-DASHSIMPLE-005.A2: searching a function name shows its source right and its linked requirements left', reqDashsimple005A2);
   it('REQ-DASHSIMPLE-005.A3: clicking a callee moves both sides and Back returns to the previous pair', reqDashsimple005A3);
   it('REQ-DASHSIMPLE-005.A4: reloading at a split-view URL restores the same pair', reqDashsimple005A4);
   it('REQ-DASHSIMPLE-005.A5: an unlinked symbol shows its source and "no linked requirement", not an error', reqDashsimple005A5);
+  it('REQ-DASHSIMPLE-005.A6: the split-view requirement renders as prose without link blocks, acceptance or id markers', reqDashsimple005A6);
 });
