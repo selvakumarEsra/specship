@@ -137,6 +137,13 @@ truth. Removed links MUST NOT be reported as drift.
 
 implementations:
   - src/index.ts:SpecShip.indexSpecsInternal
+  - src/index.ts:SpecShip.indexSpecs
+  - src/index.ts:SpecShip.pruneMissingSpecFiles
+verifies:
+  - __tests__/spec-file-removal.test.ts:reqMultidev003A1
+  - __tests__/spec-file-removal.test.ts:reqMultidev003A2
+  - __tests__/spec-file-removal.test.ts:reqMultidev003A3
+  - __tests__/spec-file-removal.test.ts:reqMultidev003A4
 
 ## Acceptance
 <!-- id: REQ-MULTIDEV-003.A1 -->

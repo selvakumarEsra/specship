@@ -1058,12 +1058,15 @@ export class SpecShip {
       candidatesApplied: 0, commentLinksApplied: 0, reattached: 0, transitions,
     };
     let specFilesChanged = 0;
+    // No early return when specs/ is missing: a checkout without the
+    // directory must still prune the rows of files that are gone
+    // (REQ-MULTIDEV-003).
     const specRoots = this.defaultSpecRoots();
-    if (specRoots.length === 0) return { transitions, errors: totalErrors, warnings: totalWarnings };
     const specFiles: string[] = [];
     for (const root of specRoots) {
       this.collectSpecFiles(root, specFiles);
     }
+    const present = new Set(specFiles.map((p) => path.relative(this.projectRoot, p)));
 
     for (const absPath of specFiles) {
       const rel = path.relative(this.projectRoot, absPath);
@@ -1101,6 +1104,11 @@ export class SpecShip {
       }
     }
 
+    // Prune AFTER the per-file loop: a spec id that moved from a.md to b.md
+    // has already been re-homed (source_path = b.md), so deleting a.md's rows
+    // by source_path cannot take it (REQ-MULTIDEV-003, REQ-VSTATE-001).
+    specFilesChanged += this.pruneMissingSpecFiles(present);
+
     if (specFilesChanged > 0 || forceResolve) {
       const allFiles = this.queries.getAllFiles().map((f) => f.path);
       this.specLinkResolver.applyCodeCommentLinks(allFiles);
@@ -1132,6 +1140,8 @@ export class SpecShip {
   async indexSpecs(roots?: string[]): Promise<{
     filesProcessed: number;
     filesSkipped: number;
+    /** Spec files pruned because they no longer exist (REQ-MULTIDEV-003). */
+    filesRemoved: number;
     specsExtracted: number;
     linkCandidates: number;
     resolverStats: SpecLinkResolverStats;
@@ -1146,6 +1156,7 @@ export class SpecShip {
         return {
           filesProcessed: 0,
           filesSkipped: 0,
+          filesRemoved: 0,
           specsExtracted: 0,
           linkCandidates: 0,
           resolverStats: {
@@ -1237,6 +1248,14 @@ export class SpecShip {
           totalErrors += result.errors.filter((e) => e.severity === 'error').length;
         }
 
+        // Drop specs whose spec file is gone (REQ-MULTIDEV-003). Explicit
+        // roots scope the prune to those roots; default roots prune all.
+        const present = new Set(specFiles.map((p) => path.relative(this.projectRoot, p)));
+        const filesRemoved = this.pruneMissingSpecFiles(
+          present,
+          roots && roots.length > 0 ? roots : undefined
+        );
+
         // After spec changes settle, also scan code docstrings for
         // `@implements REQ-X` markers. Bounded to the files that already
         // have nodes in the graph (full-graph scan is acceptable here —
@@ -1259,6 +1278,7 @@ export class SpecShip {
         return {
           filesProcessed: processed,
           filesSkipped: skipped,
+          filesRemoved,
           specsExtracted: totalSpecs,
           linkCandidates: totalCandidates,
           resolverStats: stats,
@@ -1269,6 +1289,40 @@ export class SpecShip {
         this.fileLock.release();
       }
     });
+  }
+
+  /**
+   * Remove indexed spec files that no longer exist in the checkout — a
+   * deleted file, or one missing on the branch just checked out
+   * (REQ-MULTIDEV-003). `deleteSpecFile` cascades to the file's specs,
+   * acceptance criteria, links and virtual `spec` nodes, so the removed links
+   * never reach drift. No drift transitions are emitted.
+   *
+   * A row is pruned only when its path was not collected this pass AND is
+   * absent on disk — a file that merely failed to read keeps its rows. With
+   * explicit `roots`, only rows under those roots are considered.
+   *
+   * Returns the number of spec files removed.
+   */
+  private pruneMissingSpecFiles(present: Set<string>, roots?: string[]): number {
+    const scopes = roots?.map((r) => {
+      const rel = path.relative(this.projectRoot, path.resolve(this.projectRoot, r));
+      return rel === '' ? '' : rel.split(path.sep).join('/');
+    });
+    const inScope = (p: string): boolean => {
+      if (!scopes) return true;
+      const norm = p.split(path.sep).join('/');
+      return scopes.some((s) => s === '' || norm === s || norm.startsWith(s + '/'));
+    };
+    let removed = 0;
+    for (const row of this.specQueries.getAllSpecFiles()) {
+      if (present.has(row.path)) continue;
+      if (!inScope(row.path)) continue;
+      if (fs.existsSync(path.join(this.projectRoot, row.path))) continue;
+      this.specQueries.deleteSpecFile(row.path);
+      removed++;
+    }
+    return removed;
   }
 
   /**

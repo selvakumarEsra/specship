@@ -9,6 +9,9 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixes
+
+- Deleting a spec file, or switching to a branch without it, now removes its requirements and links on the next sync instead of reporting them as drift.
 
 ## [0.29.0] - 2026-10-27
 
