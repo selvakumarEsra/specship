@@ -141,6 +141,16 @@ change the dashboard.
 
 implementations:
   - ui/src/theme.ts:applyTheme
+  - ui/src/main.tsx
+  - ui/src/App.tsx:TopBar
+  - ui/src/pages/settings.tsx:SettingsPage
+  - ui/src/pages/designsystem.tsx:DesignSystemPage
+
+verifies:
+  - ui/src/__tests__/theme-dark-only.test.tsx:reqDashtheme003A1
+  - ui/src/__tests__/theme-dark-only.test.tsx:reqDashtheme003A2
+  - ui/src/__tests__/theme-dark-only.test.tsx:reqDashtheme003A3
+  - ui/src/__tests__/theme-dark-only.test.tsx:reqDashtheme003A4
 
 ## Acceptance
 <!-- id: REQ-DASHTHEME-003.A1 -->

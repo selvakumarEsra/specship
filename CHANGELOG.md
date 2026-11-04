@@ -9,6 +9,9 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### New Features
+
+- The dashboard is now dark-only; the theme toggle and Theme setting are gone.
 
 ## [0.29.0] - 2026-10-27
 

@@ -9,8 +9,8 @@
    BookMyGame's domain tokens (per-sport, GP, gold/silver/bronze medals,
    whatsapp, spend) are deliberately NOT copied (A4).
 
-   The design system is dark-only, so there is no light token block: a
-   light theme pref simply renders these tokens.
+   The design system is dark-only, so the dashboard is dark-only
+   (REQ-DASHTHEME-003): there is no light token block and no light selector.
    ============================================================ */
 
 /* ---- Adopted --bmg-* source tokens (verbatim from the snapshot) ---- */
@@ -111,9 +111,9 @@
 }
 
 /* ---- Dashboard semantic tokens → BookMyGame values ----
-   [data-theme] selectors re-assert the tokens inside a scoped wrapper (the
-   design-system gallery), so a light-pref wrapper renders the dark theme. */
-:root, [data-theme="dark"], [data-theme="light"] {
+   The [data-theme="dark"] selector re-asserts the tokens inside a scoped
+   wrapper (the design-system gallery). */
+:root, [data-theme="dark"] {
   color-scheme: dark;
 
   /* ---- Surfaces ---- */

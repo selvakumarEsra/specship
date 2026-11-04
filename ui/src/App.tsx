@@ -8,7 +8,6 @@ import { CommandPalette, type PalettePage } from './components/command-palette';
 import { Icon, LogoMark } from './components/icons';
 import { useApi, useGlobalShortcuts } from './hooks';
 import { go, usePathRoute } from './router';
-import { applyTheme, getThemePref, type ThemePref } from './theme';
 import { DashboardPage } from './pages/dashboard';
 import { DesignSystemPage } from './pages/designsystem';
 import { GraphPage } from './pages/graph';
@@ -399,28 +398,9 @@ function TopBar({ onToggle, onOpenPalette }: { onToggle: () => void; onOpenPalet
         <kbd style={KBD_STYLE}>⌘K</kbd>
       </button>
       <div className="grow" />
-      <ThemeToggle />
       <button className="btn btn-ghost btn-sm" onClick={onOpenPalette} title="Command palette" aria-label="Command palette">
         <Icon name="command" size={14} />
       </button>
     </div>
-  );
-}
-
-/** Tri-state theme cycle: dark → light → system (system tracks the OS live). */
-function ThemeToggle() {
-  const [pref, setPref] = useState<ThemePref>(getThemePref());
-  const NEXT: Record<ThemePref, ThemePref> = { dark: 'light', light: 'system', system: 'dark' };
-  const ICON: Record<ThemePref, string> = { dark: 'moon', light: 'sun', system: 'monitor' };
-  const next = NEXT[pref];
-  return (
-    <button
-      className="btn btn-ghost btn-sm"
-      title={'Theme: ' + pref + ' — switch to ' + next}
-      aria-label={'Theme: ' + pref + ' — switch to ' + next}
-      onClick={() => { applyTheme(next); setPref(next); }}
-    >
-      <Icon name={ICON[pref]} size={15} />
-    </button>
   );
 }

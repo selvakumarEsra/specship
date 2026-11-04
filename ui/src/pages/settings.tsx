@@ -1,8 +1,8 @@
 /**
  * Settings — appearance, backend info, Claude Code ingest, about
  * (REQ-DESKTOP-028). TSX port of specs/specship-desktop/screens-settings.jsx.
- * Appearance changes apply immediately + persist (A1, via theme.ts/prefs.ts
- * localStorage); the transcript-ingest toggle round-trips /api/config (A2, so
+ * Appearance (density only — the dashboard is dark-only, REQ-DASHTHEME-003)
+ * applies immediately + persists (A1, via prefs.ts localStorage); the transcript-ingest toggle round-trips /api/config (A2, so
  * the analytics screens' useIngestConfig banner reacts); About shows the real
  * product version + DB backend from /api/status (A3).
  *
@@ -17,7 +17,6 @@ import { Icon } from '../components/icons';
 import { PageHead, Segmented } from '../components/ui';
 import { useApi, useIngestConfig } from '../hooks';
 import { type DensityPref, applyDensity, getDensity } from '../prefs';
-import { applyTheme, getThemePref, type ThemePref } from '../theme';
 import type { PageProps } from './types';
 
 function Section({ icon, title, children }: { icon: string; title: string; children: ReactNode }) {
@@ -82,7 +81,6 @@ function AboutRow({ label, value, color }: { label: string; value: ReactNode; co
 }
 
 export function SettingsPage(_props: PageProps) {
-  const [theme, setTheme] = useState<ThemePref>(getThemePref);
   const [density, setDensity] = useState<DensityPref>(getDensity);
 
   const status = useApi(() => api.status(_props.project), [_props.project]);
@@ -90,7 +88,6 @@ export function SettingsPage(_props: PageProps) {
   const [savingIngest, setSavingIngest] = useState(false);
   const [ingestError, setIngestError] = useState<string | null>(null);
 
-  const setThemeAndApply = (v: string) => { const t = v as ThemePref; setTheme(t); applyTheme(t); };
   const setDensityAndApply = (v: string) => { const d = v as DensityPref; setDensity(d); applyDensity(d); };
 
   const toggleIngest = async () => {
@@ -112,13 +109,6 @@ export function SettingsPage(_props: PageProps) {
       <PageHead icon="settings" title="Settings" />
       <div style={{ maxWidth: 640 }}>
         <Section icon="sparkles" title="Appearance">
-          <Field label="Theme" hint="Dark, light, or follow your OS">
-            <Segmented
-              value={theme}
-              onChange={setThemeAndApply}
-              options={[{ value: 'dark', label: 'Dark' }, { value: 'light', label: 'Light' }, { value: 'system', label: 'System' }]}
-            />
-          </Field>
           <Field label="Density" hint="Row height & padding">
             <Segmented
               value={density}

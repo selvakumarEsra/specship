@@ -1,9 +1,9 @@
 /**
  * Design system — the living token gallery (REQ-DESKTOP-028.A4). Every
  * swatch, control state, and pill renders `var(<token>)` from the manifest in
- * ../tokens, so it is the LIVE token value, never a hard-coded hex. The whole
- * gallery is rendered twice — once in a dark theme wrapper, once in a light
- * one — so both themes are visible side by side (A4: "in both themes"). Also
+ * ../tokens, so it is the LIVE token value, never a hard-coded hex. The
+ * gallery is rendered once, in the dark theme wrapper — the dashboard is
+ * dark-only (REQ-DASHTHEME-003), so there is no light variant to show. Also
  * showcases the in-module SVG chart/graph primitives so the ports stay
  * eyeball-verifiable against the snapshot.
  */
@@ -235,13 +235,11 @@ function Primitives() {
 export function DesignSystemPage() {
   return (
     <div className="scroll-y" style={{ flex: 1, padding: 22 }}>
-      <PageHead icon="layers" title="Design system" sub="Tokens, components and states — rendered live in both themes, WCAG AA." />
-      {(['dark', 'light'] as const).map((theme) => (
-        <div key={theme} data-theme={theme} style={{ marginBottom: 20, borderRadius: 12, background: 'var(--bg-canvas)', padding: 16, border: '1px solid var(--border-subtle)' }}>
-          <div className="eyebrow" data-testid={`theme-${theme}`} style={{ marginBottom: 12, color: 'var(--text-secondary)' }}>{theme} theme</div>
-          <Gallery />
-        </div>
-      ))}
+      <PageHead icon="layers" title="Design system" sub="Tokens, components and states — rendered live in the dark theme, WCAG AA." />
+      <div data-theme="dark" style={{ marginBottom: 20, borderRadius: 12, background: 'var(--bg-canvas)', padding: 16, border: '1px solid var(--border-subtle)' }}>
+        <div className="eyebrow" data-testid="theme-dark" style={{ marginBottom: 12, color: 'var(--text-secondary)' }}>dark theme</div>
+        <Gallery />
+      </div>
       <Primitives />
     </div>
   );
