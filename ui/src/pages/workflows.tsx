@@ -10,7 +10,7 @@ import { api, isNoProject, type WorkflowDefinition } from '../api';
 import { useApi } from '../hooks';
 import { go } from '../router';
 import { Icon } from '../components/icons';
-import { Empty, PageHead, Pill } from '../components/ui';
+import { Button, Empty, PageHead, Pill } from '../components/ui';
 import type { PageProps } from './types';
 
 const SCOPE_COLOR: Record<string, string> = {
@@ -71,9 +71,9 @@ export function WorkflowsPage({ project, query }: PageProps) {
                   </>
                 )}
                 <span className="grow" />
-                <button className="btn btn-primary btn-sm" onClick={() => setLaunch(wf.name)}>
+                <Button variant="primary" size="sm" onClick={() => setLaunch(wf.name)}>
                   <Icon name="play" size={13} />Launch
-                </button>
+                </Button>
               </div>
             </div>
           );
@@ -113,7 +113,7 @@ export function LaunchRunDialog({ wf, project, onClose }: {
         <div className="row gap-10" style={{ padding: '14px 16px', borderBottom: '1px solid var(--border-subtle)' }}>
           <Icon name="workflow" size={16} style={{ color: 'var(--accent)' }} />
           <span className="mono grow" style={{ fontWeight: 600 }}>{wf.name}</span>
-          <button className="btn btn-ghost btn-xs" onClick={onClose} aria-label="Close"><Icon name="x" size={14} /></button>
+          <Button variant="ghost" size="xs" onClick={onClose} aria-label="Close"><Icon name="x" size={14} /></Button>
         </div>
         <div style={{ padding: 16 }}>
           <div className="secondary" style={{ fontSize: 12.5, marginBottom: 16, lineHeight: 1.55 }}>{wf.description || 'No description.'}</div>
@@ -149,15 +149,17 @@ export function LaunchRunDialog({ wf, project, onClose }: {
           )}
         </div>
         <div className="row gap-8" style={{ padding: '12px 16px', borderTop: '1px solid var(--border-subtle)', justifyContent: 'flex-end' }}>
-          <button className="btn btn-ghost btn-sm" onClick={onClose}>Cancel</button>
-          <button
-            className="btn btn-primary btn-sm"
+          <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
+          <Button
+            variant="primary"
+            size="sm"
             onClick={submit}
-            disabled={busy || missing.length > 0}
+            loading={busy}
+            disabled={missing.length > 0}
             title={missing.length ? 'Fill the required inputs: ' + missing.map((m) => m.name).join(', ') : undefined}
           >
-            <Icon name="play" size={13} />{busy ? 'Launching…' : 'Launch run'}
-          </button>
+            {!busy && <Icon name="play" size={13} />}{busy ? 'Launching…' : 'Launch run'}
+          </Button>
         </div>
       </div>
     </div>

@@ -1,8 +1,11 @@
 /**
- * Shared UI primitives + state-pill config. TSX port of the design bundle's
- * ui.jsx (specs/specship-desktop/ui.jsx).
+ * Shared UI kit + state-pill config. Originally a TSX port of the design
+ * bundle's ui.jsx; restyled in the BookMyGame UI visual language with React
+ * and CSS only (REQ-DASHTHEME-004) — every component's look and every state
+ * comes from the kit classes in styles/app.css, which read tokens.css. Inline
+ * styles here carry only `var(--token)` references, never literals.
  */
-import { useState, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react';
+import { useState, type ButtonHTMLAttributes, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react';
 import { Icon } from './icons';
 
 export interface StateStyle {
@@ -42,22 +45,25 @@ const STATE_ICON: Record<string, string> = {
   verified: 'check', completed: 'check', paused: 'pause', running: 'circle',
 };
 
+// @implements REQ-DASHTHEME-004
 export function StatePill({ state, pulse, withDot }: { state: string; pulse?: boolean; withDot?: boolean }) {
   const c = STATE[state] ?? STATE.info!;
   const ic = STATE_ICON[state];
   return (
     <span className="pill" style={{ color: c.color, background: c.bg, animation: pulse ? 'pulsePill 600ms ease-out' : undefined }}>
-      {withDot && <span className="pill-dot" style={{ background: c.color }} />}
+      {withDot && <span className="pill-dot" />}
       {ic && !withDot && <Icon name={ic} size={11} />}
       {c.label}
     </span>
   );
 }
 
+/** Neutral badge; `color`/`bg` take token refs (defaults come from `.pill`). */
+// @implements REQ-DASHTHEME-004
 export function Pill({ children, color, bg, dot }: { children: ReactNode; color?: string; bg?: string; dot?: boolean }) {
   return (
-    <span className="pill" style={{ color: color || 'var(--text-secondary)', background: bg || 'var(--fill-soft)' }}>
-      {dot && <span className="pill-dot" style={{ background: color }} />}
+    <span className="pill" style={color || bg ? { color, background: bg } : undefined}>
+      {dot && <span className="pill-dot" />}
       {children}
     </span>
   );
@@ -82,11 +88,39 @@ export function SampleBadge({ title }: { title?: string }) {
   );
 }
 
+export type ButtonVariant = 'primary' | 'ghost' | 'outline' | 'secondary' | 'destructive';
+
+/**
+ * Kit button (REQ-DASHTHEME-004): primary / ghost / outline (secondary and
+ * destructive kept as aliases for existing screens), md / sm / xs. `loading`
+ * disables the control and sets aria-busy, which the CSS renders as a
+ * spinner. All states come from the `.btn*` rules (REQ-DESKTOP-013).
+ */
+// @implements REQ-DASHTHEME-004
+export function Button({ variant = 'outline', size = 'md', loading, disabled, className, children, type, ...rest }: {
+  variant?: ButtonVariant; size?: 'md' | 'sm' | 'xs'; loading?: boolean;
+} & ButtonHTMLAttributes<HTMLButtonElement>) {
+  const cls = 'btn btn-' + variant + (size === 'md' ? '' : ' btn-' + size) + (className ? ' ' + className : '');
+  return (
+    <button
+      {...rest}
+      type={type ?? 'button'}
+      className={cls}
+      disabled={disabled || loading}
+      aria-busy={loading || undefined}
+    >
+      {children}
+    </button>
+  );
+}
+
+// @implements REQ-DASHTHEME-004
 export function CopyBtn({ text, label, ariaLabel }: { text: string; label?: string; ariaLabel?: string }) {
   const [done, setDone] = useState(false);
   return (
-    <button
-      className="btn btn-ghost btn-xs"
+    <Button
+      variant="ghost"
+      size="xs"
       title="Copy"
       aria-label={ariaLabel ?? (label ? undefined : 'Copy ' + text)}
       onClick={(e) => {
@@ -99,6 +133,60 @@ export function CopyBtn({ text, label, ariaLabel }: { text: string; label?: stri
     >
       <Icon name={done ? 'check' : 'copy'} size={12} />
       {label || ''}
+    </Button>
+  );
+}
+
+/**
+ * Toggle filter chip (REQ-DASHTHEME-004) — a small rounded rectangle, not a
+ * pill. `active` is exposed as aria-pressed; `color`/`bg` (token refs) tint
+ * the on state through the `--chip-color` / `--chip-bg` custom properties.
+ */
+// @implements REQ-DASHTHEME-004
+export function Chip({ label, count, active, onClick, color, bg, dot, size, className, disabled }: {
+  label: ReactNode; count?: number; active: boolean; onClick: () => void;
+  color?: string; bg?: string; dot?: boolean; size?: 'sm'; className?: string; disabled?: boolean;
+}) {
+  const vars: Record<string, string> = {};
+  if (color) vars['--chip-color'] = color;
+  if (bg) vars['--chip-bg'] = bg;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-pressed={active}
+      className={'chip' + (size === 'sm' ? ' sm' : '') + (active ? ' on' : '') + (className ? ' ' + className : '')}
+      style={Object.keys(vars).length ? (vars as CSSProperties) : undefined}
+    >
+      {(dot ?? !!color) && <span className="chip-dot" />}
+      {label}
+      {count != null && <span className="chip-count">{count}</span>}
+    </button>
+  );
+}
+
+/**
+ * Kit switch (REQ-DASHTHEME-004): role="switch" with aria-checked, a 44×26
+ * pill track and 20×20 thumb (tokens.css --switch-*). `busy` disables it and
+ * sets aria-busy while a save is in flight.
+ */
+// @implements REQ-DASHTHEME-004
+export function Switch({ checked, onChange, label, disabled, busy, className }: {
+  checked: boolean; onChange: () => void; label: string; disabled?: boolean; busy?: boolean; className?: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      aria-busy={busy || undefined}
+      disabled={disabled || busy}
+      className={'switch' + (className ? ' ' + className : '')}
+      onClick={onChange}
+    >
+      <span className="switch-thumb" />
     </button>
   );
 }
@@ -148,16 +236,34 @@ export function PageHead({ icon, title, sub, actions }: { icon?: string; title: 
   );
 }
 
+// @implements REQ-DASHTHEME-004
 export function Empty({ icon, title, body, action }: { icon?: string; title: ReactNode; body?: ReactNode; action?: ReactNode }) {
   return (
-    <div style={{ display: 'grid', placeItems: 'center', height: '100%', minHeight: 280, textAlign: 'center', padding: 40 }}>
-      <div style={{ maxWidth: 360 }}>
-        <div style={{ width: 52, height: 52, borderRadius: 14, background: 'var(--bg-panel)', border: '1px solid var(--border-subtle)', display: 'grid', placeItems: 'center', color: 'var(--text-muted)', margin: '0 auto 16px' }}>
+    <div className="empty">
+      <div className="empty-inner">
+        <div className="empty-icon">
           <Icon name={icon || 'box'} size={24} />
         </div>
-        <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 6 }}>{title}</div>
-        {body && <div className="secondary" style={{ lineHeight: 1.55 }}>{body}</div>}
-        {action && <div style={{ marginTop: 16 }}>{action}</div>}
+        <div className="empty-title">{title}</div>
+        {body && <div className="empty-body">{body}</div>}
+        {action && <div className="empty-action">{action}</div>}
+      </div>
+    </div>
+  );
+}
+
+/** Error state (REQ-DASHTHEME-004): the empty-state layout in the danger tone, announced as an alert. */
+// @implements REQ-DASHTHEME-004
+export function ErrorState({ title, detail, action, icon }: { title: ReactNode; detail?: ReactNode; action?: ReactNode; icon?: string }) {
+  return (
+    <div className="empty error-state" role="alert">
+      <div className="empty-inner">
+        <div className="empty-icon">
+          <Icon name={icon || 'cancel'} size={24} />
+        </div>
+        <div className="empty-title">{title}</div>
+        {detail && <div className="error-state-detail">{detail}</div>}
+        {action && <div className="empty-action">{action}</div>}
       </div>
     </div>
   );
@@ -172,6 +278,7 @@ export type SegmentedOption = string | { value: string; label: string };
  */
 // @implements REQ-DESKTOP-013
 // @implements REQ-DESKTOP-014
+// @implements REQ-DASHTHEME-004
 export function Segmented({ options, value, onChange, size, label, disabled }: {
   options: SegmentedOption[]; value: string; onChange: (v: string) => void;
   size?: 'sm'; label?: string; disabled?: boolean;

@@ -14,7 +14,7 @@ import { type ReactNode, useState } from 'react';
 import { api } from '../api';
 import { Module } from '../components/dashboard-modules';
 import { Icon } from '../components/icons';
-import { PageHead, Segmented } from '../components/ui';
+import { PageHead, Segmented, Switch } from '../components/ui';
 import { useApi, useIngestConfig } from '../hooks';
 import { type DensityPref, applyDensity, getDensity } from '../prefs';
 import type { PageProps } from './types';
@@ -43,6 +43,8 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
   );
 }
 
+/** A labelled setting row built on the kit's Switch (REQ-DASHTHEME-004). */
+// @implements REQ-DASHTHEME-004
 function ToggleRow({ label, desc, on, onClick, busy }: { label: string; desc: string; on: boolean; onClick: () => void; busy?: boolean }) {
   return (
     <div className="row" style={{ justifyContent: 'space-between', padding: '8px 0' }}>
@@ -50,23 +52,7 @@ function ToggleRow({ label, desc, on, onClick, busy }: { label: string; desc: st
         <div style={{ fontSize: 12.5, fontWeight: 500 }}>{label}</div>
         <div className="muted" style={{ fontSize: 11 }}>{desc}</div>
       </div>
-      <button
-        role="switch"
-        aria-checked={on}
-        aria-label={label}
-        disabled={busy}
-        onClick={onClick}
-        style={{
-          width: 38, height: 22, borderRadius: 11, border: 'none', cursor: busy ? 'wait' : 'pointer',
-          background: on ? 'var(--accent)' : 'var(--bg-elevated)', position: 'relative', flexShrink: 0,
-          transition: 'background var(--motion-fast)', opacity: busy ? 0.6 : 1,
-        }}
-      >
-        <span style={{
-          position: 'absolute', top: 2, left: on ? 18 : 2, width: 18, height: 18, borderRadius: '50%',
-          background: 'var(--on-strong)', transition: 'left var(--motion-fast)',
-        }} />
-      </button>
+      <Switch checked={on} onChange={onClick} label={label} busy={busy} />
     </div>
   );
 }

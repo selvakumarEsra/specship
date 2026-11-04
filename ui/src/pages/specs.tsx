@@ -8,7 +8,7 @@ import { api, isNoProject, type RequirementCoverage, type SpecDoc, type SpecFunn
 import { useApi } from '../hooks';
 import { Icon } from '../components/icons';
 import { SpecDetail, type SpecDetailCache } from '../components/spec-detail';
-import { Empty, STATE } from '../components/ui';
+import { Chip, Empty, STATE } from '../components/ui';
 import type { PageProps } from './types';
 
 /** Enter/Space activate a focusable row, mirroring its click (REQ-DESKTOP-014.A1). */
@@ -199,21 +199,18 @@ export function SpecsPage({ project, param, query }: PageProps) {
             const on = !off.has(s);
             const st = STATE[s]!;
             return (
-              <button
+              <Chip
                 key={s}
+                label={s}
+                count={counts[s] ?? 0}
+                active={on}
                 onClick={() => toggle(s)}
-                className="row gap-4"
-                style={{
-                  height: 22, padding: '0 8px', borderRadius: 999, fontSize: 10.5, fontWeight: 500,
-                  cursor: 'pointer', textTransform: 'capitalize',
-                  border: '1px solid ' + (on ? 'transparent' : 'var(--border-subtle)'),
-                  background: on ? st.bg : 'var(--bg-panel)',
-                  color: on ? st.color : 'var(--text-muted)',
-                }}
-              >
-                {s}
-                <span className="tabular" style={{ opacity: 0.7 }}>{counts[s] ?? 0}</span>
-              </button>
+                color={st.color}
+                bg={st.bg}
+                dot={false}
+                size="sm"
+                className="chip-cap"
+              />
             );
           })}
         </div>

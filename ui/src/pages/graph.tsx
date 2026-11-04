@@ -9,31 +9,8 @@ import { useApi } from '../hooks';
 import { GraphCanvas, forceLayout, hierarchicalLayout, type CanvasEdge } from '../components/graph';
 import { GraphDetailRail, GraphOverviewRail } from '../components/graph-rail';
 import { Icon } from '../components/icons';
-import { Empty, Segmented, nodeColor } from '../components/ui';
+import { Button, Chip, Empty, Segmented, nodeColor } from '../components/ui';
 import type { PageProps } from './types';
-
-/** Toolbar filter chip (design bundle's Chip). */
-function Chip({ label, count, active, onClick, color }: {
-  label: string; count?: number; active: boolean; onClick: () => void; color?: string;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className="row gap-6"
-      style={{
-        height: 26, padding: '0 10px', borderRadius: 999, fontSize: 11.5, fontWeight: 500, cursor: 'pointer',
-        border: '1px solid ' + (active ? 'transparent' : 'var(--border-subtle)'),
-        background: active ? (color ? `color-mix(in srgb, ${color} 22%, var(--bg-panel))` : 'var(--accent-soft)') : 'var(--bg-panel)',
-        color: active ? (color || 'var(--accent)') : 'var(--text-secondary)',
-        transition: 'background var(--motion-fast), color var(--motion-fast), border-color var(--motion-fast)',
-      }}
-    >
-      {color && <span style={{ width: 7, height: 7, borderRadius: '50%', background: color }} />}
-      {label}
-      {count != null && <span className="tabular muted" style={{ fontSize: 10.5 }}>{count}</span>}
-    </button>
-  );
-}
 
 const KIND_CHIPS = [
   { kind: 'code', label: 'Code' }, { kind: 'spec', label: 'Spec' },
@@ -129,10 +106,10 @@ export function GraphPage({ project, query }: PageProps) {
             />
           ))}
           <div className="grow" />
-          <button className="btn btn-secondary btn-sm" onClick={() => setFitKey((k) => k + 1)}>
+          <Button variant="outline" size="sm" onClick={() => setFitKey((k) => k + 1)}>
             <Icon name="recenter" size={13} />
             Recenter
-          </button>
+          </Button>
         </div>
         {/* canvas */}
         <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>

@@ -11,6 +11,10 @@
 
    The design system is dark-only, so the dashboard is dark-only
    (REQ-DASHTHEME-003): there is no light token block and no light selector.
+
+   The shared UI kit (REQ-DASHTHEME-004) builds only from the tokens here: the
+   component-token block near the end aliases --bmg-* values and names the few
+   px dimensions the design system's component source fixes.
    ============================================================ */
 
 /* ---- Adopted --bmg-* source tokens (verbatim from the snapshot) ---- */
@@ -218,8 +222,51 @@
   --r-xl: var(--bmg-radius-xl);
   --r-pill: var(--bmg-radius-pill);
 
+  /* ---- UI kit component tokens (REQ-DASHTHEME-004) ----
+     Shapes follow the design system's component source (ds-bundle): buttons
+     and chips are rounded rectangles, not pills; switches are pill tracks.
+     Every px dimension the kit needs is named here, never inline. */
+  --radius-card: var(--bmg-radius-3xl);
+  --radius-control: var(--bmg-radius-lg);           /* buttons */
+  --radius-control-primary: var(--bmg-radius-xl);   /* primary button */
+  --radius-chip: var(--bmg-radius-xs);              /* DS chip is 7px; nearest --bmg-radius-* is xs (8px) */
+  --radius-seg: var(--bmg-radius-lg);               /* segmented container */
+  --radius-seg-btn: var(--bmg-radius-sm);           /* segment */
+  --radius-switch: var(--bmg-radius-pill);
+  --radius-empty-icon: var(--bmg-radius-lg);
+  /* Compact dashboard control heights (the DS's 50px mobile CTA is not adopted). */
+  --control-h-md: 32px;
+  --control-h-sm: 28px;
+  --control-h-xs: 22px;
+  --control-pad-x: var(--bmg-space-lg);
+  --control-pad-x-sm: var(--bmg-space-md);
+  --control-pad-x-xs: var(--bmg-space-sm);
+  --control-gap: var(--bmg-space-sm);
+  --control-border-w: 1px;
+  --chip-pad-x: var(--bmg-space-sm);
+  --chip-pad-y: var(--bmg-space-xs);
+  --badge-pad-x: var(--bmg-space-sm);
+  --badge-pad-y: 2px;
+  --dot-size: 6px;
+  --seg-h: 36px;
+  --seg-inset: 2px;
+  --switch-track-w: 44px;
+  --switch-track-h: 26px;
+  --switch-thumb: 20px;
+  --switch-inset: calc((var(--switch-track-h) - var(--switch-thumb)) / 2);
+  --empty-icon: 52px;
+  --empty-min-h: 280px;
+  --empty-max-w: 360px;
+  --spinner-size: 12px;
+  --spinner-w: 2px;
+  /* Shared interaction-state tokens (REQ-DESKTOP-013). */
+  --state-disabled-opacity: 0.4;
+  --focus-ring: 2px solid var(--border-focus);
+  --focus-ring-offset: 1px;
+
   /* ---- Motion (the ONLY control-state transition timing — REQ-DESKTOP-013) ---- */
   --motion-fast: 100ms ease;
+  --motion-spin: 700ms linear infinite;
 
   /* ---- Shadow ---- */
   --shadow-pop: 0 12px 32px -8px rgba(0,0,0,0.6), 0 2px 8px rgba(0,0,0,0.4);
