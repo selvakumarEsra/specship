@@ -5,7 +5,7 @@ owner: core
 priority: high
 version: 1
 epicKey: SSHIP-600
-jira: SSHIP-613
+jira: SSHIP-601
 depends_on: [LINK-TRUTH-DOC, JIRA-TEAM-DOC]
 jira_issue_REQ-MULTIDEV-001: SSHIP-601
 jira_fingerprint_REQ-MULTIDEV-001: 0d53f50b17925107
