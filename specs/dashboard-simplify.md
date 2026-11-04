@@ -151,6 +151,24 @@ links to the issue when a JIRA base URL is configured, and is plain text
 otherwise. Levels expand and collapse, and a story or task deep-links to its
 place in Review.
 
+implementations:
+  - server/src/routes/spec.ts:buildPlan
+  - server/src/routes/spec.ts:readJiraBaseUrl
+  - ui/src/pages/plan.tsx:PlanPage
+  - ui/src/pages/plan.tsx:PlanReader
+  - ui/src/pages/plan.tsx:JiraKey
+  - ui/src/pages/plan.tsx:storyStatus
+  - ui/src/prefs.ts:getPlanLevel
+  - ui/src/prefs.ts:setPlanLevel
+
+verifies:
+  - ui/src/__tests__/plan.test.tsx:reqDashsimple003A1
+  - ui/src/__tests__/plan.test.tsx:reqDashsimple003A2
+  - ui/src/__tests__/plan.test.tsx:reqDashsimple003A3
+  - ui/src/__tests__/plan.test.tsx:reqDashsimple003A4
+  - ui/src/__tests__/plan.test.tsx:reqDashsimple003A5
+  - ui/src/__tests__/plan.test.tsx:reqDashsimple003A6
+
 ## Acceptance
 <!-- id: REQ-DASHSIMPLE-003.A1 -->
 - A fixture with two documents sharing `epicKey: SSHIP-600` renders one epic

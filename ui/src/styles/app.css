@@ -523,3 +523,13 @@ h1, h2, h3, h4, .sp-title, [data-page-title], .display-num { font-family: var(--
 @media (prefers-reduced-motion: reduce) {
   * { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
 }
+
+/* Plan reader (REQ-DASHSIMPLE-003.A5): one reading-mode column — line length
+   capped at 75ch, document typography, nothing beside it. Tokens only. */
+.plan-reader { max-width: 75ch; margin: 0 auto; padding: var(--space-lg) var(--space-lg) var(--space-2xl); font-size: var(--fs-base); line-height: 1.6; }
+.plan-reader h2 { font-family: var(--font-display); font-size: var(--fs-title); margin: var(--space-xl) 0 var(--space-sm); }
+.plan-reader h3 { font-size: var(--fs-lg); margin: var(--space-lg) 0 var(--space-xs); }
+.plan-reader p { margin: 0 0 var(--space-sm); white-space: pre-wrap; }
+.plan-reader ul { margin: 0 0 var(--space-md); padding-left: var(--space-lg); }
+.plan-reader li { margin: var(--space-xs) 0; }
+.plan-reader a { color: inherit; }

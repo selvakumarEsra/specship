@@ -8,6 +8,7 @@
  */
 
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { SpecLinkKind, NodeKind, SpecLinkState } from '@specship/specship';
@@ -114,6 +115,151 @@ function atomicWriteFile(targetPath: string, content: string): void {
   fs.renameSync(tmp, targetPath);
 }
 
+// ---- Plan reader (REQ-DASHSIMPLE-003) ----
+
+/** The slice of the coverage rollup the plan carries per story (raw, unclassified). */
+type CoverageRequirement = ReturnType<SpecShipInstance['getSpecCoverage']>['requirements'][number];
+type SpecLinkRow = ReturnType<ReturnType<SpecShipInstance['getSpecQueries']>['getAllLinks']>[number];
+
+export interface PlanTask { specId: string; title: string; verdict: string }
+export interface PlanStory {
+  specId: string;
+  title: string;
+  body: string;
+  jiraKey: string | null;
+  /**
+   * The raw coverage the Review classifier reads. The client classifies with
+   * review-groups.ts `classifyRequirement`, so a story's status is always the
+   * same group Review shows — the server never re-derives it.
+   */
+  coverage: CoverageRequirement | null;
+  tasks: PlanTask[];
+}
+export interface PlanDoc { id: string; title: string; stories: PlanStory[] }
+export interface PlanEpic { key: string | null; title: string; docs: PlanDoc[] }
+export interface PlanResponse {
+  jiraBaseUrl: string | null;
+  epics: PlanEpic[];
+  /** Links in a drift state — the second input Review's classifier takes. */
+  driftLinks: Array<SpecLinkRow & { specTitle: string | null }>;
+}
+
+const PLAN_DRIFT_STATES = ['drifted', 'broken', 'orphaned'] as const;
+
+const metaString = (meta: Record<string, unknown> | undefined, key: string): string | null => {
+  const v = meta?.[key];
+  return typeof v === 'string' && v.trim() ? v.trim() : null;
+};
+
+/**
+ * The JIRA base URL for issue links — and ONLY that. Reads
+ * `SPECSHIP_JIRA_BASE_URL`, else the `baseUrl` field of the user-level JIRA
+ * config (`SPECSHIP_JIRA_CONFIG` or `~/.specship/jira.json`). That file also
+ * holds credentials; nothing but `baseUrl` is ever read out of the parsed
+ * object, returned or logged. No JIRA request is made (REQ-DASHSIMPLE-003.A4).
+ */
+export function readJiraBaseUrl(): string | null {
+  const fromEnv = process.env.SPECSHIP_JIRA_BASE_URL;
+  let base: string | null = fromEnv && fromEnv.trim() ? fromEnv.trim() : null;
+  if (!base) {
+    const file = process.env.SPECSHIP_JIRA_CONFIG ?? path.join(os.homedir(), '.specship', 'jira.json');
+    try {
+      const parsed: unknown = JSON.parse(fs.readFileSync(file, 'utf-8'));
+      const v = parsed && typeof parsed === 'object' ? (parsed as { baseUrl?: unknown }).baseUrl : undefined;
+      if (typeof v === 'string' && v.trim()) base = v.trim();
+    } catch { /* absent or malformed → no links, plain-text keys */ }
+  }
+  if (!base || !/^https?:\/\//i.test(base)) return null;
+  return base.replace(/\/+$/, '');
+}
+
+const byFileOrder = (a: { sourcePath: string; startLine?: number }, b: { sourcePath: string; startLine?: number }) =>
+  a.sourcePath < b.sourcePath ? -1 : a.sourcePath > b.sourcePath ? 1 : (a.startLine ?? 0) - (b.startLine ?? 0);
+
+/**
+ * Epic → story → task from the indexed specs alone (REQ-DASHSIMPLE-003).
+ * `epicKey` and `jira_issue_<REQ>` come from each document's stored metadata
+ * (its frontmatter, as indexed) — the spec files are not re-parsed here.
+ * Documents sharing an `epicKey` merge into one epic in file order; a document
+ * without one is its own group titled after the document.
+ */
+// @implements REQ-DASHSIMPLE-003
+export function buildPlan(cg: SpecShipInstance, jiraBaseUrl: string | null): PlanResponse {
+  const sq = cg.getSpecQueries();
+  const all = sq.getAllSpecs();
+  const coverage = new Map(cg.getSpecCoverage().requirements.map((r) => [r.specId, r]));
+
+  const docs = all.filter((s) => s.kind === 'document').sort(byFileOrder);
+  const docIds = new Set(docs.map((d) => d.id));
+  const reqsByDoc = new Map<string, typeof all>();
+  const looseByFile = new Map<string, typeof all>();
+  for (const s of all) {
+    if (s.kind !== 'requirement') continue;
+    if (s.parentId && docIds.has(s.parentId)) {
+      const arr = reqsByDoc.get(s.parentId) ?? [];
+      arr.push(s);
+      reqsByDoc.set(s.parentId, arr);
+    } else {
+      // A requirement outside any document still belongs in the plan.
+      const arr = looseByFile.get(s.sourcePath) ?? [];
+      arr.push(s);
+      looseByFile.set(s.sourcePath, arr);
+    }
+  }
+
+  const story = (s: (typeof all)[number], meta: Record<string, unknown> | undefined): PlanStory => {
+    const cov = coverage.get(s.id) ?? null;
+    return {
+      specId: s.id,
+      title: s.title,
+      body: s.body ?? '',
+      jiraKey: metaString(meta, `jira_issue_${s.id}`),
+      coverage: cov,
+      tasks: (cov?.criteria ?? []).map((c) => ({ specId: c.specId, title: c.title, verdict: c.verdict })),
+    };
+  };
+
+  const entries: Array<{ key: string | null; title: string; sourcePath: string; startLine?: number; doc: PlanDoc }> = [];
+  for (const d of docs) {
+    const reqs = (reqsByDoc.get(d.id) ?? []).sort(byFileOrder);
+    entries.push({
+      key: metaString(d.metadata, 'epicKey'),
+      title: d.title,
+      sourcePath: d.sourcePath,
+      startLine: d.startLine,
+      doc: { id: d.id, title: d.title, stories: reqs.map((r) => story(r, d.metadata)) },
+    });
+  }
+  for (const [file, reqs] of looseByFile) {
+    entries.push({
+      key: null, title: file, sourcePath: file,
+      doc: { id: file, title: file, stories: reqs.sort(byFileOrder).map((r) => story(r, undefined)) },
+    });
+  }
+  entries.sort(byFileOrder);
+
+  const epics: PlanEpic[] = [];
+  const byKey = new Map<string, PlanEpic>();
+  for (const e of entries) {
+    if (e.key) {
+      const hit = byKey.get(e.key);
+      if (hit) { hit.docs.push(e.doc); continue; }
+      const epic: PlanEpic = { key: e.key, title: e.title, docs: [e.doc] };
+      byKey.set(e.key, epic);
+      epics.push(epic);
+    } else {
+      epics.push({ key: null, title: e.title, docs: [e.doc] });
+    }
+  }
+
+  const titles = new Map(all.map((s) => [s.id, s.title]));
+  const driftLinks = sq
+    .getLinksByState([...PLAN_DRIFT_STATES])
+    .map((l) => ({ ...l, specTitle: titles.get(l.specId) ?? null }));
+
+  return { jiraBaseUrl, epics, driftLinks };
+}
+
 async function resolveCg(app: FastifyInstance, req: FastifyRequest, reply: FastifyReply): Promise<SpecShipInstance | null> {
   const cg = await app.activeCg(req);
   if (!cg) { reply.code(409).send({ error: 'no project selected', code: 'no_project' }); return null; }
@@ -170,6 +316,16 @@ export async function registerSpecRoutes(app: FastifyInstance): Promise<void> {
     const cg = await resolveCg(app, req, reply); if (!cg) return;
     const scope = req.query.spec && req.query.spec.length > 0 ? req.query.spec : undefined;
     return cg.getSpecCoverage(scope);
+  });
+
+  /**
+   * GET /api/spec/plan — epic → story → task for the Plan reader
+   * (REQ-DASHSIMPLE-003). Read-only, no JIRA call; the only JIRA config field
+   * it exposes is the base URL.
+   */
+  app.get('/api/spec/plan', async (req: FastifyRequest<{ Querystring: ProjectQuery }>, reply) => {
+    const cg = await resolveCg(app, req, reply); if (!cg) return;
+    return buildPlan(cg, readJiraBaseUrl());
   });
 
   app.get('/api/spec/:id', async (req: FastifyRequest<{ Params: { id: string }; Querystring: ProjectQuery }>, reply) => {

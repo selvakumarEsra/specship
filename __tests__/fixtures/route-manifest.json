@@ -125,6 +125,9 @@
     "GET /api/spec/coverage": {
       "tested": "ui/src/__tests__/traceability.test.tsx, __tests__/spec-coverage.test.ts"
     },
+    "GET /api/spec/plan": {
+      "tested": "ui/src/__tests__/plan.test.tsx, __tests__/spec-plan-endpoint.test.ts"
+    },
     "GET /api/spec/funnel": {
       "tested": "ui/src/__tests__/specs.test.tsx"
     },

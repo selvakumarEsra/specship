@@ -228,6 +228,46 @@ export interface SpecCoverageResponse {
   };
 }
 
+// ---- Plan reader (REQ-DASHSIMPLE-003) ----
+
+/** A task: one acceptance criterion with its test-evidence verdict. */
+export interface PlanTask {
+  specId: string;
+  title: string;
+  verdict: CoverageVerdict;
+}
+
+/** A story: one requirement. `coverage` is raw — the client classifies it. */
+export interface PlanStory {
+  specId: string;
+  title: string;
+  body: string;
+  jiraKey: string | null;
+  coverage: RequirementCoverage | null;
+  tasks: PlanTask[];
+}
+
+export interface PlanDoc {
+  id: string;
+  title: string;
+  stories: PlanStory[];
+}
+
+/** An epic: documents sharing an `epicKey`, or one document with none (key null). */
+export interface PlanEpic {
+  key: string | null;
+  title: string;
+  docs: PlanDoc[];
+}
+
+/** GET /api/spec/plan. */
+export interface PlanResponse {
+  jiraBaseUrl: string | null;
+  epics: PlanEpic[];
+  /** Drift-state links — Review's classifier's second input. */
+  driftLinks: DriftLink[];
+}
+
 /** POST /api/spec/link-verify — promote or fail one link. */
 export interface LinkVerifyResponse {
   ok: boolean;
@@ -492,6 +532,8 @@ export const api = {
   // Scoped to one spec with `spec`, or the whole project when omitted.
   specCoverage: (spec?: string | null, project?: string | null) =>
     getJson<SpecCoverageResponse>(q('/api/spec/coverage' + (spec ? `?spec=${encodeURIComponent(spec)}` : ''), project)),
+  // Epic → story → task for the Plan reader (REQ-DASHSIMPLE-003).
+  specPlan: (project?: string | null) => getJson<PlanResponse>(q('/api/spec/plan', project)),
   // Promote (`pass`) or fail a link. A `pass` on an `implements` link with no
   // test evidence comes back 409 / `no_test_evidence` (REQ-TVIZ-009.A1).
   linkVerify: (
