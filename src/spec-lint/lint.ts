@@ -32,6 +32,7 @@ export type LintSeverity = 'error' | 'warning';
 export type LintCode =
   // errors
   | 'spec_duplicate_id'
+  | 'spec_duplicate_id_cross_file'
   | 'spec_orphan_acceptance_parent'
   | 'spec_requirement_without_acceptance'
   | 'spec_needs_review_marker'
@@ -188,6 +189,58 @@ function lintDomainFact(
 }
 
 /**
+ * Every `<!-- id: X -->` declaration in a spec file, in line order (1-indexed).
+ * A brief or design transcript declares nothing — it is not a spec, so its
+ * markers (quoted from elsewhere) must not collide with real ones.
+ */
+export function collectIdDeclarations(filePath: string, source: string): Array<{ id: string; line: number }> {
+  if (isNonSpecArtifact(filePath)) return [];
+  const out: Array<{ id: string; line: number }> = [];
+  const lines = source.split(/\r?\n/);
+  for (let i = 0; i < lines.length; i++) {
+    const id = (lines[i] ?? '').match(ID_COMMENT_LINE)?.[1];
+    if (id) out.push({ id, line: i + 1 });
+  }
+  return out;
+}
+
+/** Where one id is declared: a project-relative file and a 1-indexed line. */
+export interface IdDeclarationSite {
+  filePath: string;
+  line: number;
+}
+
+/**
+ * Ids declared in more than one spec file (REQ-MULTIDEV-001). The persistence
+ * layer upserts by id, so after a merge where two branches picked the same id
+ * in different files, one section silently replaces the other. Repeats inside a
+ * single file are `spec_duplicate_id`'s job and are not reported here.
+ *
+ * Emits one error per colliding id per declaring file, anchored at that file's
+ * first declaration, with every `path:line` listed (sorted) in the message.
+ * Callers decide which of the returned findings belong to a linted file.
+ */
+export function findCrossFileDuplicates(decls: Map<string, IdDeclarationSite[]>): LintFinding[] {
+  const out: LintFinding[] = [];
+  for (const [id, sites] of decls) {
+    const byFile = new Map<string, number>();
+    for (const s of sites) {
+      const first = byFile.get(s.filePath);
+      if (first === undefined || s.line < first) byFile.set(s.filePath, s.line);
+    }
+    if (byFile.size < 2) continue;
+    const listed = [...sites]
+      .sort((a, b) => a.filePath.localeCompare(b.filePath) || a.line - b.line)
+      .map((s) => `${s.filePath}:${s.line}`);
+    const message = `ID ${id} is declared in ${byFile.size} files: ${listed.join(', ')}. Ids are global — the index keeps only one of these sections, so rename all but one.`;
+    for (const [filePath, line] of byFile) {
+      out.push({ code: 'spec_duplicate_id_cross_file', severity: 'error', filePath, line, specId: id, message });
+    }
+  }
+  return out;
+}
+
+/**
  * Lint one spec file's source. `filePath` is used verbatim in findings, so
  * callers should pass a project-relative path.
  */
@@ -218,21 +271,18 @@ export function lintSpecSource(filePath: string, source: string): LintFinding[] 
   // 2. Duplicate ids within the file (A1). The persistence layer upserts by id,
   //    so the LAST occurrence wins and the earlier section silently vanishes.
   const seen = new Map<string, number>();
-  for (let i = 0; i < lines.length; i++) {
-    const m = (lines[i] ?? '').match(ID_COMMENT_LINE);
-    const id = m?.[1];
-    if (!id) continue;
+  for (const { id, line } of collectIdDeclarations(filePath, source)) {
     const first = seen.get(id);
     if (first !== undefined) {
       add({
         code: 'spec_duplicate_id',
         severity: 'error',
-        line: i + 1,
+        line,
         specId: id,
         message: `Duplicate id ${id} (first declared on line ${first}). The last occurrence overwrites earlier ones, so the earlier section is lost.`,
       });
     } else {
-      seen.set(id, i + 1);
+      seen.set(id, line);
     }
   }
 
@@ -438,6 +488,14 @@ export interface LintOptions {
 export function lintSpecs(paths: string[], options: LintOptions = {}): LintReport {
   const projectRoot = options.projectRoot ?? process.cwd();
   const files: LintFileReport[] = [];
+  const decls = new Map<string, IdDeclarationSite[]>();
+  const recordDeclarations = (rel: string, source: string) => {
+    for (const { id, line } of collectIdDeclarations(rel, source)) {
+      const sites = decls.get(id);
+      if (sites) sites.push({ filePath: rel, line });
+      else decls.set(id, [{ filePath: rel, line }]);
+    }
+  };
 
   const targets = paths.length > 0 ? paths : [path.join(projectRoot, 'specs')];
   const absFiles: string[] = [];
@@ -484,12 +542,43 @@ export function lintSpecs(paths: string[], options: LintOptions = {}): LintRepor
       continue;
     }
     const findings = lintSpecSource(rel, source);
+    recordDeclarations(rel, source);
     files.push({
       filePath: rel,
       findings,
       errorCount: findings.filter((f) => f.severity === 'error').length,
       warningCount: findings.filter((f) => f.severity === 'warning').length,
     });
+  }
+
+  // Cross-file duplicate ids (REQ-MULTIDEV-001). The rest of the checkout's
+  // specs/ is scanned for declarations even when only a subset was linted
+  // (A4), so a linted file colliding with an unlinted one still fails; the
+  // unlinted file only contributes sites and gets no report entry.
+  const linted = new Set(absFiles);
+  const corpus: string[] = [];
+  collectSpecFiles(path.join(projectRoot, 'specs'), corpus);
+  for (const abs of [...new Set(corpus)].sort()) {
+    if (linted.has(abs)) continue;
+    let source: string;
+    try {
+      source = fs.readFileSync(abs, 'utf-8');
+    } catch {
+      continue;
+    }
+    recordDeclarations(path.relative(projectRoot, abs) || abs, source);
+  }
+  const reportsByPath = new Map(files.map((f) => [f.filePath, f]));
+  const touched = new Set<LintFileReport>();
+  for (const finding of findCrossFileDuplicates(decls)) {
+    const report = reportsByPath.get(finding.filePath);
+    if (!report) continue; // an unlinted file — named in the message only
+    report.findings.push(finding);
+    touched.add(report);
+  }
+  for (const report of touched) {
+    report.findings = sortFindings(report.findings);
+    report.errorCount = report.findings.filter((f) => f.severity === 'error').length;
   }
 
   files.sort((a, b) => a.filePath.localeCompare(b.filePath));

@@ -12,6 +12,7 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Fixes
 
 - Deleting a spec file, or switching to a branch without it, now removes its requirements and links on the next sync instead of reporting them as drift.
+- `specship lint` now reports a requirement ID that is declared in more than one spec file — for example after merging two branches that picked the same ID — naming every file and line, even when you lint only some of the files.
 
 ## [0.29.0] - 2026-10-27
 
