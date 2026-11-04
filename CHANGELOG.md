@@ -26,6 +26,11 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `specship lint` now reports a requirement ID that is declared in more than one spec file — for example after merging two branches that picked the same ID — naming every file and line, even when you lint only some of the files.
 - Settings no longer shows an agent-specific transcript-ingest option.
 - Code text in the dashboard no longer renders `===`, `=>` or `!=` as ligatures, and the Design system screen's sample figures are plain counts instead of dollar amounts.
+- The `spec-implement` workflow no longer fails at its last step on every run. A shell variable followed by text, such as `$i.md`, was mistaken for a reference to another step's output.
+- The `spec-implement` workflow's review and final approval now see the whole change the run made. Before, once the implement step had committed its work, the diff they were shown was empty.
+- Removing an `@implements` or `@verifies` comment, a test title that names a requirement, or the whole file now removes the link it created on the next sync, instead of leaving it in the drift queue. A link the spec still declares is kept.
+- Publishing a spec to JIRA from the agent now puts the new Story under the spec's epic, or the repository's default epic, the same way publishing on sync does.
+- Plan screen titles show inline code as code instead of raw backticks.
 
 ## [0.29.0] - 2026-10-27
 
