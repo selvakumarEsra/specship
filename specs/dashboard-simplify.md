@@ -242,6 +242,7 @@ implementations:
   - ui/src/pages/review.tsx:ReviewPage
   - ui/src/pages/dashboard.tsx:DashboardPage
   - ui/src/components/graph-rail.tsx:GraphDetailRail
+  - ui/src/components/spec-detail.tsx:SpecDetail
 
 verifies:
   - ui/src/__tests__/review.test.tsx:reqDashsimple004A1
@@ -251,6 +252,7 @@ verifies:
   - ui/src/__tests__/review.test.tsx:reqDashsimple004A5
   - ui/src/__tests__/review.test.tsx:reqDashsimple004A6
   - ui/src/__tests__/review.test.tsx:reqDashsimple004A7
+  - ui/src/__tests__/review.test.tsx:reqDashsimple004A8
 
 ## Acceptance
 <!-- id: REQ-DASHSIMPLE-004.A1 -->
