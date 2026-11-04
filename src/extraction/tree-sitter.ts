@@ -155,6 +155,17 @@ function scanParseTree(tree: Tree): { htmlCommentStarts: number[]; errorCount: n
   }
 }
 
+/**
+ * Declaration kinds whose range, when it fully encloses a parse-error region,
+ * means the region's code still produced a declaration (REQ-HTMLLEX-003).
+ * Locals (variables, constants, properties) never count: a malformed function
+ * whose body still yields local constants must warn.
+ */
+const PARSE_REGION_ENCLOSING_KINDS: ReadonlySet<NodeKind> = new Set<NodeKind>([
+  'function', 'method', 'class', 'struct', 'interface', 'trait', 'enum',
+  'type_alias', 'namespace', 'module', 'component', 'route',
+]);
+
 /** Number of `<!--` and `-->` occurrences — the bound on mask attempts. */
 function countHtmlCommentDelimiters(source: string): number {
   return (source.match(/<!--|-->/g) ?? []).length;
@@ -318,6 +329,7 @@ export class TreeSitterExtractor {
       if (packageNodeId) this.nodeStack.push(packageNodeId);
 
       this.visitNode(this.tree.rootNode);
+      this.reportParseErrorRegions(this.tree.rootNode);
 
       if (packageNodeId) this.nodeStack.pop();
       this.nodeStack.pop();
@@ -355,6 +367,65 @@ export class TreeSitterExtractor {
       errors: this.errors,
       durationMs: Date.now() - startTime,
     };
+  }
+
+  /**
+   * Report parse-error regions that may have swallowed declarations
+   * (REQ-HTMLLEX-003). Collects every outermost `ERROR` node and emits one
+   * `warning`-severity `parse_error_region` error for each region that is not
+   * fully enclosed by an extracted declaration (function, method, class, …).
+   * A region inside an extracted function's body stays silent; a region at
+   * program level always warns, even when local constants were extracted from
+   * inside it. Only appends to `this.errors` — nodes and edges are untouched,
+   * so retrieval output is unchanged. Clean trees cost one `hasError` check.
+   */
+  private reportParseErrorRegions(root: SyntaxNode): void {
+    if (!root.hasError) return;
+
+    const regions: Array<{ startLine: number; startColumn: number; endLine: number; endColumn: number }> = [];
+    const stack: SyntaxNode[] = [root];
+    while (stack.length > 0) {
+      const node = stack.pop()!;
+      if (node.isError) {
+        regions.push({
+          startLine: node.startPosition.row + 1,
+          startColumn: node.startPosition.column,
+          endLine: node.endPosition.row + 1,
+          endColumn: node.endPosition.column,
+        });
+        continue; // outermost only — don't descend into an ERROR node
+      }
+      for (let i = node.childCount - 1; i >= 0; i--) {
+        const child = node.child(i);
+        if (child && child.hasError) stack.push(child);
+      }
+    }
+    if (regions.length === 0) return;
+
+    const enclosing = this.nodes.filter((n) => PARSE_REGION_ENCLOSING_KINDS.has(n.kind));
+    regions.sort((a, b) => a.startLine - b.startLine);
+    for (const region of regions) {
+      // Position-precise: a stray `}` right after a function's own closing
+      // brace sits on the function's last line but outside its range.
+      const enclosed = enclosing.some(
+        (n) =>
+          (n.startLine < region.startLine ||
+            (n.startLine === region.startLine && n.startColumn <= region.startColumn)) &&
+          (n.endLine > region.endLine ||
+            (n.endLine === region.endLine && n.endColumn >= region.endColumn)),
+      );
+      if (enclosed) continue;
+      const range = region.startLine === region.endLine
+        ? `line ${region.startLine}`
+        : `lines ${region.startLine}–${region.endLine}`;
+      this.errors.push({
+        message: `Parse error region at ${range} produced no enclosing declaration; some declarations may be missing`,
+        filePath: this.filePath,
+        line: region.startLine,
+        severity: 'warning',
+        code: 'parse_error_region',
+      });
+    }
   }
 
   /**

@@ -9,6 +9,10 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### New Features
+
+- `specship index` and `specship sync` now tell you how many files have syntax errors that may have hidden some of their functions or classes from the index, instead of skipping them without a word. Everything else in those files is still indexed, and search results don't change.
+
 ### Fixes
 
 - JavaScript and TypeScript functions, classes and variables that contain `<!--` or `-->` inside a regular expression are no longer missing from the index. Before, those character sequences were mistaken for old-style HTML comments and the whole declaration was dropped from search, callers and impact results.
