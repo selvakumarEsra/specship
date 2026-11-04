@@ -444,7 +444,7 @@ export function GraphCanvas({ nodes: initialNodes, edges, selectedId, onSelect, 
                 <div
                   style={{
                     width: 18, height: 18, borderRadius: '50%', background: col, transform: `scale(${nodeScale})`,
-                    boxShadow: sel ? `0 0 0 4px ${col}44, 0 0 14px ${col}` : hov ? `0 0 0 3px ${col}33` : `0 0 8px ${col}66`,
+                    boxShadow: sel ? `0 0 0 4px color-mix(in srgb, ${col} 27%, transparent), 0 0 14px ${col}` : hov ? `0 0 0 3px color-mix(in srgb, ${col} 20%, transparent)` : `0 0 8px color-mix(in srgb, ${col} 40%, transparent)`,
                     border: '2px solid var(--bg-canvas-2)',
                   }}
                 />
@@ -463,7 +463,7 @@ export function GraphCanvas({ nodes: initialNodes, edges, selectedId, onSelect, 
                   border: `1.5px solid ${sel ? col : drift ? col : `color-mix(in srgb, ${col} 45%, transparent)`}`,
                   color: 'var(--node-text)', fontSize: 12.5, fontWeight: 500, whiteSpace: 'nowrap',
                   fontFamily: 'var(--font-mono)',
-                  boxShadow: sel ? `0 0 0 4px ${col}33, 0 4px 16px ${col}44` : hov ? `0 0 0 3px ${col}22` : 'var(--shadow-node)',
+                  boxShadow: sel ? `0 0 0 4px color-mix(in srgb, ${col} 20%, transparent), 0 4px 16px color-mix(in srgb, ${col} 27%, transparent)` : hov ? `0 0 0 3px color-mix(in srgb, ${col} 13%, transparent)` : 'var(--shadow-node)',
                 }}
               >
                 <span style={{ width: 7, height: 7, borderRadius: b.shape === 'rect' ? 2 : '50%', background: col, flexShrink: 0, boxShadow: `0 0 6px ${col}` }} />
