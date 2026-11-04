@@ -45,14 +45,14 @@ and remain `[needs review]` until a live-introspection source is wired.
 <!-- id: REQ-MCP-001 -->
 ## The list view MUST present configured servers grouped by scope with summary tiles
 
+> **SUPERSEDED 2026-11-04** by REQ-DASHSIMPLE-001 — the MCP screen is removed from the agent-agnostic dashboard. Kept for history.
+
 The MCP route renders a page header ("MCP servers") with Reload and Add-server
 actions, a row of summary stat tiles (server count, running count, total tools
 exposed, and a needs-attention count), then the configured servers split into
 **Global** and **Project** groups. Each group is omitted when it has no servers.
 Each server appears as a clickable row that opens its detail view.
 
-implementations:
-  - ui/src/pages/mcp.tsx:McpPage
 
 ## Acceptance
 <!-- id: REQ-MCP-001.A1 -->
@@ -67,13 +67,13 @@ implementations:
 <!-- id: REQ-MCP-002 -->
 ## Each server row MUST communicate its run state and scope at a glance
 
+> **SUPERSEDED 2026-11-04** by REQ-DASHSIMPLE-001 — the MCP screen is removed. Kept for history.
+
 A server row shows the server's icon with a status dot, its name, a scope pill
 (Global / Project), its launch command, the number of tools it exposes, and a
 state pill. The three run states — running, failed, disabled — MUST be visually
 distinct, and the running state animates its status indicator.
 
-implementations:
-  - ui/src/pages/mcp.tsx:ServerRow
 
 ## Acceptance
 <!-- id: REQ-MCP-002.A1 -->
@@ -88,6 +88,8 @@ implementations:
 <!-- id: REQ-MCP-003 -->
 ## The detail view MUST show a status banner that adapts to the server's state
 
+> **SUPERSEDED 2026-11-04** by REQ-DASHSIMPLE-001 — the MCP screen is removed. Kept for history.
+
 Opening a server shows a back control, the server name, scope pill and config
 hint, then a status banner. The banner's accent colour and content adapt to the
 run state: a failed server surfaces its error with a Re-authenticate action; a
@@ -97,8 +99,6 @@ banner always shows transport, uptime, protocol, tool count, and the copyable
 launch command. Below it, a row of summary tiles shows tools, calls this week,
 result tokens returned, and client count.
 
-implementations:
-  - ui/src/pages/mcp.tsx:ServerDetail
 
 ## Acceptance
 <!-- id: REQ-MCP-003.A1 -->
@@ -115,6 +115,8 @@ implementations:
 <!-- id: REQ-MCP-004 -->
 ## Each tool MUST expand to reveal its input schema, an example call, and a copy control
 
+> **SUPERSEDED 2026-11-04** by REQ-DASHSIMPLE-001 — the MCP screen is removed. Kept for history.
+
 The detail view lists the server's tools. Each tool row shows its icon, name,
 description, weekly call count, and average tokens-per-call. Clicking a tool
 expands it to reveal the input schema (each parameter with name, type, and
@@ -123,8 +125,6 @@ tools that track usage — a link into the heatmap. Only one tool is expanded at
 time. A server exposing no tools MUST show an empty state rather than an empty
 list.
 
-implementations:
-  - ui/src/pages/mcp.tsx:ToolRow
 
 ## Acceptance
 <!-- id: REQ-MCP-004.A1 -->
@@ -141,13 +141,13 @@ implementations:
 <!-- id: REQ-MCP-005 -->
 ## The detail view MUST list the clients using the server and its raw configuration
 
+> **SUPERSEDED 2026-11-04** by REQ-DASHSIMPLE-001 — the MCP screen is removed. Kept for history.
+
 Alongside the tools, the detail view shows a "Used by" panel listing each client
 (name, host, connection state, last-seen) and a "Configuration" panel showing the
 server's JSON config with a copy control and its config-file hint. A server with
 no clients MUST say so rather than render an empty panel.
 
-implementations:
-  - ui/src/pages/mcp.tsx:ServerDetail
 
 ## Acceptance
 <!-- id: REQ-MCP-005.A1 -->
@@ -160,16 +160,14 @@ implementations:
 <!-- id: REQ-MCP-006 -->
 ## The page MUST load servers from a typed endpoint with a seed fallback and explicit loading, empty, and error states
 
+> **SUPERSEDED 2026-11-04** by REQ-DASHSIMPLE-001 — the MCP screen is removed. Kept for history.
+
 The page reads servers from `/api/mcp/servers` through the app's `apiResource`
 helper. While the request is in flight it shows loading placeholders; on success
 with zero servers it shows an empty state; on error it shows an error state. When
 the endpoint is unavailable or returns nothing, the page MUST fall back to a seed
 dataset so it still renders meaningfully, marked as seed.
 
-implementations:
-  - ui/src/api.ts:McpServersResponse
-  - ui/src/api.ts:mcpServers
-  - ui/src/pages/mcp.tsx:McpPage
 
 ## Acceptance
 <!-- id: REQ-MCP-006.A1 -->
@@ -184,6 +182,8 @@ implementations:
 <!-- id: REQ-MCP-007 -->
 ## Navigation MUST use a list route and a deep-linkable detail route
 
+> **SUPERSEDED 2026-11-04** by REQ-DASHSIMPLE-001 — the MCP screen is removed. Kept for history.
+
 The page is reachable at `mcp` (list) and `mcp/:id` (detail), consistent with the
 existing `specs/:id`, `runs/:id`, and `sessions/:id` detail routes. Opening a
 server navigates to its detail route; the back control returns to the list. A
@@ -191,7 +191,6 @@ detail route for an unknown server id MUST resolve gracefully.
 
 implementations:
   - ui/src/router.ts:usePathRoute
-  - ui/src/pages/mcp.tsx:ServerDetail
 
 ## Acceptance
 <!-- id: REQ-MCP-007.A1 -->

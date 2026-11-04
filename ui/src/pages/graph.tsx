@@ -8,32 +8,10 @@ import { api, isNoProject } from '../api';
 import { useApi } from '../hooks';
 import { GraphCanvas, forceLayout, hierarchicalLayout, type CanvasEdge } from '../components/graph';
 import { GraphDetailRail, GraphOverviewRail } from '../components/graph-rail';
+import { SplitSearch, SplitView } from '../components/graph-split';
 import { Icon } from '../components/icons';
-import { Empty, Segmented, nodeColor } from '../components/ui';
+import { Button, Chip, Empty, Segmented, nodeColor } from '../components/ui';
 import type { PageProps } from './types';
-
-/** Toolbar filter chip (design bundle's Chip). */
-function Chip({ label, count, active, onClick, color }: {
-  label: string; count?: number; active: boolean; onClick: () => void; color?: string;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className="row gap-6"
-      style={{
-        height: 26, padding: '0 10px', borderRadius: 999, fontSize: 11.5, fontWeight: 500, cursor: 'pointer',
-        border: '1px solid ' + (active ? 'transparent' : 'var(--border-subtle)'),
-        background: active ? (color ? `color-mix(in srgb, ${color} 22%, var(--bg-panel))` : 'var(--accent-soft)') : 'var(--bg-panel)',
-        color: active ? (color || 'var(--accent)') : 'var(--text-secondary)',
-        transition: 'background var(--motion-fast), color var(--motion-fast), border-color var(--motion-fast)',
-      }}
-    >
-      {color && <span style={{ width: 7, height: 7, borderRadius: '50%', background: color }} />}
-      {label}
-      {count != null && <span className="tabular muted" style={{ fontSize: 10.5 }}>{count}</span>}
-    </button>
-  );
-}
 
 const KIND_CHIPS = [
   { kind: 'code', label: 'Code' }, { kind: 'spec', label: 'Spec' },
@@ -48,6 +26,7 @@ const EDGE_CHIPS = [
 ];
 
 // @implements REQ-DESKTOP-021
+// @implements REQ-DASHSIMPLE-005
 export function GraphPage({ project, query }: PageProps) {
   const graph = useApi(() => api.graphFull(project), [project]);
   // `?focus=<nodeId>` deep-links a selection — the ⌘K palette, Show in graph,
@@ -96,71 +75,80 @@ export function GraphPage({ project, query }: PageProps) {
     return <Empty icon="folder" title="No project selected" body="Pick an indexed project from the switcher in the status strip." />;
   }
 
+  // `?req=` / `?sym=` open the spec ↔ code split view (REQ-DASHSIMPLE-005);
+  // otherwise the canvas + rails, with `?focus=` unchanged.
+  const split = Boolean(query.req || query.sym);
+
   return (
-    <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
-      <div className="col" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-        {/* toolbar */}
-        <div className="row" style={{ gap: 10, padding: '9px 14px', borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-panel-2)', flexWrap: 'wrap' }}>
-          <Segmented
-            size="sm"
-            value={mode}
-            onChange={(v) => { setMode(v); setFitKey((k) => k + 1); }}
-            options={[{ value: 'hierarchical', label: 'Hierarchical' }, { value: 'force', label: 'Force' }]}
-            label="Graph layout"
-          />
-          <div style={{ width: 1, height: 20, background: 'var(--border-subtle)' }} />
-          {KIND_CHIPS.filter((k) => counts[k.kind]).map((k) => (
-            <Chip
-              key={k.kind}
-              label={k.label}
-              count={counts[k.kind]}
-              color={nodeColor(k.kind)}
-              active={!hiddenKinds.has(k.kind)}
-              onClick={() => toggleIn(hiddenKinds, k.kind, setHiddenKinds)}
-            />
-          ))}
-          <div style={{ width: 1, height: 20, background: 'var(--border-subtle)' }} />
-          {EDGE_CHIPS.map((b) => (
-            <Chip
-              key={b.key}
-              label={b.label}
-              active={!hiddenEdgeKinds.has(b.key)}
-              onClick={() => toggleIn(hiddenEdgeKinds, b.key, setHiddenEdgeKinds)}
-            />
-          ))}
-          <div className="grow" />
-          <button className="btn btn-secondary btn-sm" onClick={() => setFitKey((k) => k + 1)}>
-            <Icon name="recenter" size={13} />
-            Recenter
-          </button>
+    <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+      <SplitSearch project={project} />
+      {split ? <SplitView project={project} query={query} /> : (
+        <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
+          <div className="col" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+            {/* toolbar */}
+            <div className="row" style={{ gap: 10, padding: '9px 14px', borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-panel-2)', flexWrap: 'wrap' }}>
+              <Segmented
+                size="sm"
+                value={mode}
+                onChange={(v) => { setMode(v); setFitKey((k) => k + 1); }}
+                options={[{ value: 'hierarchical', label: 'Hierarchical' }, { value: 'force', label: 'Force' }]}
+                label="Graph layout"
+              />
+              <div style={{ width: 1, height: 20, background: 'var(--border-subtle)' }} />
+              {KIND_CHIPS.filter((k) => counts[k.kind]).map((k) => (
+                <Chip
+                  key={k.kind}
+                  label={k.label}
+                  count={counts[k.kind]}
+                  color={nodeColor(k.kind)}
+                  active={!hiddenKinds.has(k.kind)}
+                  onClick={() => toggleIn(hiddenKinds, k.kind, setHiddenKinds)}
+                />
+              ))}
+              <div style={{ width: 1, height: 20, background: 'var(--border-subtle)' }} />
+              {EDGE_CHIPS.map((b) => (
+                <Chip
+                  key={b.key}
+                  label={b.label}
+                  active={!hiddenEdgeKinds.has(b.key)}
+                  onClick={() => toggleIn(hiddenEdgeKinds, b.key, setHiddenEdgeKinds)}
+                />
+              ))}
+              <div className="grow" />
+              <Button variant="outline" size="sm" onClick={() => setFitKey((k) => k + 1)}>
+                <Icon name="recenter" size={13} />
+                Recenter
+              </Button>
+            </div>
+            {/* canvas */}
+            <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
+              {nodes.length > 0 && (
+                <GraphCanvas
+                  nodes={nodes}
+                  edges={edges}
+                  selectedId={selected}
+                  onSelect={setSelected}
+                  hiddenIds={hiddenIds}
+                  hiddenEdgeKinds={hiddenEdgeKinds}
+                  fitKey={fitKey}
+                  focusId={focus}
+                />
+              )}
+              {graph.data && !nodes.length && (
+                <Empty icon="graph" title="Nothing indexed yet" body="Run specship index to populate the graph." />
+              )}
+            </div>
+          </div>
+          {/* right rail */}
+          <div data-testid="graph-rail" style={{ width: 360, flexShrink: 0, borderLeft: '1px solid var(--border-subtle)', background: 'var(--bg-panel)', minHeight: 0 }}>
+            {selected ? (
+              <GraphDetailRail id={selected} project={project} onSelect={setSelected} onClose={() => setSelected(null)} />
+            ) : (
+              <GraphOverviewRail project={project} counts={counts} shown={graph.data?.shown ?? 0} onSelect={setSelected} />
+            )}
+          </div>
         </div>
-        {/* canvas */}
-        <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
-          {nodes.length > 0 && (
-            <GraphCanvas
-              nodes={nodes}
-              edges={edges}
-              selectedId={selected}
-              onSelect={setSelected}
-              hiddenIds={hiddenIds}
-              hiddenEdgeKinds={hiddenEdgeKinds}
-              fitKey={fitKey}
-              focusId={focus}
-            />
-          )}
-          {graph.data && !nodes.length && (
-            <Empty icon="graph" title="Nothing indexed yet" body="Run specship index to populate the graph." />
-          )}
-        </div>
-      </div>
-      {/* right rail */}
-      <div style={{ width: 360, flexShrink: 0, borderLeft: '1px solid var(--border-subtle)', background: 'var(--bg-panel)', minHeight: 0 }}>
-        {selected ? (
-          <GraphDetailRail id={selected} project={project} onSelect={setSelected} onClose={() => setSelected(null)} />
-        ) : (
-          <GraphOverviewRail project={project} counts={counts} shown={graph.data?.shown ?? 0} onSelect={setSelected} />
-        )}
-      </div>
+      )}
     </div>
   );
 }

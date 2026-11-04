@@ -8,23 +8,15 @@ import { CommandPalette, type PalettePage } from './components/command-palette';
 import { Icon, LogoMark } from './components/icons';
 import { useApi, useGlobalShortcuts } from './hooks';
 import { go, usePathRoute } from './router';
-import { applyTheme, getThemePref, type ThemePref } from './theme';
-import { ComparePage } from './pages/compare';
-import { CostsPage } from './pages/costs';
 import { DashboardPage } from './pages/dashboard';
 import { DesignSystemPage } from './pages/designsystem';
-import { DriftPage } from './pages/drift';
 import { GraphPage } from './pages/graph';
-import { HeatmapPage } from './pages/heatmap';
-import { McpPage } from './pages/mcp';
-import { MemoryPage } from './pages/memory';
 import { PlaceholderPage } from './pages/placeholder';
+import { PlanPage } from './pages/plan';
+import { ReviewPage } from './pages/review';
 import { RunsPage } from './pages/runs';
-import { SessionsPage } from './pages/sessions';
 import { SettingsPage } from './pages/settings';
-import { SpecsPage } from './pages/specs';
 import { TraceabilityPage } from './pages/traceability';
-import { TipsPage } from './pages/tips';
 import { WorkflowsPage } from './pages/workflows';
 import type { PageProps } from './pages/types';
 
@@ -32,7 +24,6 @@ import type { PageProps } from './pages/types';
 interface BadgeCounts {
   drift: number;
   runs: number;
-  tips: number;
 }
 
 interface NavEntry {
@@ -43,69 +34,59 @@ interface NavEntry {
   badgeKind?: 'warn' | 'error';
 }
 
-const NAV: Array<{ group: string; items: NavEntry[] }> = [
+/**
+ * The sidebar (REQ-DASHSIMPLE-001): one unnamed group of agent-agnostic
+ * screens — every entry is built from data any coding agent produces (specs,
+ * links, drift, the code graph, workflow runs). The retired analytics screens
+ * and the old Specs / Drift queue routes redirect in router.ts.
+ */
+// @implements REQ-DASHSIMPLE-001
+export const NAV: Array<{ group: string; items: NavEntry[] }> = [
   {
-    group: 'Project',
+    group: '',
     items: [
-      { id: 'dashboard', label: 'Dashboard', icon: 'dashboard' },
+      { id: 'dashboard', label: 'Overview', icon: 'dashboard' },
+      { id: 'plan', label: 'Plan', icon: 'book' },
+      { id: 'review', label: 'Review', icon: 'drift', badge: (c) => c.drift },
       { id: 'graph', label: 'Graph', icon: 'graph' },
-      { id: 'specs', label: 'Specs', icon: 'book' },
       { id: 'traceability', label: 'Traceability', icon: 'matrix' },
-      { id: 'drift', label: 'Drift queue', icon: 'drift', badge: (c) => c.drift },
       { id: 'runs', label: 'Runs', icon: 'play', badge: (c) => c.runs, badgeKind: 'warn' },
-    ],
-  },
-  {
-    group: 'Claude Code',
-    items: [
-      { id: 'sessions', label: 'Sessions', icon: 'sessions' },
-      { id: 'heatmap', label: 'Heatmap', icon: 'heatmap' },
-      { id: 'costs', label: 'Costs', icon: 'dollar' },
-      { id: 'compare', label: 'Compare projects', icon: 'compare' },
-      { id: 'memory', label: 'Memory', icon: 'memory' },
-      { id: 'mcp', label: 'MCP', icon: 'plug' },
-      { id: 'tips', label: 'Tips', icon: 'tips', badge: (c) => c.tips, badgeKind: 'error' },
     ],
   },
 ];
 
 /**
  * Pages the ⌘K palette jumps to — NAV plus the pinned sidebar items.
- * Workflows is deliberately NOT a sidebar entry (REQ-DESKTOP-018 pins the
- * sidebar groups to the snapshot): it's launched from the Runs screen.
+ * Workflows is deliberately NOT a sidebar entry: it's launched from the
+ * Runs screen (REQ-DASHSIMPLE-001).
  * Chat was removed entirely (CHAT-REMOVE-DOC) — the reviewer loop lives on
  * Workflows + Runs.
  */
-const PALETTE_PAGES: PalettePage[] = [
+// @implements REQ-DASHSIMPLE-001
+export const PALETTE_PAGES: PalettePage[] = [
   ...NAV.flatMap((g) => g.items.map(({ id, label, icon }) => ({ id, label, icon }))),
   { id: 'workflows', label: 'Workflows', icon: 'workflow' },
   { id: 'designsystem', label: 'Design system', icon: 'layers' },
   { id: 'settings', label: 'Settings', icon: 'settings' },
 ];
 
-/** ⌘1–7 targets: the first seven nav items in sidebar order (REQ-DESKTOP-019). */
+/** ⌘1–7 targets: the nav items in sidebar order (REQ-DESKTOP-019) — six today. */
 const JUMP_PAGE_IDS = NAV.flatMap((g) => g.items.map((it) => it.id)).slice(0, 7);
 
 /**
- * Routed screens (REQ-DESKTOP-024 lands the five Claude analytics pages).
- * Tips is wired separately in App — it takes the lifted tips state so
- * dismissal updates the sidebar badge in the same reload (024.A4).
+ * Routed screens. Plan is the epic → story → task reader (REQ-DASHSIMPLE-003); Review
+ * is the drifted / pending / completed queue (REQ-DASHSIMPLE-004), which
+ * replaced the old Specs and Drift queue screens.
  */
 const SCREENS: Record<string, ComponentType<PageProps>> = {
   dashboard: DashboardPage,
+  plan: PlanPage,
+  review: ReviewPage,
   graph: GraphPage,
-  specs: SpecsPage,
   traceability: TraceabilityPage,
-  drift: DriftPage,
   runs: RunsPage,
   workflows: WorkflowsPage,
   designsystem: () => <DesignSystemPage />,
-  sessions: SessionsPage,
-  heatmap: HeatmapPage,
-  costs: CostsPage,
-  compare: ComparePage,
-  memory: MemoryPage,
-  mcp: McpPage,
   settings: (p) => <SettingsPage {...p} />,
 };
 
@@ -113,6 +94,7 @@ const PROJECT_KEY = 'ss_project';
 const NAV_GROUPS_KEY = 'ss_nav_groups';
 const NAV_COLLAPSED_KEY = 'ss_nav_collapsed';
 
+// @implements REQ-DASHSIMPLE-001
 export function App() {
   const { route, param, query } = usePathRoute();
   const [collapsed, setCollapsed] = useState<boolean>(() => {
@@ -127,7 +109,6 @@ export function App() {
   const status = useApi(() => api.status(project), [project, route]);
   const projects = useApi(() => api.projects(), []);
   const runs = useApi(() => api.runs(project), [project, route]);
-  const tips = useApi(() => api.claudeTips(), [route]);
   const drift = useApi(() => api.drift(project), [project, route]);
 
   // ⌘K toggle, ⌘1–7 nav jumps, and g-chords (REQ-DESKTOP-019).
@@ -139,21 +120,9 @@ export function App() {
     // the status roll-up only bridges the gap until /api/drift answers.
     drift: drift.data?.links.length ?? status.data?.drift ?? 0,
     runs: runs.data?.runs.filter((r) => r.status === 'running').length ?? 0,
-    // Actionable tips only — applied ones no longer need attention, and
-    // dismissed ones never come back from the server (REQ-DESKTOP-020.A2).
-    tips: tips.data?.tips.filter((t) => t.state !== 'applied').length ?? 0,
   };
 
   const openPalette = useCallback(() => setPaletteOpen(true), []);
-
-  // A4 (REQ-DESKTOP-024): Apply/Dismiss persists server-side, then the SHARED
-  // tips state reloads — the sidebar badge and the Tips screen update from the
-  // same fetch, so a dismissal is reflected in both immediately.
-  const setTipState = useCallback((id: string, state: 'applied' | 'dismissed') => {
-    api.setTipState(id, state)
-      .catch(() => undefined)
-      .finally(() => tips.reload());
-  }, [tips.reload]);
 
   const toggleCollapse = () =>
     setCollapsed((c) => {
@@ -193,9 +162,7 @@ export function App() {
         />
         <TopBar onToggle={toggleCollapse} onOpenPalette={openPalette} />
         <div key={route + (param ?? '')} data-screen={route} style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-          {route === 'tips'
-            ? <TipsPage project={project} param={param} query={query} tips={tips} onSetTipState={setTipState} />
-            : <Screen project={project} param={param} query={query} />}
+          <Screen project={project} param={param} query={query} />
         </div>
       </div>
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} pages={PALETTE_PAGES} project={project} />
@@ -234,20 +201,20 @@ function Sidebar({ route, collapsed, counts, version, onToggleCollapse }: { rout
       </div>
       <div className="scroll-y" style={{ flex: 1, padding: '4px 8px' }}>
         {NAV.map((g) => (
-          <div key={g.group} style={{ marginBottom: collapsed ? 10 : 4 }}>
-            {!collapsed && (
+          <div key={g.group || 'main'} style={{ marginBottom: collapsed ? 10 : 4 }}>
+            {!collapsed && g.group && (
               <button onClick={() => toggleGroup(g.group)} className="row gap-6" style={{ width: '100%', padding: '8px 8px 4px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}>
                 <span className="eyebrow grow">{g.group}</span>
                 <Icon name={isOpen(g.group) ? 'chevronDown' : 'chevronRight'} size={12} style={{ color: 'var(--text-muted)' }} />
               </button>
             )}
-            {(collapsed || isOpen(g.group)) && g.items.map((it) => <NavItem key={it.id} item={it} active={route === it.id} collapsed={collapsed} counts={counts} />)}
+            {(collapsed || !g.group || isOpen(g.group)) && g.items.map((it) => <NavItem key={it.id} item={it} active={route === it.id} collapsed={collapsed} counts={counts} />)}
           </div>
         ))}
       </div>
       <div style={{ padding: 8, borderTop: '1px solid var(--border-subtle)' }}>
-        <NavItem item={{ id: 'designsystem', label: 'Design system', icon: 'layers' }} active={route === 'designsystem'} collapsed={collapsed} />
         <NavItem item={{ id: 'settings', label: 'Settings', icon: 'settings' }} active={route === 'settings'} collapsed={collapsed} />
+        <NavItem item={{ id: 'designsystem', label: 'Design system', icon: 'layers' }} active={route === 'designsystem'} collapsed={collapsed} />
         {version && (
           <div
             className="mono tabular"
@@ -302,7 +269,7 @@ function NavItem({ item, active, collapsed, counts }: { item: NavEntry; active: 
           style={{
             fontSize: 10, fontWeight: 700, padding: '1px 6px', minWidth: 18, justifyContent: 'center',
             color: bk === 'error' ? 'var(--error)' : bk === 'warn' ? 'var(--warn)' : 'var(--text-secondary)',
-            background: bk === 'error' ? 'var(--error-soft)' : bk === 'warn' ? 'var(--warn-soft)' : 'rgba(255,255,255,0.06)',
+            background: bk === 'error' ? 'var(--error-soft)' : bk === 'warn' ? 'var(--warn-soft)' : 'var(--fill)',
           }}
         >
           {badge}
@@ -432,28 +399,9 @@ function TopBar({ onToggle, onOpenPalette }: { onToggle: () => void; onOpenPalet
         <kbd style={KBD_STYLE}>⌘K</kbd>
       </button>
       <div className="grow" />
-      <ThemeToggle />
       <button className="btn btn-ghost btn-sm" onClick={onOpenPalette} title="Command palette" aria-label="Command palette">
         <Icon name="command" size={14} />
       </button>
     </div>
-  );
-}
-
-/** Tri-state theme cycle: dark → light → system (system tracks the OS live). */
-function ThemeToggle() {
-  const [pref, setPref] = useState<ThemePref>(getThemePref());
-  const NEXT: Record<ThemePref, ThemePref> = { dark: 'light', light: 'system', system: 'dark' };
-  const ICON: Record<ThemePref, string> = { dark: 'moon', light: 'sun', system: 'monitor' };
-  const next = NEXT[pref];
-  return (
-    <button
-      className="btn btn-ghost btn-sm"
-      title={'Theme: ' + pref + ' — switch to ' + next}
-      aria-label={'Theme: ' + pref + ' — switch to ' + next}
-      onClick={() => { applyTheme(next); setPref(next); }}
-    >
-      <Icon name={ICON[pref]} size={15} />
-    </button>
   );
 }

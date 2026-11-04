@@ -1,6 +1,6 @@
 /**
- * REQ-DESKTOP-019 A3 — global shortcuts: ⌘/Ctrl 1–7 jumps to the first seven
- * nav pages, g-chords (g g / g s / g d) navigate, and both are suppressed
+ * REQ-DESKTOP-019 A3 — global shortcuts: ⌘/Ctrl 1–7 jumps to the nav pages in
+ * sidebar order (six since REQ-DASHSIMPLE-001), g-chords (g g / g s / g d) navigate, and both are suppressed
  * while focus is in an editable field. ⌘K toggles the palette from anywhere,
  * including editables.
  */
@@ -8,7 +8,8 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useGlobalShortcuts } from '../hooks';
 
-const JUMP_IDS = ['dashboard', 'graph', 'specs', 'drift', 'runs', 'sessions', 'heatmap'];
+// The live sidebar order (REQ-DASHSIMPLE-001): six entries, so ⌘7 maps to nothing.
+const JUMP_IDS = ['dashboard', 'plan', 'review', 'graph', 'traceability', 'runs'];
 
 function Probe({ onToggle = () => {} }: { onToggle?: () => void }) {
   useGlobalShortcuts({ onTogglePalette: onToggle, pageIds: JUMP_IDS });
@@ -30,28 +31,31 @@ afterEach(() => {
 });
 
 describe('useGlobalShortcuts (REQ-DESKTOP-019)', () => {
-  it('⌘/Ctrl 1–7 jumps to the first seven nav pages', () => {
+  it('⌘/Ctrl 1–6 jumps to the nav pages in sidebar order', () => {
     render(<Probe />);
     fireEvent.keyDown(window, { key: '2', metaKey: true });
-    expect(location.pathname).toBe('/graph');
-    fireEvent.keyDown(window, { key: '7', ctrlKey: true });
-    expect(location.pathname).toBe('/heatmap');
-    // Keys past the mapped seven do nothing.
+    expect(location.pathname).toBe('/plan');
+    fireEvent.keyDown(window, { key: '6', ctrlKey: true });
+    expect(location.pathname).toBe('/runs');
+    // Keys past the mapped entries do nothing.
+    fireEvent.keyDown(window, { key: '7', metaKey: true });
+    expect(location.pathname).toBe('/runs');
     fireEvent.keyDown(window, { key: '9', metaKey: true });
-    expect(location.pathname).toBe('/heatmap');
+    expect(location.pathname).toBe('/runs');
   });
 
-  it('g g / g s / g d chords navigate to Graph, Specs, and Drift', () => {
+  it('g g / g s / g d chords navigate to Graph, then Review for both s and d', () => {
     render(<Probe />);
     fireEvent.keyDown(window, { key: 'g' });
     fireEvent.keyDown(window, { key: 'g' });
     expect(location.pathname).toBe('/graph');
     fireEvent.keyDown(window, { key: 'g' });
     fireEvent.keyDown(window, { key: 's' });
-    expect(location.pathname).toBe('/specs');
+    expect(location.pathname).toBe('/review');
+    history.replaceState(null, '', '/');
     fireEvent.keyDown(window, { key: 'g' });
     fireEvent.keyDown(window, { key: 'd' });
-    expect(location.pathname).toBe('/drift');
+    expect(location.pathname).toBe('/review');
   });
 
   it('an armed chord expires after the window instead of firing late', () => {

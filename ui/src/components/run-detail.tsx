@@ -166,9 +166,9 @@ function RunNodeGraph({ nodes }: { nodes: NodeView[] }) {
                 animation: n.state === 'running' ? 'spin 1.4s linear infinite' : 'none',
                 borderTopColor: n.state === 'running' ? 'transparent' : undefined }}
               >
-                {n.state === 'completed' && <Icon name="check" size={10} style={{ color: '#fff' }} />}
-                {n.state === 'failed' && <Icon name="x" size={10} style={{ color: '#fff' }} />}
-                {n.state === 'paused' && <Icon name="pause" size={9} style={{ color: '#fff' }} />}
+                {n.state === 'completed' && <Icon name="check" size={10} style={{ color: 'var(--on-accent)' }} />}
+                {n.state === 'failed' && <Icon name="x" size={10} style={{ color: 'var(--on-accent)' }} />}
+                {n.state === 'paused' && <Icon name="pause" size={9} style={{ color: 'var(--on-accent)' }} />}
               </span>
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontSize: 12, fontWeight: 500, whiteSpace: 'nowrap' }}>{n.id}</div>

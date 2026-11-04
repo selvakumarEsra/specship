@@ -158,7 +158,6 @@ implementations:
 
 implementations:
   - src/installer/index.ts:runInstallerWithOptions
-  - ui/src/pages/mcp.tsx:exampleText
 
 ## Acceptance
 <!-- id: REQ-SURF-009.A1 -->

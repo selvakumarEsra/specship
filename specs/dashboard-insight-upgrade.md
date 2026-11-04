@@ -75,13 +75,13 @@ implementations:
 <!-- id: REQ-DASHUX-003 -->
 ## Spec-tree entries MUST encode rolled-up link state, and the funnel MUST be visible
 
+> **SUPERSEDED 2026-11-04** by REQ-DASHSIMPLE-004 — the spec tree is replaced by Review's completed/pending/drifted groups. Kept for history.
+
 Each requirement's dot/badge in the specs tree is colored by its rolled-up
 spec-link state (verified / implemented / drifted-or-broken / orphaned /
 unlinked), not by node kind, so the tree reads as an alignment map. The
 funnel summary is promoted to a visible stat strip on the page header.
 
-implementations:
-  - ui/src/pages/specs.tsx:SpecsPage
 
 ## Acceptance
 <!-- id: REQ-DASHUX-003.A1 -->

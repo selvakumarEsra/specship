@@ -80,9 +80,9 @@ function mockFetch(routes: Record<string, unknown>): string[] {
   return calls;
 }
 
-/** The 360px right rail — second child of the page's flex row. */
+/** The 360px right rail beside the canvas. */
 function railEl(container: HTMLElement): HTMLElement {
-  return (container.firstElementChild as HTMLElement).lastElementChild as HTMLElement;
+  return container.querySelector('[data-testid="graph-rail"]') as HTMLElement;
 }
 
 /** Select a canvas node the way a user does: press + release without moving. */

@@ -1,17 +1,20 @@
 /**
- * REQ-DESKTOP-022 (A1/A2) — the Specs screen renders the grouped requirement
- * tree from live (mocked) endpoints, selection loads the detail contract, and
- * filters never clear a still-matching selection. Plus the approved read-view
- * scope of REQ-DESKTOP-001…005 and 012: section order + copy-id + state
- * accent (001), escaped keyword decoration incl. XSS and word boundaries
- * (002), criterion marks / segment bar / met rollup (003), linked code and
- * the orphaned alarm (004), workflow-gated actions (005), and the guidance /
- * skeleton / error-retry / unknown-state safety states (012).
+ * The shared spec read view (components/spec-detail.tsx) — the approved
+ * read-view scope of REQ-DESKTOP-001…005 and 012: section order + copy-id +
+ * state accent (001), escaped keyword decoration incl. XSS and word
+ * boundaries (002), criterion marks / segment bar / met rollup (003), linked
+ * code and the orphaned alarm (004), workflow-gated actions (005), and the
+ * guidance / skeleton / error-retry / unknown-state safety states (012).
+ *
+ * These suites used to drive the pane through the Specs screen; Review
+ * replaced that screen (REQ-DASHSIMPLE-004), so they render the pane directly
+ * and keep one deep-link case through Review itself.
  */
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { SpecsPage, groupSpecs } from '../pages/specs';
-import type { SpecDoc } from '../api';
+import { SpecDetail } from '../components/spec-detail';
+import { ReviewPage } from '../pages/review';
+import { reviewRoutesFromSpecs } from './review-fixtures';
 
 const NOW = Date.now();
 
@@ -91,44 +94,10 @@ const DETAIL_I1 = {
   source: null,
 };
 
-const FUNNEL = {
-  summary: {
-    ideas: 2, specified: 1, conflicts: 1, documents: 2, requirements: 3,
-    links: { implemented: 4, verified: 2, drifted: 1, broken: 0, orphaned: 1 },
-  },
-  documents: [],
-  ideas: [],
-  conflicts: [],
-};
-
-const COVERAGE = {
-  specId: null,
-  requirements: [
-    {
-      specId: 'REQ-A-1', title: 'Validate session token', kind: 'requirement',
-      implementsLinks: { count: 2, states: { verified: 2 } },
-      testsLinks: { count: 1, states: { verified: 1 } },
-      verdict: 'verified', criteria: [],
-      criteriaTotals: { untested: 2, tested: 0, verified: 1, broken: 0 },
-      criteriaWithTests: 1, criteriaCount: 3,
-    },
-    {
-      specId: 'REQ-A-2', title: 'Reject expired tokens', kind: 'requirement',
-      implementsLinks: { count: 1, states: { drifted: 1 } },
-      testsLinks: { count: 0, states: {} },
-      verdict: 'untested', criteria: [],
-      criteriaTotals: { untested: 1, tested: 0, verified: 0, broken: 0 },
-      criteriaWithTests: 0, criteriaCount: 1,
-    },
-  ],
-  totals: { requirements: 2, criteria: 4, criteriaWithTests: 1, criteriaVerified: 1, criteriaBroken: 0 },
-};
-
 function routesWithDetails(): Record<string, unknown> {
   return {
     '/api/specs': SPECS,
-    '/api/spec/funnel': FUNNEL,
-    '/api/spec/coverage': COVERAGE,
+    ...reviewRoutesFromSpecs(SPECS),
     '/api/spec/REQ-A-1': DETAIL_A1,
     '/api/spec/REQ-A-2': DETAIL_A2,
     '/api/spec/REQ-I-1': DETAIL_I1,
@@ -151,13 +120,8 @@ function mockFetch(routes: Record<string, unknown>): string[] {
   return calls;
 }
 
-/** The 280px tree pane — first child of the page's flex row. */
-function treePane(container: HTMLElement): HTMLElement {
-  return container.querySelector('div[style*="width: 280px"]') as HTMLElement;
-}
-
 beforeEach(() => {
-  history.replaceState(null, '', '/specs');
+  history.replaceState(null, '', '/review');
 });
 
 afterEach(() => {
@@ -165,40 +129,19 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe('groupSpecs', () => {
-  it('groups requirements under their parent document by sourcePath', () => {
-    const groups = groupSpecs(SPECS.specs as SpecDoc[]);
-    expect(groups.map((g) => g.path)).toEqual(['specs/auth.md', 'specs/ingest.md']);
-    expect(groups[0]!.reqs.map((r) => r.id)).toEqual(['REQ-A-1', 'REQ-A-2']);
-    expect(groups[1]!.reqs.map((r) => r.id)).toEqual(['REQ-I-1']);
-  });
-
-  it('keeps a requirement whose parent document is missing', () => {
-    const orphanReq = [{ id: 'REQ-X-1', kind: 'requirement', title: 'Solo', sourcePath: 'specs/x.md', parentId: 'GONE' }] as SpecDoc[];
-    const groups = groupSpecs(orphanReq);
-    expect(groups).toHaveLength(1);
-    expect(groups[0]!.path).toBe('specs/x.md');
-    expect(groups[0]!.reqs[0]!.id).toBe('REQ-X-1');
-  });
-});
-
-describe('SpecsPage (REQ-DESKTOP-022)', () => {
-  it('A1: renders the grouped tree with state pills, shows guidance with no selection, and loads detail on click', async () => {
+describe('SpecDetail read view (REQ-DESKTOP-001…005, 012)', () => {
+  it('A1: shows guidance with no selection, then a skeleton and the detail contract for a selection', async () => {
     const calls = mockFetch(routesWithDetails());
-    const { container } = render(<SpecsPage project={null} query={{}} />);
+    const none = render(<SpecDetail id={null} project={null} />);
 
-    await screen.findByText('auth.md');
-    expect(screen.getByText('ingest.md')).toBeTruthy();
-    expect(screen.getByText('REQ-A-1')).toBeTruthy();
-    expect(screen.getByText('REQ-A-2')).toBeTruthy();
-    expect(screen.getByText('REQ-I-1')).toBeTruthy();
-
-    // No-selection guidance with the copyable command (REQ-DESKTOP-012.A1).
-    expect(screen.getByText('Pick a spec from the tree')).toBeTruthy();
-    expect(screen.getByText('specship init -i')).toBeTruthy();
+    // No-selection guidance only — the indexing hint and copyable command
+    // were removed (REQ-DESKTOP-012.A1 superseded by REQ-DASHSIMPLE-004.A8).
+    expect(screen.getByText('Pick a requirement to read it')).toBeTruthy();
+    expect(screen.queryByText('specship init -i')).toBeNull();
+    none.unmount();
 
     // Skeleton shimmer appears immediately on selection (REQ-DESKTOP-012.A2)…
-    fireEvent.click(screen.getByText('REQ-A-1'));
+    const { container } = render(<SpecDetail id="REQ-A-1" project={null} />);
     expect(screen.getByTestId('spec-skeleton')).toBeTruthy();
 
     // …then the detail contract renders in reading order (REQ-DESKTOP-001.A1).
@@ -216,7 +159,7 @@ describe('SpecsPage (REQ-DESKTOP-022)', () => {
 
     // Statement accent edge takes the state color token (REQ-DESKTOP-001.A3).
     const statement = container.querySelector('.sp-statement') as HTMLElement;
-    expect(statement.getAttribute('style')).toContain('--sp-accent: var(--success)');
+    expect(statement.getAttribute('style')).toContain('--sp-accent: var(--accent)'); // verified → accent (REQ-DASHTHEME-001)
 
     // Copy-id control confirms in the success token (REQ-DESKTOP-001.A2).
     const copy = within(container.querySelector('.sp-breadcrumb') as HTMLElement).getByTitle('Copy');
@@ -241,40 +184,15 @@ describe('SpecsPage (REQ-DESKTOP-022)', () => {
     expect(showInGraph.disabled).toBe(false);
   });
 
-  it('A1: a ?sel= deep-link selects and loads that requirement', async () => {
+  it('A1: a retired ?sel= deep-link still opens that requirement in Review', async () => {
     mockFetch(routesWithDetails());
-    render(<SpecsPage project={null} query={{ sel: 'REQ-I-1' }} />);
+    render(<ReviewPage project={null} query={{ sel: 'REQ-I-1' }} />);
     await screen.findByRole('heading', { name: 'Tail JSONL incrementally' });
-  });
-
-  it('A2: filtering hides non-matching rows without clearing a still-matching selection', async () => {
-    mockFetch(routesWithDetails());
-    const { container } = render(<SpecsPage project={null} query={{}} />);
-    await screen.findByText('auth.md');
-    const tree = () => within(treePane(container));
-
-    fireEvent.click(tree().getByText('REQ-A-1'));
-    await screen.findByRole('heading', { name: 'Validate session token' });
-
-    // Toggling "drifted" off hides REQ-A-2; the selection and detail stand.
-    fireEvent.click(tree().getByRole('button', { name: /drifted/i }));
-    expect(tree().queryByText('REQ-A-2')).toBeNull();
-    expect(tree().getByText('REQ-A-1')).toBeTruthy();
-    expect(screen.getByRole('heading', { name: 'Validate session token' })).toBeTruthy();
-
-    // Even hiding the selected row leaves the selection state intact.
-    fireEvent.click(tree().getByRole('button', { name: /verified/i }));
-    expect(tree().queryByText('REQ-A-1')).toBeNull();
-    expect(screen.getByRole('heading', { name: 'Validate session token' })).toBeTruthy();
-
-    // Un-hiding brings the row back, still selected (accent id color).
-    fireEvent.click(tree().getByRole('button', { name: /verified/i }));
-    expect(tree().getByText('REQ-A-1')).toBeTruthy();
   });
 
   it('002: keyword chips operate on escaped, word-bounded text — script tags render literal', async () => {
     mockFetch(routesWithDetails());
-    const { container } = render(<SpecsPage project={null} query={{ sel: 'REQ-A-2' }} />);
+    const { container } = render(<SpecDetail id="REQ-A-2" project={null} />);
     await screen.findByRole('heading', { name: 'Reject expired tokens' });
 
     // No element from the body is parsed into the page (002.A3).
@@ -294,7 +212,7 @@ describe('SpecsPage (REQ-DESKTOP-022)', () => {
     expect(metaPill.textContent).toBe('Drifted');
     expect(metaPill.style.animation).toContain('pulsePill');
     const statement = container.querySelector('.sp-statement') as HTMLElement;
-    expect(statement.getAttribute('style')).toContain('--sp-accent: var(--warn)');
+    expect(statement.getAttribute('style')).toContain('--sp-accent: var(--danger)'); // drifted → danger (REQ-DASHTHEME-001)
     expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(2); // owner + verified placeholders
 
     // Axis pill on the drifted link (004.A2), and the unknown-state link
@@ -305,7 +223,7 @@ describe('SpecsPage (REQ-DESKTOP-022)', () => {
 
   it('002.A4 + 003: code/bold decorate every prose surface; marks, segment bar, and rollup follow the data', async () => {
     mockFetch(routesWithDetails());
-    const { container } = render(<SpecsPage project={null} query={{ sel: 'REQ-A-1' }} />);
+    const { container } = render(<SpecDetail id="REQ-A-1" project={null} />);
     await screen.findByRole('heading', { name: 'Validate session token' });
 
     // Inline code + bold render in the statement and in criterion text alike.
@@ -336,7 +254,7 @@ describe('SpecsPage (REQ-DESKTOP-022)', () => {
 
   it('004.A3 + 003.A4: zero links renders the orphaned alarm card; zero criteria omits the section', async () => {
     mockFetch(routesWithDetails());
-    const { container } = render(<SpecsPage project={null} query={{ sel: 'REQ-I-1' }} />);
+    const { container } = render(<SpecDetail id="REQ-I-1" project={null} />);
     await screen.findByRole('heading', { name: 'Tail JSONL incrementally' });
 
     const alarm = screen.getByText(/Orphaned — no code implements this requirement yet/);
@@ -348,7 +266,7 @@ describe('SpecsPage (REQ-DESKTOP-022)', () => {
     const routes = routesWithDetails();
     delete routes['/api/spec/REQ-A-1'];
     mockFetch(routes);
-    render(<SpecsPage project={null} query={{ sel: 'REQ-A-1' }} />);
+    render(<SpecDetail id="REQ-A-1" project={null} />);
 
     await screen.findByText(/Couldn.t load REQ-A-1/);
     routes['/api/spec/REQ-A-1'] = DETAIL_A1;
@@ -356,118 +274,19 @@ describe('SpecsPage (REQ-DESKTOP-022)', () => {
     await screen.findByRole('heading', { name: 'Validate session token' });
   });
 
-  it('renders the filter chips with per-state counts from linkStates', async () => {
-    mockFetch(routesWithDetails());
-    const { container } = render(<SpecsPage project={null} query={{}} />);
-    await screen.findByText('auth.md');
-    const tree = () => within(treePane(container));
-
-    const verified = tree().getByRole('button', { name: /verified/i });
-    const drifted = tree().getByRole('button', { name: /drifted/i });
-    expect(verified.textContent).toBe('verified1');
-    expect(drifted.textContent).toBe('drifted1');
-    expect(tree().getByRole('button', { name: /broken/i }).textContent).toBe('broken0');
-  });
 });
 
-/**
- * REQ-TVIZ-007 — the Specs page carries the funnel and per-requirement
- * coverage, and stops dropping idea-stage briefs on the floor. Plus the
- * document-row drift shading of REQ-TVIZ-010.A2.
- */
-describe('SpecsPage funnel + coverage (REQ-TVIZ-007)', () => {
-  it('A1: renders funnel stat tiles from /api/spec/funnel', async () => {
-    const calls = mockFetch(routesWithDetails());
-    render(<SpecsPage project={null} query={{}} />);
-
-    const tiles = await screen.findByTestId('funnel-tiles');
-    expect(calls).toContain('/api/spec/funnel');
-    const t = within(tiles);
-    expect(t.getByTitle('Ideas').textContent).toContain('2');
-    expect(t.getByTitle('Requirements').textContent).toContain('3');
-    expect(t.getByTitle('Verified').textContent).toContain('2');
-    // Drift tile sums drifted + broken + orphaned (1 + 0 + 1).
-    expect(t.getByTitle('Drift').textContent).toContain('2');
-    expect(tiles.textContent).toContain('1 brief/spec conflict');
-  });
-
-  it('A1: a funnel the server cannot answer leaves the tree standing', async () => {
+describe('SpecDetail idea read view (REQ-TVIZ-007.A3)', () => {
+  it('A3: an idea-stage brief opens the idea read view, not a requirement view', async () => {
     const routes = routesWithDetails();
-    delete routes['/api/spec/funnel'];
-    mockFetch(routes);
-    render(<SpecsPage project={null} query={{}} />);
-
-    await screen.findByText('auth.md');
-    expect(screen.queryByTestId('funnel-tiles')).toBeNull();
-  });
-
-  it('A2: requirement rows show code/test/criteria indicators and documents roll them up', async () => {
-    mockFetch(routesWithDetails());
-    render(<SpecsPage project={null} query={{}} />);
-    await screen.findByText('auth.md');
-
-    const chips = await screen.findAllByTestId('coverage-chips');
-    // REQ-A-1: 2 code links, 1 test link, 1 of 3 criteria have a test.
-    expect(chips[0]!.textContent).toBe('2c1t1/3');
-    // REQ-A-2: implemented but untested — the test count reads 0.
-    expect(chips[1]!.textContent).toBe('1c0t0/1');
-
-    // The document row sums its requirements (REQ-TVIZ-007.A2).
-    const rollup = screen.getAllByTestId('doc-rollup')[0]!;
-    expect(rollup.textContent).toBe('3c 1t 1/4');
-  });
-
-  it('A2: coverage the server cannot answer degrades to no chips, not wrong chips', async () => {
-    const routes = routesWithDetails();
-    delete routes['/api/spec/coverage'];
-    mockFetch(routes);
-    render(<SpecsPage project={null} query={{}} />);
-
-    await screen.findByText('auth.md');
-    expect(screen.queryByTestId('coverage-chips')).toBeNull();
-    expect(screen.queryByTestId('doc-rollup')).toBeNull();
-  });
-
-  it('A3: idea-stage briefs render as their own branch instead of being dropped', async () => {
-    const routes = routesWithDetails();
-    routes['/api/specs'] = {
-      ...SPECS,
-      specs: [
-        ...SPECS.specs,
-        { id: 'brief:rate-limits', kind: 'brief', title: 'Brainstorm: rate limits', sourcePath: 'specs/rate-limits/brief.md', metadata: {} },
-        { id: 'brief:sso', kind: 'brief', title: 'Brainstorm: SSO', sourcePath: 'specs/sso/brief.md', metadata: { spec: 'specs/sso.md' } },
-      ],
-    };
     routes['/api/spec/brief:rate-limits'] = {
       spec: { id: 'brief:rate-limits', kind: 'brief', title: 'Brainstorm: rate limits', body: 'What if we **capped** bursts?', sourcePath: 'specs/rate-limits/brief.md', metadata: { created: '2026-09-01' } },
       parent: null, siblings: [], children: [], links: [], childLinks: {}, source: null,
     };
     mockFetch(routes);
-    render(<SpecsPage project={null} query={{}} />);
-
-    const branch = await screen.findByTestId('ideas-branch');
-    expect(within(branch).getByText('Ideas')).toBeTruthy();
-    expect(within(branch).getByText('Brainstorm: rate limits')).toBeTruthy();
-    // A brief that already graduated into a spec is marked as such.
-    expect(within(branch).getByTitle('Already specified')).toBeTruthy();
-
-    // Selecting a brief opens the idea read view, not a requirement view.
-    fireEvent.click(within(branch).getByText('Brainstorm: rate limits'));
+    render(<SpecDetail id="brief:rate-limits" project={null} />);
     await screen.findByRole('heading', { name: 'Brainstorm: rate limits' });
     expect(screen.getByText('Idea')).toBeTruthy();
     expect(screen.getByText('Brief')).toBeTruthy();
-  });
-
-  it('REQ-TVIZ-010.A2: document rows shade by their worst drift state', async () => {
-    mockFetch(routesWithDetails());
-    const { container } = render(<SpecsPage project={null} query={{}} />);
-    await screen.findByText('auth.md');
-
-    // auth.md holds the drifted REQ-A-2; ingest.md holds nothing unhealthy.
-    const auth = (screen.getByText('auth.md').closest('[data-drift]')) as HTMLElement;
-    expect(auth.getAttribute('data-drift')).toBe('drifted');
-    expect(auth.style.background).toBe('var(--warn-soft)');
-    expect(screen.getByText('ingest.md').closest('[data-drift]')).toBeNull();
-    expect(container.querySelectorAll('[data-drift]')).toHaveLength(1);
   });
 });

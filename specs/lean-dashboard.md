@@ -122,7 +122,7 @@ NOT offer in-place spec editing and MUST NOT ship a heavyweight embedded code
 editor. This removes both the editing affordance and its largest dependency.
 
 implementations:
-  - ui/src/pages/specs.tsx:SpecsPage
+  - ui/src/pages/review.tsx:ReviewPage
   - ui/src/components/spec-detail.tsx:SpecDetail
 
 ## Acceptance
@@ -160,6 +160,8 @@ framework runtime.
 
 <!-- id: REQ-DASHLEAN-005 -->
 ## The rebuilt dashboard MUST preserve the existing visual design system
+
+> **SUPERSEDED 2026-11-04** by DASHTHEME-DOC (`specs/dashboard-theme-bmg.md`) — the dashboard now uses the BookMyGame UI design system instead of the "SpecShip Desktop" bundle. Kept for history.
 
 The rebuild MUST reproduce the "SpecShip Desktop" Claude Design bundle — the
 canonical design reference imported on 2026-07-04 into `specs/lean-dashboard/`:

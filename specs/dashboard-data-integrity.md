@@ -74,7 +74,6 @@ unbounded ratios into delta slots are normalized to fractions.
 
 implementations:
   - ui/src/components/ui.tsx:Delta
-  - ui/src/components/dashboard-modules.tsx:fmtTok
 
 ## Acceptance
 <!-- id: REQ-DASHINT-002.A1 -->
@@ -136,8 +135,6 @@ state with an explicit SAMPLE treatment on the data itself (badge on each
 seeded card/row), not only a dismissible banner, so a screenshot of the page
 cannot be mistaken for live data.
 
-implementations:
-  - ui/src/pages/mcp.tsx:McpPage
 
 ## Acceptance
 <!-- id: REQ-DASHINT-005.A1 -->

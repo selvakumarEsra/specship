@@ -104,34 +104,34 @@ export function Icon({ name, size = 16, stroke = 2, fill = 'none', style, classN
  * tile: render inside a rounded tile bg. glow: soft accent drop-shadow.
  */
 export function LogoMark({ size = 24, tile = true, glow = true }: { size?: number; tile?: boolean; glow?: boolean }) {
-  const edge = 'rgba(150,165,200,0.5)';
+  const edge = 'var(--edge-arrow)';
   return (
     <svg
       width={size}
       height={size}
       viewBox="0 0 32 32"
       fill="none"
-      style={{ filter: glow ? 'drop-shadow(0 0 9px rgba(91,147,242,0.35))' : 'none', flexShrink: 0 }}
+      style={{ filter: glow ? 'var(--glow-logo)' : 'none', flexShrink: 0 }}
     >
       <defs>
         <linearGradient id="ssTile" x1={0} y1={0} x2={32} y2={32} gradientUnits="userSpaceOnUse">
-          <stop stopColor="#12161E" />
-          <stop offset={1} stopColor="#0B0D11" />
+          <stop stopColor="var(--bg-panel)" />
+          <stop offset={1} stopColor="var(--bg-canvas-2)" />
         </linearGradient>
         <linearGradient id="ssLead" x1={18} y1={11} x2={26} y2={21} gradientUnits="userSpaceOnUse">
-          <stop stopColor="#6FA0F6" />
-          <stop offset={1} stopColor="#5B93F2" />
+          <stop stopColor="color-mix(in srgb, var(--node-spec) 85%, var(--on-strong))" />
+          <stop offset={1} stopColor="var(--node-spec)" />
         </linearGradient>
       </defs>
       {tile && <rect width={32} height={32} rx={7.2} fill="url(#ssTile)" />}
-      {tile && <rect x={0.5} y={0.5} width={31} height={31} rx={6.7} fill="none" stroke="rgba(255,255,255,0.08)" />}
+      {tile && <rect x={0.5} y={0.5} width={31} height={31} rx={6.7} fill="none" stroke="var(--fill-strong)" />}
       <g transform="translate(4.6 4.6) scale(0.715)">
         <path d="M5 16 H11 M11 9 L23 16 L11 23" stroke={edge} strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" fill="none" />
-        <line x1={11} y1={9} x2={11} y2={23} stroke="rgba(150,165,200,0.4)" strokeWidth={1.9} strokeLinecap="round" />
+        <line x1={11} y1={9} x2={11} y2={23} stroke="var(--edge-arrow)" strokeWidth={1.9} strokeLinecap="round" />
         <circle cx={23} cy={16} r={3.6} fill="url(#ssLead)" />
-        <circle cx={11} cy={9} r={2.9} fill="#A586F5" />
-        <circle cx={11} cy={23} r={2.9} fill="#46C26B" />
-        <circle cx={5} cy={16} r={2.1} fill="#29D2BE" />
+        <circle cx={11} cy={9} r={2.9} fill="var(--node-code)" />
+        <circle cx={11} cy={23} r={2.9} fill="var(--node-test)" />
+        <circle cx={5} cy={16} r={2.1} fill="var(--node-route)" />
       </g>
     </svg>
   );

@@ -130,10 +130,8 @@ implementations:
 <!-- id: REQ-TVIZ-007 -->
 ## The Specs page MUST show the funnel and per-requirement coverage badges
 
-implementations:
-  - ui/src/pages/specs.tsx:FunnelTiles
-  - ui/src/pages/specs.tsx:CoverageChips
-  - ui/src/pages/specs.tsx:IdeasBranch
+> **SUPERSEDED 2026-11-04** by REQ-DASHSIMPLE-004 — the Specs page (funnel tiles, coverage chips, ideas branch) is replaced by Review and Plan; ideas stay available via `specship spec`. Kept for history.
+
 
 ## Acceptance
 <!-- id: REQ-TVIZ-007.A1 -->
@@ -163,7 +161,7 @@ implementations:
 ## Verification and drift repair MUST be reachable from the dashboard
 
 implementations:
-  - ui/src/pages/drift.tsx:REPAIR
+  - ui/src/review-groups.ts:fixCommand
   - ui/src/components/spec-detail.tsx:persistedFields
   - ui/src/components/spec-detail.tsx:SpecEditor
 
@@ -180,7 +178,6 @@ implementations:
 
 implementations:
   - server/src/routes/graph.ts:registerGraphRoutes
-  - ui/src/pages/specs.tsx:groupSpecs
   - ui/src/components/spec-detail.tsx:rollupState
 
 ## Acceptance

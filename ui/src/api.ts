@@ -125,6 +125,16 @@ export interface GraphNodeDetail extends NodeRef {
   callers: NodeRef[];
   callees: NodeRef[];
   linkedSpecs: LinkedSpec[];
+  /** Verbatim source of the symbol's own body — only with `includeCode`. */
+  code?: string | null;
+  /** True when `code` was cut at the server's line cap. */
+  codeTruncated?: boolean;
+}
+
+/** GET /api/graph/split-search — the split view's grouped matches (REQ-DASHSIMPLE-005). */
+export interface SplitSearchResponse {
+  specs: Array<{ id: string; title: string; kind: string; snippet: string }>;
+  symbols: Array<{ id: string; name: string; kind: string; filePath: string; startLine?: number }>;
 }
 
 export interface GraphNodeResponse {
@@ -228,6 +238,46 @@ export interface SpecCoverageResponse {
   };
 }
 
+// ---- Plan reader (REQ-DASHSIMPLE-003) ----
+
+/** A task: one acceptance criterion with its test-evidence verdict. */
+export interface PlanTask {
+  specId: string;
+  title: string;
+  verdict: CoverageVerdict;
+}
+
+/** A story: one requirement. `coverage` is raw — the client classifies it. */
+export interface PlanStory {
+  specId: string;
+  title: string;
+  body: string;
+  jiraKey: string | null;
+  coverage: RequirementCoverage | null;
+  tasks: PlanTask[];
+}
+
+export interface PlanDoc {
+  id: string;
+  title: string;
+  stories: PlanStory[];
+}
+
+/** An epic: documents sharing an `epicKey`, or one document with none (key null). */
+export interface PlanEpic {
+  key: string | null;
+  title: string;
+  docs: PlanDoc[];
+}
+
+/** GET /api/spec/plan. */
+export interface PlanResponse {
+  jiraBaseUrl: string | null;
+  epics: PlanEpic[];
+  /** Drift-state links — Review's classifier's second input. */
+  driftLinks: DriftLink[];
+}
+
 /** POST /api/spec/link-verify — promote or fail one link. */
 export interface LinkVerifyResponse {
   ok: boolean;
@@ -276,6 +326,17 @@ export interface WorkflowRun {
   model?: string | null;
   eta?: unknown;
   [key: string]: unknown;
+}
+
+/**
+ * The coding agent a run executed on, exactly as the executor recorded it at
+ * `metadata.agent` (src/workflows/agents RUN_AGENT_KEY). Null when the run has
+ * none — never a guessed default (REQ-DASHSIMPLE-002.A2).
+ */
+// @implements REQ-DASHSIMPLE-002
+export function runAgentName(run: WorkflowRun): string | null {
+  const agent = run.metadata?.agent;
+  return typeof agent === 'string' && agent.trim() ? agent : null;
 }
 
 export interface RunsResponse {
@@ -367,324 +428,6 @@ export interface SearchResponse {
   results: SearchResult[];
 }
 
-/** One row from GET /api/claude/prompts/recent (text capped at 200 chars). */
-export interface RecentPrompt {
-  id: string;
-  session_id: string;
-  text: string;
-  ts: number;
-}
-
-export interface RecentPromptsResponse {
-  prompts: RecentPrompt[];
-}
-
-// ---- Claude analytics shapes (server/src/routes/claude.ts) ----
-
-/**
- * One dashboard stat-tile metric: value + WoW delta + 7-point sparkline.
- * `delta` and `series` are OPTIONAL — a metric with no prior-window snapshot
- * omits them rather than sending 0/[] (REQ-REVINT-007.A2).
- */
-export interface StatMetric {
-  value: number;
-  delta?: number;
-  series?: number[];
-}
-
-export interface ClaudeStatsResponse {
-  /** unpricedTokens > 0 = the last session's model resolved no pricing row —
-   *  render an unpriced marker, never $0.00 (REQ-DASHINT-007). */
-  lastSessionCost: StatMetric & { unpricedTokens?: number };
-  toolCalls: StatMetric;
-  subagentPct: StatMetric;
-  drift: StatMetric;
-  /** Total ingested sessions; 0 = nothing ingested (REQ-DESKTOP-020.A4). */
-  sessionCount: number;
-  /** Parse coverage of the latest ingest pass (REQ-DASHINT-008). Null until
-   *  the first pass of this server process completes. */
-  ingest?: { linesParsed: number; linesSkipped: number; at: number } | null;
-}
-
-/** One row from /api/claude/costs topPrompts (text capped at 200 chars). */
-export interface CostPrompt {
-  id: string;
-  session_id: string;
-  text: string;
-  model: string | null;
-  cost_usd: number;
-  is_sidechain: number;
-  input_tokens: number;
-  output_tokens: number;
-  cache_creation_tokens: number;
-  cache_read_tokens: number;
-  ts: number;
-}
-
-export interface ClaudeCostsResponse {
-  total: number;
-  topPrompts: CostPrompt[];
-  series: Array<{ day: number; cost: number; prompts: number }>;
-  byModel: Array<{ model: string; prompts: number; cost: number }>;
-  wowDelta: number;
-  /** Sessions in the window with tokens but no resolvable pricing — the
-   *  total excludes them and the UI must say so (REQ-DASHINT-007.A2). */
-  unpricedSessions?: number;
-}
-
-export interface ClaudeCacheResponse {
-  readRate: number;
-  creationTokens: number;
-  readTokens: number;
-  inputTokens: number;
-  outputTokens: number;
-  totalCost: number;
-  dollarsSaved: number;
-  wowDelta: number;
-}
-
-export interface HeatmapFile {
-  path: string;
-  calls: number;
-  resultBytes: number | null;
-  trend: number[];
-}
-
-export interface ClaudeHeatmapResponse {
-  files: HeatmapFile[];
-  tools: Array<{ name: string; calls: number; resultBytes: number | null }>;
-  subagents: Array<{ type: string; prompts: number; tokens: number; cost: number }>;
-  subagentByName: Array<{ name: string; calls: number; firstSeen: number; lastSeen: number }>;
-}
-
-export interface ClaudeTip {
-  id: string;
-  severity: 'error' | 'warn' | 'info';
-  icon: string;
-  title: string;
-  why: string;
-  evidence: { session: string; detail: string };
-  fix: string;
-  saving: string;
-  /** Set when the tip was applied; dismissed tips never come back at all. */
-  state?: 'applied';
-}
-
-export interface ClaudeTipsResponse {
-  tips: ClaudeTip[];
-}
-
-export interface ClaudeSession {
-  id: string;
-  project_path: string;
-  started_at: number | null;
-  ended_at: number | null;
-  total_cost_usd: number | null;
-  prompt_count: number | null;
-  last_model: string | null;
-  total_input_tokens?: number;
-  total_output_tokens?: number;
-  total_cache_creation_tokens?: number;
-  total_cache_read_tokens?: number;
-  /** Derived: token sum when cost is 0 with non-zero tokens (unpriced model,
-   *  REQ-DASHINT-007) — render a marker, not $0.00. */
-  unpriced_tokens?: number;
-  [key: string]: unknown;
-}
-
-export interface ClaudeSessionsResponse {
-  sessions: ClaudeSession[];
-}
-
-/** One claude_prompts row from /api/claude/session/:id (+ derived duration). */
-export interface ClaudePrompt {
-  id: string;
-  session_id: string;
-  text: string | null;
-  ts: number;
-  model: string | null;
-  input_tokens: number;
-  output_tokens: number;
-  cache_creation_tokens: number;
-  cache_read_tokens: number;
-  cost_usd: number;
-  is_sidechain: number;
-  durationMs?: number;
-  [key: string]: unknown;
-}
-
-/** One claude_tool_calls row from /api/claude/session/:id. */
-export interface ClaudeToolCall {
-  prompt_id: string | null;
-  session_id: string;
-  tool_name: string;
-  input_summary: string;
-  result_length: number | null;
-  ts: number;
-  [key: string]: unknown;
-}
-
-export interface ClaudeSessionDetailResponse {
-  session: ClaudeSession;
-  prompts: ClaudePrompt[];
-  toolCalls: ClaudeToolCall[];
-}
-
-/** GET /api/claude/session/:id/summary — the Session Detail summary rail. */
-export interface ClaudeSessionSummaryResponse {
-  sessionId: string;
-  byTool: Array<{ name: string; calls: number; totalBytes: number }>;
-  byModel: Array<{ model: string; prompts: number; cost: number }>;
-  slashCommands: Array<{ name: string; count: number }>;
-  skills: Array<{ name: string; count: number }>;
-  filesTouched: Array<{ path: string; ops: number; lastOp: string }>;
-  durationMs: number;
-}
-
-/** One row from GET /api/claude/projects — Claude-cost projects (by cwd). */
-export interface ClaudeProject {
-  path: string;
-  name: string;
-  sessions: number;
-  cost: number;
-  prompts: number;
-  [key: string]: unknown;
-}
-
-export interface ClaudeProjectsResponse {
-  projects: ClaudeProject[];
-}
-
-/** One row from GET /api/claude/compare — per-project cost comparison. */
-export interface ClaudeCompareProject {
-  path: string;
-  name: string;
-  sessions: number;
-  cost: number;
-  avgCost: number;
-  prompts: number;
-  cacheHit: number;
-  /** null = not measured. Only the primary project has an indexed spec graph
-   *  here, so every other row is unknown, not clean (REQ-REVINT-007.A3). */
-  drift: number | null;
-  byModel: Array<{ model: string; cost: number }>;
-  topTools: string[];
-  [key: string]: unknown;
-}
-
-export interface ClaudeCompareResponse {
-  projects: ClaudeCompareProject[];
-}
-
-// ---- Heatmap drill-downs (REQ-DESKTOP-024) ----
-
-/** GET /api/claude/heatmap/file — sessions + tool split for one file path. */
-export interface HeatmapFileDetail {
-  path: string;
-  sessions: Array<{ session_id: string; last_model: string | null; project_path: string | null; calls: number; bytes: number; lastTs: number; firstTs: number }>;
-  byTool: Array<{ name: string; calls: number; bytes: number }>;
-}
-
-/** GET /api/claude/heatmap/tool — totals + top inputs for one tool. */
-export interface HeatmapToolDetail {
-  tool: string;
-  totals: { calls: number; bytes: number; sessions: number };
-  inputs: Array<{ input: string; calls: number; bytes: number; lastTs: number }>;
-  recentSessions: Array<{ session_id: string; last_model: string | null; project_path: string | null; calls: number; lastTs: number }>;
-}
-
-/** GET /api/claude/heatmap/subagent — invocations of one subagent_type. */
-export interface HeatmapSubagentDetail {
-  subagent: string;
-  totals: { calls: number; sessions: number };
-  invocations: Array<{ session_id: string; ts: number; description: string; prompt: string; last_model: string | null }>;
-}
-
-// ---- Memory (server/src/routes/memory.ts, REQ-DESKTOP-025) ----
-
-export type MemoryLevel = 'enterprise' | 'user' | 'project' | 'subdir' | 'import' | 'note';
-export type MemoryType = 'instruction' | 'note' | 'import';
-
-/** One memory source: a CLAUDE.md tier, an @path import, or a saved note. */
-export interface MemoryFile {
-  id: string;
-  level: MemoryLevel;
-  type: MemoryType;
-  name: string;
-  scope: string;
-  path: string;
-  tokens: number;
-  lines: number;
-  modified: string;
-  body: string;
-  readOnly?: boolean;
-  /** ids of the import files this instruction file pulls in via @path. */
-  imports?: string[];
-  session?: string;
-  tags?: string[];
-}
-
-/** GET /api/memory — files arrive in Claude Code's load order. */
-export interface MemoryResponse {
-  totalTokens: number;
-  instructionCount: number;
-  noteCount: number;
-  importCount: number;
-  files: MemoryFile[];
-}
-
-// ---- MCP servers (server/src/routes/mcp.ts, REQ-DESKTOP-026) ----
-
-/** Spec vocabulary — see the route's deriveState precedence. */
-export type McpServerState = 'active' | 'connected' | 'idle' | 'failed' | 'disabled';
-
-export interface McpServerTool {
-  name: string;
-  calls: number;
-  resultBytes: number;
-}
-
-/** Latest real call from claude_tool_calls (input_json). */
-export interface McpExampleCall {
-  tool: string;
-  args: Record<string, unknown>;
-  /** true = server-synthesized placeholder (top tool, empty args), not a
-   *  recorded call. The page labels it as such (REQ-SURF-009.A2). */
-  synthesized: boolean;
-}
-
-export interface McpServer {
-  id: string;
-  name: string;
-  /** 'unknown' = seen in transcripts but not in any config file. */
-  scope: 'user' | 'project' | 'unknown';
-  state: McpServerState;
-  transport: 'stdio' | 'http';
-  command: string;
-  /** Owning config file path; null for usage-only servers. */
-  configFile: string | null;
-  disabled: boolean;
-  /** The raw config entry, for the detail panel's config JSON. */
-  entry: Record<string, unknown> | null;
-  calls: number;
-  resultBytes: number;
-  lastUsed: string | null;
-  tools: McpServerTool[];
-  exampleCall: McpExampleCall | null;
-}
-
-export interface McpServersResponse {
-  servers: McpServer[];
-}
-
-export interface AddMcpServerPayload {
-  name: string;
-  scope: 'user' | 'project';
-  command?: string;
-  args?: string[];
-  url?: string;
-}
-
 // ---- Runtime config (server/src/routes/config.ts, REQ-DESKTOP-028) ----
 
 /** GET/PUT /api/config — the server's dashboard-editable runtime knobs. */
@@ -702,8 +445,11 @@ export const api = {
   refresh: (project?: string | null) => postJson<StatusResponse>(q('/api/refresh', project)),
   graphFull: (project?: string | null, limit = 250) =>
     getJson<GraphFullResponse>(q(`/api/graph/full?limit=${limit}`, project)),
-  graphNode: (id: string, project?: string | null) =>
-    getJson<GraphNodeResponse>(q(`/api/graph/node?id=${encodeURIComponent(id)}`, project)),
+  graphNode: (id: string, project?: string | null, opts: { includeCode?: boolean } = {}) =>
+    getJson<GraphNodeResponse>(q(`/api/graph/node?id=${encodeURIComponent(id)}${opts.includeCode ? '&includeCode=1' : ''}`, project)),
+  // One search box over specs + code symbols (REQ-DASHSIMPLE-005).
+  splitSearch: (qs: string, project?: string | null) =>
+    getJson<SplitSearchResponse>(q(`/api/graph/split-search?q=${encodeURIComponent(qs)}`, project)),
   graphHealth: (project?: string | null) =>
     getJson<GraphHealthResponse>(q('/api/graph/health', project)),
   specs: (project?: string | null) => getJson<SpecsResponse>(q('/api/specs', project)),
@@ -715,13 +461,23 @@ export const api = {
   // Scoped to one spec with `spec`, or the whole project when omitted.
   specCoverage: (spec?: string | null, project?: string | null) =>
     getJson<SpecCoverageResponse>(q('/api/spec/coverage' + (spec ? `?spec=${encodeURIComponent(spec)}` : ''), project)),
+  // Epic → story → task for the Plan reader (REQ-DASHSIMPLE-003).
+  specPlan: (project?: string | null) => getJson<PlanResponse>(q('/api/spec/plan', project)),
   // Promote (`pass`) or fail a link. A `pass` on an `implements` link with no
   // test evidence comes back 409 / `no_test_evidence` (REQ-TVIZ-009.A1).
   linkVerify: (
     body: { link_id: number; result: 'pass' | 'fail'; reason?: string; evidence?: string[] },
     project?: string | null,
   ) => postJson<LinkVerifyResponse>(q('/api/spec/link-verify', project), body),
-  drift: (project?: string | null) => getJson<DriftResponse>(q('/api/drift', project)),
+  // Review passes its states explicitly (and the server's max limit) so the
+  // screen never depends on the route's default filter (REQ-DASHSIMPLE-004).
+  drift: (project?: string | null, opts: { states?: readonly string[]; limit?: number } = {}) => {
+    const p = new URLSearchParams();
+    if (opts.states?.length) p.set('state', opts.states.join(','));
+    if (opts.limit) p.set('limit', String(opts.limit));
+    const qs = p.toString();
+    return getJson<DriftResponse>(q('/api/drift' + (qs ? '?' + qs : ''), project));
+  },
   runs: (project?: string | null) => getJson<RunsResponse>(q('/api/workflows/runs', project)),
   workflows: (project?: string | null) => getJson<WorkflowsResponse>(q('/api/workflows', project)),
   launchRun: (workflowName: string, inputs: Record<string, string>, project?: string | null) =>
@@ -735,42 +491,6 @@ export const api = {
   projects: () => getJson<ProjectsResponse>('/api/projects'),
   graphSearch: (qs: string, project?: string | null, limit = 10) =>
     getJson<SearchResponse>(q(`/api/graph/search?q=${encodeURIComponent(qs)}&limit=${limit}`, project)),
-  recentPrompts: (project?: string | null, limit = 20) =>
-    getJson<RecentPromptsResponse>(q(`/api/claude/prompts/recent?limit=${limit}`, project)),
-  // Claude analytics (REQ-DESKTOP-020/-024). These aggregate the cross-project
-  // claude_* tables on the primary project's DB; the optional project/model
-  // params narrow them (REQ-DESKTOP-024.A2). `project` here is a Claude
-  // project path (or transcript-dir slug), not a specship project slug.
-  claudeStats: (range = 'week') => getJson<ClaudeStatsResponse>(`/api/claude/stats?range=${range}`),
-  claudeCosts: (range = 'week', project?: string | null, model?: string | null) =>
-    getJson<ClaudeCostsResponse>(q(`/api/claude/costs?range=${range}${model ? `&model=${encodeURIComponent(model)}` : ''}`, project)),
-  claudeCache: (range = 'week') => getJson<ClaudeCacheResponse>(`/api/claude/cache?range=${range}`),
-  claudeHeatmap: (range = 'week', project?: string | null) =>
-    getJson<ClaudeHeatmapResponse>(q(`/api/claude/heatmap?range=${range}`, project)),
-  claudeHeatmapFile: (path: string, range = 'week') =>
-    getJson<HeatmapFileDetail>(`/api/claude/heatmap/file?path=${encodeURIComponent(path)}&range=${range}`),
-  claudeHeatmapTool: (name: string, range = 'week') =>
-    getJson<HeatmapToolDetail>(`/api/claude/heatmap/tool?name=${encodeURIComponent(name)}&range=${range}`),
-  claudeHeatmapSubagent: (type: string, range = 'week') =>
-    getJson<HeatmapSubagentDetail>(`/api/claude/heatmap/subagent?type=${encodeURIComponent(type)}&range=${range}`),
-  claudeTips: () => getJson<ClaudeTipsResponse>('/api/claude/tips'),
-  setTipState: (id: string, state: 'applied' | 'dismissed') =>
-    postJson<{ ok: boolean }>('/api/claude/tips/state', { id, state }),
-  claudeSessions: (project?: string | null, limit = 10, range = 'week', model?: string | null) =>
-    getJson<ClaudeSessionsResponse>(q(`/api/claude/sessions?limit=${limit}&range=${range}${model ? `&model=${encodeURIComponent(model)}` : ''}`, project)),
-  claudeSession: (id: string) =>
-    getJson<ClaudeSessionDetailResponse>(`/api/claude/session/${encodeURIComponent(id)}`),
-  claudeSessionSummary: (id: string) =>
-    getJson<ClaudeSessionSummaryResponse>(`/api/claude/session/${encodeURIComponent(id)}/summary`),
-  claudeProjects: () => getJson<ClaudeProjectsResponse>('/api/claude/projects'),
-  claudeCompare: () => getJson<ClaudeCompareResponse>('/api/claude/compare'),
-  ingestNow: () => postJson<{ ok: boolean }>('/api/claude/ingest'),
-  memory: (project?: string | null) => getJson<MemoryResponse>(q('/api/memory', project)),
-  mcpServers: () => getJson<McpServersResponse>('/api/mcp/servers'),
-  setMcpServerEnabled: (name: string, enabled: boolean) =>
-    patchJson<{ ok: boolean; name: string; disabled: boolean }>(`/api/mcp/servers/${encodeURIComponent(name)}`, { enabled }),
-  addMcpServer: (payload: AddMcpServerPayload) =>
-    postJson<{ ok: boolean; name: string }>('/api/mcp/servers', payload),
   // Server runtime config (REQ-DESKTOP-028.A2): the Settings ingest toggle
   // round-trips through these; analytics screens read `get` to react.
   config: {

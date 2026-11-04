@@ -10,7 +10,7 @@ import { useApi } from '../hooks';
 import { go } from '../router';
 import { Icon } from '../components/icons';
 import { RunDetail, fmtCost, fmtDuration } from '../components/run-detail';
-import { Empty, PageHead, Segmented, StatePill, timeAgo } from '../components/ui';
+import { Button, Empty, PageHead, Segmented, StatePill, timeAgo } from '../components/ui';
 import type { PageProps } from './types';
 
 const STATUSES = ['running', 'paused', 'rejected', 'completed', 'failed', 'cancelled'];
@@ -53,9 +53,9 @@ function RunsList({ project }: { project: string | null }) {
           title="Runs"
           sub={runs.data ? `${all.length} workflow runs` : 'Loading runs…'}
           actions={
-            <button className="btn btn-primary btn-sm" onClick={() => go('workflows')}>
+            <Button variant="primary" size="sm" onClick={() => go('workflows')}>
               <Icon name="play" size={13} />Launch run
-            </button>
+            </Button>
           }
         />
       </div>
@@ -73,7 +73,7 @@ function RunsList({ project }: { project: string | null }) {
           icon="play"
           title="No runs yet"
           body="Workflow runs started from the CLI or dashboard land here."
-          action={<button className="btn btn-secondary btn-sm" onClick={() => go('workflows')}>Browse workflows</button>}
+          action={<Button variant="outline" size="sm" onClick={() => go('workflows')}>Browse workflows</Button>}
         />
       ) : (
         <div className="scroll-y" style={{ padding: '0 18px 18px' }}>

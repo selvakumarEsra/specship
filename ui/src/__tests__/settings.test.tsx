@@ -1,10 +1,12 @@
 /**
  * REQ-DESKTOP-028 — Settings + Design system. A1 appearance changes apply
- * immediately and persist (theme/density write documentElement attrs +
- * localStorage); A2 the transcript-ingest toggle PUTs /api/config so the
- * analytics screens' banner reacts; A3 About renders the real version + DB
+ * immediately and persist (density writes a documentElement attr +
+ * localStorage); A2 (the transcript-ingest toggle) is superseded by
+ * REQ-DASHSIMPLE-001.A7 — the toggle is gone, covered in navigation.test.tsx; A3 About renders the real version + DB
  * backend from /api/status; A4 the design-system gallery renders control
- * states from the shared tokens in both themes. Rendered through the full
+ * states from the shared tokens. The theme option and the light gallery are
+ * gone — these expectations now reflect REQ-DASHTHEME-003 (dark-only
+ * dashboard), which supersedes the theme parts of A1/A4. Rendered through the full
  * App per the suite convention (mcp.test.tsx).
  */
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
@@ -65,41 +67,16 @@ afterEach(() => {
 });
 
 describe('SettingsPage via App (REQ-DESKTOP-028)', () => {
-  it('A1: theme and density changes apply immediately and persist', async () => {
+  it('A1: density changes apply immediately and persist', async () => {
     mockFetch([{ ingestEnabled: false }]);
     render(<App />);
 
-    // Appearance section renders; pick Light theme.
-    const light = await screen.findByRole('radio', { name: 'Light' });
-    fireEvent.click(light);
-    expect(document.documentElement.getAttribute('data-theme')).toBe('light');
-    expect(localStorage.getItem('specship-theme')).toBe('light');
-
-    // Density → Compact.
-    const compact = screen.getByRole('radio', { name: 'Compact' });
+    // Appearance section renders (density only — REQ-DASHTHEME-003 removed
+    // the theme option); Density → Compact.
+    const compact = await screen.findByRole('radio', { name: 'Compact' });
     fireEvent.click(compact);
     expect(document.documentElement.getAttribute('data-density')).toBe('compact');
     expect(localStorage.getItem('specship-density')).toBe('compact');
-  });
-
-  it('A2: the ingest toggle PUTs /api/config', async () => {
-    const recorded = mockFetch([{ ingestEnabled: false }, { ingestEnabled: true }]);
-    render(<App />);
-
-    const toggle = await screen.findByRole('switch', { name: 'Enable transcript ingest' });
-    expect(toggle.getAttribute('aria-checked')).toBe('false');
-    fireEvent.click(toggle);
-
-    // A PUT to /api/config carried the flipped flag.
-    await vi.waitFor(() => {
-      const put = recorded.find((c) => c.url === '/api/config' && c.method === 'PUT');
-      expect(put).toBeTruthy();
-      expect(put!.body).toEqual({ ingestEnabled: true });
-    });
-    // After the reload the switch reflects the new state.
-    await vi.waitFor(() => {
-      expect(screen.getByRole('switch', { name: 'Enable transcript ingest' }).getAttribute('aria-checked')).toBe('true');
-    });
   });
 
   it('A3: About shows the real version and DB backend from /api/status', async () => {
@@ -143,25 +120,24 @@ describe('SettingsPage via App (REQ-DESKTOP-028)', () => {
     expect(badge.textContent).toBe('v9.9.9');
   });
 
-  it('A4: the design-system gallery renders control states from tokens in both themes', async () => {
+  it('A4: the design-system gallery renders control states from tokens in the dark theme', async () => {
     mockFetch([{ ingestEnabled: false }]);
     history.replaceState(null, '', '/designsystem');
     render(<App />);
 
-    // Both theme wrappers present (A4: "in both themes").
+    // A single dark theme wrapper; no light gallery (REQ-DASHTHEME-003).
     const darkWrap = await screen.findByTestId('theme-dark');
-    const lightWrap = screen.getByTestId('theme-light');
     expect(darkWrap).toBeTruthy();
-    expect(lightWrap).toBeTruthy();
-    expect(document.querySelector('[data-theme="light"]')).toBeTruthy();
+    expect(screen.queryByTestId('theme-light')).toBeNull();
+    expect(document.querySelector('[data-theme="light"]')).toBeNull();
 
     // Button control states render (disabled, pressed) — asserted by aria-label.
-    expect(screen.getAllByLabelText('Primary disabled').length).toBeGreaterThanOrEqual(2); // one per theme
-    expect(screen.getAllByLabelText('Secondary pressed').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByLabelText('Primary disabled')).toHaveLength(1); // one gallery
+    expect(screen.getAllByLabelText('Secondary pressed').length).toBeGreaterThanOrEqual(1);
 
     // Spec link + run state pills render (from the shared STATE record).
-    expect(screen.getAllByText('Verified').length).toBeGreaterThanOrEqual(2);
-    expect(screen.getAllByText('Running').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText('Verified').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('Running').length).toBeGreaterThanOrEqual(1);
 
     // A swatch derives from a token var, never a hard-coded hex.
     const swatch = darkWrap.parentElement!.querySelector('[style*="var(--bg-panel)"]');

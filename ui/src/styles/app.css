@@ -1,140 +1,9 @@
 /* ============================================================
    SpecShip Desktop — Design System
-   Dark-first (light theme below). Graph as hero. Geist + Geist Mono.
+   Dark-only (BookMyGame UI tokens, REQ-DASHTHEME-001). Graph as hero. Space Grotesk + Bricolage Grotesque + Geist Mono (REQ-DASHTHEME-002).
    ============================================================ */
 
-/* [data-theme="dark"] is listed alongside :root so a scoped wrapper (the
-   design-system gallery renders both themes side by side) can re-assert the
-   dark tokens inside a light-themed app, not just inherit them. */
-:root, [data-theme="dark"] {
-  color-scheme: dark;
-  /* ---- Surfaces ---- */
-  --bg-canvas: #0E1014;
-  --bg-canvas-2: #0B0D11;        /* graph void, deepest */
-  --bg-panel: #161A21;
-  --bg-panel-2: #1A1F28;
-  --bg-elevated: #20262F;
-  --bg-hover: rgba(255,255,255,0.04);
-  --bg-active: rgba(255,255,255,0.07);
-
-  /* ---- Borders ---- */
-  --border-subtle: rgba(255,255,255,0.07);
-  --border-strong: rgba(255,255,255,0.12);
-  --border-focus: #3B82F6;
-
-  /* ---- Text ---- */
-  --text-primary: #E8EBF0;
-  --text-secondary: #9AA3B2;
-  --text-muted: #5C6573;
-  --text-faint: #424B59;
-
-  /* ---- Accent (primary / brand) ---- */
-  --accent: #3B82F6;
-  --accent-strong: #2563EB;
-  --accent-soft: rgba(59,130,246,0.14);
-  --accent-line: rgba(59,130,246,0.35);
-
-  /* ---- Node colors (must be distinct at 4px) ---- */
-  --node-code: #A586F5;      /* purple  — functions, classes */
-  --node-spec: #5B93F2;      /* blue    — requirements */
-  --node-test: #46C26B;      /* green   — tests */
-  --node-route: #29D2BE;     /* teal    — routes/endpoints */
-  --node-code-soft: rgba(165,134,245,0.14);
-  --node-spec-soft: rgba(91,147,242,0.14);
-  --node-test-soft: rgba(70,194,107,0.14);
-  --node-route-soft: rgba(41,210,190,0.14);
-  --node-text: #ffffff;          /* label text on graph node fills */
-  --dot-grid: rgba(255,255,255,0.045); /* graph canvas dot grid */
-
-  /* ---- Semantic states ---- */
-  --success: #46C26B;
-  --success-soft: rgba(70,194,107,0.13);
-  --warn: #E5A50A;
-  --warn-soft: rgba(229,165,10,0.14);
-  --error: #F2555A;
-  --error-soft: rgba(242,85,90,0.14);
-  --info: #58A6FF;
-  --info-soft: rgba(88,166,255,0.13);
-
-  /* ---- Typography ---- */
-  --font-ui: "Geist", system-ui, -apple-system, sans-serif;
-  --font-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
-  --fs-title: 22px;
-  --fs-base: 13px;
-  --fs-sm: 12px;
-  --fs-xs: 11px;
-  --fs-big: 28px;
-
-  /* ---- Radius ---- */
-  --r-sm: 5px;
-  --r-md: 8px;
-  --r-lg: 12px;
-  --r-pill: 999px;
-
-  /* ---- Motion (the ONLY control-state transition timing — REQ-DESKTOP-013) ---- */
-  --motion-fast: 100ms ease;
-
-  /* ---- Shadow ---- */
-  --shadow-pop: 0 12px 32px -8px rgba(0,0,0,0.6), 0 2px 8px rgba(0,0,0,0.4);
-  --shadow-panel: 0 1px 0 rgba(255,255,255,0.02) inset;
-
-  /* ---- Layout ---- */
-  --sidebar-w: 232px;
-  --sidebar-w-collapsed: 56px;
-  --status-h: 30px;
-}
-
-/* ============================================================
-   LIGHT THEME — devtool-grade, high contrast on white
-   ============================================================ */
-[data-theme="light"] {
-  color-scheme: light;
-  --bg-canvas: #F4F6F8;
-  --bg-canvas-2: #E9ECF1;        /* graph void */
-  --bg-panel: #FFFFFF;
-  --bg-panel-2: #F8FAFC;
-  --bg-elevated: #FFFFFF;
-  --bg-hover: rgba(15,23,42,0.045);
-  --bg-active: rgba(15,23,42,0.07);
-
-  --border-subtle: rgba(15,23,42,0.10);
-  --border-strong: rgba(15,23,42,0.18);
-  --border-focus: #2563EB;
-
-  --text-primary: #161B22;
-  --text-secondary: #4A5566;
-  --text-muted: #7B8696;
-  --text-faint: #A9B2C0;
-
-  --accent: #2563EB;
-  --accent-strong: #2563EB;
-  --accent-soft: rgba(37,99,235,0.10);
-  --accent-line: rgba(37,99,235,0.30);
-
-  /* nodes darkened for legibility on light fills */
-  --node-code: #7C56E0;
-  --node-spec: #2F6FE0;
-  --node-test: #1E9E4C;
-  --node-route: #0E9C8E;
-  --node-code-soft: rgba(124,86,224,0.12);
-  --node-spec-soft: rgba(47,111,224,0.12);
-  --node-test-soft: rgba(30,158,76,0.12);
-  --node-route-soft: rgba(14,156,142,0.12);
-  --node-text: #1A2230;
-  --dot-grid: rgba(15,23,42,0.07);
-
-  --success: #1E9E4C;
-  --success-soft: rgba(30,158,76,0.12);
-  --warn: #B27500;
-  --warn-soft: rgba(178,117,0,0.13);
-  --error: #DC4A4F;
-  --error-soft: rgba(220,74,79,0.12);
-  --info: #2563EB;
-  --info-soft: rgba(37,99,235,0.11);
-
-  --shadow-pop: 0 12px 32px -10px rgba(15,23,42,0.22), 0 2px 8px rgba(15,23,42,0.10);
-  --shadow-panel: 0 1px 0 rgba(15,23,42,0.02) inset;
-}
+/* Tokens live in tokens.css (REQ-DASHTHEME-001) — imported first by main.tsx. */
 
 /* ============================================================
    DENSITY — data-density="compact" on <html> tightens the shell
@@ -173,84 +42,168 @@ html, body {
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
-  background: rgba(255,255,255,0.08);
+  background: var(--fill-strong);
   border-radius: 999px;
   border: 2px solid transparent;
   background-clip: content-box;
 }
-::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.16); background-clip: content-box; }
+::-webkit-scrollbar-thumb:hover { background: var(--border-active); background-clip: content-box; }
 
-.mono { font-family: var(--font-mono); font-feature-settings: "zero"; }
+/* Headings and large numerals take the display face (REQ-DASHTHEME-002). */
+h1, h2, h3, h4, .sp-title, [data-page-title], .display-num { font-family: var(--font-display); }
+
+.mono { font-family: var(--font-mono); font-feature-settings: var(--font-mono-features); font-variant-ligatures: none; }
+/* Every surface that sets code or symbol text in the mono face — native code
+   elements, kit classes, and inline `font-family: var(--font-mono)` styles
+   (HTML style attribute and SVG font-family attribute) — renders without
+   ligatures, so ===, => and != show as their literal characters.
+   REQ-DASHTHEME-004.A5. */
+code, pre, kbd, samp, .mono, .sp-code, .sp-kw, .sp-crit-id, .sp-label .ct,
+.sp-textarea, .sp-textarea::placeholder, .sp-crit-num,
+[style*="--font-mono"], [font-family*="--font-mono"] {
+  font-feature-settings: var(--font-mono-features); font-variant-ligatures: none;
+}
 .tnum { font-variant-numeric: tabular-nums; }
+
+/* ============================================================
+   SHARED UI KIT (REQ-DASHTHEME-004) — rebuilt in the BookMyGame UI visual
+   language from tokens.css only: buttons (primary / ghost / outline), badges,
+   chips, cards, stat tiles, segmented controls, switches, empty and error
+   states. Every interactive state reads the shared state tokens
+   (REQ-DESKTOP-013): hover is guarded on :not(:disabled) so disabled controls
+   never react (013.A3); :active (pressed) follows hover so pressing wins; a
+   selected/on rule comes last so it survives both. The .is-hover/.is-active
+   companions share each rule so the Design system gallery renders every state
+   statically from the same single source (REQ-DESKTOP-028.A4) — they are
+   gallery-only, never applied by app code.
+   ============================================================ */
 
 /* ---- Buttons ---- */
 .btn {
   font-family: var(--font-ui);
   font-size: var(--fs-base);
   font-weight: 500;
-  border: 1px solid transparent;
-  border-radius: var(--r-sm);
-  padding: 6px 12px;
+  border: var(--control-border-w) solid transparent;
+  border-radius: var(--radius-control);
+  height: var(--control-h-md);
+  padding: 0 var(--control-pad-x);
   display: inline-flex;
   align-items: center;
-  gap: 7px;
+  justify-content: center;
+  gap: var(--control-gap);
   cursor: pointer;
   white-space: nowrap;
   transition: background var(--motion-fast), border-color var(--motion-fast), color var(--motion-fast);
   user-select: none;
 }
 .btn svg { width: 14px; height: 14px; flex-shrink: 0; }
-/* Hover is guarded on :not(:disabled) so disabled controls never react to it
-   (REQ-DESKTOP-013.A3); :active (pressed) rules come after hover so pressing
-   wins while hovering. The .is-hover/.is-active companions share each rule so
-   the design-system gallery can render every state statically from the same
-   single source (REQ-DESKTOP-028.A4) — they are gallery-only, never applied
-   by app code. */
-.btn-primary { background: var(--accent-strong); color: #fff; }
-.btn-primary.is-hover, .btn-primary:hover:not(:disabled) { background: var(--accent); }
+.btn-primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); border-radius: var(--radius-control-primary); }
+.btn-primary.is-hover, .btn-primary:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); }
+.btn-primary.is-active, .btn-primary:active:not(:disabled) { background: var(--accent-strong); border-color: var(--accent-strong); }
+.btn-ghost { background: transparent; color: var(--text-secondary); }
+.btn-ghost.is-hover, .btn-ghost:hover:not(:disabled) { background: var(--bg-hover); color: var(--text-primary); }
+.btn-ghost.is-active, .btn-ghost:active:not(:disabled) { background: var(--bg-active); color: var(--text-primary); }
+.btn-outline { background: transparent; color: var(--text-primary); border-color: var(--border-strong); }
+.btn-outline.is-hover, .btn-outline:hover:not(:disabled) { background: var(--bg-hover); border-color: var(--border-hover); }
+.btn-outline.is-active, .btn-outline:active:not(:disabled) { background: var(--bg-active); border-color: var(--border-active); }
+/* Kept aliases so existing screens keep working: secondary is a filled
+   outline, destructive the danger-tinted variant. */
 .btn-secondary { background: var(--bg-elevated); color: var(--text-primary); border-color: var(--border-subtle); }
 .btn-secondary.is-hover, .btn-secondary:hover:not(:disabled) { background: var(--bg-elevated); border-color: var(--border-strong); }
 .btn-secondary.is-active, .btn-secondary:active:not(:disabled) { background: var(--bg-active); }
-.btn-ghost { background: transparent; color: var(--text-secondary); }
-.btn-ghost.is-hover, .btn-ghost:hover:not(:disabled) { background: var(--bg-hover); color: var(--text-primary); }
-.btn-ghost.is-active, .btn-ghost:active:not(:disabled) { background: var(--bg-active); }
-.btn-destructive { background: var(--error-soft); color: var(--error); border-color: rgba(242,85,90,0.3); }
-.btn-destructive.is-hover, .btn-destructive:hover:not(:disabled) { background: rgba(242,85,90,0.22); }
-.btn-sm { padding: 4px 9px; font-size: var(--fs-sm); }
-.btn-xs { padding: 2px 7px; font-size: var(--fs-xs); border-radius: 4px; }
-.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-destructive { background: var(--error-soft); color: var(--error); border-color: var(--danger-line); }
+.btn-destructive.is-hover, .btn-destructive:hover:not(:disabled) { background: var(--danger-soft-strong); }
+.btn-destructive.is-active, .btn-destructive:active:not(:disabled) { background: var(--danger-soft); }
+.btn-sm { height: var(--control-h-sm); padding: 0 var(--control-pad-x-sm); font-size: var(--fs-sm); }
+.btn-xs { height: var(--control-h-xs); padding: 0 var(--control-pad-x-xs); font-size: var(--fs-xs); border-radius: var(--r-sm); }
+.btn:disabled { opacity: var(--state-disabled-opacity); cursor: not-allowed; }
+/* Loading: aria-busy (set by <Button loading>) shows a currentColor spinner. */
+.btn.is-loading, .btn[aria-busy="true"] { cursor: progress; }
+.btn.is-loading::before, .btn[aria-busy="true"]::before {
+  content: "";
+  width: var(--spinner-size);
+  height: var(--spinner-size);
+  border-radius: var(--r-pill);
+  border: var(--spinner-w) solid currentColor;
+  border-right-color: transparent;
+  animation: spin var(--motion-spin);
+  flex-shrink: 0;
+}
 
 /* ---- Pills / badges ---- */
 .pill {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: var(--space-xs);
   font-size: var(--fs-xs);
   font-weight: 600;
-  padding: 2px 8px;
+  padding: var(--badge-pad-y) var(--badge-pad-x);
   border-radius: var(--r-pill);
   letter-spacing: 0.01em;
   white-space: nowrap;
   line-height: 1.5;
+  color: var(--text-secondary);
+  background: var(--fill-soft);
 }
 .pill svg { width: 11px; height: 11px; }
-.pill-dot { width: 6px; height: 6px; border-radius: 50%; }
+.pill-dot { width: var(--dot-size); height: var(--dot-size); border-radius: var(--r-pill); background: currentColor; }
+
+/* ---- Chips (toggle filters) — small rounded rectangles, not pills ---- */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--chip-pad-y) var(--chip-pad-x);
+  border: var(--control-border-w) solid var(--border-subtle);
+  border-radius: var(--radius-chip);
+  background: var(--bg-panel);
+  color: var(--text-secondary);
+  font-family: var(--font-ui);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  line-height: 1.4;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--motion-fast), color var(--motion-fast), border-color var(--motion-fast);
+}
+.chip.sm { font-size: var(--fs-xs); }
+.chip-cap { text-transform: capitalize; }
+.chip-count { font-size: var(--fs-xs); font-variant-numeric: tabular-nums; opacity: 0.75; }
+.chip-dot { width: var(--dot-size); height: var(--dot-size); border-radius: var(--r-pill); background: var(--chip-color, var(--accent)); }
+.chip.is-hover, .chip:hover:not(:disabled) { background: var(--bg-hover); border-color: var(--border-strong); color: var(--text-primary); }
+.chip.is-active, .chip:active:not(:disabled) { background: var(--bg-active); }
+.chip:disabled { opacity: var(--state-disabled-opacity); cursor: not-allowed; }
+/* On (aria-pressed) last: it survives hover and press. */
+.chip.on, .chip[aria-pressed="true"] {
+  background: var(--chip-bg, color-mix(in srgb, var(--chip-color, var(--accent)) 22%, var(--bg-panel)));
+  color: var(--chip-color, var(--accent));
+  border-color: transparent;
+}
 
 /* ---- Cards ---- */
 .card {
   background: var(--bg-panel);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--r-lg);
+  border: var(--control-border-w) solid var(--border-subtle);
+  border-radius: var(--radius-card);
 }
-.card-pad { padding: 14px; }
+.card-pad { padding: var(--space-lg); }
 /* Clickable card (stat tiles): opaque-surface hover pair — panel-2 +
    strong border — and the elevated surface when pressed. */
 .card-btn {
   cursor: pointer;
+  font-family: var(--font-ui);
+  color: var(--text-primary);
   transition: background var(--motion-fast), border-color var(--motion-fast);
 }
-.card-btn:hover:not(:disabled) { background: var(--bg-panel-2); border-color: var(--border-strong); }
-.card-btn:active:not(:disabled) { background: var(--bg-elevated); }
+.card-btn.is-hover, .card-btn:hover:not(:disabled) { background: var(--bg-panel-2); border-color: var(--border-strong); }
+.card-btn.is-active, .card-btn:active:not(:disabled) { background: var(--bg-elevated); }
+.card-btn:disabled { opacity: var(--state-disabled-opacity); cursor: not-allowed; }
+
+/* ---- Stat tile ---- */
+.stat-tile { text-align: left; padding: var(--space-md); display: flex; flex-direction: column; gap: var(--space-sm); }
+.stat-tile-label { letter-spacing: 0.04em; }
+.stat-tile .display-num { font-size: var(--bmg-font-size-h2); font-weight: 650; letter-spacing: -0.02em; line-height: 1; }
+.stat-tile-note { font-size: var(--fs-xs); color: var(--text-muted); }
 
 /* ---- List rows (trees, rails, queues, palette options) ----
    Token-driven interactive states shared by every hoverable row. Selected is
@@ -265,16 +218,17 @@ html, body {
 .seg {
   display: inline-flex;
   background: var(--bg-canvas);
-  border: 1px solid var(--border-subtle);
-  border-radius: 7px;
-  padding: 2px;
-  gap: 2px;
+  border: var(--control-border-w) solid var(--border-subtle);
+  border-radius: var(--radius-seg);
+  padding: var(--seg-inset);
+  gap: var(--seg-inset);
 }
 .seg-btn {
   border: none;
   cursor: pointer;
-  border-radius: 5px;
-  padding: 5px 12px;
+  border-radius: var(--radius-seg-btn);
+  height: var(--seg-h);
+  padding: 0 var(--control-pad-x-sm);
   font-size: var(--fs-sm);
   font-weight: 500;
   font-family: var(--font-ui);
@@ -282,12 +236,75 @@ html, body {
   color: var(--text-muted);
   transition: background var(--motion-fast), color var(--motion-fast), box-shadow var(--motion-fast);
 }
-.seg-btn.sm { padding: 3px 9px; }
-.seg-btn:hover:not(:disabled):not(.active) { background: var(--bg-hover); color: var(--text-secondary); }
-.seg-btn:active { background: var(--bg-active); }
-.seg-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+/* Compact toolbar variant keeps the dashboard's small control height. */
+.seg-btn.sm { height: var(--control-h-sm); padding: 0 var(--control-pad-x-xs); }
+.seg-btn.is-hover:not(.active), .seg-btn:hover:not(:disabled):not(.active) { background: var(--bg-hover); color: var(--text-secondary); }
+.seg-btn.is-active, .seg-btn:active:not(:disabled) { background: var(--bg-active); }
+.seg-btn:disabled { opacity: var(--state-disabled-opacity); cursor: not-allowed; }
 /* Selected segment last: it survives hover and press. */
-.seg-btn.active { background: var(--bg-elevated); color: var(--text-primary); box-shadow: 0 1px 2px rgba(0,0,0,0.3); }
+.seg-btn.active { background: var(--bg-elevated); color: var(--text-primary); box-shadow: var(--shadow-seg); }
+
+/* ---- Switch (role="switch") — pill track, round thumb ---- */
+.switch {
+  position: relative;
+  flex-shrink: 0;
+  width: var(--switch-track-w);
+  height: var(--switch-track-h);
+  padding: 0;
+  border: var(--control-border-w) solid var(--border-strong);
+  border-radius: var(--radius-switch);
+  background: var(--bg-elevated);
+  cursor: pointer;
+  transition: background var(--motion-fast), border-color var(--motion-fast);
+}
+.switch-thumb {
+  position: absolute;
+  top: calc(var(--switch-inset) - var(--control-border-w));
+  left: calc(var(--switch-inset) - var(--control-border-w));
+  width: var(--switch-thumb);
+  height: var(--switch-thumb);
+  border-radius: var(--radius-switch);
+  background: var(--on-strong);
+  transition: transform var(--motion-fast);
+}
+.switch.is-hover, .switch:hover:not(:disabled) { border-color: var(--border-hover); }
+.switch.is-active, .switch:active:not(:disabled) { background: var(--bg-active); }
+.switch:disabled { opacity: var(--state-disabled-opacity); cursor: not-allowed; }
+.switch[aria-busy="true"] { cursor: progress; }
+/* On last: it survives hover and press. */
+.switch[aria-checked="true"] { background: var(--accent); border-color: var(--accent); }
+.switch[aria-checked="true"] .switch-thumb {
+  background: var(--on-accent);
+  transform: translateX(calc(var(--switch-track-w) - var(--switch-thumb) - 2 * var(--switch-inset)));
+}
+
+/* ---- Empty & error states ---- */
+.empty {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  min-height: var(--empty-min-h);
+  text-align: center;
+  padding: var(--space-2xl);
+}
+.empty-inner { max-width: var(--empty-max-w); }
+.empty-icon {
+  width: var(--empty-icon);
+  height: var(--empty-icon);
+  border-radius: var(--radius-empty-icon);
+  background: var(--bg-panel);
+  border: var(--control-border-w) solid var(--border-subtle);
+  display: grid;
+  place-items: center;
+  color: var(--text-muted);
+  margin: 0 auto var(--space-lg);
+}
+.empty-title { font-family: var(--font-display); font-size: var(--fs-lg); font-weight: 600; margin-bottom: var(--space-sm); }
+.empty-body { color: var(--text-secondary); line-height: 1.55; }
+.empty-action { margin-top: var(--space-lg); }
+.error-state .empty-icon { color: var(--danger); background: var(--danger-soft); border-color: var(--danger-line); }
+.error-state .empty-title { color: var(--danger); }
+.error-state-detail { color: var(--text-muted); font-size: var(--fs-sm); overflow-wrap: anywhere; margin-top: var(--space-xs); }
 
 /* ---- Inputs ---- */
 .input {
@@ -313,8 +330,9 @@ html, body {
   color: var(--text-muted);
 }
 
-/* ---- Focus ring (keyboard) ---- */
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* ---- Focus ring (keyboard) — the ONE focus rule every kit control shares
+   (REQ-DESKTOP-013); --focus-ring resolves to the accent via --border-focus. */
+:focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-ring-offset); }
 
 /* ============================================================
    SPEC DETAIL — readable normative prose + acceptance checklist
@@ -322,7 +340,8 @@ html, body {
 .sp-prose { font-size: 15px; line-height: 1.62; color: var(--text-secondary); text-wrap: pretty; }
 .sp-prose strong, .sp-strong { color: var(--text-primary); font-weight: 600; }
 .sp-code {
-  font-family: var(--font-mono); font-size: 0.86em; font-feature-settings: "zero";
+  font-family: var(--font-mono); font-size: 0.86em; font-feature-settings: var(--font-mono-features);
+  font-variant-ligatures: none;
   background: var(--bg-canvas); color: var(--text-primary);
   padding: 1px 6px; border-radius: 5px; border: 1px solid var(--border-subtle);
   white-space: nowrap;
@@ -335,8 +354,7 @@ html, body {
 }
 .sp-kw-must   { color: var(--node-spec); background: var(--node-spec-soft); }
 .sp-kw-should { color: var(--warn);      background: var(--warn-soft); }
-.sp-kw-may    { color: var(--text-muted); background: rgba(255,255,255,0.05); }
-[data-theme="light"] .sp-kw-may { background: rgba(15,23,42,0.05); }
+.sp-kw-may    { color: var(--text-muted); background: var(--fill-soft); }
 
 /* Normative statement block */
 .sp-statement {
@@ -516,3 +534,13 @@ html, body {
 @media (prefers-reduced-motion: reduce) {
   * { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
 }
+
+/* Plan reader (REQ-DASHSIMPLE-003.A5): one reading-mode column — line length
+   capped at 75ch, document typography, nothing beside it. Tokens only. */
+.plan-reader { max-width: 75ch; margin: 0 auto; padding: var(--space-lg) var(--space-lg) var(--space-2xl); font-size: var(--fs-base); line-height: 1.6; }
+.plan-reader h2 { font-family: var(--font-display); font-size: var(--fs-title); margin: var(--space-xl) 0 var(--space-sm); }
+.plan-reader h3 { font-size: var(--fs-lg); margin: var(--space-lg) 0 var(--space-xs); }
+.plan-reader p { margin: 0 0 var(--space-sm); white-space: pre-wrap; }
+.plan-reader ul { margin: 0 0 var(--space-md); padding-left: var(--space-lg); }
+.plan-reader li { margin: var(--space-xs) 0; }
+.plan-reader a { color: inherit; }

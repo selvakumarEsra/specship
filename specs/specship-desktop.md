@@ -397,6 +397,12 @@ implementations:
 <!-- id: REQ-DESKTOP-012 -->
 ## The Specs panel MUST render explicit empty, loading, and error states
 
+> **PARTLY SUPERSEDED 2026-11-04** by REQ-DASHSIMPLE-004.A8 — the
+> no-selection clause and A1 are replaced: with requirements indexed, the
+> empty detail panel only invites picking a requirement and no longer shows
+> the indexing hint or the copyable `specship init -i` command. The loading,
+> error and unknown-state clauses (A2–A4) still apply. Kept for history.
+
 With no spec selected the panel renders a guidance empty state: the spec
 glyph, a "pick a spec from the tree" heading, and an indexing hint carrying
 a copyable `specship init -i` command. While detail data loads, the panel
@@ -411,7 +417,8 @@ implementations:
 ## Acceptance
 <!-- id: REQ-DESKTOP-012.A1 -->
 - With no selection, the empty state shows the guidance heading and the
-  copyable command.
+  copyable command. *(Superseded 2026-11-04 by REQ-DASHSIMPLE-004.A8 — the
+  copyable command is removed.)*
 <!-- id: REQ-DESKTOP-012.A2 -->
 - While loading, skeleton blocks render in place of the sections; the
   panel is never blank.
@@ -452,6 +459,8 @@ bespoke per-component timings.
 
 <!-- id: REQ-DESKTOP-014 -->
 ## The detail surfaces MUST be fully operable with assistive technology
+
+> **SUPERSEDED 2026-11-04 (light theme only)** by REQ-DASHTHEME-003 — the dashboard is dark-only; the contrast requirement now applies to the dark theme only.
 
 Keyboard alone completes the full path: navigate the tree, open a spec,
 activate Edit, edit every field in visual order, and Save or Cancel.
@@ -579,6 +588,10 @@ implementations:
 <!-- id: REQ-DESKTOP-018 -->
 ## The app shell MUST render the sidebar, status strip, and top bar per the snapshot, with deep-linkable routes
 
+> **SUPERSEDED 2026-11-04** by REQ-DASHSIMPLE-001 — sidebar layout replaced by the agent-agnostic navigation.
+
+> **SUPERSEDED 2026-11-04 (theme only)** by REQ-DASHTHEME-003 — the theme toggle and light theme are retired; the dashboard is dark-only.
+
 The sidebar renders two collapsible groups — Project (Dashboard, Graph,
 Specs, Drift queue, Runs) and Claude Code (Sessions, Heatmap, Costs,
 Compare projects, Memory, MCP, Tips) — plus Design system and Settings
@@ -600,7 +613,6 @@ implementations:
   - ui/src/App.tsx:ProjectSwitcher
   - ui/src/App.tsx:StatusStrip
   - ui/src/App.tsx:TopBar
-  - ui/src/App.tsx:ThemeToggle
   - ui/src/components/command-palette.tsx:CommandPalette
   - server/src/routes/projects.ts:attachDriftCounts
 
@@ -652,6 +664,8 @@ implementations:
 <!-- id: REQ-DESKTOP-020 -->
 ## The Dashboard screen MUST render the overview modules per the snapshot with live data
 
+> **SUPERSEDED 2026-11-04** by REQ-DASHSIMPLE-002 — the Dashboard is replaced by the agent-agnostic Overview; the transcript analytics modules are removed.
+
 The dashboard renders the snapshot's module grid: cost stat tiles (last
 session cost, saved this week, token breakdowns), cost ranking, cache
 analytics, the tool-call heatmap strip, recent prompts, the recent
@@ -660,10 +674,6 @@ Dismiss / View-in-Tips actions, plus cross-links (Open graph, Open
 heatmap) that navigate to their screens. Every module binds to live
 backend data and follows the shared loading / empty / error pattern
 (REQ-DESKTOP-012 generalized by REQ-DESKTOP-030).
-
-implementations:
-  - ui/src/pages/dashboard.tsx:DashboardPage
-  - ui/src/components/dashboard-modules.tsx:TipsRail
 
 ## Acceptance
 <!-- id: REQ-DESKTOP-020.A1 -->
@@ -711,6 +721,8 @@ implementations:
 <!-- id: REQ-DESKTOP-022 -->
 ## The Specs screen shell and Drift queue MUST render the live spec inventory
 
+> **SUPERSEDED 2026-11-04** by REQ-DASHSIMPLE-004 — the Specs screen and Drift queue are replaced by Review. Kept for history.
+
 The Specs screen renders the document-grouped requirement tree with
 per-requirement state pills and filters; selecting a requirement loads the
 detail contract (REQ-DESKTOP-001…016). The Drift queue screen lists every
@@ -718,9 +730,6 @@ drifted, broken, and orphaned link with its axis pill and the
 workflow-gated repair actions (REQ-DESKTOP-005), and its count matches the
 sidebar badge.
 
-implementations:
-  - ui/src/pages/specs.tsx:SpecsPage
-  - ui/src/pages/drift.tsx:DriftPage
 
 ## Acceptance
 <!-- id: REQ-DESKTOP-022.A1 -->
@@ -764,6 +773,8 @@ implementations:
 <!-- id: REQ-DESKTOP-024 -->
 ## The Claude Code analytics screens MUST render ingested transcript data per the snapshot
 
+> **SUPERSEDED 2026-11-04** by REQ-DASHSIMPLE-001 — the agent-specific analytics screens are removed. Kept for history.
+
 Sessions, Heatmap, Costs, Compare projects, and Tips render from ingested
 Claude Code transcript data: the sessions list and per-session detail
 with prompts and quality signals; the busiest-file / tool-call heatmap;
@@ -772,12 +783,6 @@ cross-project comparison table; and the tips list with severity grouping
 and Apply / Dismiss. Model and project filters apply across these
 screens.
 
-implementations:
-  - ui/src/pages/sessions.tsx:SessionsPage
-  - ui/src/pages/heatmap.tsx:HeatmapPage
-  - ui/src/pages/costs.tsx:CostsPage
-  - ui/src/pages/compare.tsx:ComparePage
-  - ui/src/pages/tips.tsx:TipsPage
 
 ## Acceptance
 <!-- id: REQ-DESKTOP-024.A1 -->
@@ -795,13 +800,13 @@ implementations:
 <!-- id: REQ-DESKTOP-025 -->
 ## The Memory screen MUST render the effective memory and its sources
 
+> **SUPERSEDED 2026-11-04** by REQ-DASHSIMPLE-001 — the Memory screen is removed. Kept for history.
+
 The screen lists the memory sources in scope (global and project
 CLAUDE.md files and their imports) with per-file scope, line count, and
 modified time; renders the composed effective-memory view; and offers
 copy-contents and reload actions.
 
-implementations:
-  - ui/src/pages/memory.tsx:MemoryPage
 
 ## Acceptance
 <!-- id: REQ-DESKTOP-025.A1 -->
@@ -818,6 +823,8 @@ implementations:
 <!-- id: REQ-DESKTOP-026 -->
 ## The MCP screen MUST render the configured MCP servers with live status
 
+> **SUPERSEDED 2026-11-04** by REQ-DASHSIMPLE-001 — the MCP screen is removed. Kept for history.
+
 The screen inventories MCP servers from the machine's client
 configurations with per-server status (connected, active, idle, failed,
 disabled), configuration detail, call statistics, and an example call;
@@ -829,7 +836,6 @@ Desktop/Cursor readers, per this fork's Claude-Code-only house rule; the
 snapshot's multi-client column renders only the Claude Code client.
 
 implementations:
-  - ui/src/pages/mcp.tsx:McpPage
   - server/src/routes/mcp.ts:deriveState
 
 ## Acceptance
@@ -876,6 +882,10 @@ authoritative for answer semantics.
 <!-- id: REQ-DESKTOP-028 -->
 ## The Settings and Design system screens MUST render live configuration and the token gallery
 
+> **SUPERSEDED 2026-11-04 (theme setting only)** by REQ-DASHTHEME-003 — Settings → Appearance no longer offers a theme choice, and the Design system gallery (A4) now renders the dark theme only; density, boot animation and the rest of the requirement still apply.
+
+> **SUPERSEDED 2026-11-04 (transcript-ingest toggle only)** by REQ-DASHSIMPLE-001 — the agent-named Claude Code section and its ingest toggle are removed from Settings (A2); the server's `/api/config` route is unchanged.
+
 Settings renders Appearance (theme, density, boot animation), Backend
 information, the Claude Code section (transcript-ingest toggle), Editor
 preferences, and About (real version and backend identity). The Design
@@ -891,7 +901,9 @@ implementations:
 <!-- id: REQ-DESKTOP-028.A1 -->
 - Appearance changes apply immediately and persist across reload.
 <!-- id: REQ-DESKTOP-028.A2 -->
-- The transcript-ingest toggle round-trips to the server's configuration
+- **SUPERSEDED 2026-11-04** by REQ-DASHSIMPLE-001 (A7) — Settings no longer
+  offers the agent-specific transcript-ingest toggle.
+  The transcript-ingest toggle round-trips to the server's configuration
   and analytics screens react to its state.
 <!-- id: REQ-DESKTOP-028.A3 -->
 - About shows the real product version and active database backend.

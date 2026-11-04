@@ -159,13 +159,13 @@ describe('TraceabilityPage (REQ-TVIZ-008)', () => {
     await screen.findByText('No requirement matches these filters.');
   });
 
-  it('A3: clicking a row opens that requirement on the Specs screen', async () => {
+  it('A3: clicking a row opens that requirement on the Review screen', async () => {
     mockFetch(ROUTES);
     render(<TraceabilityPage project={null} query={{}} />);
     await screen.findByText('REQ-A-1');
 
     fireEvent.click(rows()[1]!);
-    expect(location.pathname).toBe('/specs');
+    expect(location.pathname).toBe('/review');
     expect(location.search).toContain('sel=REQ-A-2');
   });
 

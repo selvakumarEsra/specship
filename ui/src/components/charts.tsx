@@ -27,7 +27,7 @@ export function Sparkline({ data, color, w = 80, h = 24, fill }: { data: number[
 // ---- Line chart with hover ----
 export interface LinePoint {
   day: number | string;
-  cost: number;
+  count: number;
   [key: string]: unknown;
 }
 
@@ -38,12 +38,12 @@ export function LineChart({ series, w = 640, h = 200, color = 'var(--accent)', x
   const pad = { l: 44, r: 12, t: 14, b: 24 };
   const iw = w - pad.l - pad.r;
   const ih = h - pad.t - pad.b;
-  const vals = series.map((s) => s.cost);
+  const vals = series.map((s) => s.count);
   const max = Math.max(...vals) * 1.12 || 1;
   const min = 0;
   const x = (i: number) => pad.l + (i / (series.length - 1)) * iw;
   const y = (v: number) => pad.t + ih - ((v - min) / (max - min)) * ih;
-  const line = series.map((s, i) => (i ? 'L' : 'M') + x(i).toFixed(1) + ' ' + y(s.cost).toFixed(1)).join(' ');
+  const line = series.map((s, i) => (i ? 'L' : 'M') + x(i).toFixed(1) + ' ' + y(s.count).toFixed(1)).join(' ');
   const area = line + ` L${x(series.length - 1)} ${pad.t + ih} L${pad.l} ${pad.t + ih} Z`;
   const yticks = 4;
   const hiPoint = hi != null ? series[hi] : undefined;
@@ -67,9 +67,9 @@ export function LineChart({ series, w = 640, h = 200, color = 'var(--accent)', x
         const yy = y(v);
         return (
           <g key={i}>
-            <line x1={pad.l} x2={w - pad.r} y1={yy} y2={yy} stroke="rgba(255,255,255,0.05)" />
+            <line x1={pad.l} x2={w - pad.r} y1={yy} y2={yy} stroke="var(--fill-soft)" />
             <text x={pad.l - 8} y={yy + 3} textAnchor="end" fontSize={10} fill="var(--text-muted)" fontFamily="var(--font-mono)">
-              {'$' + v.toFixed(0)}
+              {v.toFixed(0)}
             </text>
           </g>
         );
@@ -89,7 +89,7 @@ export function LineChart({ series, w = 640, h = 200, color = 'var(--accent)', x
       {hi != null && hiPoint && (
         <g>
           <line x1={x(hi)} x2={x(hi)} y1={pad.t} y2={pad.t + ih} stroke={color} opacity={0.4} strokeDasharray="3 3" />
-          <circle cx={x(hi)} cy={y(hiPoint.cost)} r={4} fill={color} stroke="var(--bg-canvas)" strokeWidth={2} />
+          <circle cx={x(hi)} cy={y(hiPoint.count)} r={4} fill={color} stroke="var(--bg-canvas)" strokeWidth={2} />
         </g>
       )}
     </svg>
@@ -99,14 +99,14 @@ export function LineChart({ series, w = 640, h = 200, color = 'var(--accent)', x
 // ---- Donut ----
 export interface DonutSlice {
   label: string;
-  cost: number;
+  count: number;
   color: string;
 }
 
 export function Donut({ data, size = 140, thickness = 22, centerLabel, centerSub }: {
   data: DonutSlice[]; size?: number; thickness?: number; centerLabel?: string; centerSub?: string;
 }) {
-  const total = data.reduce((a, b) => a + b.cost, 0) || 1;
+  const total = data.reduce((a, b) => a + b.count, 0) || 1;
   const r = (size - thickness) / 2;
   const cx = size / 2;
   const cy = size / 2;
@@ -115,9 +115,9 @@ export function Donut({ data, size = 140, thickness = 22, centerLabel, centerSub
   return (
     <div style={{ position: 'relative', width: size, height: size }}>
       <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
-        <circle cx={cx} cy={cy} r={r} fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth={thickness} />
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke="var(--fill-soft)" strokeWidth={thickness} />
         {data.map((d, i) => {
-          const frac = d.cost / total;
+          const frac = d.count / total;
           const dash = frac * circ;
           const el = (
             <circle
@@ -141,7 +141,7 @@ export function Donut({ data, size = 140, thickness = 22, centerLabel, centerSub
   );
 }
 
-// ---- Stacked horizontal bars (cost by model per project) ----
+// ---- Stacked horizontal bars (a per-row breakdown of counts) ----
 export interface StackedSegment {
   key: string;
   label: string;
@@ -309,17 +309,17 @@ export function Treemap({ items, height = 120, onPick, selKey }: {
           background: bg, borderRadius: 4, cursor: onPick ? 'pointer' : 'default', overflow: 'hidden',
           padding: big ? '5px 7px' : '0 5px', display: 'flex', flexDirection: 'column',
           justifyContent: big ? 'flex-start' : 'center',
-          border: on ? '1.5px solid var(--accent)' : '1px solid rgba(0,0,0,0.26)',
+          border: on ? '1.5px solid var(--accent)' : '1px solid var(--cell-border)',
         };
         return (
           <div key={c.key} onClick={onPick ? () => onPick(c) : undefined} title={c.title || c.label} style={cellStyle}>
             {mid && (
-              <span className="mono" style={{ fontSize: big ? 10 : 9, fontWeight: 500, color: t > 0.45 ? '#fff' : 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.25 }}>
+              <span className="mono" style={{ fontSize: big ? 10 : 9, fontWeight: 500, color: t > 0.45 ? 'var(--on-strong)' : 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.25 }}>
                 {c.label}
               </span>
             )}
             {big && c.sub && (
-              <span className="mono tabular" style={{ fontSize: 9, color: t > 0.45 ? 'rgba(255,255,255,0.8)' : 'var(--text-muted)', marginTop: 1 }}>
+              <span className="mono tabular" style={{ fontSize: 9, color: t > 0.45 ? 'var(--on-strong-muted)' : 'var(--text-muted)', marginTop: 1 }}>
                 {c.sub}
               </span>
             )}

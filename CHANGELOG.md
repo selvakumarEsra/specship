@@ -15,12 +15,17 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `specship check` now reports links that won't survive a merge: links that exist only in your local index and aren't declared in a spec file or code comment, and, with `--since <ref>`, links that worked at that ref but are broken on your branch (for example after a rename). Both are advisory by default; gate on them with `--strict` or `specship check --enable-gate undeclaredLinks branchBroken`. They need only the checked-out files and git, so they work in a fresh CI clone.
 - `specship status` (and the `specship_status` tool) now shows the branch and commit your index was built from next to the current HEAD, and warns that the index may be stale — suggesting `specship sync` — when you've switched commits or your uncommitted edits changed since the last sync. It never re-indexes on its own.
 - Teams can now require JIRA publishing to happen only in CI: set `"publishFrom": "ci"` under `jira` in `specship.config.json` (optionally `"publishBranch"`, default `main`). Sync, `specship jira publish --pending` and the `specship_jira_publish` tool then make no JIRA write on developer machines or other branches and report specs as pending CI publication. Work can start from the spec's epic before its issue exists. CI never commits or pushes, and a repeat CI run finds the issue it created earlier by a repo-specific label and updates it instead of creating a duplicate.
+- The dashboard is now dark-only; the theme toggle and Theme setting are gone.
+- The dashboard now uses the Space Grotesk and Bricolage Grotesque fonts from its design system. They ship with the dashboard, so it looks the same offline.
+- The dashboard's Plan screen now reads your specs as epics, stories and tasks in a single distraction-free column. You can collapse it to epics or stories, filter it, and open any story or task in Review. JIRA keys from your spec files link to their issues when a JIRA base URL is configured.
 
 ### Fixes
 
 - JavaScript and TypeScript functions, classes and variables that contain HTML-comment text (`<!--` or `-->`) inside a regex are no longer missing from the index. Before, those characters were mistaken for an old-style HTML comment and the whole declaration was dropped from search, callers and impact results. Existing indexes are repaired automatically on the next sync, with no reindex needed.
 - Deleting a spec file, or switching to a branch without it, now removes its requirements and links on the next sync instead of reporting them as drift.
 - `specship lint` now reports a requirement ID that is declared in more than one spec file — for example after merging two branches that picked the same ID — naming every file and line, even when you lint only some of the files.
+- Settings no longer shows an agent-specific transcript-ingest option.
+- Code text in the dashboard no longer renders `===`, `=>` or `!=` as ligatures, and the Design system screen's sample figures are plain counts instead of dollar amounts.
 
 ## [0.29.0] - 2026-10-27
 

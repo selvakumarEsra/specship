@@ -18,7 +18,7 @@ export const PORT_FAULT = BASE + 1;
 export const PORT_EMPTY = BASE + 2;
 
 /** The `/api` path substring the fault server is configured to fail. */
-export const FAULT_ROUTE = '/api/claude/stats';
+export const FAULT_ROUTE = '/api/workflows/runs';
 
 export const URL_MAIN = `http://127.0.0.1:${PORT_MAIN}`;
 export const URL_FAULT = `http://127.0.0.1:${PORT_FAULT}`;

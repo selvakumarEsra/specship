@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { api, type ConfigResponse } from './api';
 import { go } from './router';
 
 export interface ApiState<T> {
@@ -72,21 +71,6 @@ export function useApi<T>(fn: () => Promise<T>, deps: unknown[] = [], opts: UseA
 }
 
 /**
- * The server's runtime config (GET /api/config), refetched whenever anything
- * dispatches `specship-config` (the Settings ingest toggle does after a PUT)
- * so analytics screens react to the toggle in-session (REQ-DESKTOP-028.A2).
- */
-export function useIngestConfig(): ApiState<ConfigResponse> {
-  const state = useApi(() => api.config.get(), []);
-  const { reload } = state;
-  useEffect(() => {
-    window.addEventListener('specship-config', reload);
-    return () => window.removeEventListener('specship-config', reload);
-  }, [reload]);
-  return state;
-}
-
-/**
  * True when a keystroke belongs to a text-entry surface — chords and number
  * jumps must never fire there (REQ-DESKTOP-019.A3). The attribute check
  * backs up `isContentEditable` because jsdom never implements the latter.
@@ -103,14 +87,17 @@ export function isEditable(target: EventTarget | null): boolean {
 /** How long a bare `g` stays armed waiting for the chord's second key. */
 const CHORD_WINDOW_MS = 1000;
 
-/** g-chord destinations: g g → Graph, g s → Specs, g d → Drift queue. */
-const G_CHORDS: Record<string, string> = { g: 'graph', s: 'specs', d: 'drift' };
+/**
+ * g-chord destinations: g g → Graph; g s / g d → Review (the old Specs and
+ * Drift queue screens both live there now, REQ-DASHSIMPLE-001).
+ */
+const G_CHORDS: Record<string, string> = { g: 'graph', s: 'review', d: 'review' };
 
 /**
  * App-wide keyboard shortcuts (REQ-DESKTOP-019):
  *   - ⌘/Ctrl K toggles the command palette (global — works in editables too,
  *     the modifier keeps it unambiguous).
- *   - ⌘/Ctrl 1–7 jumps to `pageIds[0..6]` (the first seven nav items).
+ *   - ⌘/Ctrl 1–7 jumps to `pageIds[0..6]` (the nav items in sidebar order).
  *   - Bare `g` arms a chord for ~1 s; then g/s/d navigates (G_CHORDS).
  * Number jumps and chords are suppressed while focus is in an editable field.
  */
