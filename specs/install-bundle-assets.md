@@ -16,7 +16,7 @@ jira_fingerprint_REQ-INSTALL-ASSETS-002: 9cbf630fa2d49a71
 into the user's Claude Code config: the slash-command files (`commands/`), the
 `specship-explorer` subagent (`agents/`), and the plugin manifest / hooks
 (`.claude-plugin/`, `hooks/`). The installer resolves these from the package via
-`packageAssetPath` in `src/installer/targets/claude.ts`.
+`packageAssetPath` in `src/installer/targets/shared.ts`.
 
 The published package now ships in two shapes — the **non-bundled** root package
 (which lists `commands`/`agents`/`hooks`/`.claude-plugin` in `files[]`) and the
@@ -42,7 +42,7 @@ fresh install from the bundled package completes without a missing-file error an
 writes the same Claude Code config it writes from the non-bundled package.
 
 implementations:
-  - src/installer/targets/claude.ts:packageAssetPath
+  - src/installer/targets/shared.ts:packageAssetPath
   - src/installer/targets/claude.ts:writeCommandsEntries
   - src/installer/targets/claude.ts:writeAgentsEntries
 
