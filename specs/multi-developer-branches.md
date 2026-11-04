@@ -4,7 +4,19 @@ title: Multiple developers and branches on a shared repository
 owner: core
 priority: high
 version: 1
+epicKey: SSHIP-600
+jira: SSHIP-613
 depends_on: [LINK-TRUTH-DOC, JIRA-TEAM-DOC]
+jira_issue_REQ-MULTIDEV-001: SSHIP-601
+jira_fingerprint_REQ-MULTIDEV-001: 0d53f50b17925107
+jira_issue_REQ-MULTIDEV-002: SSHIP-606
+jira_fingerprint_REQ-MULTIDEV-002: 02aac467ff0a73f2
+jira_issue_REQ-MULTIDEV-003: SSHIP-613
+jira_fingerprint_REQ-MULTIDEV-003: 95eff5dffd8ec219
+jira_issue_REQ-MULTIDEV-004: SSHIP-618
+jira_fingerprint_REQ-MULTIDEV-004: 6953e12d2b6c3a2b
+jira_issue_REQ-MULTIDEV-005: SSHIP-624
+jira_fingerprint_REQ-MULTIDEV-005: a71d8111395be015
 ---
 
 <!-- id: MULTIDEV-DOC -->
