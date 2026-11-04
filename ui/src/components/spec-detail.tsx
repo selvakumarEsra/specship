@@ -147,25 +147,22 @@ function stateLabel(state: string): string {
 export type SpecDetailCache = Map<string, SpecDetailResponse>;
 
 // @implements REQ-DESKTOP-012
+// @implements REQ-DASHSIMPLE-004
 export function SpecDetail({ id, project, cache }: { id: string | null; project: string | null; cache?: SpecDetailCache }) {
   return id ? <SpecDetailLoaded id={id} project={project} cache={cache} /> : <NoSelection />;
 }
 
-/** No-selection guidance empty state (REQ-DESKTOP-012.A1). */
+/**
+ * No-selection empty state (REQ-DASHSIMPLE-004.A8, superseding
+ * REQ-DESKTOP-012.A1): requirements are already indexed when this renders,
+ * so it only invites picking one — no indexing hint, no `init` command.
+ */
 function NoSelection() {
   return (
     <Empty
       icon="book"
       title="Pick a requirement to read it"
-      body="Or run specship init -i to index your specs/ folder if you haven’t yet."
-      action={
-        <span className="row gap-6" style={{ justifyContent: 'center' }}>
-          <code className="mono" style={{ fontSize: 11.5, color: 'var(--accent)', background: 'var(--bg-canvas)', padding: '5px 10px', borderRadius: 6, border: '1px solid var(--border-subtle)' }}>
-            specship init -i
-          </code>
-          <CopyBtn text="specship init -i" />
-        </span>
-      }
+      body="Choose a requirement from the list to see its acceptance criteria, links and drift."
     />
   );
 }

@@ -134,9 +134,10 @@ describe('SpecDetail read view (REQ-DESKTOP-001…005, 012)', () => {
     const calls = mockFetch(routesWithDetails());
     const none = render(<SpecDetail id={null} project={null} />);
 
-    // No-selection guidance with the copyable command (REQ-DESKTOP-012.A1).
+    // No-selection guidance only — the indexing hint and copyable command
+    // were removed (REQ-DESKTOP-012.A1 superseded by REQ-DASHSIMPLE-004.A8).
     expect(screen.getByText('Pick a requirement to read it')).toBeTruthy();
-    expect(screen.getByText('specship init -i')).toBeTruthy();
+    expect(screen.queryByText('specship init -i')).toBeNull();
     none.unmount();
 
     // Skeleton shimmer appears immediately on selection (REQ-DESKTOP-012.A2)…
