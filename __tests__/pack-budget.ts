@@ -23,7 +23,11 @@ import * as path from 'path';
 // through the tarball gzip almost 1:1); 6,229,047 → 6,301,560 B unpacked;
 // 580 → 579 files. Checked for stale dist assets first — none (dist/ui/assets
 // is wiped per build).
-export const MAX_PACKED_BYTES = 2_450_000;
+// Raised 2.45 MB → 2.50 MB (2026-11-05, AGENTSWITCH-DOC): clean builds packed
+// 2,440,452 B / 583 files before REQ-AGENTSWITCH-006 and 2,450,373 B / 587
+// files after 006 + 007 (installed-agents record, agent detection). Measured
+// with `npm pack --dry-run` on a fresh dist; headroom covers 008/009/001–005.
+export const MAX_PACKED_BYTES = 2_500_000;
 // Raised 6.20 MB → 6.25 MB and 560 → 580 files (2026-10-27): the headless-agent
 // adapters (dist/workflows/agents/, REQ-AGENTADAPT-005–007) and the shared
 // criterion-id parser add 10 files / ~23 KB; no stale dist assets.
