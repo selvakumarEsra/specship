@@ -49,8 +49,8 @@ analytics; and deleting the transcript-ingest server routes (their removal is
 separate cleanup work).
 
 **Test plan.** Component tests in `ui/src/__tests__/` render each screen
-against fixture API responses, following the existing `dashboard.test.tsx` /
-`drift.test.tsx` pattern. Server tests cover any new or changed endpoint. The
+against fixture API responses, following the `overview.test.tsx` /
+`review.test.tsx` pattern. Server tests cover any new or changed endpoint. The
 existing `check-ui-deps` build step covers the dependency constraint.
 
 <!-- id: REQ-DASHSIMPLE-001 -->
@@ -118,6 +118,18 @@ charts.
 
 implementations:
   - ui/src/pages/dashboard.tsx:DashboardPage
+  - ui/src/pages/dashboard.tsx:useOverviewData
+  - ui/src/pages/dashboard.tsx:OverviewCounts
+  - ui/src/pages/dashboard.tsx:IndexFreshness
+  - ui/src/pages/dashboard.tsx:RecentRuns
+  - ui/src/pages/dashboard.tsx:OverviewEmpty
+  - ui/src/api.ts:runAgentName
+
+verifies:
+  - ui/src/__tests__/overview.test.tsx:reqDashsimple002A1
+  - ui/src/__tests__/overview.test.tsx:reqDashsimple002A2
+  - ui/src/__tests__/overview.test.tsx:reqDashsimple002A3
+  - ui/src/__tests__/overview.test.tsx:reqDashsimple002A4
 
 ## Acceptance
 <!-- id: REQ-DASHSIMPLE-002.A1 -->

@@ -74,7 +74,6 @@ unbounded ratios into delta slots are normalized to fractions.
 
 implementations:
   - ui/src/components/ui.tsx:Delta
-  - ui/src/components/dashboard-modules.tsx:fmtTok
 
 ## Acceptance
 <!-- id: REQ-DASHINT-002.A1 -->

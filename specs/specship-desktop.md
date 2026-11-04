@@ -658,6 +658,8 @@ implementations:
 <!-- id: REQ-DESKTOP-020 -->
 ## The Dashboard screen MUST render the overview modules per the snapshot with live data
 
+> **SUPERSEDED 2026-11-04** by REQ-DASHSIMPLE-002 — the Dashboard is replaced by the agent-agnostic Overview; the transcript analytics modules are removed.
+
 The dashboard renders the snapshot's module grid: cost stat tiles (last
 session cost, saved this week, token breakdowns), cost ranking, cache
 analytics, the tool-call heatmap strip, recent prompts, the recent
@@ -666,10 +668,6 @@ Dismiss / View-in-Tips actions, plus cross-links (Open graph, Open
 heatmap) that navigate to their screens. Every module binds to live
 backend data and follows the shared loading / empty / error pattern
 (REQ-DESKTOP-012 generalized by REQ-DESKTOP-030).
-
-implementations:
-  - ui/src/pages/dashboard.tsx:DashboardPage
-  - ui/src/components/dashboard-modules.tsx:TipsRail
 
 ## Acceptance
 <!-- id: REQ-DESKTOP-020.A1 -->

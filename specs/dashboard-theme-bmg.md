@@ -115,7 +115,6 @@ once nothing uses them.
 
 implementations:
   - ui/src/components/dashboard-modules.tsx:StatTile
-  - ui/src/components/dashboard-modules.tsx:CacheCard
   - ui/src/main.tsx
   - ui/src/styles/fonts.css
   - ui/src/styles/tokens.css
