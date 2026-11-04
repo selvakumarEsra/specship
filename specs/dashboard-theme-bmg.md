@@ -6,6 +6,16 @@ priority: high
 version: 1
 epicKey: SSHIP-635
 depends_on: [DASHSIMPLE-DOC, DASH-LEAN-DOC, SPECSHIP-DESKTOP-DOC]
+jira_issue_REQ-DASHTHEME-001: SSHIP-669
+jira_fingerprint_REQ-DASHTHEME-001: 471e2f3e73573424
+jira_issue_REQ-DASHTHEME-002: SSHIP-674
+jira_fingerprint_REQ-DASHTHEME-002: 0882cc044e6b4aee
+jira_issue_REQ-DASHTHEME-003: SSHIP-680
+jira_fingerprint_REQ-DASHTHEME-003: d6a26ecd74e617cf
+jira_issue_REQ-DASHTHEME-004: SSHIP-685
+jira_fingerprint_REQ-DASHTHEME-004: 1eadba9dffa1e591
+jira_issue_REQ-DASHTHEME-005: SSHIP-690
+jira_fingerprint_REQ-DASHTHEME-005: aa6e2dc594abb15a
 ---
 
 <!-- id: DASHTHEME-DOC -->
