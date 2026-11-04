@@ -5,6 +5,7 @@ owner: extraction
 priority: high
 version: 1
 epicKey: SSHIP-583
+jira: SSHIP-584
 jira_issue_REQ-HTMLLEX-001: SSHIP-584
 jira_fingerprint_REQ-HTMLLEX-001: d6638bb81bc1580e
 jira_issue_REQ-HTMLLEX-002: SSHIP-591
