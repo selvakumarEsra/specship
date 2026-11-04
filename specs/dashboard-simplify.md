@@ -72,6 +72,7 @@ implementations:
   - ui/src/router.ts:resolveRedirect
   - ui/src/router.ts:parse
   - ui/src/components/command-palette.tsx:CommandPalette
+  - ui/src/pages/settings.tsx:SettingsPage
 
 verifies:
   - ui/src/__tests__/navigation.test.tsx:reqDashsimple001A1
@@ -80,6 +81,7 @@ verifies:
   - ui/src/__tests__/navigation.test.tsx:reqDashsimple001A4
   - ui/src/__tests__/navigation.test.tsx:reqDashsimple001A5
   - __tests__/ui-build-guard.test.ts:reqDashsimple001A6
+  - ui/src/__tests__/navigation.test.tsx:reqDashsimple001A7
 
 ## Acceptance
 <!-- id: REQ-DASHSIMPLE-001.A1 -->

@@ -8,7 +8,9 @@
  *   A3 the ⌘K palette offers no removed screen;
  *   A4 no sidebar, palette or screen-title text names a coding agent;
  *   A5 specs/specship-desktop.md carries the dated SUPERSEDED note on
- *      REQ-DESKTOP-018.
+ *      REQ-DESKTOP-018;
+ *   A7 no screen (Settings included) has a section, label or control named
+ *      after a coding agent, and transcript ingest is not offered.
  */
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -194,10 +196,35 @@ function reqDashsimple001A5(): void {
   expect(section).toMatch(/SUPERSEDED \d{4}-\d{2}-\d{2}\*{0,2} by REQ-DASHSIMPLE-001/);
 }
 
+async function reqDashsimple001A7(): Promise<void> {
+  const routes = ['dashboard', 'plan', 'review', 'graph', 'traceability', 'runs', 'workflows', 'settings', 'designsystem'];
+  for (const r of routes) {
+    renderAt('/' + r);
+    await waitFor(() => expect(document.querySelector('[data-screen]')).not.toBeNull());
+    // Let each screen's fixture fetches settle so section bodies render.
+    await act(async () => { await new Promise((res) => setTimeout(res, 30)); });
+    const shown = document.querySelector('[data-screen]') as HTMLElement;
+    // Whole-screen text: section headings, labels and descriptions alike.
+    expect(shown.textContent ?? '', `screen text on /${r}`).not.toMatch(AGENT_NAMES);
+    for (const el of Array.from(shown.querySelectorAll<HTMLElement>('[role="switch"], button, input, select, textarea'))) {
+      const name = [el.getAttribute('aria-label'), el.getAttribute('title'), el.getAttribute('placeholder'), el.textContent]
+        .filter(Boolean).join(' ');
+      expect(name, `control on /${r}`).not.toMatch(AGENT_NAMES);
+    }
+    if (r === 'settings') {
+      expect(screen.queryByText(/transcript ingest/i)).toBeNull();
+      expect(screen.queryByRole('switch', { name: /ingest/i })).toBeNull();
+      expect(shown.textContent ?? '').not.toContain('~/.claude');
+    }
+    cleanup();
+  }
+}
+
 describe('agent-agnostic navigation (REQ-DASHSIMPLE-001)', () => {
   it('REQ-DASHSIMPLE-001.A1: the sidebar lists exactly the agent-agnostic screens, then Settings and Design system', reqDashsimple001A1);
   it('REQ-DASHSIMPLE-001.A2: retired routes redirect to Overview or Review, keeping a requirement id', reqDashsimple001A2);
   it('REQ-DASHSIMPLE-001.A3: the command palette offers no removed screen', reqDashsimple001A3);
   it('REQ-DASHSIMPLE-001.A4: no sidebar, palette or screen-title text names a coding agent', reqDashsimple001A4);
   it('REQ-DASHSIMPLE-001.A5: specship-desktop.md marks REQ-DESKTOP-018 SUPERSEDED by REQ-DASHSIMPLE-001', reqDashsimple001A5);
+  it('REQ-DASHSIMPLE-001.A7: no screen has a section, label or control named after a coding agent; transcript ingest is not offered', reqDashsimple001A7);
 });
