@@ -208,7 +208,11 @@ describe('control-state CSS contract (REQ-DESKTOP-013)', () => {
   });
 
   it('A4: the global focus-visible ring renders in the accent token', () => {
-    expect(cssRule(':focus-visible')).toContain('var(--accent)');
+    // REQ-DASHTHEME-004: the ring is the shared --focus-ring token, which
+    // resolves through --border-focus to the accent.
+    expect(cssRule(':focus-visible')).toContain('var(--focus-ring)');
+    expect(CSS).toMatch(/--focus-ring:\s*2px solid var\(--border-focus\)/);
+    expect(CSS).toMatch(/--border-focus:\s*var\(--bmg-color-accent\)/);
   });
 
   it('A1 (rendered): selection is class/ARIA-driven with no inline background for hover handlers to fight', async () => {

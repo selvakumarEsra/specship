@@ -1,5 +1,6 @@
 /**
- * Design system — the living token gallery (REQ-DESKTOP-028.A4). Every
+ * Design system — the living token gallery (REQ-DESKTOP-028.A4) and the
+ * shared UI kit in every state (REQ-DASHTHEME-004.A2). Every
  * swatch, control state, and pill renders `var(<token>)` from the manifest in
  * ../tokens, so it is the LIVE token value, never a hard-coded hex. The
  * gallery is rendered once, in the dark theme wrapper — the dashboard is
@@ -10,10 +11,13 @@
 import { useState } from 'react';
 import { Donut, HBars, LineChart, Sparkline, StackedBars, Treemap } from '../components/charts';
 import { GraphCanvas } from '../components/graph';
-import { PageHead, Pill, SampleBadge, Segmented, StatePill } from '../components/ui';
+import { StatTile } from '../components/dashboard-modules';
+import { Button, Chip, Empty, ErrorState, PageHead, Pill, SampleBadge, Segmented, StatePill, Switch } from '../components/ui';
 import {
   BUTTON_VARIANTS,
   FORCED_STATE_CLASS,
+  KIT_COMPONENT_STATES,
+  type KitState,
   NODE_TOKENS,
   PILL_GROUPS,
   RADIUS_TOKENS,
@@ -40,6 +44,140 @@ function Swatch({ tok }: { tok: TokenSwatch }) {
       <div style={{ fontSize: 11, fontWeight: 500 }}>{tok.name}</div>
       <div className="mono muted" style={{ fontSize: 10 }}>{tok.varName}</div>
     </div>
+  );
+}
+
+/**
+ * One kit sample in one state. data-kit / data-kit-state let the
+ * REQ-DASHTHEME-004.A2 test prove every component renders in every state.
+ */
+function KitSample({ kit, state, children }: { kit: string; state: KitState; children: React.ReactNode }) {
+  return (
+    <div data-kit={kit} data-kit-state={state} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-xs)', alignItems: 'flex-start' }}>
+      {children}
+      <div className="mono muted" style={{ fontSize: 'var(--fs-xs)' }}>{state}</div>
+    </div>
+  );
+}
+
+const noop = () => undefined;
+const forced = (st: KitState) => FORCED_STATE_CLASS[st];
+
+/** Every shared-kit component in each of its states (REQ-DASHTHEME-004.A2). */
+function KitGallery() {
+  return (
+    <>
+      <DSBlock title="Buttons · every state" span>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
+          {BUTTON_VARIANTS.map((v) => (
+            <div key={v.variant} className="row gap-10" style={{ flexWrap: 'wrap', alignItems: 'flex-start' }}>
+              {v.states.map((st) => (
+                <KitSample key={st} kit="button" state={st}>
+                  <Button
+                    variant={v.variant}
+                    size="sm"
+                    className={forced(st)}
+                    disabled={st === 'disabled'}
+                    loading={st === 'loading'}
+                    aria-label={`${v.label} ${st}`}
+                  >
+                    {v.label}
+                  </Button>
+                </KitSample>
+              ))}
+            </div>
+          ))}
+        </div>
+      </DSBlock>
+
+      <DSBlock title="Cards · every state">
+        <div className="row gap-10" style={{ flexWrap: 'wrap', alignItems: 'flex-start' }}>
+          {KIT_COMPONENT_STATES.card!.map((st) => (
+            <KitSample key={st} kit="card" state={st}>
+              {st === 'default'
+                ? <div className="card card-pad">Card</div>
+                : <button type="button" className={'card card-btn card-pad' + (forced(st) ? ' ' + forced(st) : '')} disabled={st === 'disabled'}>Clickable card</button>}
+            </KitSample>
+          ))}
+        </div>
+      </DSBlock>
+
+      <DSBlock title="Stat tiles · every state">
+        <div className="row gap-10" style={{ flexWrap: 'wrap', alignItems: 'flex-start' }}>
+          {KIT_COMPONENT_STATES['stat-tile']!.map((st) => (
+            <KitSample key={st} kit="stat-tile" state={st}>
+              {st === 'loading'
+                ? <div className="skel" aria-busy="true" aria-label="Loading stat" style={{ width: 'var(--empty-icon)', height: 'var(--empty-icon)' }} />
+                : <StatTile icon="check" label="Verified" value="42" note="links" className={forced(st)} disabled={st === 'disabled'} onClick={noop} />}
+            </KitSample>
+          ))}
+        </div>
+      </DSBlock>
+
+      <DSBlock title="Chips · every state">
+        <div className="row gap-10" style={{ flexWrap: 'wrap', alignItems: 'flex-start' }}>
+          {KIT_COMPONENT_STATES.chip!.map((st) => (
+            <KitSample key={st} kit="chip" state={st}>
+              <Chip
+                label="Spec"
+                count={12}
+                color="var(--node-spec)"
+                active={st === 'on'}
+                className={forced(st)}
+                disabled={st === 'disabled'}
+                onClick={noop}
+              />
+            </KitSample>
+          ))}
+        </div>
+      </DSBlock>
+
+      <DSBlock title="Segmented · every state">
+        <div className="row gap-10" style={{ flexWrap: 'wrap', alignItems: 'flex-start' }}>
+          {KIT_COMPONENT_STATES.segmented!.map((st) => (
+            <KitSample key={st} kit="segmented" state={st}>
+              {st === 'hover' || st === 'pressed' ? (
+                // Static mirror: the forced class sits on the unselected segment.
+                <div className="seg" role="radiogroup" aria-label={`Segmented ${st}`}>
+                  <button type="button" role="radio" aria-checked className="seg-btn active" tabIndex={-1}>Day</button>
+                  <button type="button" role="radio" aria-checked={false} className={'seg-btn ' + forced(st)} tabIndex={-1}>Week</button>
+                </div>
+              ) : (
+                <Segmented options={['Day', 'Week']} value="Day" onChange={noop} disabled={st === 'disabled'} label={`Segmented ${st}`} />
+              )}
+            </KitSample>
+          ))}
+        </div>
+      </DSBlock>
+
+      <DSBlock title="Switches · every state">
+        <div className="row gap-10" style={{ flexWrap: 'wrap', alignItems: 'flex-start' }}>
+          {KIT_COMPONENT_STATES.switch!.map((st) => (
+            <KitSample key={st} kit="switch" state={st}>
+              <Switch
+                checked={st === 'on'}
+                onChange={noop}
+                label={`Switch ${st}`}
+                className={forced(st)}
+                disabled={st === 'disabled'}
+                busy={st === 'loading'}
+              />
+            </KitSample>
+          ))}
+        </div>
+      </DSBlock>
+
+      <DSBlock title="Empty & error states" span>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 'var(--space-md)' }}>
+          <KitSample kit="empty" state="default">
+            <Empty icon="book" title="No specs yet" body="Author one with the spec-author skill." action={<Button variant="outline" size="sm">Learn how</Button>} />
+          </KitSample>
+          <KitSample kit="error" state="default">
+            <ErrorState title="Couldn't load specs" detail="fetch failed: 503" action={<Button variant="outline" size="sm">Retry</Button>} />
+          </KitSample>
+        </div>
+      </DSBlock>
+    </>
   );
 }
 
@@ -112,28 +250,7 @@ function Gallery() {
         </div>
       </DSBlock>
 
-      <DSBlock title="Buttons · every state">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {BUTTON_VARIANTS.map((v) => (
-            <div key={v.className} className="row gap-6" style={{ flexWrap: 'wrap' }}>
-              {v.states.map((st) => {
-                const forced = FORCED_STATE_CLASS[st];
-                return (
-                  <button
-                    key={st}
-                    className={`btn ${v.className} btn-sm${forced ? ' ' + forced : ''}`}
-                    disabled={st === 'disabled' || st === 'loading'}
-                    aria-busy={st === 'loading'}
-                    aria-label={`${v.label} ${st}`}
-                  >
-                    {v.label} · {st}
-                  </button>
-                );
-              })}
-            </div>
-          ))}
-        </div>
-      </DSBlock>
+      <KitGallery />
 
       {PILL_GROUPS.map((g) => (
         <DSBlock key={g.label} title={g.label}>
@@ -144,7 +261,7 @@ function Gallery() {
       ))}
 
       <DSBlock title="Pills & badges">
-        <div className="row gap-8" style={{ flexWrap: 'wrap' }}>
+        <div className="row gap-8" style={{ flexWrap: 'wrap' }} data-kit="badge" data-kit-state="default">
           <Pill color="var(--accent)" bg="var(--accent-soft)" dot>custom</Pill>
           <Pill color="var(--node-code)" bg="var(--node-code-soft)">code</Pill>
           <Pill color="var(--text-secondary)" bg="var(--bg-elevated)">neutral</Pill>
@@ -232,6 +349,7 @@ function Primitives() {
   );
 }
 
+// @implements REQ-DASHTHEME-004
 export function DesignSystemPage() {
   return (
     <div className="scroll-y" style={{ flex: 1, padding: 22 }}>

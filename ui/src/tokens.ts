@@ -153,22 +153,46 @@ export const ADOPTED_BMG_TOKENS: Record<string, string> = {
 };
 
 /**
- * Button control states per variant. Only states app.css actually documents
- * appear here: hover exists for every variant; pressed (`:active` → the
- * .is-active mirror) only for secondary/ghost; disabled is the shared
- * `.btn:disabled`; loading is the app's disabled-with-spinner treatment.
+ * Kit control states (REQ-DASHTHEME-004). Every button variant documents all
+ * five in app.css: hover and pressed (`:hover` / `:active`, mirrored by the
+ * gallery-only .is-hover / .is-active classes), the shared `.btn:disabled`,
+ * and loading (`aria-busy` → spinner, also disabled).
  */
 export type ButtonState = 'default' | 'hover' | 'pressed' | 'disabled' | 'loading';
 
-export const BUTTON_VARIANTS: Array<{ label: string; className: string; states: ButtonState[] }> = [
-  { label: 'Primary', className: 'btn-primary', states: ['default', 'hover', 'disabled', 'loading'] },
-  { label: 'Secondary', className: 'btn-secondary', states: ['default', 'hover', 'pressed', 'disabled', 'loading'] },
-  { label: 'Ghost', className: 'btn-ghost', states: ['default', 'hover', 'pressed', 'disabled'] },
-  { label: 'Destructive', className: 'btn-destructive', states: ['default', 'hover', 'disabled'] },
+const ALL_BUTTON_STATES: ButtonState[] = ['default', 'hover', 'pressed', 'disabled', 'loading'];
+
+export const BUTTON_VARIANTS: Array<{ label: string; variant: 'primary' | 'ghost' | 'outline' | 'secondary' | 'destructive'; states: ButtonState[] }> = [
+  { label: 'Primary', variant: 'primary', states: ALL_BUTTON_STATES },
+  { label: 'Ghost', variant: 'ghost', states: ALL_BUTTON_STATES },
+  { label: 'Outline', variant: 'outline', states: ALL_BUTTON_STATES },
+  // Kept aliases (existing screens) — shown so they stay eyeball-verifiable.
+  { label: 'Secondary', variant: 'secondary', states: ALL_BUTTON_STATES },
+  { label: 'Destructive', variant: 'destructive', states: ALL_BUTTON_STATES },
 ];
 
+/** A kit state the gallery renders; `on` is the checked/pressed-toggle state. */
+export type KitState = ButtonState | 'on';
+
+/**
+ * Every shared-kit component and the states the Design system screen renders
+ * for it (REQ-DASHTHEME-004.A2). The gallery tags each sample with
+ * data-kit / data-kit-state so the test can prove full coverage.
+ */
+export const KIT_COMPONENT_STATES: Record<string, KitState[]> = {
+  button: ALL_BUTTON_STATES,
+  card: ['default', 'hover', 'pressed', 'disabled'],
+  'stat-tile': ['default', 'hover', 'pressed', 'disabled', 'loading'],
+  badge: ['default'],
+  chip: ['default', 'on', 'hover', 'pressed', 'disabled'],
+  segmented: ['default', 'hover', 'pressed', 'disabled'],
+  switch: ['default', 'on', 'hover', 'pressed', 'disabled', 'loading'],
+  empty: ['default'],
+  error: ['default'],
+};
+
 /** Gallery-only forced-state classes (app.css mirrors of the pseudo states). */
-export const FORCED_STATE_CLASS: Partial<Record<ButtonState, string>> = {
+export const FORCED_STATE_CLASS: Partial<Record<KitState, string>> = {
   hover: 'is-hover',
   pressed: 'is-active',
 };

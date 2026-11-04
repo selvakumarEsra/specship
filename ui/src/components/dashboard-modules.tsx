@@ -21,7 +21,7 @@ import { go } from '../router';
 import { Sparkline, Treemap } from './charts';
 import { GraphCanvas, spiralLayout, type CanvasEdge, type CanvasNode } from './graph';
 import { Icon } from './icons';
-import { Bar, Delta } from './ui';
+import { Bar, Button, Delta } from './ui';
 
 /** Token-count formatter shared by the analytics modules (design's fmtK). */
 export const fmtTok = (n: number): string =>
@@ -73,7 +73,7 @@ export function Module<T>({ state, label, minHeight, children }: {
             <span style={{ fontSize: 12.5, fontWeight: 600 }}>Couldn't load {label}</span>
           </div>
           <div className="muted" style={{ fontSize: 11.5, marginTop: 4, overflowWrap: 'anywhere' }}>{msg}</div>
-          <button className="btn btn-secondary btn-xs" style={{ marginTop: 10 }} onClick={state.reload}>Retry</button>
+          <Button variant="outline" size="xs" style={{ marginTop: 10 }} onClick={state.reload}>Retry</Button>
         </div>
       </div>
     );
@@ -103,9 +103,9 @@ export function NeedsIngest({ onIngested }: { onIngested?: () => void }) {
         <div className="muted" style={{ fontSize: 11.5, lineHeight: 1.5 }}>
           Usage modules light up once SpecShip ingests your transcripts from ~/.claude/projects — run an ingest pass now, or use Refresh in the status strip.
         </div>
-        <button className="btn btn-secondary btn-xs" style={{ marginTop: 10 }} onClick={run} disabled={running}>
+        <Button variant="outline" size="xs" style={{ marginTop: 10 }} onClick={run} disabled={running}>
           {running ? 'Ingesting…' : 'Run ingest now'}
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -147,26 +147,32 @@ function CardHead({ icon, iconColor, title, sub, action, pad }: {
 
 // ---- Stat tiles ----
 
-export function StatTile({ icon, label, value, delta, deltaInvert, spark, sparkColor, color, note, onClick }: {
+/** Stat tile (REQ-DASHTHEME-004): a clickable kit card; look and states come from `.card-btn` / `.stat-tile*`. */
+// @implements REQ-DASHTHEME-004
+export function StatTile({ icon, label, value, delta, deltaInvert, spark, sparkColor, color, note, onClick, className, disabled }: {
   icon: string; label: string; value: string; delta?: number; deltaInvert?: boolean;
   spark?: number[]; sparkColor?: string; color?: string; note?: string; onClick?: () => void;
+  /** Gallery-only forced-state class (`is-hover` / `is-active`). */
+  className?: string;
+  disabled?: boolean;
 }) {
   return (
     <button
+      type="button"
       onClick={onClick}
-      className="card card-btn"
-      style={{ textAlign: 'left', padding: '11px 13px', display: 'flex', flexDirection: 'column', gap: 6 }}
+      disabled={disabled}
+      className={'card card-btn stat-tile' + (className ? ' ' + className : '')}
     >
-      <div className="row gap-8" style={{ color: 'var(--text-muted)' }}>
+      <div className="row gap-8 muted">
         <Icon name={icon} size={13} style={{ color: color || 'var(--text-muted)' }} />
-        <span className="eyebrow" style={{ letterSpacing: '0.04em' }}>{label}</span>
+        <span className="eyebrow stat-tile-label">{label}</span>
       </div>
-      <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-end', gap: 8 }}>
-        <div className="tabular display-num" style={{ fontSize: 23, fontWeight: 650, letterSpacing: '-0.02em', lineHeight: 1 }}>{value}</div>
+      <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-end', gap: 'var(--space-sm)' }}>
+        <div className="tabular display-num">{value}</div>
         {spark && spark.length > 1 && <Sparkline data={spark} color={sparkColor || color || 'var(--accent)'} fill w={64} h={22} />}
       </div>
       {note
-        ? <div className="muted" style={{ fontSize: 10.5 }}>{note}</div>
+        ? <div className="stat-tile-note">{note}</div>
         : delta !== undefined && <Delta value={delta} invert={deltaInvert} />}
     </button>
   );
@@ -252,8 +258,8 @@ function TipRow({ tip, onApply, onDismiss }: { tip: ClaudeTip; onApply: () => vo
               <Icon name="check" size={11} />Applied
             </span>
           )
-          : <button className="btn btn-secondary btn-xs" onClick={(e) => { e.stopPropagation(); onApply(); }} title="Mark applied">Apply</button>}
-        <button className="btn btn-ghost btn-xs" onClick={(e) => { e.stopPropagation(); onDismiss(); }} title="Dismiss"><Icon name="x" size={12} /></button>
+          : <Button variant="outline" size="xs" onClick={(e) => { e.stopPropagation(); onApply(); }} title="Mark applied">Apply</Button>}
+        <Button variant="ghost" size="xs" onClick={(e) => { e.stopPropagation(); onDismiss(); }} title="Dismiss"><Icon name="x" size={12} /></Button>
       </div>
     </div>
   );

@@ -9,7 +9,7 @@ import { api, isNoProject, type DriftLink } from '../api';
 import { useApi } from '../hooks';
 import { go } from '../router';
 import { Icon } from '../components/icons';
-import { Empty, PageHead, Pill, STATE, StatePill, timeAgo } from '../components/ui';
+import { Button, Chip, Empty, PageHead, Pill, STATE, StatePill, timeAgo } from '../components/ui';
 import type { PageProps } from './types';
 
 const DRIFT_STATES = ['drifted', 'broken', 'orphaned'];
@@ -56,21 +56,17 @@ export function DriftPage({ project }: PageProps) {
           const on = !off.has(s);
           const st = STATE[s]!;
           return (
-            <button
+            <Chip
               key={s}
+              label={s}
+              count={counts[s] ?? 0}
+              active={on}
               onClick={() => toggle(s)}
-              className="row gap-6"
-              style={{
-                height: 26, padding: '0 10px', borderRadius: 999, fontSize: 11.5, fontWeight: 500,
-                cursor: 'pointer', textTransform: 'capitalize',
-                border: '1px solid ' + (on ? 'transparent' : 'var(--border-subtle)'),
-                background: on ? st.bg : 'var(--bg-panel)',
-                color: on ? st.color : 'var(--text-muted)',
-              }}
-            >
-              {s}
-              <span className="tabular" style={{ opacity: 0.7 }}>{counts[s] ?? 0}</span>
-            </button>
+              color={st.color}
+              bg={st.bg}
+              dot={false}
+              className="chip-cap"
+            />
           );
         })}
       </div>
@@ -147,12 +143,12 @@ function DriftRow({ link, project }: { link: DriftLink; project: string | null }
           </div>
           <div className="row gap-8">
             {repair && (
-              <button className="btn btn-primary btn-sm" disabled={launching} title={repair.title} onClick={launch}>
-                <Icon name={repair.icon} size={12} />{launching ? 'Launching…' : repair.label}
-              </button>
+              <Button variant="primary" size="sm" loading={launching} title={repair.title} onClick={launch}>
+                {!launching && <Icon name={repair.icon} size={12} />}{launching ? 'Launching…' : repair.label}
+              </Button>
             )}
-            <button className="btn btn-secondary btn-sm" onClick={() => go('specs', { query: { sel: link.specId } })}>Open spec</button>
-            <button className="btn btn-secondary btn-sm" onClick={() => go('graph', { query: { focus: 'spec:' + link.specId } })}>Show in graph</button>
+            <Button variant="outline" size="sm" onClick={() => go('specs', { query: { sel: link.specId } })}>Open spec</Button>
+            <Button variant="outline" size="sm" onClick={() => go('graph', { query: { focus: 'spec:' + link.specId } })}>Show in graph</Button>
           </div>
           {launchError && (
             <div className="row gap-6" role="alert" style={{ marginTop: 8, color: 'var(--error)', fontSize: 12 }}>
