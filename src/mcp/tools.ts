@@ -20,6 +20,8 @@ const loadSpecShip = (): typeof import('../index').default =>
 import {
   detectWorktreeIndexMismatch,
   worktreeMismatchWarning,
+  indexStaleNotice,
+  formatRevision,
   worktreeMismatchNotice,
   type WorktreeIndexMismatch,
 } from '../sync/worktree';
@@ -3645,6 +3647,17 @@ export class ToolHandler {
       `**Total edges:** ${stats.edgeCount}`,
       `**Database size:** ${(stats.dbSizeBytes / 1024 / 1024).toFixed(2)} MB`,
     );
+
+    // Recorded index revision vs live HEAD (REQ-MULTIDEV-004). Report-only —
+    // a moved HEAD never triggers a sync from here.
+    const freshness = cg.getIndexFreshness();
+    if (freshness) {
+      lines.push(
+        `**Indexed:** ${formatRevision(freshness.indexedBranch, freshness.indexedCommit)}`,
+        `**HEAD:** ${formatRevision(freshness.headBranch, freshness.headCommit)}`,
+      );
+      if (freshness.stale) lines.push(`**⚠ ${indexStaleNotice(freshness)}**`);
+    }
 
     // Surface the active SQLite backend (node:sqlite, Node's built-in real
     // SQLite — full WAL + FTS5, no native build).

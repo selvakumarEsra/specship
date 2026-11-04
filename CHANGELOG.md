@@ -12,6 +12,7 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### New Features
 
 - `specship check` now reports links that won't survive a merge: links that exist only in your local index and aren't declared in a spec file or code comment, and, with `--since <ref>`, links that worked at that ref but are broken on your branch (for example after a rename). Both are advisory by default; gate on them with `--strict` or `specship check --enable-gate undeclaredLinks branchBroken`. They need only the checked-out files and git, so they work in a fresh CI clone.
+- `specship status` (and the `specship_status` tool) now shows the branch and commit your index was built from next to the current HEAD, and warns that the index may be stale — suggesting `specship sync` — when you've switched commits or your uncommitted edits changed since the last sync. It never re-indexes on its own.
 
 ### Fixes
 

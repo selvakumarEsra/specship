@@ -27,7 +27,13 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
 import { getSpecShipDir, isInitialized } from '../directory';
-import { detectWorktreeIndexMismatch, worktreeMismatchWarning } from '../sync/worktree';
+import {
+  detectWorktreeIndexMismatch,
+  worktreeMismatchWarning,
+  indexFreshnessJsonFields,
+  indexStaleNotice,
+  formatRevision,
+} from '../sync/worktree';
 import { createShimmerProgress } from '../ui/shimmer-progress';
 import { getGlyphs } from '../ui/glyphs';
 
@@ -1088,6 +1094,9 @@ program
       const changes = cg.getChangedFiles();
       const backend = cg.getBackend();
       const journalMode = cg.getJournalMode();
+      // Recorded index revision vs live HEAD (REQ-MULTIDEV-004). Report-only:
+      // nothing here syncs because HEAD moved.
+      const freshness = cg.getIndexFreshness();
 
       // JSON output mode
       if (options.json) {
@@ -1114,6 +1123,7 @@ program
           worktreeMismatch: worktreeMismatch
             ? { worktreeRoot: worktreeMismatch.worktreeRoot, indexRoot: worktreeMismatch.indexRoot }
             : null,
+          ...indexFreshnessJsonFields(freshness),
         }));
         cg.destroy();
         return;
@@ -1125,6 +1135,11 @@ program
       console.log(chalk.cyan('Project:'), projectPath);
       if (worktreeMismatch) {
         warn(worktreeMismatchWarning(worktreeMismatch));
+      }
+      if (freshness) {
+        console.log(chalk.cyan('Indexed:'), formatRevision(freshness.indexedBranch, freshness.indexedCommit));
+        console.log(chalk.cyan('HEAD:   '), formatRevision(freshness.headBranch, freshness.headCommit));
+        if (freshness.stale) warn(indexStaleNotice(freshness));
       }
       console.log();
 

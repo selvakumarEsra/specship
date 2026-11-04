@@ -192,13 +192,28 @@ verifies:
 Every full or incremental sync and every index MUST record the branch name and
 commit it ran against. `specship status`, both human and `--json` output, MUST
 show the recorded branch and commit and the checkout's current HEAD. When they
-differ, or the checkout has uncommitted changes to tracked source or spec files,
-it MUST say the index may be stale and name `specship sync` as the fix. This is
+differ, or the checkout's uncommitted changes to tracked files differ from those
+present when it was indexed, it MUST say the index may be stale and name `specship sync` as the fix. This is
 report-only: no command re-indexes because HEAD moved. Outside a git repository
 the fields are absent and nothing is reported.
 
 implementations:
-  - src/sync/worktree.ts:detectWorktreeIndexMismatch
+  - src/sync/worktree.ts:readGitHead
+  - src/sync/worktree.ts:uncommittedTrackedFingerprint
+  - src/sync/worktree.ts:computeIndexFreshness
+  - src/sync/worktree.ts:indexStaleNotice
+  - src/sync/worktree.ts:formatRevision
+  - src/sync/worktree.ts:indexFreshnessJsonFields
+  - src/index.ts:SpecShip.recordIndexedRevision
+  - src/index.ts:SpecShip.getIndexFreshness
+  - src/mcp/tools.ts:ToolHandler.handleStatus
+
+verifies:
+  - __tests__/multidev-index-revision.test.ts:reqMultidev004A1
+  - __tests__/multidev-index-revision.test.ts:reqMultidev004A2
+  - __tests__/multidev-index-revision.test.ts:reqMultidev004A3
+  - __tests__/multidev-index-revision.test.ts:reqMultidev004A4
+  - __tests__/multidev-index-revision.test.ts:reqMultidev004A5
 
 ## Acceptance
 <!-- id: REQ-MULTIDEV-004.A1 -->

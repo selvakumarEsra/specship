@@ -119,6 +119,12 @@ import {
 import { ContextBuilder, createContextBuilder } from './context';
 import { Mutex, FileLock } from './utils';
 import { FileWatcher, WatchOptions, PendingFile, LockUnavailableError } from './sync';
+import {
+  readGitHead,
+  uncommittedTrackedFingerprint,
+  computeIndexFreshness,
+  IndexFreshness,
+} from './sync/worktree';
 
 // Re-export types for consumers
 export * from './types';
@@ -220,6 +226,7 @@ export { changedFilesSince, InvalidRefError, workingTreeDiffText, existedAtRef }
 // Suppression-comment scan (REQ-QGATE-004).
 export { scanDisableComments, formatSuppressionFinding } from './enforce/suppressions';
 export type { SuppressionFinding } from './enforce/suppressions';
+export type { IndexFreshness, IndexStaleReason } from './sync/worktree';
 // Mutation-score gate (REQ-QGATE-002).
 export { parseMutationReport, loadMutationDeps, DEFAULT_MUTATION_THRESHOLD, DEFAULT_MUTATION_REPORT } from './enforce/mutation';
 export type { MutationConfig, MutationDeps, MutationFileStats } from './enforce/mutation';
@@ -1004,12 +1011,61 @@ export class SpecShip {
           /* a diagram fault must never fail an index */
         }
 
+        if (result.success) this.recordIndexedRevision();
         this.refreshStatuslineCache();
         return result;
       } finally {
         this.fileLock.release();
       }
     });
+  }
+
+  /**
+   * Record the git branch, commit and uncommitted-tracked-state fingerprint
+   * this index was built against (REQ-MULTIDEV-004). Called only at the end of
+   * a full `indexAll()` / `sync()` — never from `indexFiles()` — so the record
+   * always describes a complete pass. Outside git it writes nothing.
+   * Best-effort: never fails the index.
+   */
+  private recordIndexedRevision(): void {
+    try {
+      const head = readGitHead(this.projectRoot);
+      if (!head) return;
+      this.queries.setMetadata('indexed_commit', head.commit);
+      this.queries.setMetadata('indexed_branch', head.branch ?? '');
+      this.queries.setMetadata(
+        'indexed_worktree_fingerprint',
+        uncommittedTrackedFingerprint(this.projectRoot) ?? '',
+      );
+    } catch {
+      /* best-effort */
+    }
+  }
+
+  /**
+   * Compare the recorded index revision with the checkout's live HEAD and
+   * uncommitted tracked state (REQ-MULTIDEV-004). Read-only: never syncs.
+   * Null outside git or when no revision was recorded.
+   */
+  getIndexFreshness(): IndexFreshness | null {
+    try {
+      const indexedCommit = this.queries.getMetadata('indexed_commit');
+      if (!indexedCommit) return null;
+      const head = readGitHead(this.projectRoot);
+      if (!head) return null;
+      const indexedBranch = this.queries.getMetadata('indexed_branch') || null;
+      const recordedFp = this.queries.getMetadata('indexed_worktree_fingerprint');
+      const currentFp = uncommittedTrackedFingerprint(this.projectRoot);
+      // Unknown on either side → don't claim a working-tree change (silent beats wrong).
+      const worktreeChanged = !!recordedFp && !!currentFp && recordedFp !== currentFp;
+      return computeIndexFreshness(
+        { branch: indexedBranch, commit: indexedCommit },
+        head,
+        worktreeChanged,
+      );
+    } catch {
+      return null;
+    }
   }
 
   /**
@@ -1575,6 +1631,7 @@ export class SpecShip {
           /* a diagram fault must never fail a sync */
         }
 
+        this.recordIndexedRevision();
         this.refreshStatuslineCache();
         return result;
       } finally {
