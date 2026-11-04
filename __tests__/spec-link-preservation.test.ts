@@ -421,6 +421,18 @@ verifies:
 
     // …and a code-comment link, from an `@implements` marker in a docstring.
     const queries = (cg as unknown as { queries: import('../src/db/queries').QueryBuilder }).queries;
+    // A real marker lives in an indexed file; the full code-derived pass walks
+    // indexed files and drops links whose marker it no longer finds
+    // (REQ-MULTIDEV-006).
+    queries.upsertFile({
+      path: 'src/marked.ts',
+      contentHash: 'h',
+      language: 'typescript',
+      size: 1,
+      modifiedAt: Date.now(),
+      indexedAt: Date.now(),
+      nodeCount: 1,
+    });
     queries.insertNode({
       id: generateNodeId('src/marked.ts', 'function', 'marked', 1),
       kind: 'function',

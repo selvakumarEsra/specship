@@ -55,6 +55,8 @@ import {
   DriftTransition,
   canonicalQualifiedName,
   qualifiedNameVariants,
+  codeDerivedLinkKey,
+  type CodeDerivedLinks,
 } from './resolution/spec-link-resolver';
 import { computeSpecFunnel, SpecFunnel } from './resolution/brief-link-resolver';
 import { computeDomainGapSeed, DomainGapSeed } from './resolution/domain-gap-seed';
@@ -1152,6 +1154,57 @@ export class SpecShip {
   }
 
   /**
+   * Remove `code-comment` links the last full pass did not re-derive
+   * (REQ-MULTIDEV-006): the `@implements` / `@verifies` marker, the test
+   * title naming the requirement, or the whole file is gone. A link the spec
+   * file still declares is kept and re-labelled as a declaration, with its
+   * state and evidence untouched (A4). Links in files that could not be read
+   * are left alone. Removed links are not drift, so nothing is reported.
+   *
+   * Must run only after BOTH code-derived passes over every indexed file —
+   * a partial pass would take the links of the files it skipped.
+   */
+  // @implements REQ-MULTIDEV-006
+  private reconcileCodeDerivedLinks(derived: CodeDerivedLinks): number {
+    const declaredBySource = new Map<string, Set<string>>();
+    const declaredKeys = (sourcePath: string): Set<string> => {
+      let keys = declaredBySource.get(sourcePath);
+      if (keys) return keys;
+      keys = new Set();
+      try {
+        const abs = path.isAbsolute(sourcePath) ? sourcePath : path.join(this.projectRoot, sourcePath);
+        const result = new MarkdownSpecExtractor(sourcePath, fs.readFileSync(abs, 'utf-8')).extract();
+        for (const c of result.linkCandidates) {
+          keys.add(
+            codeDerivedLinkKey(c.specId, c.targetFilePath, canonicalQualifiedName(c.targetQualifiedName), c.kind)
+          );
+        }
+      } catch {
+        // An unreadable spec declares nothing we can see; its spec rows are
+        // pruned separately (REQ-MULTIDEV-003).
+      }
+      declaredBySource.set(sourcePath, keys);
+      return keys;
+    };
+
+    let removed = 0;
+    const now = Date.now();
+    for (const link of this.specQueries.getLinksByProvenance('code-comment')) {
+      if (derived.unreadFiles.has(link.targetFilePath)) continue;
+      const key = codeDerivedLinkKey(link.specId, link.targetFilePath, link.targetQualifiedName, link.kind);
+      if (derived.keys.has(key)) continue;
+      const spec = this.specQueries.getSpecById(link.specId);
+      if (spec && declaredKeys(spec.sourcePath).has(key)) {
+        this.specQueries.setSpecLinkProvenance(link.id, 'spec-declaration', 0.7, now);
+        continue;
+      }
+      this.specQueries.deleteSpecLink(link.id);
+      removed++;
+    }
+    return removed;
+  }
+
+  /**
    * Internal spec indexing — does NOT take the indexMutex (caller already holds it)
    * and does NOT take the fileLock. Used by indexAll and sync, which manage locks
    * themselves. Returns the links that transitioned into `drifted` during the
@@ -1229,8 +1282,11 @@ export class SpecShip {
 
     if (specFilesChanged > 0 || forceResolve) {
       const allFiles = this.queries.getAllFiles().map((f) => f.path);
-      this.specLinkResolver.applyCodeCommentLinks(allFiles);
-      this.specLinkResolver.applyTestTitleLinks(allFiles, specStats);
+      const derived: CodeDerivedLinks = { keys: new Set(), unreadFiles: new Set() };
+      this.specLinkResolver.applyCodeCommentLinks(allFiles, undefined, derived);
+      this.specLinkResolver.applyTestTitleLinks(allFiles, specStats, derived);
+      // Drop code-derived links whose marker or file is gone (REQ-MULTIDEV-006).
+      this.reconcileCodeDerivedLinks(derived);
       const resolveStats = this.specLinkResolver.resolveAll();
       transitions.push(...resolveStats.transitions);
     }
@@ -1379,10 +1435,13 @@ export class SpecShip {
         // have nodes in the graph (full-graph scan is acceptable here —
         // node count is bounded and the scan is O(N) regex over docstrings).
         const allFiles = this.queries.getAllFiles().map((f) => f.path);
-        this.specLinkResolver.applyCodeCommentLinks(allFiles, stats);
+        const derived: CodeDerivedLinks = { keys: new Set(), unreadFiles: new Set() };
+        this.specLinkResolver.applyCodeCommentLinks(allFiles, stats, derived);
         // Spec ids inside `it()` titles in test files → `tests` links
         // (REQ-VSTATE-002).
-        this.specLinkResolver.applyTestTitleLinks(allFiles, stats);
+        this.specLinkResolver.applyTestTitleLinks(allFiles, stats, derived);
+        // Drop code-derived links whose marker or file is gone (REQ-MULTIDEV-006).
+        this.reconcileCodeDerivedLinks(derived);
 
         // Re-resolve all links (post-extraction).
         const resolveStats = this.specLinkResolver.resolveAll();

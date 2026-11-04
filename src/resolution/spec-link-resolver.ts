@@ -210,6 +210,27 @@ function nonTestEvidenceFlag(
   return { nonTestTarget: !isRecognizedTestFile(targetFilePath) };
 }
 
+/**
+ * The code-derived links one full pass produced (REQ-MULTIDEV-006): the
+ * logical keys of every `@implements` / `@verifies` marker and test-title
+ * link still present, plus the files that could not be read (whose links are
+ * left alone rather than taken for gone).
+ */
+export interface CodeDerivedLinks {
+  keys: Set<string>;
+  unreadFiles: Set<string>;
+}
+
+/** Logical key of a link: spec id, target file, canonical qualified name, kind. */
+export function codeDerivedLinkKey(
+  specId: string,
+  filePath: string,
+  qualifiedName: string,
+  kind: string
+): string {
+  return `${specId}\u0000${filePath}\u0000${qualifiedName}\u0000${kind}`;
+}
+
 export class SpecLinkResolver {
   private queries: QueryBuilder;
   private specQueries: SpecQueries;
@@ -448,7 +469,8 @@ export class SpecLinkResolver {
    */
   applyCodeCommentLinks(
     changedFiles: string[],
-    stats?: SpecLinkResolverStats
+    stats?: SpecLinkResolverStats,
+    derived?: CodeDerivedLinks
   ): void {
     const now = Date.now();
     for (const file of changedFiles) {
@@ -473,6 +495,9 @@ export class SpecLinkResolver {
               if (!specId) continue;
               const spec = this.specQueries.getSpecById(specId);
               if (!spec) continue;
+              derived?.keys.add(
+                codeDerivedLinkKey(specId, node.filePath, canonicalQualifiedName(node.qualifiedName), kind)
+              );
               this.specQueries.upsertSpecLink({
                 specId,
                 targetFilePath: node.filePath,
@@ -519,7 +544,11 @@ export class SpecLinkResolver {
    * Requires `projectRoot` in the resolver options (it reads the files); a
    * resolver without one silently skips the pass.
    */
-  applyTestTitleLinks(changedFiles: string[], stats?: SpecLinkResolverStats): void {
+  applyTestTitleLinks(
+    changedFiles: string[],
+    stats?: SpecLinkResolverStats,
+    derived?: CodeDerivedLinks
+  ): void {
     const root = this.opts.projectRoot;
     if (!root) return;
     const now = Date.now();
@@ -530,7 +559,10 @@ export class SpecLinkResolver {
       try {
         source = fs.readFileSync(path.resolve(root, file), 'utf-8');
       } catch {
-        continue; // deleted / unreadable — the resolve pass handles the fallout
+        // Deleted / unreadable — the resolve pass handles the fallout. Its
+        // existing links are not reconciled away on a read failure.
+        derived?.unreadFiles.add(file);
+        continue;
       }
 
       // Group the file's titles by spec id so one link carries every title in
@@ -548,6 +580,9 @@ export class SpecLinkResolver {
       for (const [specId, titles] of titlesBySpec) {
         const spec = this.specQueries.getSpecById(specId);
         if (!spec) continue; // not a real spec id — just words in a title
+        derived?.keys.add(
+          codeDerivedLinkKey(specId, file, canonicalQualifiedName(fileNode?.qualifiedName ?? file), 'tests')
+        );
         this.specQueries.upsertSpecLink({
           specId,
           targetFilePath: file,

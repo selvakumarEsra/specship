@@ -947,6 +947,34 @@ export class SpecQueries {
     return rows.map(rowToSpecLink);
   }
 
+  /**
+   * Every link with the given provenance — used to reconcile code-derived
+   * (`code-comment`) links against the markers that still exist
+   * (REQ-MULTIDEV-006).
+   */
+  getLinksByProvenance(provenance: SpecLinkProvenance): SpecLink[] {
+    const rows = this.db
+      .prepare(`SELECT * FROM spec_links WHERE provenance = ?`)
+      .all(provenance) as SpecLinkRow[];
+    return rows.map(rowToSpecLink);
+  }
+
+  /**
+   * Re-label a link's provenance and confidence without touching its state or
+   * evidence — a code-comment link whose marker is gone but whose spec still
+   * declares it becomes a declared link again (REQ-MULTIDEV-006.A4).
+   */
+  setSpecLinkProvenance(
+    id: number,
+    provenance: SpecLinkProvenance,
+    confidence: number,
+    updatedAt: number = Date.now()
+  ): void {
+    this.db
+      .prepare(`UPDATE spec_links SET provenance = ?, confidence = ?, updated_at = ? WHERE id = ?`)
+      .run(provenance, confidence, updatedAt, id);
+  }
+
   /** All links pointing at a given resolved node (e.g., for specship_node response). */
   getLinksByNode(nodeId: string): SpecLink[] {
     if (!this.stmts.getLinksByNode) {
