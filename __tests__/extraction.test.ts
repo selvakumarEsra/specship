@@ -4,13 +4,13 @@
  * Tests for the tree-sitter extraction system.
  */
 
-import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { SpecShip } from '../src';
 import { extractFromSource, scanDirectory } from '../src/extraction';
-import { detectLanguage, isLanguageSupported, getSupportedLanguages, initGrammars, loadAllGrammars, isSourceFile } from '../src/extraction/grammars';
+import { detectLanguage, isLanguageSupported, getSupportedLanguages, initGrammars, loadAllGrammars, isSourceFile, getParser } from '../src/extraction/grammars';
 import { normalizePath } from '../src/utils';
 
 beforeAll(async () => {
@@ -4458,4 +4458,169 @@ func (s Stack[T]) Len() int { return len(s.items) }
     const js = extractFromSource('service.xsjs', 'function handleRequest() { return 1; }');
     expect(js.nodes.find((n) => n.name === 'handleRequest' && n.kind === 'function')).toBeDefined();
   });
+});
+
+describe('REQ-HTMLLEX-001', () => {
+  // The vendored TS/JS grammar lexes `<!--` / `-->` inside regex literals as
+  // Annex-B HTML comments, turning the enclosing declaration into an ERROR node.
+  const JS_FAMILY_FILES = ['a.ts', 'a.tsx', 'a.js', 'a.jsx'];
+  const repoRoot = path.resolve(__dirname, '..');
+
+  const functionNamed = (nodes: { kind: string; name: string }[], name: string) =>
+    nodes.find((n) => n.kind === 'function' && n.name === name);
+  const callNames = (refs: { referenceKind: string; referenceName: string }[]) =>
+    refs.filter((r) => r.referenceKind === 'calls').map((r) => r.referenceName).sort();
+
+  function reqHtmllex001A1(): void {
+    for (const file of JS_FAMILY_FILES) {
+      for (const src of ['function a() { return /-->/; }', 'function a() { return /<!--/; }']) {
+        const fn = functionNamed(extractFromSource(file, src).nodes, 'a') as
+          { startLine: number; endLine: number } | undefined;
+        expect(fn, `${file}: ${src}`).toBeDefined();
+        expect(fn!.startLine).toBe(1);
+        expect(fn!.endLine).toBe(1);
+      }
+    }
+  }
+
+  function reqHtmllex001A2(): void {
+    const body = (re: string) =>
+      `export function strip(s: string): string {\n  helper();\n  return s.replace(${re}, '');\n}\n`;
+    for (const file of ['a.ts', 'a.tsx']) {
+      const withComment = extractFromSource(file, body('/<!--[\\s\\S]*?-->/g'));
+      const plain = extractFromSource(file, body('/x/g'));
+      const a = withComment.nodes.find((n) => n.name === 'strip');
+      const b = plain.nodes.find((n) => n.name === 'strip');
+      expect(a, file).toBeDefined();
+      expect(b, file).toBeDefined();
+      expect([a!.kind, a!.name, a!.qualifiedName, a!.startLine, a!.endLine, a!.isExported])
+        .toEqual([b!.kind, b!.name, b!.qualifiedName, b!.startLine, b!.endLine, b!.isExported]);
+      expect(callNames(withComment.unresolvedReferences)).toEqual(callNames(plain.unresolvedReferences));
+      expect(callNames(withComment.unresolvedReferences)).toContain('helper');
+    }
+  }
+
+  function reqHtmllex001A3(): void {
+    const src = "export function strip(s: string, re = /<!--[\\s\\S]*?-->/g): string {\n  return s.replace(re, '');\n}\n";
+    const result = extractFromSource('a.ts', src);
+    const fn = result.nodes.find((n) => n.name === 'strip');
+    expect(fn).toBeDefined();
+    expect(fn!.signature).toContain('/<!--[\\s\\S]*?-->/g');
+    // Offsets describe the original, unmasked source.
+    const lines = src.split('\n');
+    const text = lines.slice(fn!.startLine - 1, fn!.endLine).join('\n');
+    expect(text).toContain('<!--');
+    expect(text).toContain('-->');
+    expect(text).not.toContain('<!-_');
+    expect(text).not.toContain('-_>');
+    const constant = extractFromSource('a.ts', 'const RE = /<!--[\\s\\S]*?-->/g;\nfunction f() {}\n')
+      .nodes.find((n) => n.name === 'RE');
+    expect(constant?.signature).toBe('= /<!--[\\s\\S]*?-->/g');
+  }
+
+  function reqHtmllex001A4(): void {
+    const decrement = extractFromSource('a.ts', 'function f(x: number) { while (x-->0) {} }');
+    expect(functionNamed(decrement.nodes, 'f')).toBeDefined();
+    // Strings and templates were already lexed correctly — output is unchanged.
+    const src = "const s = '<!-- -->';\nfunction a() { return `-->`; }\n";
+    const result = extractFromSource('a.ts', src);
+    expect(result.nodes.map((n) => `${n.kind}:${n.name}@${n.startLine}-${n.endLine}`))
+      .toEqual(['file:a.ts@1-3', 'constant:s@1-1', 'function:a@2-2']);
+    expect(result.nodes.find((n) => n.name === 's')?.signature).toBe("= '<!-- -->'");
+  }
+
+  // Tie rule: the masked reparse has the same ERROR count but fewer
+  // html_comment nodes, so the rest of the line (here `helper()`) is recovered.
+  function reqHtmllex001A1TieKeepsDeclaration(): void {
+    const result = extractFromSource('a.ts', 'function a(s: string) {\n  /-->/); helper();\n}\n');
+    expect(functionNamed(result.nodes, 'a')).toBeDefined();
+    expect(callNames(result.unresolvedReferences)).toContain('helper');
+  }
+
+  // A genuine legacy HTML comment keeps its meaning: masking it would add
+  // ERROR nodes, so the original parse wins.
+  function reqHtmllex001A4LegacyHtmlCommentKept(): void {
+    const result = extractFromSource('a.js', '<!-- legacy\nfunction a() {}\n--> trailing\n');
+    expect(result.nodes.map((n) => `${n.kind}:${n.name}@${n.startLine}`)).toEqual(['file:a.js@1', 'function:a@2']);
+  }
+
+  async function reqHtmllex001A5(): Promise<void> {
+    // The repo's own affected files extract the declarations they lost.
+    const expected: Record<string, string[]> = {
+      'src/design-md/check.ts': ['checkDesignMd', 'runDesignCheckCli'],
+      '__tests__/design-md-upkeep.test.ts': ['uiChangeWithoutChangeLogFails', 'upkeep'],
+      // The spec names `reqEvkind005A5` here; no such function exists in the
+      // file. Its declarations extract either way — assert they all do.
+      '__tests__/criterion-ids.test.ts': ['shorthandChainsExpand', 'postcheckCountsShorthandCriteria'],
+    };
+    for (const [file, names] of Object.entries(expected)) {
+      const result = extractFromSource(file, fs.readFileSync(path.join(repoRoot, file), 'utf-8'));
+      for (const name of names) expect(functionNamed(result.nodes, name), `${file}:${name}`).toBeDefined();
+    }
+
+    // Spec links targeting them resolve instead of being born `orphaned`.
+    const dir = createTempDir();
+    let cg: SpecShip | undefined;
+    try {
+      for (const file of Object.keys(expected)) {
+        fs.mkdirSync(path.join(dir, path.dirname(file)), { recursive: true });
+        fs.copyFileSync(path.join(repoRoot, file), path.join(dir, file));
+      }
+      fs.mkdirSync(path.join(dir, 'specs'));
+      fs.writeFileSync(path.join(dir, 'specs', 'demo.md'), [
+        '---', 'id: DEMO-DOC', 'title: Demo', '---', '', '<!-- id: DEMO-DOC -->', '# Demo', '',
+        '<!-- id: REQ-DEMO-001 -->', '## Demo requirement', '', 'Body.', '',
+        'implementations:',
+        '  - src/design-md/check.ts:checkDesignMd',
+        '  - src/design-md/check.ts:runDesignCheckCli',
+        '  - __tests__/design-md-upkeep.test.ts:uiChangeWithoutChangeLogFails',
+        '',
+      ].join('\n'));
+      cg = await SpecShip.init(dir);
+      await cg.indexAll();
+      await cg.indexSpecs();
+      const links = cg.getSpecQueries().getLinksBySpec('REQ-DEMO-001');
+      expect(links.map((l) => l.targetQualifiedName).sort())
+        .toEqual(['checkDesignMd', 'runDesignCheckCli', 'uiChangeWithoutChangeLogFails']);
+      for (const link of links) {
+        expect(link.state, link.targetQualifiedName).not.toBe('orphaned');
+        expect(link.resolvedNodeId, link.targetQualifiedName).toBeTruthy();
+      }
+    } finally {
+      cg?.close();
+      cleanupTempDir(dir);
+    }
+  }
+
+  function reqHtmllex001A6(): void {
+    // Non-JS languages never enter the masking path: exactly one parse.
+    const samples: Array<[string, Parameters<typeof getParser>[0], string]> = [
+      ['a.py', 'python', 'def a():\n    return "<!-- -->"\n'],
+      ['a.go', 'go', 'package a\n\nfunc A() string { return "<!-- -->" }\n'],
+      ['a.rs', 'rust', 'fn a() -> &\'static str { "<!-- -->" }\n'],
+    ];
+    for (const [file, lang, src] of samples) {
+      const parser = getParser(lang)!;
+      const spy = vi.spyOn(parser, 'parse');
+      try {
+        const first = extractFromSource(file, src);
+        expect(spy, file).toHaveBeenCalledTimes(1);
+        const second = extractFromSource(file, src);
+        const strip = (r: typeof first) => r.nodes.map(({ updatedAt: _u, ...n }) => n);
+        expect(strip(second)).toEqual(strip(first));
+        expect(first.nodes.some((n) => n.kind === 'function')).toBe(true);
+      } finally {
+        spy.mockRestore();
+      }
+    }
+  }
+
+  it('extracts functions whose regex holds `-->` or `<!--` in .ts/.tsx/.js/.jsx (REQ-HTMLLEX-001.A1)', reqHtmllex001A1);
+  it('a regex `-->` with an html_comment but no extra ERROR still yields the declaration and its calls (REQ-HTMLLEX-001.A1)', reqHtmllex001A1TieKeepsDeclaration);
+  it('an HTML-comment regex leaves name, qualified name, lines and calls unchanged (REQ-HTMLLEX-001.A2)', reqHtmllex001A2);
+  it('signature and source text keep `<!--` and `-->` as written (REQ-HTMLLEX-001.A3)', reqHtmllex001A3);
+  it('`x-->0` stays code and string literals are unchanged (REQ-HTMLLEX-001.A4)', reqHtmllex001A4);
+  it('a genuine legacy HTML comment keeps its meaning (REQ-HTMLLEX-001.A4)', reqHtmllex001A4LegacyHtmlCommentKept);
+  it('this repository\'s affected declarations extract and their spec links are not orphaned (REQ-HTMLLEX-001.A5)', reqHtmllex001A5, 60_000);
+  it('non-JS-family languages parse once and extract unchanged (REQ-HTMLLEX-001.A6)', reqHtmllex001A6);
 });

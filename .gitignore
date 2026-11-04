@@ -77,3 +77,8 @@ assets/generate-waitlist.py
 
 # Legacy data dir from the pre-rename era; safe to delete locally.
 .codegraph/
+
+# Local-only agent config for other coding agents (Codex etc.); never commit.
+.agents/
+.codex/
+AGENTS.md
