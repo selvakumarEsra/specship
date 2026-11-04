@@ -115,6 +115,8 @@ implementations:
   - src/enforce/changed-files.ts:existedAtRef
   - src/index.ts:SpecShip.getEnforce
   - src/index.ts:SpecShip.prepareEnforce
+  - src/index.ts:SpecShip.linksBrokenSinceRef
+  - src/enforce/enforce.ts:linkKey
 
 verifies:
   - __tests__/multidev-merge-checks.test.ts:reqMultidev002A1
