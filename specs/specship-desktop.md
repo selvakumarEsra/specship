@@ -877,6 +877,8 @@ authoritative for answer semantics.
 
 > **SUPERSEDED 2026-11-04 (theme setting only)** by REQ-DASHTHEME-003 — Settings → Appearance no longer offers a theme choice, and the Design system gallery (A4) now renders the dark theme only; density, boot animation and the rest of the requirement still apply.
 
+> **SUPERSEDED 2026-11-04 (transcript-ingest toggle only)** by REQ-DASHSIMPLE-001 — the agent-named Claude Code section and its ingest toggle are removed from Settings (A2); the server's `/api/config` route is unchanged.
+
 Settings renders Appearance (theme, density, boot animation), Backend
 information, the Claude Code section (transcript-ingest toggle), Editor
 preferences, and About (real version and backend identity). The Design
@@ -892,7 +894,9 @@ implementations:
 <!-- id: REQ-DESKTOP-028.A1 -->
 - Appearance changes apply immediately and persist across reload.
 <!-- id: REQ-DESKTOP-028.A2 -->
-- The transcript-ingest toggle round-trips to the server's configuration
+- **SUPERSEDED 2026-11-04** by REQ-DASHSIMPLE-001 (A7) — Settings no longer
+  offers the agent-specific transcript-ingest toggle.
+  The transcript-ingest toggle round-trips to the server's configuration
   and analytics screens react to its state.
 <!-- id: REQ-DESKTOP-028.A3 -->
 - About shows the real product version and active database backend.

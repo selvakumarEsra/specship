@@ -1,10 +1,13 @@
 /**
- * Settings — appearance, backend info, Claude Code ingest, about
- * (REQ-DESKTOP-028). TSX port of specs/specship-desktop/screens-settings.jsx.
- * Appearance (density only — the dashboard is dark-only, REQ-DASHTHEME-003)
- * applies immediately + persists (A1, via prefs.ts localStorage); the transcript-ingest toggle round-trips /api/config (A2, so
- * the analytics screens' useIngestConfig banner reacts); About shows the real
- * product version + DB backend from /api/status (A3).
+ * Settings — appearance, backend info, about (REQ-DESKTOP-028). TSX port of
+ * specs/specship-desktop/screens-settings.jsx. Appearance (density only — the
+ * dashboard is dark-only, REQ-DASHTHEME-003) applies immediately + persists
+ * (A1, via prefs.ts localStorage); About shows the real product version + DB
+ * backend from /api/status (A3).
+ *
+ * The transcript-ingest toggle (and its agent-named section) is gone: it was
+ * specific to one coding agent, and no screen may name or assume one
+ * (REQ-DASHSIMPLE-001.A7, superseding REQ-DESKTOP-028.A2).
  *
  * The design bundle's boot-animation toggle and editor picker are gone — no
  * boot splash and no open-in-editor feature ever shipped behind them
@@ -15,7 +18,7 @@ import { api } from '../api';
 import { Module } from '../components/dashboard-modules';
 import { Icon } from '../components/icons';
 import { PageHead, Segmented, Switch } from '../components/ui';
-import { useApi, useIngestConfig } from '../hooks';
+import { useApi } from '../hooks';
 import { type DensityPref, applyDensity, getDensity } from '../prefs';
 import type { PageProps } from './types';
 
@@ -66,29 +69,13 @@ function AboutRow({ label, value, color }: { label: string; value: ReactNode; co
   );
 }
 
+// @implements REQ-DASHSIMPLE-001
 export function SettingsPage(_props: PageProps) {
   const [density, setDensity] = useState<DensityPref>(getDensity);
 
   const status = useApi(() => api.status(_props.project), [_props.project]);
-  const ingest = useIngestConfig();
-  const [savingIngest, setSavingIngest] = useState(false);
-  const [ingestError, setIngestError] = useState<string | null>(null);
 
   const setDensityAndApply = (v: string) => { const d = v as DensityPref; setDensity(d); applyDensity(d); };
-
-  const toggleIngest = async () => {
-    const next = !(ingest.data?.ingestEnabled ?? false);
-    setSavingIngest(true);
-    setIngestError(null);
-    try {
-      await api.config.set({ ingestEnabled: next });
-      ingest.reload();
-    } catch (e) {
-      setIngestError(e instanceof Error ? e.message : 'Failed to save');
-    } finally {
-      setSavingIngest(false);
-    }
-  };
 
   return (
     <div className="scroll-y" style={{ flex: 1, padding: 22 }}>
@@ -102,22 +89,6 @@ export function SettingsPage(_props: PageProps) {
               options={[{ value: 'comfortable', label: 'Comfortable' }, { value: 'compact', label: 'Compact' }]}
             />
           </Field>
-        </Section>
-
-        <Section icon="sessions" title="Claude Code">
-          <ToggleRow
-            label="Enable transcript ingest"
-            desc="Read JSONL transcripts from ~/.claude/projects for analytics"
-            on={ingest.data?.ingestEnabled ?? false}
-            onClick={toggleIngest}
-            busy={savingIngest || ingest.loading}
-          />
-          {ingestError && (
-            <div style={{ fontSize: 11.5, color: 'var(--error)', padding: '4px 0' }}>{ingestError}</div>
-          )}
-          {savingIngest && (
-            <div className="muted" style={{ fontSize: 11.5, padding: '4px 0' }}>Saving…</div>
-          )}
         </Section>
 
         <Section icon="database" title="Backend">

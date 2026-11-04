@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { api, type ConfigResponse } from './api';
 import { go } from './router';
 
 export interface ApiState<T> {
@@ -69,21 +68,6 @@ export function useApi<T>(fn: () => Promise<T>, deps: unknown[] = [], opts: UseA
   useEffect(() => { run(false); }, [run]);
 
   return { data, error, loading, reload: () => run(true) };
-}
-
-/**
- * The server's runtime config (GET /api/config), refetched whenever anything
- * dispatches `specship-config` (the Settings ingest toggle does after a PUT)
- * so analytics screens react to the toggle in-session (REQ-DESKTOP-028.A2).
- */
-export function useIngestConfig(): ApiState<ConfigResponse> {
-  const state = useApi(() => api.config.get(), []);
-  const { reload } = state;
-  useEffect(() => {
-    window.addEventListener('specship-config', reload);
-    return () => window.removeEventListener('specship-config', reload);
-  }, [reload]);
-  return state;
 }
 
 /**

@@ -1,8 +1,8 @@
 /**
  * REQ-DESKTOP-028 — Settings + Design system. A1 appearance changes apply
  * immediately and persist (density writes a documentElement attr +
- * localStorage); A2 the transcript-ingest toggle PUTs /api/config so the
- * analytics screens' banner reacts; A3 About renders the real version + DB
+ * localStorage); A2 (the transcript-ingest toggle) is superseded by
+ * REQ-DASHSIMPLE-001.A7 — the toggle is gone, covered in navigation.test.tsx; A3 About renders the real version + DB
  * backend from /api/status; A4 the design-system gallery renders control
  * states from the shared tokens. The theme option and the light gallery are
  * gone — these expectations now reflect REQ-DASHTHEME-003 (dark-only
@@ -77,26 +77,6 @@ describe('SettingsPage via App (REQ-DESKTOP-028)', () => {
     fireEvent.click(compact);
     expect(document.documentElement.getAttribute('data-density')).toBe('compact');
     expect(localStorage.getItem('specship-density')).toBe('compact');
-  });
-
-  it('A2: the ingest toggle PUTs /api/config', async () => {
-    const recorded = mockFetch([{ ingestEnabled: false }, { ingestEnabled: true }]);
-    render(<App />);
-
-    const toggle = await screen.findByRole('switch', { name: 'Enable transcript ingest' });
-    expect(toggle.getAttribute('aria-checked')).toBe('false');
-    fireEvent.click(toggle);
-
-    // A PUT to /api/config carried the flipped flag.
-    await vi.waitFor(() => {
-      const put = recorded.find((c) => c.url === '/api/config' && c.method === 'PUT');
-      expect(put).toBeTruthy();
-      expect(put!.body).toEqual({ ingestEnabled: true });
-    });
-    // After the reload the switch reflects the new state.
-    await vi.waitFor(() => {
-      expect(screen.getByRole('switch', { name: 'Enable transcript ingest' }).getAttribute('aria-checked')).toBe('true');
-    });
   });
 
   it('A3: About shows the real version and DB backend from /api/status', async () => {
