@@ -5,7 +5,7 @@ owner: dashboard
 priority: high
 version: 1
 epicKey: SSHIP-635
-jira: SSHIP-663
+jira: SSHIP-648
 depends_on: [SPECSHIP-DESKTOP-DOC, DASH-LEAN-DOC]
 jira_issue_REQ-DASHSIMPLE-001: SSHIP-636
 jira_fingerprint_REQ-DASHSIMPLE-001: f3efde74f08d0341
@@ -100,6 +100,10 @@ verifies:
 <!-- id: REQ-DASHSIMPLE-001.A6 -->
 - The UI build's dependency check still passes with runtime dependencies
   exactly `react` and `react-dom`.
+<!-- id: REQ-DASHSIMPLE-001.A7 -->
+- No screen anywhere in the dashboard, including Settings, has a section,
+  label or control named after a coding agent. The agent-specific transcript
+  ingest setting is not offered in the UI.
 
 <!-- id: REQ-DASHSIMPLE-002 -->
 ## The Overview MUST summarise the project in one screen of agent-agnostic facts
@@ -205,6 +209,10 @@ verifies:
 <!-- id: REQ-DASHSIMPLE-003.A6 -->
 - Collapsing to "epics only", "epics + stories" and "everything" changes the
   rendered depth, and the choice survives a reload.
+<!-- id: REQ-DASHSIMPLE-003.A7 -->
+- A story's body renders as readable prose only. Its `implementations:` and
+  `verifies:` blocks, `## Acceptance` heading and `<!-- id: … -->` markers
+  never appear as text; acceptance criteria appear only as the story's tasks.
 
 <!-- id: REQ-DASHSIMPLE-004 -->
 ## The Review screen MUST sort every requirement into completed, pending or drifted
@@ -266,6 +274,9 @@ verifies:
 <!-- id: REQ-DASHSIMPLE-004.A7 -->
 - When the spec or link data fails to load, Review shows an error with a retry
   control, not three empty groups.
+<!-- id: REQ-DASHSIMPLE-004.A8 -->
+- With requirements indexed and none selected, the detail panel invites
+  picking a requirement and does not suggest indexing or initialising specs.
 
 <!-- id: REQ-DASHSIMPLE-005 -->
 ## Searching the code graph MUST show the spec on the left and its code on the right
@@ -312,3 +323,8 @@ verifies:
 <!-- id: REQ-DASHSIMPLE-005.A5 -->
 - A symbol with no linked requirement shows its source and "no linked
   requirement", not an error.
+
+<!-- id: REQ-DASHSIMPLE-005.A6 -->
+- The requirement shown in the split view renders as readable prose, with the
+  same rules as REQ-DASHSIMPLE-003.A7: no link blocks, acceptance heading or
+  id markers as text.

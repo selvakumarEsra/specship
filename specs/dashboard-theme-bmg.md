@@ -5,7 +5,7 @@ owner: dashboard
 priority: high
 version: 1
 epicKey: SSHIP-635
-jira: SSHIP-690
+jira: SSHIP-685
 depends_on: [DASHSIMPLE-DOC, DASH-LEAN-DOC, SPECSHIP-DESKTOP-DOC]
 jira_issue_REQ-DASHTHEME-001: SSHIP-669
 jira_fingerprint_REQ-DASHTHEME-001: 471e2f3e73573424
@@ -231,6 +231,12 @@ verifies:
 <!-- id: REQ-DASHTHEME-004.A4 -->
 - Interactive states (hover, pressed, focus, disabled) still come from shared
   state tokens, per REQ-DESKTOP-013.
+<!-- id: REQ-DASHTHEME-004.A5 -->
+- Code and symbol text render with font ligatures disabled, so `===`, `=>`
+  and `!=` show as their literal characters.
+<!-- id: REQ-DASHTHEME-004.A6 -->
+- The Design system screen's samples contain no currency, cost or token
+  figures; numeric samples are counts.
 
 <!-- id: REQ-DASHTHEME-005 -->
 ## Superseded visual requirements MUST be marked in their specs
