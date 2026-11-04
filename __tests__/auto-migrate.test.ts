@@ -16,7 +16,7 @@ import * as path from 'path';
 import * as os from 'os';
 import * as crypto from 'crypto';
 import { spawnSync } from 'child_process';
-import { recordInstall, readAgentRecord } from '../src/installer/agent-record';
+import { agentRecordPath, recordInstall, readAgentRecord } from '../src/installer/agent-record';
 import { claudeTarget } from '../src/installer/targets/claude';
 import {
   beginWriteJournal,
@@ -332,6 +332,26 @@ function reqAgentswitch008A5Pending(): void {
   expect(fs.existsSync(path.join(projectP, '.gemini', 'settings.json'))).toBe(false);
 }
 
+/** A5 (record step) — a failure AFTER the target's files are written still rolls them back. */
+function reqAgentswitch008A5RecordFails(): void {
+  // The record directory turns read-only once the Claude entry is seeded, so
+  // the target install succeeds and only the record update fails.
+  const recordDir = path.dirname(agentRecordPath());
+  fs.chmodSync(recordDir, 0o555);
+  try {
+    const out = maybeAutoMigrate('gemini', { projectRoot: projectP });
+    expect(out.kind).toBe('failed');
+    expect(out.line).toMatch(/nothing was changed/);
+    // The failure note could not be saved, so the outcome's own line is shown.
+    expect(migrationLine(out)).toMatch(/automatic setup for Gemini CLI failed/);
+    expect(fs.existsSync(path.join(projectP, '.gemini', 'settings.json'))).toBe(false);
+    expect(fs.existsSync(path.join(projectP, 'GEMINI.md'))).toBe(false);
+  } finally {
+    fs.chmodSync(recordDir, 0o755);
+  }
+  expect(readAgentRecord()!.entries.map((e) => e.agent)).toEqual(['claude']);
+}
+
 /** The journal restores earlier bytes, deletes new files and drops new empty dirs. */
 function journalRollsBackWrites(): void {
   const existing = path.join(projectP, 'keep.txt');
@@ -404,6 +424,7 @@ describe('REQ-AGENTSWITCH-008 — auto-migrate to a newly detected agent', () =>
   it('REQ-AGENTSWITCH-008.A4: "autoMigrate": false in specship.config.json opts out', reqAgentswitch008A4Config);
   it('REQ-AGENTSWITCH-008.A5: a failed write rolls the attempt back and the next output reports it', reqAgentswitch008A5);
   it('REQ-AGENTSWITCH-008.A5: an undelivered failure is reported by the next output, once', reqAgentswitch008A5Pending);
+  it.runIf(process.platform !== 'win32' && process.getuid?.() !== 0)('REQ-AGENTSWITCH-008.A5: a failed record update rolls back the files already written', reqAgentswitch008A5RecordFails);
   it('write journal rolls back writes, new files and new directories', journalRollsBackWrites);
   it('hot path: unknown agent reads nothing; recorded agent costs one read', hotPathCost);
   it('migration scope follows the existing install', scopeFollowsExistingInstall);

@@ -349,6 +349,7 @@ verifies:
   - __tests__/auto-migrate.test.ts:reqAgentswitch008A4Config
   - __tests__/auto-migrate.test.ts:reqAgentswitch008A5
   - __tests__/auto-migrate.test.ts:reqAgentswitch008A5Pending
+  - __tests__/auto-migrate.test.ts:reqAgentswitch008A5RecordFails
   - __tests__/auto-migrate.test.ts:journalRollsBackWrites
   - __tests__/auto-migrate.test.ts:hotPathCost
   - __tests__/auto-migrate.test.ts:cliTriggerAndUndo

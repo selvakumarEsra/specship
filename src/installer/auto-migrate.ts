@@ -248,8 +248,10 @@ export function maybeAutoMigrate(
       installStatusLine: choices.statusLine ?? false,
       sdd: choices.sdd,
     });
-    endWriteJournal();
+    // The record update stays inside the journal: if it fails, the catch
+    // rolls back the target's files too, so "nothing was changed" is true.
     recordInstall(target.id, where.scope, where.projectRoot, currentSpecshipVersion(), env, choices);
+    endWriteJournal();
     remember('installed');
     try { writeGuard(guard, env); } catch { /* advisory */ }
     const written = result.files
@@ -299,6 +301,8 @@ export function takePendingMigrationFailure(env: NodeJS.ProcessEnv = process.env
  * pending note so it is reported exactly once, by whichever output shows it.
  */
 export function migrationLine(outcome: MigrationOutcome, env: NodeJS.ProcessEnv = process.env): string | null {
-  if (outcome.kind === 'failed') return takePendingMigrationFailure(env) ?? null;
+  // The note may be unsaved (an unwritable SpecShip home): report the
+  // failure from the outcome itself rather than not at all.
+  if (outcome.kind === 'failed') return takePendingMigrationFailure(env) ?? outcome.line ?? null;
   return outcome.line ?? null;
 }
