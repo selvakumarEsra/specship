@@ -65,6 +65,17 @@ describe('version comparison', () => {
 });
 
 describe('runUpdate — perform (REQ-CLI-UPDATE-001)', () => {
+  it('REQ-AGENTSWITCH-006: reinstalls recorded agents only after a real update', async () => {
+    let reinstalled = 0;
+    const reinstallAgents = async () => { reinstalled++; return ['Gemini CLI (global): reinstalled']; };
+    const noop = await runUpdate(deps({ currentVersion: '0.11.8', resolveLatest: async () => '0.11.8', reinstallAgents }));
+    expect(reinstalled).toBe(0);
+    expect(noop.lines.join('\n')).not.toMatch(/reinstalled/);
+    const updated = await runUpdate(deps({ reinstallAgents }));
+    expect(reinstalled).toBe(1);
+    expect(updated.lines).toContain('Gemini CLI (global): reinstalled');
+  });
+
   it('A1: updates an out-of-date install and reports old → new', async () => {
     let ran = 0;
     const r = await runUpdate(deps({ currentVersion: '0.11.6', resolveLatest: async () => '0.11.8', runInstaller: async () => { ran++; } }));

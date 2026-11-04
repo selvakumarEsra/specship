@@ -26,6 +26,7 @@ import {
 import { ALL_TARGETS, getTarget, listTargetIds } from './targets/registry';
 import type { AgentTarget, Location, TargetId } from './targets/types';
 import { detectInstallMethod } from '../update/updater';
+import { recordInstall, recordUninstall, ensureAgentRecord, type AgentRecordEntry } from './agent-record';
 import { planPurge, executePurge, assertSafeToRemove, type PurgeEnv, type PurgeExecDeps } from './purge';
 import { getGlyphs } from '../ui/glyphs';
 // Lightweight (fs/path only) — safe for the installer's no-native-modules rule.
@@ -323,6 +324,16 @@ export async function runInstallerWithOptions(
     for (const note of result.notes ?? []) {
       clack.log.info(`${target.displayName}: ${note}`);
     }
+    // REQ-AGENTSWITCH-006.A1: remember what was wired, and where. Best-effort —
+    // a record that can't be written never fails the install itself.
+    try {
+      recordInstall(target.id, location, location === 'local' ? process.cwd() : undefined, getVersion(), process.env, {
+        // Booleans only: what this install opted into, so a reinstall repeats it.
+        sdd: opts.sdd === true,
+        autoAllow: autoAllow === true,
+        statusLine: installStatusLine === true,
+      });
+    } catch { /* record is advisory */ }
   }
 
   // Step 4b: the gate graduation ramp's install ask (REQ-ENFORCE-004.A3).
@@ -518,6 +529,11 @@ export function uninstallTargets(
     const removedPaths = result.files
       .filter((f) => f.action === 'removed')
       .map((f) => f.path);
+    // REQ-AGENTSWITCH-006.A1: drop the entry whether we removed something or
+    // found nothing (a stale entry is cleared too). No write when absent.
+    try {
+      recordUninstall(target.id, location, location === 'local' ? process.cwd() : undefined);
+    } catch { /* record is advisory */ }
     return {
       id: target.id,
       displayName: target.displayName,
@@ -526,6 +542,75 @@ export function uninstallTargets(
       notes: result.notes ?? [],
     };
   });
+}
+
+/** One line per recorded entry, as `reinstallRecordedAgents` reports it. */
+export interface ReinstallReport {
+  entry: AgentRecordEntry;
+  status: 'reinstalled' | 'skipped' | 'failed';
+  detail: string;
+}
+
+/**
+ * Reinstall SpecShip for every agent in the installed-agents record
+ * (REQ-AGENTSWITCH-006.A3) — what `specship update` and the bundle installer
+ * run, through the NEW binary, so each agent gets the new version's files.
+ *
+ * Each entry is reinstalled at its own scope with the choices it was
+ * installed with (SDD tier, auto-allow, status line); only an entry rebuilt
+ * from config files, whose choices are unknown, gets the defaults of a
+ * non-interactive `specship install -y`. Prior opt-ins (integrations, a
+ * Gemini trust policy) are preserved by the targets themselves. A local
+ * entry whose project root no longer exists is skipped and reported.
+ */
+export function reinstallRecordedAgents(
+  opts: { projectRoot?: string; targets?: readonly AgentTarget[] } = {},
+): ReinstallReport[] {
+  const record = ensureAgentRecord(opts.projectRoot ?? process.cwd());
+  const pool = opts.targets ?? ALL_TARGETS;
+  const reports: ReinstallReport[] = [];
+  for (const entry of record.entries) {
+    const target = pool.find((t) => t.id === entry.agent);
+    const where = entry.scope === 'local' ? (entry.projectRoot ?? '') : 'global';
+    if (!target) {
+      reports.push({ entry, status: 'skipped', detail: `${entry.agent} (${where}): unknown agent — skipped` });
+      continue;
+    }
+    if (entry.scope === 'local' && !(entry.projectRoot && fs.existsSync(entry.projectRoot))) {
+      reports.push({ entry, status: 'skipped', detail: `${target.displayName} (${tildify(where)}): project no longer exists — skipped` });
+      continue;
+    }
+    const isClaude = target.id === 'claude';
+    const prevCwd = process.cwd();
+    try {
+      if (entry.scope === 'local' && entry.projectRoot) process.chdir(entry.projectRoot);
+      // Repeat the choices the user installed with. Only an entry rebuilt
+      // from config files (choices unknown) falls back to the defaults of a
+      // non-interactive install.
+      const c = entry.choices;
+      const choices = {
+        autoAllow: c?.autoAllow ?? resolveAutoAllow(undefined, isClaude),
+        sdd: c?.sdd ?? true,
+        statusLine: c?.statusLine ?? resolveStatusLine(undefined, isClaude),
+      };
+      target.install(entry.scope, {
+        autoAllow: choices.autoAllow,
+        sdd: choices.sdd,
+        installStatusLine: choices.statusLine,
+      });
+      recordInstall(target.id, entry.scope, entry.projectRoot, getVersion(), process.env, choices);
+      reports.push({ entry, status: 'reinstalled', detail: `${target.displayName} (${tildify(where)}): reinstalled` });
+    } catch (err) {
+      reports.push({
+        entry,
+        status: 'failed',
+        detail: `${target.displayName} (${tildify(where)}): reinstall failed — ${err instanceof Error ? err.message : String(err)}`,
+      });
+    } finally {
+      if (process.cwd() !== prevCwd) process.chdir(prevCwd);
+    }
+  }
+  return reports;
 }
 
 /**
