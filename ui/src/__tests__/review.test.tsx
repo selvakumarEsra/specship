@@ -303,6 +303,24 @@ async function reqDashsimple004A7(): Promise<void> {
 }
 
 /** The fix commands Review shows are real CLI commands, not agent slash commands. */
+// ---- A8 ----
+
+async function reqDashsimple004A8(): Promise<void> {
+  mockFetch(REVIEW_ROUTES);
+  render(<ReviewPage project={null} query={{}} />);
+  await screen.findByTestId('review-group-drifted'); // requirements are indexed
+
+  const heading = screen.getByText('Pick a requirement to read it');
+  const panel = heading.closest('.empty') as HTMLElement;
+  expect(panel).toBeTruthy();
+  const text = panel.textContent ?? '';
+  expect(text).toMatch(/requirement/i);
+  expect(text).not.toMatch(/init/i);
+  expect(text).not.toMatch(/index/i);
+  expect(Array.from(panel.querySelectorAll('code')).some((c) => /specship init/.test(c.textContent ?? ''))).toBe(false);
+  expect(within(panel).queryByRole('button')).toBeNull(); // no copy control
+}
+
 function fixCommandsExistInCli(): void {
   const cli = readFileSync(join(REPO, 'src', 'bin', 'specship.ts'), 'utf8');
   const shown = [fixCommand('drifted', 'REQ-X-1'), fixCommand('broken', 'REQ-X-1'), fixCommand('orphaned', 'REQ-X-1')];
@@ -325,6 +343,7 @@ describe('Review screen (REQ-DASHSIMPLE-004)', () => {
   it('REQ-DASHSIMPLE-004.A5: tabs and the Overview count filter to one group, and the filter is in the URL', reqDashsimple004A5);
   it('REQ-DASHSIMPLE-004.A6: a requirement with no acceptance criteria is never Completed (property)', reqDashsimple004A6);
   it('REQ-DASHSIMPLE-004.A7: a failed spec or link load shows an error with a working retry', reqDashsimple004A7);
+  it('REQ-DASHSIMPLE-004.A8: with requirements indexed and none selected, the detail panel invites picking one and never suggests indexing', reqDashsimple004A8);
   it('REQ-DASHSIMPLE-004: every shown fix command is a real specship subcommand', fixCommandsExistInCli);
 });
 
