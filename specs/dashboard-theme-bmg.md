@@ -200,6 +200,23 @@ implementations:
   - ui/src/components/ui.tsx:Pill
   - ui/src/components/ui.tsx:Segmented
   - ui/src/components/ui.tsx:Empty
+  - ui/src/components/ui.tsx:Button
+  - ui/src/components/ui.tsx:Chip
+  - ui/src/components/ui.tsx:Switch
+  - ui/src/components/ui.tsx:ErrorState
+  - ui/src/components/ui.tsx:CopyBtn
+  - ui/src/components/dashboard-modules.tsx:StatTile
+  - ui/src/pages/designsystem.tsx:DesignSystemPage
+  - ui/src/tokens.ts:KIT_COMPONENT_STATES
+  - ui/src/tokens.ts:BUTTON_VARIANTS
+  - ui/src/styles/app.css
+  - ui/src/styles/tokens.css
+
+verifies:
+  - ui/src/__tests__/ui-kit.test.tsx:reqDashtheme004A1
+  - ui/src/__tests__/ui-kit.test.tsx:reqDashtheme004A2
+  - ui/src/__tests__/ui-kit.test.tsx:reqDashtheme004A3
+  - ui/src/__tests__/ui-kit.test.tsx:reqDashtheme004A4
 
 ## Acceptance
 <!-- id: REQ-DASHTHEME-004.A1 -->
