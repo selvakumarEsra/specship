@@ -106,6 +106,23 @@ describe('REQ-AGENTSWITCH-007 — current-agent detection', () => {
   }
   it('REQ-AGENTSWITCH-007.A2 — specship status with GEMINI_CLI=1 reports Gemini as the current agent', reqAgentswitch007A2);
 
+  async function reqAgentswitch007A2InitializedAndHuman(): Promise<void> {
+    // The initialized-project branch and the human-readable line, run under
+    // Claude Code's launcher env through the built CLI.
+    execFileSync(process.execPath, [BIN, 'init', tempDir], { encoding: 'utf-8', env: cleanEnv(), stdio: 'ignore' });
+    const json = runStatusJson(tempDir, { ...cleanEnv(), CLAUDECODE: '1' });
+    expect(json.currentAgent).toBe('claude');
+    const human = execFileSync(process.execPath, [BIN, 'status'], {
+      cwd: tempDir,
+      encoding: 'utf-8',
+      env: { ...cleanEnv(), GEMINI_CLI: '1' },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    // eslint-disable-next-line no-control-regex
+    expect(human.replace(/\u001b\[[0-9;]*m/g, '')).toMatch(/Agent:\s+Gemini CLI/);
+  }
+  it('REQ-AGENTSWITCH-007.A2 — status on an initialized project names the agent in JSON and in text', reqAgentswitch007A2InitializedAndHuman);
+
   function reqAgentswitch007A3(): void {
     const sessionStart = parseHookPayload(JSON.stringify({ hook_event_name: 'SessionStart', cwd: '/x' }));
     expect(detectHookAgent(sessionStart)).toBe(UNKNOWN_AGENT);

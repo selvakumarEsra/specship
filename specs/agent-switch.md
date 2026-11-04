@@ -284,6 +284,7 @@ implementations:
 verifies:
   - __tests__/agent-detect.test.ts:reqAgentswitch007A1
   - __tests__/agent-detect.test.ts:reqAgentswitch007A2
+  - __tests__/agent-detect.test.ts:reqAgentswitch007A2InitializedAndHuman
   - __tests__/agent-detect.test.ts:reqAgentswitch007A3
 
 ## Acceptance
