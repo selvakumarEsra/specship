@@ -43,7 +43,11 @@ export const MAX_PACKED_BYTES = 2_500_000;
 // 6,398,315 B / 583 files on a clean build; the installed-agents record
 // (dist/installer/agent-record.*) plus the install/update replay wiring adds
 // 21,037 B / 2 files. Both measured with `npm pack --dry-run`; no stale dist.
-export const MAX_UNPACKED_BYTES = 6_450_000;
+// Raised 6.45 MB → 6.48 MB (2026-11-05, REQ-AGENTSWITCH-008): a clean build
+// (fresh worktree, no prior dist/) packs 6,454,951 B; the automatic agent
+// set-up (dist/installer/auto-migrate.*, 27,411 B / 4 files incl. maps) plus
+// the write journal in targets/shared and the trigger wiring is the growth.
+export const MAX_UNPACKED_BYTES = 6_480_000;
 // Raised 530 → 560 (2026-10-26) after investigating a 531-file build: no stale
 // dist assets; the growth is new feature modules (dist/spec-quality/,
 // dist/pulse/, and the 0.30/0.31 knowledge + throughput modules that follow).

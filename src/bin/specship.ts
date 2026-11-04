@@ -343,9 +343,36 @@ const AGENT_RECORD_SKIP_COMMANDS = new Set([
 // REQ-AGENTSWITCH-006.A2: any other command rebuilds a missing/unreadable
 // installed-agents record from the agents' configs. A present record costs one
 // file read and no write. Silent: the record never blocks or fails a command.
+/**
+ * Commands that never auto-set-up a newly used agent (REQ-AGENTSWITCH-008):
+ * the install commands do it explicitly, and the MCP server detects its
+ * agent from the client name in its own session instead.
+ */
+const AUTO_MIGRATE_SKIP_COMMANDS = new Set(['install', 'uninstall', 'serve', 'update']);
+
 program.hook('preAction', (_root, actionCommand) => {
   let top = actionCommand;
   while (top.parent && top.parent !== program) top = top.parent;
+  // REQ-AGENTSWITCH-008: a `specship` command in a supported agent's shell —
+  // typed by the user, run by a hook, or by the git hook a commit from that
+  // shell fires — sets SpecShip up for that agent if the record doesn't list
+  // it here. Unknown agent → no file access; recorded agent → one small read.
+  // The notice goes to stderr so hook stdout stays the host's JSON.
+  if (!AUTO_MIGRATE_SKIP_COMMANDS.has(top.name())) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { agentFromEnv } = require('../agents/detect') as typeof import('../agents/detect');
+      const agent = agentFromEnv();
+      if (agent !== 'unknown') {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const { maybeAutoMigrate, migrationLine } = require('../installer/auto-migrate') as typeof import('../installer/auto-migrate');
+        const line = migrationLine(maybeAutoMigrate(agent));
+        if (line) process.stderr.write(line + '\n');
+      }
+    } catch {
+      /* advisory — never blocks or fails a command */
+    }
+  }
   if (AGENT_RECORD_SKIP_COMMANDS.has(top.name())) return;
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -3737,16 +3764,34 @@ program
   .option('-f, --force', 'Alias for --yes')
   .option('--keep-data', 'Only unwire from Claude Code; keep the indexes, ~/.specship data, and the binary')
   .option('-l, --location <where>', 'With --keep-data: which wiring to remove ("global" or "local")')
-  // vestigial — kept so existing `--target claude` invocations keep working.
-  .option('-t, --target <ids>', '(vestigial) accepted: "claude" | "auto" | "all" | "none"')
+  .option('--local', 'Only unwire this project (same as --keep-data --location local); keeps indexes, data and the binary')
+  .option('--global', 'Only unwire the user-wide install (same as --keep-data --location global); keeps indexes, data and the binary')
+  .option('-t, --target <ids>', 'Agents to unwire with --keep-data/--local/--global: "claude" (default) | "gemini" | "claude,gemini"')
   .action(async (opts: {
     target?: string;
     location?: string;
     yes?: boolean;
     force?: boolean;
     keepData?: boolean;
+    local?: boolean;
+    global?: boolean;
   }) => {
     const { runUninstaller } = await import('../installer');
+    // `--local` / `--global` (REQ-AGENTSWITCH-008): the undo command an
+    // automatic agent setup prints — wiring-only, never the full purge.
+    if (opts.local && opts.global) {
+      error('Use only one of --local and --global.');
+      process.exit(1);
+    }
+    if (opts.local || opts.global) {
+      const where = opts.local ? 'local' : 'global';
+      if (opts.location && opts.location !== where) {
+        error(`--${where} conflicts with --location ${opts.location}.`);
+        process.exit(1);
+      }
+      opts.location = where;
+      opts.keepData = true;
+    }
     if (opts.location && opts.location !== 'global' && opts.location !== 'local') {
       error(`--location must be "global" or "local" (got "${opts.location}").`);
       process.exit(1);

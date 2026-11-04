@@ -96,16 +96,115 @@ export function readJsonFile(filePath: string): Record<string, any> {
 }
 
 /**
+ * One change a journalled install made (REQ-AGENTSWITCH-008.A5): a file's
+ * bytes before the first write (`prior === null` → the file was new), or a
+ * directory the install created.
+ */
+export type JournalEntry =
+  | { kind: 'file'; path: string; prior: Buffer | null }
+  | { kind: 'dir'; path: string };
+
+let activeJournal: JournalEntry[] | null = null;
+let journalledFiles: Set<string> | null = null;
+
+/**
+ * Start recording every file the installer writes or removes, so a failed
+ * install can be undone with {@link rollbackJournal}. An install that throws
+ * never returns its `WriteResult`, so the journal is the only reliable list
+ * of what it already changed.
+ */
+export function beginWriteJournal(): void {
+  activeJournal = [];
+  journalledFiles = new Set();
+}
+
+/** Stop recording and return what was changed since {@link beginWriteJournal}. */
+export function endWriteJournal(): JournalEntry[] {
+  const entries = activeJournal ?? [];
+  activeJournal = null;
+  journalledFiles = null;
+  return entries;
+}
+
+/** Save a file's current bytes once, before the journal's first change to it. */
+function journalFile(filePath: string): void {
+  if (!activeJournal || !journalledFiles) return;
+  const abs = path.resolve(filePath);
+  if (journalledFiles.has(abs)) return;
+  journalledFiles.add(abs);
+  let prior: Buffer | null = null;
+  try {
+    prior = fs.readFileSync(abs);
+  } catch {
+    prior = null;
+  }
+  activeJournal.push({ kind: 'file', path: abs, prior });
+}
+
+/** `mkdir -p` that records the top directory it created in the journal. */
+function journalledMkdir(dir: string): void {
+  const created = fs.mkdirSync(dir, { recursive: true });
+  if (created && activeJournal) activeJournal.push({ kind: 'dir', path: path.resolve(created) });
+}
+
+/** Remove `dir` and its sub-directories if they hold no files; files stay. */
+function removeEmptyTree(dir: string): void {
+  let names: string[];
+  try {
+    names = fs.readdirSync(dir);
+  } catch {
+    return;
+  }
+  for (const name of names) {
+    const child = path.join(dir, name);
+    try {
+      if (fs.statSync(child).isDirectory()) removeEmptyTree(child);
+    } catch { /* gone */ }
+  }
+  try { fs.rmdirSync(dir); } catch { /* not empty — keep */ }
+}
+
+/**
+ * Undo a journal (REQ-AGENTSWITCH-008.A5): delete files that were new, put
+ * back the earlier bytes of files that existed, then drop directories the
+ * install created if that leaves them empty. Best-effort per entry — one
+ * entry failing never stops the others.
+ */
+export function rollbackJournal(entries: readonly JournalEntry[]): void {
+  for (const e of [...entries].reverse()) {
+    if (e.kind !== 'file') continue;
+    try {
+      if (e.prior === null) {
+        if (fs.existsSync(e.path)) fs.unlinkSync(e.path);
+      } else {
+        fs.writeFileSync(e.path, e.prior);
+      }
+    } catch { /* best-effort */ }
+  }
+  for (const e of [...entries].reverse()) {
+    if (e.kind === 'dir') removeEmptyTree(e.path);
+  }
+}
+
+/** Delete a file the installer owns, journalled so a rollback restores it. */
+export function removeFileSync(filePath: string): void {
+  journalFile(filePath);
+  fs.unlinkSync(filePath);
+}
+
+/**
  * Write a file atomically: write to `<path>.tmp.<pid>`, then rename.
  *
  * Prevents corruption if the process crashes mid-write. The temp
- * file is cleaned up on rename failure.
+ * file is cleaned up on rename failure. While a write journal is open the
+ * file's earlier bytes (or its absence) are recorded first.
  */
 export function atomicWriteFileSync(filePath: string, content: string): void {
   const dir = path.dirname(filePath);
   if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
+    journalledMkdir(dir);
   }
+  journalFile(filePath);
   const tmpPath = filePath + '.tmp.' + process.pid;
   try {
     fs.writeFileSync(tmpPath, content);
@@ -226,7 +325,7 @@ export function removeMarkedSection(
   const joined = before + (before && after ? '\n\n' : '') + after;
 
   if (joined.trim() === '') {
-    try { fs.unlinkSync(filePath); } catch { /* ignore */ }
+    try { removeFileSync(filePath); } catch { /* ignore */ }
   } else {
     atomicWriteFileSync(filePath, joined.trim() + '\n');
   }

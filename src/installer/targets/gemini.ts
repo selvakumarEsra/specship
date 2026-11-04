@@ -42,10 +42,12 @@ import {
   WriteResult,
 } from './types';
 import {
+  atomicWriteFileSync,
   getMcpServerConfig,
   jsonDeepEqual,
   packageAssetPath,
   readJsonFile,
+  removeFileSync,
   removeMarkedSection,
   upsertMarkedSection,
   writeJsonFile,
@@ -263,7 +265,7 @@ export function writeGeminiCommandsEntries(
     if (cmd.toml === undefined) {
       notes.push(`Gemini CLI: skipped /${cmd.target.replace(/\.toml$/, '').replace(/\//g, ':')} — ${cmd.excluded}.`);
       if (isOurCommandFile(dest)) {
-        fs.unlinkSync(dest);
+        removeFileSync(dest);
         files.push({ path: dest, action: 'removed' });
       }
       continue;
@@ -280,8 +282,7 @@ export function writeGeminiCommandsEntries(
         continue;
       }
     }
-    fs.mkdirSync(path.dirname(dest), { recursive: true });
-    fs.writeFileSync(dest, cmd.toml);
+    atomicWriteFileSync(dest, cmd.toml);
     files.push({ path: dest, action: existed ? 'updated' : 'created' });
   }
   return { files, notes };
@@ -597,8 +598,7 @@ export function writeGeminiPolicyEntry(): WriteResult['files'][number] {
     // an earlier `--trust` install wrote (it carries our header marker).
     if (!current.startsWith(GEMINI_POLICY_HEADER_MARKER)) return { path: file, action: 'kept' };
   }
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, content);
+  atomicWriteFileSync(file, content);
   return { path: file, action: existed ? 'updated' : 'created' };
 }
 

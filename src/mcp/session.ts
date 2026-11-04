@@ -19,6 +19,7 @@ import { tools } from './tools';
 import { resolveServerInstructions } from './server-instructions';
 import { SpecShipPackageVersion } from './version';
 import { agentFromMcpClient, type DetectedAgent, UNKNOWN_AGENT } from '../agents/detect';
+import { maybeAutoMigrate, migrationLine } from '../installer/auto-migrate';
 
 /**
  * MCP Server Info — kept on the session because some clients log it. The
@@ -87,6 +88,8 @@ export class MCPSession {
   private explicitProjectPath: string | null;
   private removeTierListener: (() => void) | null = null;
   private detectedAgent: DetectedAgent = UNKNOWN_AGENT;
+  /** One-line auto-setup notice for the first tool response (REQ-AGENTSWITCH-008). */
+  private migrationNotice: string | null = null;
 
   constructor(
     private transport: JsonRpcTransport,
@@ -210,11 +213,28 @@ export class MCPSession {
       instructions: resolveServerInstructions(explicitPath ?? this.explicitProjectPath ?? null),
     });
 
+    // REQ-AGENTSWITCH-008: a supported agent the record doesn't list for this
+    // project gets SpecShip set up for it, once. Runs after the handshake
+    // reply so the client never waits on it; the notice goes to stderr now
+    // and prefixes the first tool response (stdout stays protocol-only).
+    this.runAutoMigrate(explicitPath ?? process.cwd());
+
     if (explicitPath) {
       // Kick off engine init in the background. If another session in the
       // same daemon already opened the project, `ensureInitialized` is a
       // ~free no-op — N concurrent clients pay exactly one open.
       this.resolvePromise = this.engine.ensureInitialized(explicitPath);
+    }
+  }
+
+  private runAutoMigrate(projectRoot: string): void {
+    try {
+      const line = migrationLine(maybeAutoMigrate(this.detectedAgent, { projectRoot }));
+      if (!line) return;
+      this.migrationNotice = line;
+      process.stderr.write(`[SpecShip MCP] ${line}\n`);
+    } catch {
+      /* advisory — never breaks a session */
     }
   }
 
@@ -252,6 +272,13 @@ export class MCPSession {
     await this.retryInitIfNeeded();
 
     const result = await this.engine.getToolHandler().execute(toolName, toolArgs);
+    if (this.migrationNotice) {
+      const notice = this.migrationNotice;
+      this.migrationNotice = null;
+      const first = result.content?.[0];
+      if (first && first.type === 'text') first.text = `${notice}\n\n${first.text}`;
+      else result.content = [{ type: 'text', text: notice }, ...(result.content ?? [])];
+    }
     this.transport.sendResult(request.id, result);
   }
 
