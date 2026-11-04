@@ -161,6 +161,8 @@ framework runtime.
 <!-- id: REQ-DASHLEAN-005 -->
 ## The rebuilt dashboard MUST preserve the existing visual design system
 
+> **SUPERSEDED 2026-11-04** by DASHTHEME-DOC (`specs/dashboard-theme-bmg.md`) — the dashboard now uses the BookMyGame UI design system instead of the "SpecShip Desktop" bundle. Kept for history.
+
 The rebuild MUST reproduce the "SpecShip Desktop" Claude Design bundle — the
 canonical design reference imported on 2026-07-04 into `specs/lean-dashboard/`:
 `design-system.css` (the design's own stylesheet: tokens for dark + light,

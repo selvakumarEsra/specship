@@ -453,6 +453,8 @@ bespoke per-component timings.
 <!-- id: REQ-DESKTOP-014 -->
 ## The detail surfaces MUST be fully operable with assistive technology
 
+> **SUPERSEDED 2026-11-04 (light theme only)** by REQ-DASHTHEME-003 — the dashboard is dark-only; the contrast requirement now applies to the dark theme only.
+
 Keyboard alone completes the full path: navigate the tree, open a spec,
 activate Edit, edit every field in visual order, and Save or Cancel.
 Icon-only controls (copy id, remove criterion) carry accessible names.
@@ -580,6 +582,8 @@ implementations:
 ## The app shell MUST render the sidebar, status strip, and top bar per the snapshot, with deep-linkable routes
 
 > **SUPERSEDED 2026-11-04** by REQ-DASHSIMPLE-001 — sidebar layout replaced by the agent-agnostic navigation.
+
+> **SUPERSEDED 2026-11-04 (theme only)** by REQ-DASHTHEME-003 — the theme toggle and light theme are retired; the dashboard is dark-only.
 
 The sidebar renders two collapsible groups — Project (Dashboard, Graph,
 Specs, Drift queue, Runs) and Claude Code (Sessions, Heatmap, Costs,
@@ -877,6 +881,8 @@ authoritative for answer semantics.
 
 <!-- id: REQ-DESKTOP-028 -->
 ## The Settings and Design system screens MUST render live configuration and the token gallery
+
+> **SUPERSEDED 2026-11-04 (theme setting only)** by REQ-DASHTHEME-003 — Settings → Appearance no longer offers a theme choice, and the Design system gallery (A4) now renders the dark theme only; density, boot animation and the rest of the requirement still apply.
 
 Settings renders Appearance (theme, density, boot animation), Backend
 information, the Claude Code section (transcript-ingest toggle), Editor

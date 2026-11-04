@@ -240,6 +240,15 @@ The requirements this document replaces MUST carry a dated SUPERSEDED note
 naming the requirement that replaces them, so the spec set never contradicts
 the shipped look.
 
+implementations:
+  - specs/lean-dashboard.md
+  - specs/specship-desktop.md
+
+verifies:
+  - __tests__/dashtheme-superseded.test.ts:reqDashtheme005A1
+  - __tests__/dashtheme-superseded.test.ts:reqDashtheme005A2
+  - __tests__/dashtheme-superseded.test.ts:reqDashtheme005A3
+
 ## Acceptance
 <!-- id: REQ-DASHTHEME-005.A1 -->
 - `specs/lean-dashboard.md` marks REQ-DASHLEAN-005 superseded by
