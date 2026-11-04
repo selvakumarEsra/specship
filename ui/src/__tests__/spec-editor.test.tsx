@@ -10,7 +10,8 @@
  */
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { SpecsPage } from '../pages/specs';
+import { ReviewPage } from '../pages/review';
+import { reviewRoutesFromSpecs } from './review-fixtures';
 import { normalizeSectionDraft, parseRequirementSection, serializeRequirementSection } from '../spec-source';
 
 const STATEMENT = 'The server MUST validate the session token before **any** handler runs, using `validateSession`.';
@@ -160,19 +161,20 @@ function mockFetch(routes: Record<string, RouteVal>): Call[] {
 function baseRoutes(): Record<string, RouteVal> {
   return {
     '/api/specs': SPECS,
+    ...reviewRoutesFromSpecs(SPECS),
     '/api/spec/REQ-A-1': DETAIL_A1,
     '/api/spec/REQ-A-2': DETAIL_A2,
   };
 }
 
-/** The 280px tree pane — first child of the page's flex row. */
+/** The Review list pane — first child of the page's flex row. */
 function treePane(container: HTMLElement): HTMLElement {
   return (container.firstElementChild as HTMLElement).firstElementChild as HTMLElement;
 }
 
 async function openEditor(sel = 'REQ-A-1', routes = baseRoutes()) {
   const calls = mockFetch(routes);
-  const view = render(<SpecsPage project={null} query={{ sel }} />);
+  const view = render(<ReviewPage project={null} query={{ sel }} />);
   await screen.findByText('Edit spec');
   fireEvent.click(screen.getByText('Edit spec').closest('button')!);
   return { calls, routes, ...view };
@@ -183,7 +185,7 @@ const saveBtn = () => screen.getAllByText(/Save changes|Saving…/)[0]!.closest(
 const cancelBtn = () => screen.getAllByText('Cancel')[0]!.closest('button') as HTMLButtonElement;
 
 beforeEach(() => {
-  history.replaceState(null, '', '/specs');
+  history.replaceState(null, '', '/review');
 });
 
 afterEach(() => {
@@ -354,7 +356,7 @@ describe('SpecEditor (REQ-DESKTOP-006…011)', () => {
   it('009.A2/A4: Preview decorates exactly like the read view; empty statement shows the explicit note', async () => {
     // Capture the read view's decoration for the same text first.
     mockFetch(baseRoutes());
-    const read = render(<SpecsPage project={null} query={{ sel: 'REQ-A-1' }} />);
+    const read = render(<ReviewPage project={null} query={{ sel: 'REQ-A-1' }} />);
     await screen.findByRole('heading', { name: 'Validate session token' });
     const readHtml = (read.container.querySelector('.sp-statement .sp-prose') as HTMLElement).innerHTML;
     cleanup();

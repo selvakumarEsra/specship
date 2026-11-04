@@ -156,7 +156,7 @@ function NoSelection() {
   return (
     <Empty
       icon="book"
-      title="Pick a spec from the tree"
+      title="Pick a requirement to read it"
       body="Or run specship init -i to index your specs/ folder if you haven’t yet."
       action={
         <span className="row gap-6" style={{ justifyContent: 'center' }}>

@@ -12,9 +12,9 @@ import { DashboardPage } from './pages/dashboard';
 import { DesignSystemPage } from './pages/designsystem';
 import { GraphPage } from './pages/graph';
 import { PlaceholderPage } from './pages/placeholder';
+import { ReviewPage } from './pages/review';
 import { RunsPage } from './pages/runs';
 import { SettingsPage } from './pages/settings';
-import { SpecsPage } from './pages/specs';
 import { TraceabilityPage } from './pages/traceability';
 import { WorkflowsPage } from './pages/workflows';
 import type { PageProps } from './pages/types';
@@ -73,14 +73,14 @@ export const PALETTE_PAGES: PalettePage[] = [
 const JUMP_PAGE_IDS = NAV.flatMap((g) => g.items.map((it) => it.id)).slice(0, 7);
 
 /**
- * Routed screens. Plan is a placeholder until REQ-DASHSIMPLE-002 builds the
- * plan reader; Review reuses the Specs screen (which already opens a
- * requirement's detail from its param) until REQ-DASHSIMPLE-003 replaces it.
+ * Routed screens. Plan is a placeholder until the plan reader lands; Review
+ * is the drifted / pending / completed queue (REQ-DASHSIMPLE-004), which
+ * replaced the old Specs and Drift queue screens.
  */
 const SCREENS: Record<string, ComponentType<PageProps>> = {
   dashboard: DashboardPage,
   plan: () => <PlaceholderPage title="Plan" req="REQ-DASHSIMPLE-002" />,
-  review: SpecsPage,
+  review: ReviewPage,
   graph: GraphPage,
   traceability: TraceabilityPage,
   runs: RunsPage,

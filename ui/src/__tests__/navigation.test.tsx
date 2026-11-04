@@ -13,6 +13,7 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { reviewRoutesFromSpecs } from './review-fixtures';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../App';
@@ -53,7 +54,7 @@ const ROUTES: Record<string, unknown> = {
   '/api/projects': { claudeRoot: '', projects: [] },
   '/api/workflows/runs': { runs: [] },
   '/api/workflows': { workflows: [], errors: [] },
-  '/api/drift': { links: [] },
+  ...reviewRoutesFromSpecs(SPECS),
   '/api/specs': SPECS,
   '/api/spec/REQ-X-001': DETAIL_X1,
   '/api/graph/search': { results: [] },

@@ -192,8 +192,22 @@ names the command that fixes it. Opening a row shows the requirement's full
 text and links.
 
 implementations:
-  - ui/src/pages/specs.tsx:SpecsPage
-  - ui/src/pages/drift.tsx:DriftPage
+  - ui/src/review-groups.ts:classifyRequirement
+  - ui/src/review-groups.ts:groupRequirements
+  - ui/src/review-groups.ts:fixCommand
+  - ui/src/review-groups.ts:driftReason
+  - ui/src/pages/review.tsx:ReviewPage
+  - ui/src/pages/dashboard.tsx:DashboardPage
+  - ui/src/components/graph-rail.tsx:GraphDetailRail
+
+verifies:
+  - ui/src/__tests__/review.test.tsx:reqDashsimple004A1
+  - ui/src/__tests__/review.test.tsx:reqDashsimple004A2
+  - ui/src/__tests__/review.test.tsx:reqDashsimple004A3
+  - ui/src/__tests__/review.test.tsx:reqDashsimple004A4
+  - ui/src/__tests__/review.test.tsx:reqDashsimple004A5
+  - ui/src/__tests__/review.test.tsx:reqDashsimple004A6
+  - ui/src/__tests__/review.test.tsx:reqDashsimple004A7
 
 ## Acceptance
 <!-- id: REQ-DASHSIMPLE-004.A1 -->

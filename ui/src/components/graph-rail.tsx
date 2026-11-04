@@ -278,7 +278,7 @@ export function GraphDetailRail({ id, project, onSelect, onClose }: {
           <Icon name="play" size={13} />
           Implement
         </button>
-        <button className="btn btn-secondary btn-sm" onClick={() => go('drift')}>View drift</button>
+        <button className="btn btn-secondary btn-sm" onClick={() => go('review', { query: { group: 'drifted' } })}>View drift</button>
       </div>
     </div>
   );

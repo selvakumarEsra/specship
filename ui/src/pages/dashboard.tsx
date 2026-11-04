@@ -101,7 +101,7 @@ export function DashboardPage({ project }: PageProps) {
               <StatTile icon="drift" color="var(--warn)" label="Drift queue"
                 value={fmtInt(d.drift.value)} delta={d.drift.delta} deltaInvert
                 sparkColor="var(--warn)"
-                onClick={() => go('drift')} />
+                onClick={() => go('review', { query: { group: 'drifted' } })} />
             </div>
           )}
         </Module>

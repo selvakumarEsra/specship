@@ -498,7 +498,15 @@ export const api = {
     body: { link_id: number; result: 'pass' | 'fail'; reason?: string; evidence?: string[] },
     project?: string | null,
   ) => postJson<LinkVerifyResponse>(q('/api/spec/link-verify', project), body),
-  drift: (project?: string | null) => getJson<DriftResponse>(q('/api/drift', project)),
+  // Review passes its states explicitly (and the server's max limit) so the
+  // screen never depends on the route's default filter (REQ-DASHSIMPLE-004).
+  drift: (project?: string | null, opts: { states?: readonly string[]; limit?: number } = {}) => {
+    const p = new URLSearchParams();
+    if (opts.states?.length) p.set('state', opts.states.join(','));
+    if (opts.limit) p.set('limit', String(opts.limit));
+    const qs = p.toString();
+    return getJson<DriftResponse>(q('/api/drift' + (qs ? '?' + qs : ''), project));
+  },
   runs: (project?: string | null) => getJson<RunsResponse>(q('/api/workflows/runs', project)),
   workflows: (project?: string | null) => getJson<WorkflowsResponse>(q('/api/workflows', project)),
   launchRun: (workflowName: string, inputs: Record<string, string>, project?: string | null) =>

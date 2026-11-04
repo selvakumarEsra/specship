@@ -19,11 +19,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ReactElement } from 'react';
 import { DashboardPage } from '../pages/dashboard';
 import { DesignSystemPage } from '../pages/designsystem';
-import { DriftPage } from '../pages/drift';
 import { GraphPage } from '../pages/graph';
 import { RunsPage } from '../pages/runs';
 import { SettingsPage } from '../pages/settings';
-import { SpecsPage } from '../pages/specs';
+import { ReviewPage } from '../pages/review';
+import { reviewRoutes } from './review-fixtures';
 import { TraceabilityPage } from '../pages/traceability';
 import { WorkflowsPage } from '../pages/workflows';
 import { BUTTON_VARIANTS, KIT_COMPONENT_STATES } from '../tokens';
@@ -240,6 +240,15 @@ function mockFetch(routes: Record<string, unknown>): void {
   }));
 }
 
+/** Review's coverage fixture — served to the Review screen only, so the other screens' sweep is unchanged. */
+const REVIEW_ROUTES: Record<string, unknown> = {
+  ...ROUTES,
+  '/api/spec/coverage': reviewRoutes([
+    { id: 'REQ-A-1', title: 'Validate session token' },
+    { id: 'REQ-A-2', title: 'Reject expired tokens' },
+  ])['/api/spec/coverage'],
+};
+
 /** Classes that make a control a styled kit control (app.css rules exist for each). */
 const KIT_CONTROL_CLASSES = ['btn', 'chip', 'seg-btn', 'switch', 'card-btn', 'list-row', 'sp-icon-btn'];
 
@@ -252,10 +261,9 @@ function unstyledControls(root: HTMLElement): string[] {
 
 const KEPT_SCREENS: Array<[string, string, () => ReactElement]> = [
   ['dashboard', '/', () => <DashboardPage project={null} query={{}} />],
-  ['specs', '/specs', () => <SpecsPage project={null} query={{}} />],
+  ['review', '/review', () => <ReviewPage project={null} query={{}} />],
   ['graph', '/graph', () => <GraphPage project={null} query={{}} />],
   ['traceability', '/traceability', () => <TraceabilityPage project={null} query={{}} />],
-  ['drift', '/drift', () => <DriftPage project={null} query={{}} />],
   ['runs', '/runs', () => <RunsPage project={null} query={{}} />],
   ['workflows', '/workflows', () => <WorkflowsPage project={null} query={{}} />],
   ['settings', '/settings', () => <SettingsPage project={null} query={{}} />],
@@ -270,12 +278,12 @@ describe('REQ-DASHTHEME-004.A3 — kept screens use the kit', () => {
     let controls = 0;
     for (const [name, path, el] of KEPT_SCREENS) {
       history.replaceState(null, '', path);
-      mockFetch(ROUTES);
+      mockFetch(name === 'review' ? REVIEW_ROUTES : ROUTES);
       const { container } = render(el());
       // Let every module's fetch settle (data or error state).
       await act(async () => { await new Promise((r) => setTimeout(r, 30)); });
-      // Open the first drift row so its action buttons render too.
-      if (name === 'drift') {
+      // Open the drifted row so the detail pane's action buttons render too.
+      if (name === 'review') {
         const row = screen.queryByText('REQ-A-2');
         if (row) {
           fireEvent.click(row);

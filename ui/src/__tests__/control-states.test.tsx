@@ -17,7 +17,8 @@ import { fileURLToPath } from 'node:url';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GraphPage } from '../pages/graph';
-import { SpecsPage } from '../pages/specs';
+import { ReviewPage } from '../pages/review';
+import { reviewRoutesFromSpecs } from './review-fixtures';
 import { Segmented } from '../components/ui';
 
 // node:fs, not `app.css?raw`: vitest's CSS interception returns an empty
@@ -97,7 +98,7 @@ const DETAIL_I1 = {
 };
 
 function specRoutes(): Record<string, unknown> {
-  return { '/api/specs': SPECS, '/api/spec/REQ-A-1': DETAIL_A1, '/api/spec/REQ-I-1': DETAIL_I1 };
+  return { '/api/specs': SPECS, ...reviewRoutesFromSpecs(SPECS), '/api/spec/REQ-A-1': DETAIL_A1, '/api/spec/REQ-I-1': DETAIL_I1 };
 }
 
 const GRAPH_ROUTES: Record<string, unknown> = {
@@ -132,10 +133,11 @@ function mockFetch(routes: Record<string, unknown>): string[] {
   return calls;
 }
 
-const treeRow = (name: RegExp) => screen.getByRole('treeitem', { name });
+/** A Review list row (role=option) — the selectable requirement rows. */
+const treeRow = (name: RegExp) => screen.getByRole('option', { name });
 
 beforeEach(() => {
-  history.replaceState(null, '', '/specs');
+  history.replaceState(null, '', '/review');
 });
 
 afterEach(() => {
@@ -217,8 +219,8 @@ describe('control-state CSS contract (REQ-DESKTOP-013)', () => {
 
   it('A1 (rendered): selection is class/ARIA-driven with no inline background for hover handlers to fight', async () => {
     mockFetch(specRoutes());
-    render(<SpecsPage project={null} query={{}} />);
-    await screen.findByText('auth.md');
+    render(<ReviewPage project={null} query={{}} />);
+    await screen.findByText('REQ-A-1');
 
     fireEvent.click(screen.getByText('REQ-A-1'));
     await screen.findByRole('heading', { name: 'Validate session token' });
@@ -240,11 +242,11 @@ describe('control-state CSS contract (REQ-DESKTOP-013)', () => {
 
   it('A4 (rendered): rows and segmented options are keyboard-focusable controls', async () => {
     mockFetch(specRoutes());
-    render(<SpecsPage project={null} query={{}} />);
-    await screen.findByText('auth.md');
+    render(<ReviewPage project={null} query={{}} />);
+    await screen.findByText('REQ-A-1');
 
     expect(treeRow(/REQ-A-1/).tabIndex).toBe(0);
-    expect(treeRow(/auth\.md/).tabIndex).toBe(0);
+    expect(treeRow(/REQ-I-1/).tabIndex).toBe(0);
 
     const onChange = vi.fn();
     render(<Segmented options={['P0', 'P1']} value="P1" onChange={onChange} label="Priority" />);
@@ -266,10 +268,10 @@ describe('control-state CSS contract (REQ-DESKTOP-013)', () => {
 describe('assistive tech (REQ-DESKTOP-014)', () => {
   it('A1: keyboard alone selects a spec, opens the editor, edits, and reaches Save/Cancel — fields in visual order', async () => {
     mockFetch(specRoutes());
-    const { container } = render(<SpecsPage project={null} query={{}} />);
-    await screen.findByText('auth.md');
+    const { container } = render(<ReviewPage project={null} query={{}} />);
+    await screen.findByText('REQ-A-1');
 
-    // Enter on the focusable tree row selects (Space toggles the doc header).
+    // Enter on the focusable list row selects it.
     const row = treeRow(/REQ-A-1/);
     row.focus();
     fireEvent.keyDown(row, { key: 'Enter' });
@@ -285,7 +287,9 @@ describe('assistive tech (REQ-DESKTOP-014)', () => {
 
     // Every field is a native control or a roving-tabindex radio, and DOM
     // order (= focus order) matches the visual order of the editor.
-    const fields = Array.from(container.querySelectorAll('input, textarea, select, [role="radio"]'));
+    // Scoped to the detail pane — Review's group tabs sit in the list pane.
+    const detailPane = (container.firstElementChild as HTMLElement).lastElementChild as HTMLElement;
+    const fields = Array.from(detailPane.querySelectorAll('input, textarea, select, [role="radio"]'));
     const labelOf = (el: Element) => el.getAttribute('aria-label') ?? el.textContent;
     expect(fields.map(labelOf)).toEqual([
       'Title',
@@ -304,17 +308,16 @@ describe('assistive tech (REQ-DESKTOP-014)', () => {
     expect(save.disabled).toBe(false);
     expect(screen.getAllByText('Cancel')[0]!.closest('button')).toBeTruthy();
 
-    // Space on the doc header treeitem collapses the group (aria-expanded).
-    const doc = treeRow(/auth\.md/);
-    expect(doc.getAttribute('aria-expanded')).toBe('true');
-    fireEvent.keyDown(doc, { key: ' ' });
-    expect(doc.getAttribute('aria-expanded')).toBe('false');
-    expect(screen.queryByRole('treeitem', { name: /REQ-A-1/ })).toBeNull();
+    // Space on another row selects it too, replacing the draft.
+    const other = treeRow(/REQ-I-1/);
+    fireEvent.keyDown(other, { key: ' ' });
+    await screen.findByRole('heading', { name: 'Tail JSONL incrementally' });
+    expect(other.getAttribute('aria-selected')).toBe('true');
   });
 
   it('A2: icon-only controls expose accessible names — copy id, remove criterion', async () => {
     mockFetch(specRoutes());
-    render(<SpecsPage project={null} query={{ sel: 'REQ-A-1' }} />);
+    render(<ReviewPage project={null} query={{ sel: 'REQ-A-1' }} />);
     await screen.findByRole('heading', { name: 'Validate session token' });
     expect(screen.getByRole('button', { name: 'Copy spec id' })).toBeTruthy();
 
@@ -335,7 +338,7 @@ describe('assistive tech (REQ-DESKTOP-014)', () => {
 
   it('segmented pickers are radiogroups: one checked member, arrow keys move selection and focus', async () => {
     mockFetch(specRoutes());
-    render(<SpecsPage project={null} query={{ sel: 'REQ-A-1' }} />);
+    render(<ReviewPage project={null} query={{ sel: 'REQ-A-1' }} />);
     await screen.findByText('Edit spec');
     fireEvent.click(screen.getByText('Edit spec').closest('button')!);
 
@@ -387,7 +390,7 @@ describe('assistive tech (REQ-DESKTOP-014)', () => {
     }
     // Rendered prose carries no inline color override that could bypass them.
     mockFetch(specRoutes());
-    const { container } = render(<SpecsPage project={null} query={{ sel: 'REQ-A-1' }} />);
+    const { container } = render(<ReviewPage project={null} query={{ sel: 'REQ-A-1' }} />);
     await screen.findByRole('heading', { name: 'Validate session token' });
     const prose = container.querySelector('.sp-statement .sp-prose') as HTMLElement;
     expect(prose.style.color).toBe('');
@@ -408,7 +411,7 @@ describe('responsive degradation (REQ-DESKTOP-015)', () => {
 
   it('A1 (rendered): the meta line and action row are wrap-flex; the segment bar is equal-width flex', async () => {
     mockFetch(specRoutes());
-    const { container } = render(<SpecsPage project={null} query={{ sel: 'REQ-A-1' }} />);
+    const { container } = render(<ReviewPage project={null} query={{ sel: 'REQ-A-1' }} />);
     await screen.findByRole('heading', { name: 'Validate session token' });
 
     expect(cssRule('.sp-metaline')).toContain('flex-wrap: wrap');
@@ -426,14 +429,14 @@ describe('responsive degradation (REQ-DESKTOP-015)', () => {
     expect(cssRule('.sp-breadcrumb .sp-path')).toContain('white-space: nowrap');
 
     mockFetch(specRoutes());
-    const { container } = render(<SpecsPage project={null} query={{ sel: 'REQ-A-1' }} />);
+    const { container } = render(<ReviewPage project={null} query={{ sel: 'REQ-A-1' }} />);
     await screen.findByRole('heading', { name: 'Validate session token' });
 
     expect((container.querySelector('.sp-breadcrumb .sp-path') as HTMLElement).textContent).toBe('specs/auth.md');
     const target = screen.getByText('src/auth.ts:validateSession') as HTMLElement;
     expect(target.style.textOverflow).toBe('ellipsis');
     expect(target.style.whiteSpace).toBe('nowrap');
-    // Tree rows: both the id and title lines ellipsize.
+    // Review rows: both the id and title ellipsize.
     const id = within(treeRow(/REQ-A-1/)).getByText('REQ-A-1') as HTMLElement;
     expect(id.style.textOverflow).toBe('ellipsis');
     expect(id.style.whiteSpace).toBe('nowrap');
@@ -446,7 +449,7 @@ describe('responsive degradation (REQ-DESKTOP-015)', () => {
     expect(narrow![1]).toContain('grid-template-columns: 1fr');
 
     mockFetch(specRoutes());
-    render(<SpecsPage project={null} query={{ sel: 'REQ-A-1' }} />);
+    render(<ReviewPage project={null} query={{ sel: 'REQ-A-1' }} />);
     await screen.findByText('Edit spec');
     fireEvent.click(screen.getByText('Edit spec').closest('button')!);
     const grid = screen.getByLabelText('Owner').closest('.sp-edit-grid');
@@ -462,8 +465,8 @@ describe('responsive degradation (REQ-DESKTOP-015)', () => {
 describe('interaction latency (REQ-DESKTOP-016)', () => {
   it('A1: the skeleton shows only while data is genuinely absent — a cached re-selection swaps with no flash', async () => {
     const calls = mockFetch(specRoutes());
-    render(<SpecsPage project={null} query={{}} />);
-    await screen.findByText('auth.md');
+    render(<ReviewPage project={null} query={{}} />);
+    await screen.findByText('REQ-A-1');
 
     // First selection: nothing cached yet, the skeleton is legitimate.
     fireEvent.click(screen.getByText('REQ-A-1'));
@@ -485,7 +488,7 @@ describe('interaction latency (REQ-DESKTOP-016)', () => {
 
   it('A3: the Write/Preview toggle renders the preview in the same interaction — no spinner, no skeleton', async () => {
     mockFetch(specRoutes());
-    const { container } = render(<SpecsPage project={null} query={{ sel: 'REQ-A-1' }} />);
+    const { container } = render(<ReviewPage project={null} query={{ sel: 'REQ-A-1' }} />);
     await screen.findByText('Edit spec');
     fireEvent.click(screen.getByText('Edit spec').closest('button')!);
 
@@ -498,7 +501,7 @@ describe('interaction latency (REQ-DESKTOP-016)', () => {
 
   it('A4: with a statement 10× the design sample, Write-mode keystrokes echo the raw value with zero decoration work in the DOM', async () => {
     mockFetch(specRoutes());
-    const { container } = render(<SpecsPage project={null} query={{ sel: 'REQ-A-1' }} />);
+    const { container } = render(<ReviewPage project={null} query={{ sel: 'REQ-A-1' }} />);
     await screen.findByText('Edit spec');
     fireEvent.click(screen.getByText('Edit spec').closest('button')!);
 
