@@ -199,6 +199,9 @@
   --font-ui: "Space Grotesk", system-ui, -apple-system, sans-serif;
   --font-display: "Bricolage Grotesque", "Space Grotesk", system-ui, -apple-system, sans-serif;
   --font-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  /* Code & symbol text: slashed zero, ligatures off so ===, => and != show
+     as typed (REQ-DASHTHEME-004.A5). Every mono rule reads this one token. */
+  --font-mono-features: "zero", "liga" 0, "calt" 0;
   --fs-big: var(--bmg-font-size-h0);
   --fs-title: var(--bmg-font-size-h2);
   --fs-lg: var(--bmg-font-size-lg);

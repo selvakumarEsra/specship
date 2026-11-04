@@ -52,7 +52,17 @@ html, body {
 /* Headings and large numerals take the display face (REQ-DASHTHEME-002). */
 h1, h2, h3, h4, .sp-title, [data-page-title], .display-num { font-family: var(--font-display); }
 
-.mono { font-family: var(--font-mono); font-feature-settings: "zero"; }
+.mono { font-family: var(--font-mono); font-feature-settings: var(--font-mono-features); font-variant-ligatures: none; }
+/* Every surface that sets code or symbol text in the mono face — native code
+   elements, kit classes, and inline `font-family: var(--font-mono)` styles
+   (HTML style attribute and SVG font-family attribute) — renders without
+   ligatures, so ===, => and != show as their literal characters.
+   REQ-DASHTHEME-004.A5. */
+code, pre, kbd, samp, .mono, .sp-code, .sp-kw, .sp-crit-id, .sp-label .ct,
+.sp-textarea, .sp-textarea::placeholder, .sp-crit-num,
+[style*="--font-mono"], [font-family*="--font-mono"] {
+  font-feature-settings: var(--font-mono-features); font-variant-ligatures: none;
+}
 .tnum { font-variant-numeric: tabular-nums; }
 
 /* ============================================================
@@ -330,7 +340,8 @@ h1, h2, h3, h4, .sp-title, [data-page-title], .display-num { font-family: var(--
 .sp-prose { font-size: 15px; line-height: 1.62; color: var(--text-secondary); text-wrap: pretty; }
 .sp-prose strong, .sp-strong { color: var(--text-primary); font-weight: 600; }
 .sp-code {
-  font-family: var(--font-mono); font-size: 0.86em; font-feature-settings: "zero";
+  font-family: var(--font-mono); font-size: 0.86em; font-feature-settings: var(--font-mono-features);
+  font-variant-ligatures: none;
   background: var(--bg-canvas); color: var(--text-primary);
   padding: 1px 6px; border-radius: 5px; border: 1px solid var(--border-subtle);
   white-space: nowrap;

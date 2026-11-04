@@ -70,7 +70,7 @@ export const RADIUS_TOKENS: TokenSwatch[] = [
 
 /** The documented type scale (tokens.css --fs-* → --bmg-font-size-*) with live samples. */
 export const TYPE_SCALE: Array<{ label: string; varName: string; sample: string; mono?: boolean }> = [
-  { label: 'Big number', varName: '--fs-big', sample: '$1,184.42' },
+  { label: 'Big number', varName: '--fs-big', sample: '1,184' },
   { label: 'Page title', varName: '--fs-title', sample: 'Page title' },
   { label: 'Body & labels', varName: '--fs-base', sample: 'Body & labels — Space Grotesk' },
   { label: 'Secondary', varName: '--fs-sm', sample: 'Secondary text' },

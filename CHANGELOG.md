@@ -15,6 +15,10 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The dashboard now uses the Space Grotesk and Bricolage Grotesque fonts from its design system. They ship with the dashboard, so it looks the same offline.
 - The dashboard's Plan screen now reads your specs as epics, stories and tasks in a single distraction-free column. You can collapse it to epics or stories, filter it, and open any story or task in Review. JIRA keys from your spec files link to their issues when a JIRA base URL is configured.
 
+### Fixes
+
+- Code text in the dashboard no longer renders `===`, `=>` or `!=` as ligatures, and the Design system screen's sample figures are plain counts instead of dollar amounts.
+
 ## [0.29.0] - 2026-10-27
 
 ### New Features
