@@ -167,7 +167,7 @@ implementations:
   - src/extraction/parse-warnings.ts:countParseWarningFiles
   - src/extraction/parse-warnings.ts:formatParseWarningSummary
   - src/extraction/index.ts:ExtractionOrchestrator.sync
-  - src/bin/specship.ts:printIndexResult
+  - src/bin/specship.ts:main.printIndexResult
 
 verifies:
   - __tests__/extraction-parse-error-region.test.ts:reqHtmllex003A1
