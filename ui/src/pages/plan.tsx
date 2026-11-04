@@ -18,6 +18,8 @@ import { go } from '../router';
 import { getPlanLevel, setPlanLevel, type PlanLevel } from '../prefs';
 import { classifyRequirement, type ReviewGroup } from '../review-groups';
 import { Button, Empty, ErrorState, PageHead, Pill, Segmented, StatePill } from '../components/ui';
+import { renderProse } from '../components/spec-detail';
+import { specParagraphs } from '../spec-prose';
 import type { PageProps } from './types';
 
 const LEVELS: Array<{ value: PlanLevel; label: string }> = [
@@ -180,7 +182,9 @@ function StorySection({ story, plan, showTasks }: { story: PlanStory; plan: Plan
       </p>
       {showTasks && (
         <>
-          {story.body.trim() && <p>{story.body.trim()}</p>}
+          {specParagraphs(story.body).map((para, i) => (
+            <p key={i} className="sp-prose" style={{ whiteSpace: 'pre-line' }} dangerouslySetInnerHTML={{ __html: renderProse(para) }} />
+          ))}
           {story.tasks.length > 0 && (
             <ul aria-label={'Tasks of ' + story.specId}>
               {story.tasks.map((t) => <TaskItem key={t.specId} task={t} />)}

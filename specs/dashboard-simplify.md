@@ -183,6 +183,8 @@ implementations:
   - ui/src/pages/plan.tsx:reviewHref
   - ui/src/prefs.ts:getPlanLevel
   - ui/src/prefs.ts:setPlanLevel
+  - ui/src/spec-prose.ts:specProse
+  - ui/src/spec-prose.ts:specParagraphs
 
 verifies:
   - ui/src/__tests__/plan.test.tsx:reqDashsimple003A1
@@ -191,6 +193,7 @@ verifies:
   - ui/src/__tests__/plan.test.tsx:reqDashsimple003A4
   - ui/src/__tests__/plan.test.tsx:reqDashsimple003A5
   - ui/src/__tests__/plan.test.tsx:reqDashsimple003A6
+  - ui/src/__tests__/plan.test.tsx:reqDashsimple003A7
 
 ## Acceptance
 <!-- id: REQ-DASHSIMPLE-003.A1 -->
@@ -302,6 +305,7 @@ implementations:
   - ui/src/pages/graph.tsx:GraphPage
   - ui/src/components/graph-split.tsx:SplitView
   - ui/src/components/graph-split.tsx:SplitSearch
+  - ui/src/components/graph-split.tsx:RequirementPane
   - server/src/routes/graph.ts:registerGraphRoutes
   - ui/src/api.ts:api
 
@@ -311,6 +315,7 @@ verifies:
   - ui/src/__tests__/graph-split.test.tsx:reqDashsimple005A3
   - ui/src/__tests__/graph-split.test.tsx:reqDashsimple005A4
   - ui/src/__tests__/graph-split.test.tsx:reqDashsimple005A5
+  - ui/src/__tests__/graph-split.test.tsx:reqDashsimple005A6
 
 ## Acceptance
 <!-- id: REQ-DASHSIMPLE-005.A1 -->

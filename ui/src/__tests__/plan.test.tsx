@@ -6,11 +6,13 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import * as fc from 'fast-check';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CoverageVerdict, CriterionCoverage, DriftLink, PlanResponse, PlanStory, RequirementCoverage } from '../api';
 import { __clearApiCache } from '../hooks';
 import { PlanPage, storyStatus } from '../pages/plan';
 import { classifyRequirement } from '../review-groups';
+import { specParagraphs, specProse } from '../spec-prose';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -232,6 +234,87 @@ async function reqDashsimple003A6(): Promise<void> {
   expect(within(screen.getByRole('radiogroup', { name: 'Plan depth' })).getByRole('radio', { name: 'Epics + stories' }).getAttribute('aria-checked')).toBe('true');
 }
 
+// ---- A7 ----
+
+const WORDS = ['the', 'order', 'total', 'MUST', 'reader', 'story', 'plan', 'shows', 'each', 'item', 'with', 'a', '**bold**', '`code`', 'epic', 'task'];
+const idArb = fc.tuple(fc.constantFrom('REQ-A-001', 'REQ-X-042', 'REQ-DASHSIMPLE-003'), fc.option(fc.integer({ min: 1, max: 9 })))
+  .map(([id, n]) => (n == null ? id : id + '.A' + n));
+const proseArb = fc.array(fc.constantFrom(...WORDS), { minLength: 1, maxLength: 14 }).map((w) => w.join(' '));
+const symbolArb = fc.tuple(fc.constantFrom('src/a.ts', 'ui/src/pages/plan.tsx', '__tests__/x.test.ts'), fc.constantFrom('foo', 'Bar.baz', 'reqX'))
+  .map(([f, s]) => '  - ' + f + ':' + s);
+type Piece = { kind: 'prose'; text: string; wrapAt: number } | { kind: 'raw'; text: string };
+const pieceArb: fc.Arbitrary<Piece> = fc.oneof(
+  fc.record({ kind: fc.constant('prose' as const), text: proseArb, wrapAt: fc.integer({ min: 2, max: 8 }) }),
+  idArb.map((id): Piece => ({ kind: 'raw', text: '<!-- id: ' + id + ' -->' })),
+  fc.tuple(fc.constantFrom('implementations:', 'verifies:'), fc.array(symbolArb, { minLength: 0, maxLength: 4 }))
+    .map(([label, items]): Piece => ({ kind: 'raw', text: [label, ...items].join('\n') })),
+);
+const acceptanceArb = fc.array(fc.tuple(idArb, proseArb), { minLength: 1, maxLength: 4 })
+  .map((cs) => ['## Acceptance', ...cs.flatMap(([id, t]) => ['<!-- id: ' + id + ' -->', '- ' + t])].join('\n'));
+
+/** Hard-wrap a paragraph every `n` words, the way spec files wrap prose. */
+function wrap(text: string, n: number): string {
+  const w = text.split(' ');
+  const lines: string[] = [];
+  for (let i = 0; i < w.length; i += n) lines.push(w.slice(i, i + n).join(' '));
+  return lines.join('\n');
+}
+
+async function reqDashsimple003A7(): Promise<void> {
+  // Property: whatever mix of prose, id markers and link blocks a body holds
+  // (with its Acceptance section last, as spec files do), the cleaned text
+  // carries no machine syntax and keeps every prose paragraph, one per block.
+  fc.assert(fc.property(
+    fc.array(pieceArb, { maxLength: 10 }), fc.option(acceptanceArb), fc.constantFrom('\n\n', '\n\n\n'),
+    (pieces, acceptance, sep) => {
+      const body = [...pieces.map((p) => (p.kind === 'prose' ? wrap(p.text, p.wrapAt) : p.text)), ...(acceptance ? [acceptance] : [])].join(sep);
+      const out = specProse(body);
+      expect(out).not.toMatch(/<!--\s*id:/);
+      expect(out).not.toMatch(/^implementations:/m);
+      expect(out).not.toMatch(/^verifies:/m);
+      expect(out).not.toMatch(/^#+\s*Acceptance/m);
+      expect(out).not.toMatch(/:(foo|Bar\.baz|reqX)$/m);
+      const prose = pieces.filter((p): p is Extract<Piece, { kind: 'prose' }> => p.kind === 'prose').map((p) => p.text);
+      expect(specParagraphs(body)).toEqual(prose);
+    },
+  ), { numRuns: 300 });
+
+  // Rendered: the story body is prose paragraphs; criteria appear only as tasks.
+  const raw = [
+    '<!-- id: REQ-A-001 -->',
+    'Alpha MUST read **well** and call `render()`.',
+    'It wraps onto a second line.',
+    '',
+    'A second paragraph.',
+    '',
+    'implementations:',
+    '  - ui/src/pages/plan.tsx:StorySection',
+    '',
+    'verifies:',
+    '  - ui/src/__tests__/plan.test.tsx:reqDashsimple003A7',
+    '',
+    '## Acceptance',
+    '<!-- id: REQ-A-001.A1 -->',
+    '- Criterion prose that belongs in tasks only.',
+  ].join('\n');
+  const p = plan(null);
+  p.epics[0]!.docs[0]!.stories[0] = { ...p.epics[0]!.docs[0]!.stories[0]!, body: raw };
+  mockFetch(p);
+  render(<PlanPage project={null} query={{}} />);
+  await screen.findByTestId('plan-reader');
+  const section = document.querySelector('[data-plan-story="REQ-A-001"]') as HTMLElement;
+  const tasks = within(section).getByRole('list', { name: 'Tasks of REQ-A-001' });
+  const bodyText = Array.from(section.querySelectorAll('p.sp-prose')).map((e) => e.textContent);
+  expect(bodyText).toEqual(['Alpha MUST read well and call render(). It wraps onto a second line.', 'A second paragraph.']);
+  expect(section.querySelector('p.sp-prose strong')?.textContent).toBe('well');
+  expect(section.querySelector('p.sp-prose code')?.textContent).toBe('render()');
+  const outsideTasks = (section.textContent ?? '').replace(tasks.textContent ?? '', '');
+  for (const s of ['<!--', 'implementations:', 'verifies:', 'Acceptance', 'StorySection', 'Criterion prose', '**']) {
+    expect(outsideTasks).not.toContain(s);
+  }
+  expect(within(tasks).getAllByRole('listitem')).toHaveLength(4);
+}
+
 describe('Plan reader (REQ-DASHSIMPLE-003)', () => {
   it('REQ-DASHSIMPLE-003.A1: documents sharing an epicKey render as one epic, stories in file order', reqDashsimple003A1);
   it('REQ-DASHSIMPLE-003.A2: each story lists its criteria as tasks with their test-evidence state', reqDashsimple003A2);
@@ -239,6 +322,7 @@ describe('Plan reader (REQ-DASHSIMPLE-003)', () => {
   it('REQ-DASHSIMPLE-003.A4: a JIRA key links only when a base URL is configured, with no JIRA request', reqDashsimple003A4);
   it('REQ-DASHSIMPLE-003.A5: the reader column is capped at 75ch with no side panels inside', reqDashsimple003A5);
   it('REQ-DASHSIMPLE-003.A6: the level toggle changes depth and the choice survives a reload', reqDashsimple003A6);
+  it('REQ-DASHSIMPLE-003.A7: a story body renders as readable prose only, criteria only as tasks', reqDashsimple003A7);
 
   it('filters by epic, story and task titles', async () => {
     mockFetch(plan(null));

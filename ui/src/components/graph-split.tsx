@@ -8,7 +8,9 @@ import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 
 import { api, type GraphNodeDetail, type LinkedSpec, type NodeRef, type SplitSearchResponse } from '../api';
 import { useApi } from '../hooks';
 import { go } from '../router';
+import { specParagraphs } from '../spec-prose';
 import { Icon } from './icons';
+import { renderProse } from './spec-detail';
 import { Empty, ErrorState, Pill, StatePill, nodeColor } from './ui';
 
 const ellipsis: CSSProperties = { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' };
@@ -225,7 +227,11 @@ function RequirementPane({ spec, error }: { spec: { id: string; title: string; b
     <div data-testid="split-requirement">
       <div className="mono muted" style={{ fontSize: 11 }}>{spec.id}</div>
       <h2 style={{ fontSize: 16, margin: '4px 0 10px' }}>{spec.title}</h2>
-      <div style={{ fontSize: 13, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{spec.body}</div>
+      <div data-testid="split-requirement-body" style={{ fontSize: 13, lineHeight: 1.6 }}>
+        {specParagraphs(spec.body ?? '').map((para, i) => (
+          <p key={i} className="sp-prose" style={{ whiteSpace: 'pre-line', margin: '0 0 10px' }} dangerouslySetInnerHTML={{ __html: renderProse(para) }} />
+        ))}
+      </div>
     </div>
   );
 }
