@@ -285,6 +285,17 @@ shows its code with "no linked requirement" on the left.
 
 implementations:
   - ui/src/pages/graph.tsx:GraphPage
+  - ui/src/components/graph-split.tsx:SplitView
+  - ui/src/components/graph-split.tsx:SplitSearch
+  - server/src/routes/graph.ts:registerGraphRoutes
+  - ui/src/api.ts:api
+
+verifies:
+  - ui/src/__tests__/graph-split.test.tsx:reqDashsimple005A1
+  - ui/src/__tests__/graph-split.test.tsx:reqDashsimple005A2
+  - ui/src/__tests__/graph-split.test.tsx:reqDashsimple005A3
+  - ui/src/__tests__/graph-split.test.tsx:reqDashsimple005A4
+  - ui/src/__tests__/graph-split.test.tsx:reqDashsimple005A5
 
 ## Acceptance
 <!-- id: REQ-DASHSIMPLE-005.A1 -->
