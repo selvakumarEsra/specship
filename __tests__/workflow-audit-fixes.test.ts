@@ -369,19 +369,19 @@ describe('workflow docs-audit fixes', () => {
       ],
     };
 
-    it('REQ-AUDFIX-005.A1: a node without model runs with the workflow model; a node model wins', async () => {
+    it('REQ-AUDFIX-005.A1: a node without model runs with the workflow model; a node model wins', async function reqAudfix005A1() {
       await executor.start(WF, { projectRoot: dir });
       expect(promptsRun.find((p) => p.id === 'plain')!.model).toBe('wf-model');
       expect(promptsRun.find((p) => p.id === 'custom')!.model).toBe('node-model');
     });
 
-    it('REQ-AUDFIX-005.A1: with no workflow model, a model-less node keeps none', async () => {
+    it('REQ-AUDFIX-005.A1: with no workflow model, a model-less node keeps none', async function reqAudfix005A1NoWorkflowModel() {
       await executor.start({ name: 'none', nodes: [{ id: 'x', kind: 'prompt', prompt: 'x' }] }, { projectRoot: dir });
       expect(promptsRun[0]!.model).toBeUndefined();
       expect(promptsRun[0]!.systemPromptAppend).toBeUndefined();
     });
 
-    it('REQ-AUDFIX-005.A2: workflow systemPromptAppend reaches every prompt node; node value is appended after it', async () => {
+    it('REQ-AUDFIX-005.A2: workflow systemPromptAppend reaches every prompt node; node value is appended after it', async function reqAudfix005A2() {
       await executor.start(WF, { projectRoot: dir });
       expect(promptsRun.find((p) => p.id === 'plain')!.systemPromptAppend).toBe('WORKFLOW RULES');
       expect(promptsRun.find((p) => p.id === 'custom')!.systemPromptAppend).toBe(
@@ -389,7 +389,7 @@ describe('workflow docs-audit fixes', () => {
       );
     });
 
-    it('REQ-AUDFIX-005.A2: on_reject revisions get the workflow model and systemPromptAppend', async () => {
+    it('REQ-AUDFIX-005.A2: on_reject revisions get the workflow model and systemPromptAppend', async function reqAudfix005A2OnReject() {
       const { run } = await executor.start(WF, { projectRoot: dir });
       expect(status(run.id)).toBe('paused');
       executor.reject(run.id, 'tighten it');

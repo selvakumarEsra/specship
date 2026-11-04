@@ -141,6 +141,12 @@ every prompt node, but never reach the agent.
 implementations:
   - src/workflows/executor.ts:WorkflowExecutor.resolveNodeRefs
 
+verifies:
+  - __tests__/workflow-audit-fixes.test.ts:reqAudfix005A1
+  - __tests__/workflow-audit-fixes.test.ts:reqAudfix005A1NoWorkflowModel
+  - __tests__/workflow-audit-fixes.test.ts:reqAudfix005A2
+  - __tests__/workflow-audit-fixes.test.ts:reqAudfix005A2OnReject
+
 ## Acceptance
 <!-- id: REQ-AUDFIX-005.A1 -->
 - A prompt node with no `model` runs with the workflow-level `model`; a node-level `model` wins.

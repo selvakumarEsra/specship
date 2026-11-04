@@ -48,7 +48,7 @@ implementations:
 `;
 
 describe('verifies: block extraction (REQ-VEVID-001.A1)', () => {
-  it('emits a kind=tests candidate per bullet, alongside implements', () => {
+  it('emits a kind=tests candidate per bullet, alongside implements', function reqVevid001A1() {
     const { linkCandidates } = new MarkdownSpecExtractor('specs/ev.md', SPEC).extract();
     const ev = linkCandidates.filter((c) => c.kind === 'tests');
     expect(ev).toHaveLength(1);
@@ -110,7 +110,7 @@ describe.skipIf(!fts5Available)('evidence gate end-to-end (REQ-VEVID-001/002)', 
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
-  it('A1+A3: the verifies: block produces a tests link that survives a full reindex', async () => {
+  it('A1+A3: the verifies: block produces a tests link that survives a full reindex', async function reqVevid001A3() {
     const before = cg.getSpecQueries().getLinksBySpec('REQ-EV-001').filter((l) => l.kind === 'tests');
     expect(before.length).toBeGreaterThanOrEqual(1);
     await cg.indexAll();
@@ -118,7 +118,7 @@ describe.skipIf(!fts5Available)('evidence gate end-to-end (REQ-VEVID-001/002)', 
     expect(after.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('A2: an @verifies comment on the test symbol produces a tests link', () => {
+  it('A2: an @verifies comment on the test symbol produces a tests link', function reqVevid001A2() {
     const ev = cg.getSpecQueries().getLinksBySpec('REQ-EV-002').filter((l) => l.kind === 'tests');
     expect(ev.length).toBeGreaterThanOrEqual(1);
     expect(ev[0].targetFilePath).toContain('thing.test.ts');

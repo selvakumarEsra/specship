@@ -39,6 +39,11 @@ implementations:
   - src/resolution/spec-link-resolver.ts:SpecLinkResolver.applyCodeCommentLinks
   - src/extraction/tree-sitter-helpers.ts:getPrecedingDocstring
 
+verifies:
+  - __tests__/verified-evidence.test.ts:reqVevid001A1
+  - __tests__/verified-evidence.test.ts:reqVevid001A2
+  - __tests__/verified-evidence.test.ts:reqVevid001A3
+
 ## Acceptance
 <!-- id: REQ-VEVID-001.A1 -->
 - A `verifies:` block bullet produces a queryable test-evidence link for the
