@@ -255,4 +255,21 @@ describe.skipIf(!fts5Available)('spec files no longer in the checkout are pruned
     expect(sq.getAllSpecFiles().map((f) => `${f.path}:${f.contentHash}`)).toEqual(filesBefore);
     expect(sq.getAllLinks().map((l) => l.id).sort()).toEqual(linksBefore);
   });
+
+  it('REQ-MULTIDEV-003.A3 an index scoped to other roots never prunes files outside them', async function reqMultidev003ScopedRootsKeepOthers() {
+    await open();
+    fs.mkdirSync(path.join(dir, 'specs', 'sub'), { recursive: true });
+    fs.rmSync(path.join(dir, 'specs', 'foo.md'));
+
+    // foo.md is gone, but it lies outside the scoped root, so nothing is pruned.
+    const scoped = await cg!.indexSpecs(['specs/sub']);
+    expect(scoped.filesRemoved).toBe(0);
+    const ids = sq.getAllSpecs().map((s) => s.id);
+    for (const id of FOO_IDS) expect(ids).toContain(id);
+
+    // A pass over the root that contained it prunes it.
+    const full = await cg!.indexSpecs(['specs']);
+    expect(full.filesRemoved).toBe(1);
+    assertFooGone();
+  });
 });

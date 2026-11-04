@@ -144,6 +144,7 @@ verifies:
   - __tests__/spec-file-removal.test.ts:reqMultidev003A2
   - __tests__/spec-file-removal.test.ts:reqMultidev003A3
   - __tests__/spec-file-removal.test.ts:reqMultidev003A4
+  - __tests__/spec-file-removal.test.ts:reqMultidev003ScopedRootsKeepOthers
 
 ## Acceptance
 <!-- id: REQ-MULTIDEV-003.A1 -->
