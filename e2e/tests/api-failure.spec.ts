@@ -6,8 +6,8 @@ import { FAULT_ROUTE, URL_FAULT } from '../lib/ports';
  * REQ-TVIZ-004.A1/.A2 — when a data route fails, the SPA must show a visible
  * error state, not a blank screen.
  *
- * The fault server (playwright.config.ts) boots with `E2E_FAULT=/api/claude/stats`,
- * so the dashboard's usage-stats fetch 500s while every other route stays
+ * The fault server (playwright.config.ts) boots with `E2E_FAULT=/api/workflows/runs`,
+ * so the Overview's recent-runs fetch 500s while every other route stays
  * healthy. That isolates the question these tests exist to answer: does the app
  * degrade in place, or does the whole screen go dark?
  *
@@ -23,7 +23,7 @@ import { FAULT_ROUTE, URL_FAULT } from '../lib/ports';
 const RESOURCE_500 = /Failed to load resource.*\b500\b/;
 
 test.describe('A failing API route degrades to an error state (REQ-TVIZ-004.A1)', () => {
-  test('the dashboard renders a visible error state, not a blank screen', async ({ page }) => {
+  test('the Overview renders a visible error state, not a blank screen', async ({ page }) => {
     const guard = captureConsoleErrors(page, [RESOURCE_500]);
     const failures: string[] = [];
     page.on('response', (res) => {
@@ -32,18 +32,18 @@ test.describe('A failing API route degrades to an error state (REQ-TVIZ-004.A1)'
 
     await page.goto(`${URL_FAULT}/dashboard`);
 
-    // Not blank: the React app mounted and the dashboard screen is present.
+    // Not blank: the React app mounted and the Overview screen is present.
     await expect(page.locator('#root')).not.toBeEmpty();
     const region = page.locator('[data-screen="dashboard"]');
     await expect(region).toBeVisible();
 
     // The failed module renders the shared error state with its Retry affordance
     // (components/dashboard-modules.tsx `Module`), naming what couldn't load.
-    await expect(region.getByText(/Couldn't load usage stats/i)).toBeVisible();
+    await expect(region.getByText(/Couldn't load recent runs/i)).toBeVisible();
     await expect(region.getByRole('button', { name: 'Retry' }).first()).toBeVisible();
 
     // Neighbouring modules still painted — the failure is contained, not global.
-    await expect(region.getByText('Dashboard', { exact: false }).first()).toBeVisible();
+    await expect(region.getByText('Overview', { exact: false }).first()).toBeVisible();
 
     await page.waitForTimeout(400);
 
@@ -58,7 +58,7 @@ test.describe('A failing API route degrades to an error state (REQ-TVIZ-004.A1)'
   });
 
   test('the fault knob 500s only the selected route (REQ-TVIZ-004.A2)', async ({ page }) => {
-    const faulted = await page.request.get(`${URL_FAULT}${FAULT_ROUTE}?range=week`);
+    const faulted = await page.request.get(`${URL_FAULT}${FAULT_ROUTE}`);
     expect(faulted.status()).toBe(500);
     expect((await faulted.json()).code).toBe('e2e_fault');
 
@@ -73,27 +73,19 @@ test.describe('A failing API route degrades to an error state (REQ-TVIZ-004.A1)'
     await page.goto(`${URL_FAULT}/dashboard`);
 
     const region = page.locator('[data-screen="dashboard"]');
-    await expect(region.getByText(/Couldn't load usage stats/i)).toBeVisible();
+    await expect(region.getByText(/Couldn't load recent runs/i)).toBeVisible();
 
     // Heal the route from here on (the server keeps faulting; the browser no
     // longer reaches it), then click the module's Retry: the error state must be
     // replaced by rendered data, proving the failure isn't sticky.
-    const metric = { value: 1.23, delta: 0, series: [1, 2, 3] };
     await page.route(`**${FAULT_ROUTE}**`, (route) => route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({
-        sessionCount: 1,
-        lastSessionCost: metric,
-        toolCalls: metric,
-        subagentPct: metric,
-        drift: metric,
-        ingest: null,
-      }),
+      body: JSON.stringify({ runs: [] }),
     }));
 
     await region.getByRole('button', { name: 'Retry' }).first().click();
-    await expect(region.getByText(/Couldn't load usage stats/i)).toHaveCount(0);
+    await expect(region.getByText(/Couldn't load recent runs/i)).toHaveCount(0);
 
     expect(guard.errors(), `unexpected console errors:\n${guard.errors().join('\n')}`).toEqual([]);
   });

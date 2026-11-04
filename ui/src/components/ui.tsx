@@ -321,31 +321,6 @@ export function Segmented({ options, value, onChange, size, label, disabled }: {
   );
 }
 
-/** Range selector shared by the analytics screens (design bundle's ui.jsx). */
-export function RangeSelector({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  return (
-    <Segmented
-      options={[
-        { value: 'today', label: 'Today' }, { value: 'week', label: 'This week' },
-        { value: 'month', label: 'This month' }, { value: 'all', label: 'All time' },
-      ]}
-      value={value}
-      onChange={onChange}
-      size="sm"
-      label="Time range"
-    />
-  );
-}
-
-/** Mini horizontal bar (for cost rows etc.). */
-export function Bar({ frac, color, height }: { frac: number; color?: string; height?: number }) {
-  return (
-    <div style={{ height: height || 4, background: 'var(--fill)', borderRadius: 999, overflow: 'hidden', width: '100%' }}>
-      <div style={{ width: Math.max(2, frac * 100) + '%', height: '100%', background: color || 'var(--accent)', borderRadius: 999 }} />
-    </div>
-  );
-}
-
 /** Compact relative age for link rows and metalines — "5m", "3h", "2d". */
 export function timeAgo(ms?: number): string | null {
   if (!ms) return null;

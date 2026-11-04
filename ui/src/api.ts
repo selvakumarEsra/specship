@@ -318,6 +318,17 @@ export interface WorkflowRun {
   [key: string]: unknown;
 }
 
+/**
+ * The coding agent a run executed on, exactly as the executor recorded it at
+ * `metadata.agent` (src/workflows/agents RUN_AGENT_KEY). Null when the run has
+ * none — never a guessed default (REQ-DASHSIMPLE-002.A2).
+ */
+// @implements REQ-DASHSIMPLE-002
+export function runAgentName(run: WorkflowRun): string | null {
+  const agent = run.metadata?.agent;
+  return typeof agent === 'string' && agent.trim() ? agent : null;
+}
+
 export interface RunsResponse {
   runs: WorkflowRun[];
 }
@@ -407,101 +418,6 @@ export interface SearchResponse {
   results: SearchResult[];
 }
 
-// ---- Claude analytics shapes (server/src/routes/claude.ts) ----
-
-/**
- * One dashboard stat-tile metric: value + WoW delta + 7-point sparkline.
- * `delta` and `series` are OPTIONAL — a metric with no prior-window snapshot
- * omits them rather than sending 0/[] (REQ-REVINT-007.A2).
- */
-export interface StatMetric {
-  value: number;
-  delta?: number;
-  series?: number[];
-}
-
-export interface ClaudeStatsResponse {
-  /** unpricedTokens > 0 = the last session's model resolved no pricing row —
-   *  render an unpriced marker, never $0.00 (REQ-DASHINT-007). */
-  lastSessionCost: StatMetric & { unpricedTokens?: number };
-  toolCalls: StatMetric;
-  subagentPct: StatMetric;
-  drift: StatMetric;
-  /** Total ingested sessions; 0 = nothing ingested (REQ-DESKTOP-020.A4). */
-  sessionCount: number;
-  /** Parse coverage of the latest ingest pass (REQ-DASHINT-008). Null until
-   *  the first pass of this server process completes. */
-  ingest?: { linesParsed: number; linesSkipped: number; at: number } | null;
-}
-
-/** One row from /api/claude/costs topPrompts (text capped at 200 chars). */
-export interface CostPrompt {
-  id: string;
-  session_id: string;
-  text: string;
-  model: string | null;
-  cost_usd: number;
-  is_sidechain: number;
-  input_tokens: number;
-  output_tokens: number;
-  cache_creation_tokens: number;
-  cache_read_tokens: number;
-  ts: number;
-}
-
-export interface ClaudeCostsResponse {
-  total: number;
-  topPrompts: CostPrompt[];
-  series: Array<{ day: number; cost: number; prompts: number }>;
-  byModel: Array<{ model: string; prompts: number; cost: number }>;
-  wowDelta: number;
-  /** Sessions in the window with tokens but no resolvable pricing — the
-   *  total excludes them and the UI must say so (REQ-DASHINT-007.A2). */
-  unpricedSessions?: number;
-}
-
-export interface ClaudeCacheResponse {
-  readRate: number;
-  creationTokens: number;
-  readTokens: number;
-  inputTokens: number;
-  outputTokens: number;
-  totalCost: number;
-  dollarsSaved: number;
-  wowDelta: number;
-}
-
-export interface HeatmapFile {
-  path: string;
-  calls: number;
-  resultBytes: number | null;
-  trend: number[];
-}
-
-export interface ClaudeHeatmapResponse {
-  files: HeatmapFile[];
-  tools: Array<{ name: string; calls: number; resultBytes: number | null }>;
-  subagents: Array<{ type: string; prompts: number; tokens: number; cost: number }>;
-  subagentByName: Array<{ name: string; calls: number; firstSeen: number; lastSeen: number }>;
-}
-
-export interface ClaudeTip {
-  id: string;
-  severity: 'error' | 'warn' | 'info';
-  icon: string;
-  title: string;
-  why: string;
-  evidence: { session: string; detail: string };
-  fix: string;
-  saving: string;
-  /** Set when the tip was applied; dismissed tips never come back at all. */
-  state?: 'applied';
-}
-
-export interface ClaudeTipsResponse {
-  tips: ClaudeTip[];
-}
-
 // ---- Runtime config (server/src/routes/config.ts, REQ-DESKTOP-028) ----
 
 /** GET/PUT /api/config — the server's dashboard-editable runtime knobs. */
@@ -562,20 +478,6 @@ export const api = {
   projects: () => getJson<ProjectsResponse>('/api/projects'),
   graphSearch: (qs: string, project?: string | null, limit = 10) =>
     getJson<SearchResponse>(q(`/api/graph/search?q=${encodeURIComponent(qs)}&limit=${limit}`, project)),
-  // Claude analytics (REQ-DESKTOP-020/-024). These aggregate the cross-project
-  // claude_* tables on the primary project's DB; the optional project/model
-  // params narrow them (REQ-DESKTOP-024.A2). `project` here is a Claude
-  // project path (or transcript-dir slug), not a specship project slug.
-  claudeStats: (range = 'week') => getJson<ClaudeStatsResponse>(`/api/claude/stats?range=${range}`),
-  claudeCosts: (range = 'week', project?: string | null, model?: string | null) =>
-    getJson<ClaudeCostsResponse>(q(`/api/claude/costs?range=${range}${model ? `&model=${encodeURIComponent(model)}` : ''}`, project)),
-  claudeCache: (range = 'week') => getJson<ClaudeCacheResponse>(`/api/claude/cache?range=${range}`),
-  claudeHeatmap: (range = 'week', project?: string | null) =>
-    getJson<ClaudeHeatmapResponse>(q(`/api/claude/heatmap?range=${range}`, project)),
-  claudeTips: () => getJson<ClaudeTipsResponse>('/api/claude/tips'),
-  setTipState: (id: string, state: 'applied' | 'dismissed') =>
-    postJson<{ ok: boolean }>('/api/claude/tips/state', { id, state }),
-  ingestNow: () => postJson<{ ok: boolean }>('/api/claude/ingest'),
   // Server runtime config (REQ-DESKTOP-028.A2): the Settings ingest toggle
   // round-trips through these; analytics screens read `get` to react.
   config: {

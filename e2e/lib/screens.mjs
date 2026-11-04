@@ -14,7 +14,7 @@
  * a row here or the render sweep won't cover it.
  */
 export const SCREENS = [
-  { id: 'dashboard', path: '/dashboard', content: 'Dashboard' },
+  { id: 'dashboard', path: '/dashboard', content: 'Overview' },
   { id: 'graph', path: '/graph', content: 'Recenter' },
   { id: 'specs', path: '/specs', content: 'Specs' },
   { id: 'drift', path: '/drift', content: 'Drift queue' },

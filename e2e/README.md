@@ -57,7 +57,7 @@ other). Move all three at once with `E2E_PORT`.
 | Mode | Port | Fixture | Drives |
 |---|---|---|---|
 | `default` | 4319 | indexed + seeded transcripts | every happy-path spec (`baseURL`) |
-| `fault` | 4320 | same, plus `E2E_FAULT=/api/claude/stats` | `api-failure.spec.ts` |
+| `fault` | 4320 | same, plus `E2E_FAULT=/api/workflows/runs` | `api-failure.spec.ts` |
 | `empty` | 4321 | `specship init` and nothing else | `empty-project.spec.ts` |
 
 `E2E_FAULT` (REQ-TVIZ-004.A2) is read in `server/src/server.ts`: it takes a

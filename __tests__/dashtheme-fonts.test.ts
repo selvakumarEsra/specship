@@ -120,9 +120,9 @@ describe('REQ-DASHTHEME-002 — design-system fonts, served locally', () => {
     expect(selectorsUsing(app, /font-family:\s*var\(--font-display\)/)).toEqual(
       expect.arrayContaining(['h1', 'h2', 'h3', 'h4', '.sp-title', '[data-page-title]', '.display-num']),
     );
-    // The stat-tile value and the cache-rate figure (the dashboard's large numerals) carry the class.
+    // The stat-tile value (the dashboard's large numeral) carries the class.
     const modules = read(path.join(uiDir, 'src', 'components', 'dashboard-modules.tsx'));
-    expect(modules.match(/className="tabular display-num"/g)?.length).toBe(2);
+    expect(modules.match(/className="tabular display-num"/g)?.length).toBe(1);
 
     // The built CSS keeps the mapping.
     const builtCss = assets.filter((a) => a.endsWith('.css')).map((a) => read(path.join(assetsDir, a))).join('\n');

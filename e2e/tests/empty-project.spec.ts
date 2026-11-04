@@ -20,7 +20,7 @@ test.describe('An empty/unindexed project renders empty states (REQ-TVIZ-004.A1)
     expect((await status.json()).nodeCount, 'the empty fixture must have no nodes').toBe(0);
   });
 
-  test('the dashboard points at the ingest path instead of rendering zeros', async ({ page }) => {
+  test('the Overview shows one next step instead of empty charts', async ({ page }) => {
     const guard = captureConsoleErrors(page);
     await page.goto(`${URL_EMPTY}/dashboard`);
 
@@ -28,10 +28,10 @@ test.describe('An empty/unindexed project renders empty states (REQ-TVIZ-004.A1)
     const region = page.locator('[data-screen="dashboard"]');
     await expect(region).toBeVisible();
 
-    // The zero-ingest guidance (REQ-DESKTOP-020.A4) — an explicit statement that
-    // there is no data, not a grid of $0.00s.
-    await expect(region.getByText(/No Claude Code data ingested yet/i).first()).toBeVisible();
-    await expect(region.getByText(/no transcript data/i).first()).toBeVisible();
+    // The no-specs next step (REQ-DASHSIMPLE-002.A4) — one agent-neutral
+    // instruction, not a grid of zero tiles.
+    await expect(region.getByText('Write your first spec as a Markdown file under specs/, then run specship sync.')).toBeVisible();
+    await expect(region.locator('[data-overview-count]')).toHaveCount(0);
 
     await page.waitForTimeout(400);
     expect(guard.errors(), `dashboard console errors:\n${guard.errors().join('\n')}`).toEqual([]);

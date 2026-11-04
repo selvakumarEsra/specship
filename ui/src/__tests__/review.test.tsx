@@ -230,16 +230,13 @@ async function reqDashsimple004A5(): Promise<void> {
     '/api/status': STATUS,
     '/api/projects': { claudeRoot: '', projects: [] },
     '/api/workflows/runs': { runs: [] },
-    '/api/claude/stats': {
-      sessionCount: 0,
-      lastSessionCost: { value: 0, delta: null, series: [] },
-      toolCalls: { value: 0, delta: null, series: [] },
-      subagentPct: { value: 0, delta: null, series: [] },
-      drift: { value: 1, delta: null, series: [] },
-    },
   });
   render(<App />);
-  const tile = await screen.findByText('Drift queue');
+  const tile = await waitFor(() => {
+    const t = document.querySelector<HTMLButtonElement>('[data-overview-count="drifted"] button');
+    expect(t).toBeTruthy();
+    return t!;
+  });
   fireEvent.click(tile);
   await waitFor(() => expect(location.pathname).toBe('/review'));
   expect(location.search).toContain('group=drifted');
