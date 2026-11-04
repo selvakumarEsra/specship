@@ -4,7 +4,19 @@ title: Simplified, agent-agnostic dashboard with a plan reader and a review queu
 owner: dashboard
 priority: high
 version: 1
+epicKey: SSHIP-635
+jira: SSHIP-636
 depends_on: [SPECSHIP-DESKTOP-DOC, DASH-LEAN-DOC]
+jira_issue_REQ-DASHSIMPLE-001: SSHIP-636
+jira_fingerprint_REQ-DASHSIMPLE-001: f3efde74f08d0341
+jira_issue_REQ-DASHSIMPLE-002: SSHIP-643
+jira_fingerprint_REQ-DASHSIMPLE-002: 31a71a65eb3f3d34
+jira_issue_REQ-DASHSIMPLE-003: SSHIP-648
+jira_fingerprint_REQ-DASHSIMPLE-003: b34ef463858aac49
+jira_issue_REQ-DASHSIMPLE-004: SSHIP-655
+jira_fingerprint_REQ-DASHSIMPLE-004: 238b5dc23b91446a
+jira_issue_REQ-DASHSIMPLE-005: SSHIP-663
+jira_fingerprint_REQ-DASHSIMPLE-005: 1967ad1034c0dbbf
 ---
 
 <!-- id: DASHSIMPLE-DOC -->
