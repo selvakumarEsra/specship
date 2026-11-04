@@ -206,6 +206,7 @@ implementations:
   - ui/src/components/ui.tsx:ErrorState
   - ui/src/components/ui.tsx:CopyBtn
   - ui/src/components/dashboard-modules.tsx:StatTile
+  - ui/src/pages/settings.tsx:ToggleRow
   - ui/src/pages/designsystem.tsx:DesignSystemPage
   - ui/src/tokens.ts:KIT_COMPONENT_STATES
   - ui/src/tokens.ts:BUTTON_VARIANTS
