@@ -5,7 +5,7 @@ owner: dashboard
 priority: high
 version: 1
 epicKey: SSHIP-635
-jira: SSHIP-643
+jira: SSHIP-663
 depends_on: [SPECSHIP-DESKTOP-DOC, DASH-LEAN-DOC]
 jira_issue_REQ-DASHSIMPLE-001: SSHIP-636
 jira_fingerprint_REQ-DASHSIMPLE-001: f3efde74f08d0341
