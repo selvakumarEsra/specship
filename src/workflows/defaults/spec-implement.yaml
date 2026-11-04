@@ -483,12 +483,25 @@ nodes:
       # REQ-AUTHG-004.A1 — the full diff, from git, into a run artifact. The
       # human gate and the adversarial reviewer read THIS; the implement node's
       # prose about what it believes it changed is not the change.
+      # REQ-WFINTEG-002 — diff against the commit the run started from (the
+      # readiness step records it), not HEAD: the implement step may commit,
+      # and a diff against HEAD would then be empty.
       # `git add -A -N` registers new files as intent-to-add so untracked work
-      # appears in `git diff HEAD` without staging any content.
+      # appears in the diff without staging any content.
+      BASE=$(cat "$(git rev-parse --git-dir 2>/dev/null)/specship-run-base" 2>/dev/null)
+      if [ -z "$BASE" ] || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+        echo "HALT_CAUSE=the run's base commit was not recorded — cannot show the change this run made"
+        exit 1
+      fi
       git add -A -N >/dev/null 2>&1 || true
+      DIFF=$(git --no-pager diff "$BASE" | head -c 400000)
+      if [ -z "$DIFF" ] && [ -n "$(git status --porcelain --untracked-files=all 2>/dev/null | grep '^??')" ]; then
+        echo "HALT_CAUSE=the diff is empty but the worktree has files git did not include — refusing to review an empty change"
+        exit 1
+      fi
+      echo "DIFF_BASE=$BASE"
       echo "DIFF_BEGIN"
-      git --no-pager diff HEAD | head -c 400000
-      echo
+      printf '%s\n' "$DIFF"
       echo "DIFF_END"
 
   - id: diff_stat
@@ -500,8 +513,10 @@ nodes:
       # insertions/deletions counted by git. Its own small node so the approval
       # message carries the summary while the full diff stays in the `diff`
       # artifact.
+      # Same base as `diff` (REQ-WFINTEG-002), so the stat counts the whole run.
+      BASE=$(cat "$(git rev-parse --git-dir 2>/dev/null)/specship-run-base" 2>/dev/null)
       echo "DIFF_STAT_BEGIN"
-      git --no-pager diff HEAD --stat
+      git --no-pager diff "${BASE:-HEAD}" --stat
       echo "DIFF_STAT_END"
 
   - id: verify

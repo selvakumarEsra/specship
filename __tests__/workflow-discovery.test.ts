@@ -368,13 +368,13 @@ describe('bundled implement workflows — pipeline quality gates (REQ-AUTHG-004/
     expect(suppression.bash).toContain('suppressions');
     expect(suppression.bash).toContain('SUPPRESSION_GATE=skipped');
     expect(nodeOf(wf, 'final_review').message).toContain('$suppression_gate.output');
-    expect(diff.bash).toContain('git --no-pager diff HEAD');
+    expect(diff.bash).toContain('git --no-pager diff "$BASE"'); // run base, not HEAD (REQ-WFINTEG-002)
     // Untracked new files must appear in the artifact too.
     expect(diff.bash).toContain('git add -A -N');
 
     const stat = nodeOf(wf, 'diff_stat');
     expect(stat.kind).toBe('bash');
-    expect(stat.bash).toContain('git --no-pager diff HEAD --stat');
+    expect(stat.bash).toContain('git --no-pager diff "${BASE:-HEAD}" --stat');
     // The implement node's prose is never the source of the stat block.
     expect(stat.bash).not.toContain('$implement.output');
   }

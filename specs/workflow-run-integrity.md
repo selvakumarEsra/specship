@@ -36,10 +36,12 @@ way `workflow-quality-baseline.test.ts` exercises the quality nodes.
 ## Shell text in a step MUST NOT be read as a reference to an unknown step
 
 Substitution in a workflow step MUST treat `$name.field` as a step-output
-reference only when `name` is a step of that workflow. Any other `$name.field`
-(a shell variable followed by text, such as `$i.md` or `$f.txt`) MUST be left
-as written. A reference to a real step with a wrong field (`$plan.outptu`)
-MUST still fail the step with an error naming the reference, as it does today.
+reference only when `name` is a step of that workflow or `field` is `output`.
+Any other `$name.field` (a shell variable followed by text, such as `$i.md` or
+`$f.txt`) MUST be left as written. A reference to a real step with a wrong
+field (`$plan.outptu`), or `.output` of a step that does not exist
+(`$plnn.output`), MUST still fail the step with an error naming the
+reference, as it does today.
 
 implementations:
   - src/workflows/condition-evaluator.ts:substituteRefs
@@ -56,8 +58,9 @@ verifies:
 - A bash step containing `target="$DEST/${base%.md}-$i.md"` in a workflow
   with no step named `i` substitutes to exactly that text.
 <!-- id: REQ-WFINTEG-001.A2 -->
-- `$plan.outptu` in a workflow that has a `plan` step still fails with an
-  `OutputRef` error naming `$plan.outptu`.
+- `$plan.outptu` in a workflow that has a `plan` step, and `$plnn.output` in
+  a workflow with no `plnn` step, each still fail with an `OutputRef` error
+  naming the reference.
 <!-- id: REQ-WFINTEG-001.A3 -->
 - The bundled `knowledge_publish` step substitutes without error and, run
   against a proposals directory holding a name collision, copies the second

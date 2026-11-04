@@ -586,7 +586,7 @@ export class WorkflowExecutor {
 
       // Check when: condition.
       if (node.when !== undefined) {
-        const ctx = this.makeSubstitutionContext(outputs, opts.inputs, opts.variables);
+        const ctx = this.makeSubstitutionContext(outputs, opts.inputs, opts.variables, workflow);
         const passes = evaluateCondition(node.when, ctx);
         if (!passes) {
           nodeStates.set(nodeId, 'skipped');
@@ -765,9 +765,9 @@ export class WorkflowExecutor {
     outputs: Map<string, NodeOutput>,
     inputs?: Record<string, string>,
     variables?: Record<string, string>,
-    workflow?: Pick<WorkflowDefinition, 'model' | 'systemPromptAppend'>
+    workflow?: Pick<WorkflowDefinition, 'model' | 'systemPromptAppend' | 'nodes'>
   ): DagNode {
-    const ctx = this.makeSubstitutionContext(outputs, inputs, variables);
+    const ctx = this.makeSubstitutionContext(outputs, inputs, variables, workflow);
     switch (node.kind) {
       case 'prompt': {
         const p = node as PromptNode;
@@ -819,13 +819,17 @@ export class WorkflowExecutor {
   private makeSubstitutionContext(
     outputs: Map<string, NodeOutput>,
     inputs?: Record<string, string>,
-    variables?: Record<string, string>
+    variables?: Record<string, string>,
+    workflow?: Pick<WorkflowDefinition, 'nodes'>
   ) {
     return {
       outputs,
       inputs: inputs ?? {},
       variables: variables ?? {},
       spillDir: os.tmpdir(),
+      // The workflow's step ids, so shell text like `$i.md` is not taken for
+      // a step reference (REQ-WFINTEG-001).
+      ...(workflow?.nodes ? { nodeIds: new Set(workflow.nodes.map((n) => n.id)) } : {}),
     };
   }
 

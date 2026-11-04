@@ -55,6 +55,14 @@ export interface SubstitutionContext {
   spillDir?: string;
   /** Override the 10KB spill threshold (in bytes). */
   spillThreshold?: number;
+  /**
+   * Every step id of the running workflow (REQ-WFINTEG-001). When set,
+   * `$name.field` is a step reference only if `name` is one of these or the
+   * field is `output`; any other `$name.field` (a shell variable followed by
+   * text, e.g. `$i.md`) is left as written. When unset, every `$name.field`
+   * is treated as a ref.
+   */
+  nodeIds?: ReadonlySet<string>;
 }
 
 /** Pattern matching `$nodeId` or `$nodeId.output` or `$nodeId.output.field` or `$VAR`. */
@@ -70,6 +78,7 @@ const DEFAULT_SPILL_THRESHOLD = 10 * 1024;
  * writes the value to a temp file and substitutes `$(cat <file>)` instead
  * of the raw text — preventing shell argv overflow.
  */
+// @implements REQ-WFINTEG-001
 export function substituteRefs(
   template: string,
   ctx: SubstitutionContext,
@@ -97,6 +106,12 @@ export function substituteRefs(
       if (v !== undefined) return v;
       // Fall through to node-id lookup (an UPPER_SNAKE word might be a node ID).
     }
+
+    // Not a step of this workflow and not addressing `.output`: shell text
+    // such as `$i.md`, not a ref (REQ-WFINTEG-001). A misspelled
+    // `$plnn.output` still fails below. Only known when the caller supplied
+    // the step ids.
+    if (ctx.nodeIds && !ctx.nodeIds.has(name) && second !== 'output') return match;
 
     // Node-output reference. Second segment must be `output` for v1.
     if (second !== 'output') {
