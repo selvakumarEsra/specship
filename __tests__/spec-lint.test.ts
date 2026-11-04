@@ -424,3 +424,105 @@ describe('spec lint — the repo corpus (REQ-AUTHG-001.A4)', () => {
     }
   });
 });
+
+/** A minimal spec declaring one requirement under `id`, optionally with a leading pad. */
+function specDeclaring(docId: string, reqId: string, pad = ''): string {
+  return `<!-- id: ${docId} -->
+# ${docId}
+${pad}
+Non-goals: none.
+
+<!-- id: ${reqId} -->
+## The thing MUST work
+
+verifies:
+  - __tests__/x.test.ts:x
+
+## Acceptance
+<!-- id: ${reqId}.A1 -->
+- An invalid input MUST be rejected with an error.
+`;
+}
+
+const CROSS = 'spec_duplicate_id_cross_file';
+
+function reqMultidev001A1() {
+  const dir = tmpSpecDir({
+    'specs/a.md': specDeclaring('A-DOC', 'REQ-X-001'),
+    'specs/b.md': specDeclaring('B-DOC', 'REQ-X-001', '\n\n'),
+  });
+  const report = lintSpecs(['specs'], { projectRoot: dir });
+  expect(report.hasErrors).toBe(true);
+  const a = path.join('specs', 'a.md');
+  const b = path.join('specs', 'b.md');
+  for (const rel of [a, b]) {
+    const file = report.files.find((f) => f.filePath === rel)!;
+    const cross = byCode(file.findings, CROSS).filter((f) => f.specId === 'REQ-X-001');
+    expect(cross).toHaveLength(1);
+    expect(cross[0]!.severity).toBe('error');
+    expect(cross[0]!.message).toContain(`${a}:6`);
+    expect(cross[0]!.message).toContain(`${b}:8`);
+  }
+  expect(runLintCli([], { projectRoot: dir }).exitCode).not.toBe(0);
+}
+
+function reqMultidev001A2() {
+  // The merged checkout: a shared base file plus two feature files, each added
+  // on its own branch, that both chose REQ-X-004.
+  const dir = tmpSpecDir({
+    'specs/base.md': specDeclaring('BASE-DOC', 'REQ-X-003'),
+    'specs/feature-left.md': specDeclaring('LEFT-DOC', 'REQ-X-004'),
+    'specs/feature-right.md': specDeclaring('RIGHT-DOC', 'REQ-X-004'),
+  });
+  const report = lintSpecs([], { projectRoot: dir });
+  expect(report.hasErrors).toBe(true);
+  const all = report.files.flatMap((f) => byCode(f.findings, CROSS));
+  // The requirement and its .A1 criterion both collide, once per declaring file.
+  expect(all.map((f) => f.specId).sort()).toEqual(['REQ-X-004', 'REQ-X-004', 'REQ-X-004.A1', 'REQ-X-004.A1']);
+  expect(all[0]!.message).toContain(path.join('specs', 'feature-left.md'));
+  expect(all[0]!.message).toContain(path.join('specs', 'feature-right.md'));
+  expect(all.some((f) => f.filePath === path.join('specs', 'base.md'))).toBe(false);
+}
+
+function reqMultidev001A3() {
+  const unique = tmpSpecDir({
+    'specs/a.md': specDeclaring('A-DOC', 'REQ-X-001'),
+    'specs/b.md': specDeclaring('B-DOC', 'REQ-X-002'),
+  });
+  const clean = lintSpecs(['specs'], { projectRoot: unique });
+  expect(clean.files.flatMap((f) => byCode(f.findings, CROSS))).toEqual([]);
+  expect(clean.hasErrors).toBe(false);
+
+  // Within-file repeat: exactly the old finding, no cross-file finding.
+  const repeated = specDeclaring('A-DOC', 'REQ-X-001') + `\n<!-- id: REQ-X-001 -->\n## Again MUST\n`;
+  const within = tmpSpecDir({ 'specs/a.md': repeated });
+  const report = lintSpecs(['specs'], { projectRoot: within });
+  const findings = report.files[0]!.findings;
+  expect(byCode(findings, CROSS)).toEqual([]);
+  expect(byCode(findings, 'spec_duplicate_id')).toHaveLength(1);
+  expect(byCode(findings, 'spec_duplicate_id')).toEqual(
+    byCode(lintSpecSource(path.join('specs', 'a.md'), repeated), 'spec_duplicate_id')
+  );
+}
+
+function reqMultidev001A4() {
+  const dir = tmpSpecDir({
+    'specs/a.md': specDeclaring('A-DOC', 'REQ-X-001'),
+    'specs/sub/b.md': specDeclaring('B-DOC', 'REQ-X-001', '\n'),
+  });
+  const report = lintSpecs([path.join('specs', 'a.md')], { projectRoot: dir });
+  expect(report.filesChecked).toBe(1);
+  expect(report.files.map((f) => f.filePath)).toEqual([path.join('specs', 'a.md')]);
+  const cross = byCode(report.files[0]!.findings, CROSS).filter((f) => f.specId === 'REQ-X-001');
+  expect(cross).toHaveLength(1);
+  expect(cross[0]!.message).toContain(`${path.join('specs', 'sub', 'b.md')}:7`);
+  expect(report.hasErrors).toBe(true);
+  expect(runLintCli([path.join('specs', 'a.md')], { projectRoot: dir }).exitCode).toBe(1);
+}
+
+describe('spec lint — cross-file duplicate ids (REQ-MULTIDEV-001)', () => {
+  it('two spec files declaring the same id fail the lint, naming both path:line (REQ-MULTIDEV-001.A1)', reqMultidev001A1);
+  it('a collision introduced by merging two branches is reported on the merged checkout (REQ-MULTIDEV-001.A2)', reqMultidev001A2);
+  it('unique ids add no finding and the within-file duplicate check is unchanged (REQ-MULTIDEV-001.A3)', reqMultidev001A3);
+  it('linting a subset still detects a collision with an unlinted spec file (REQ-MULTIDEV-001.A4)', reqMultidev001A4);
+});

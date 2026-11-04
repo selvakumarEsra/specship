@@ -63,6 +63,14 @@ are merged. The existing duplicate-within-one-file error is unchanged.
 
 implementations:
   - src/spec-lint/lint.ts:lintSpecs
+  - src/spec-lint/lint.ts:findCrossFileDuplicates
+  - src/spec-lint/lint.ts:collectIdDeclarations
+
+verifies:
+  - __tests__/spec-lint.test.ts:reqMultidev001A1
+  - __tests__/spec-lint.test.ts:reqMultidev001A2
+  - __tests__/spec-lint.test.ts:reqMultidev001A3
+  - __tests__/spec-lint.test.ts:reqMultidev001A4
 
 ## Acceptance
 <!-- id: REQ-MULTIDEV-001.A1 -->
