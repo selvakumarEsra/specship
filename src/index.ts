@@ -39,6 +39,8 @@ import {
   SyncResult,
   extractFromSource,
   initGrammars,
+  loadGrammarsForLanguages,
+  detectLanguage,
 } from './extraction';
 import { MarkdownSpecExtractor } from './extraction/specs/markdown-spec-extractor';
 import type { SpecExtractionResult } from './extraction/specs/types';
@@ -52,6 +54,7 @@ import {
   SpecLinkResolverStats,
   DriftTransition,
   canonicalQualifiedName,
+  qualifiedNameVariants,
 } from './resolution/spec-link-resolver';
 import { computeSpecFunnel, SpecFunnel } from './resolution/brief-link-resolver';
 import { computeDomainGapSeed, DomainGapSeed } from './resolution/domain-gap-seed';
@@ -102,10 +105,11 @@ import {
   EnforceReport,
   EnforceScope,
   RequirementVerification,
+  BrokenAtRefEntry,
 } from './enforce/enforce';
 import { scanDisableComments, SuppressionFinding } from './enforce/suppressions';
 import { loadMutationDeps } from './enforce/mutation';
-import { workingTreeDiffText } from './enforce/changed-files';
+import { workingTreeDiffText, existedAtRef } from './enforce/changed-files';
 import { computeBehaviourSurface, BehaviourSurface } from './behaviour/behaviour-surface';
 import {
   generateFlowDiagram,
@@ -210,9 +214,9 @@ export type { FlowDiagramOptions, FlowDiagramConfig, FlowDiagramResult, FlowGrap
 // Architecture-fitness harness (FITNESS-DOC / REQ-FITNESS-001…003).
 export { evaluateFitness, loadFitnessRules, FITNESS_CONFIG_FILE } from './fitness/fitness';
 // Enforcement mode (ENFORCE-DOC / REQ-ENFORCE-001…003).
-export { evaluateEnforcement, loadEnforceConfig, ENFORCE_CONFIG_FILE, normalizePath } from './enforce/enforce';
+export { evaluateEnforcement, loadEnforceConfig, ENFORCE_CONFIG_FILE, normalizePath, undeclaredLinkFindings, branchBrokenFindings } from './enforce/enforce';
 // Change-scoped gating (REQ-AUTHG-006) — `specship check --since <ref>`.
-export { changedFilesSince, InvalidRefError, workingTreeDiffText } from './enforce/changed-files';
+export { changedFilesSince, InvalidRefError, workingTreeDiffText, existedAtRef } from './enforce/changed-files';
 // Suppression-comment scan (REQ-QGATE-004).
 export { scanDisableComments, formatSuppressionFinding } from './enforce/suppressions';
 export type { SuppressionFinding } from './enforce/suppressions';
@@ -231,6 +235,7 @@ export type {
   CheckOutcome,
   CheckName,
   RequirementVerification,
+  BrokenAtRefEntry,
 } from './enforce/enforce';
 export type {
   FitnessRule,
@@ -496,11 +501,68 @@ export class SpecShip {
     const mutation = cfg.mutation !== undefined || cfg.gate?.mutation === true
       ? loadMutationDeps(this.projectRoot, cfg.mutation)
       : undefined;
+    // Merge checks (REQ-MULTIDEV-002): every link row feeds the
+    // undeclared-links check; a `--since` run also compares each currently
+    // orphaned/broken link against its file's blob at the ref.
+    const links = sq.getAllLinks();
+    const brokenAtRef = scope?.since ? this.linksBrokenSinceRef(scope.since) : undefined;
     return evaluateEnforcement(
-      { drift, fitness: this.getFitness(), maintainability: this.getMaintainability(), requirements, suppressions, mutation },
+      {
+        drift, fitness: this.getFitness(), maintainability: this.getMaintainability(), requirements, suppressions, mutation,
+        links, brokenAtRef,
+      },
       cfg,
       scope,
     );
+  }
+
+  /**
+   * Load the grammars `getEnforce` needs to parse link-target files at a
+   * `--since` ref (REQ-MULTIDEV-002). `getEnforce` is synchronous; call this
+   * first. Without it a target whose grammar isn't loaded counts as not
+   * resolving at the ref, so it is never reported (silent beats wrong).
+   */
+  async prepareEnforce(scope?: EnforceScope): Promise<void> {
+    if (!scope?.since) return;
+    const files = new Set(this.specQueries.getLinksByState(['orphaned', 'broken']).map((l) => l.targetFilePath));
+    if (files.size === 0) return;
+    await initGrammars();
+    await loadGrammarsForLanguages([...files].map((f) => detectLanguage(f)));
+  }
+
+  /**
+   * Each orphaned/broken link, marked with whether its target resolved at
+   * `ref` (REQ-MULTIDEV-002.A2/A3). Reads the file's blob from git and parses
+   * it in memory — no index of the ref is needed. The qualified-name match is
+   * the spec-link resolver's (every `.` ⇄ `::` separator variant), so a
+   * spec-declared `Class.method` finds an extracted `Class::method`. Each
+   * file is parsed once.
+   */
+  private linksBrokenSinceRef(ref: string): BrokenAtRefEntry[] {
+    const namesAtRef = new Map<string, Set<string>>();
+    const namesIn = (file: string): Set<string> => {
+      const cached = namesAtRef.get(file);
+      if (cached) return cached;
+      const names = new Set<string>();
+      const blob = existedAtRef(this.projectRoot, ref, file);
+      if (blob !== null) {
+        try {
+          for (const n of extractFromSource(file, blob).nodes) {
+            // Exact qualified name only — the resolver's getNodesByQualifiedNameExact.
+            if (n.qualifiedName) names.add(n.qualifiedName);
+          }
+        } catch {
+          // unparseable at the ref → treated as unresolved
+        }
+      }
+      namesAtRef.set(file, names);
+      return names;
+    };
+    return this.specQueries.getLinksByState(['orphaned', 'broken']).map((link) => {
+      const names = namesIn(link.targetFilePath);
+      const resolvedAtRef = qualifiedNameVariants(link.targetQualifiedName).some((v) => names.has(v));
+      return { link, resolvedAtRef, ref };
+    });
   }
 
   /**

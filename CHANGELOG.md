@@ -9,6 +9,10 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### New Features
+
+- `specship check` now reports links that won't survive a merge: links that exist only in your local index and aren't declared in a spec file or code comment, and, with `--since <ref>`, links that worked at that ref but are broken on your branch (for example after a rename). Both are advisory by default; gate on them with `--strict` or `specship check --enable-gate undeclaredLinks branchBroken`. They need only the checked-out files and git, so they work in a fresh CI clone.
+
 ### Fixes
 
 - Deleting a spec file, or switching to a branch without it, now removes its requirements and links on the next sync instead of reporting them as drift.

@@ -15,6 +15,7 @@ import { changedFilesSince, InvalidRefError } from '../src/enforce/changed-files
 import {
   evaluateEnforcement,
   strictEnforceConfig,
+  ALL_CHECKS,
   enableGateChecks,
   loadEnforceConfig,
   ENFORCE_CONFIG_FILE,
@@ -121,6 +122,11 @@ describe('enforce — graduation ramp (REQ-ENFORCE-004)', () => {
     expect(r.passed).toBe(false);
     expect(r.gatedFailures).toContain('drift');
     expect(r.gatedFailures).toContain('fitness');
+  });
+
+  it('strictEnforceConfig and ALL_CHECKS include the merge checks (REQ-MULTIDEV-002)', () => {
+    expect(ALL_CHECKS).toEqual(expect.arrayContaining(['undeclaredLinks', 'branchBroken']));
+    expect(strictEnforceConfig().gate).toMatchObject({ undeclaredLinks: true, branchBroken: true });
   });
 
   it('enableGateChecks writes gating into specship.config.json and preserves other keys (A1)', () => {

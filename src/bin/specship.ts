@@ -2369,7 +2369,7 @@ program
   .option('-j, --json', 'Output as JSON')
   .option('--strict', 'Treat every check as gating for this run only (nothing read from or written to config)')
   .option('--enable-gate <checks...>', 'Persist gating for the named checks into specship.config.json, then run the gate')
-  .option('--since <ref>', 'Evaluate only requirements whose links or spec files touch files changed since <ref> (drift + behaviour; fitness and maintainability stay repo-global)')
+  .option('--since <ref>', 'Evaluate only requirements whose links or spec files touch files changed since <ref> (drift + behaviour; fitness and maintainability stay repo-global), and report links that resolved at <ref> but this branch broke (branchBroken)')
   .action(async (pathArg: string | undefined, options: { json?: boolean; strict?: boolean; enableGate?: string[]; since?: string }) => {
     const projectPath = resolveProjectPath(pathArg);
     try {
@@ -2416,6 +2416,8 @@ program
 
       const { default: SpecShip } = await loadSpecShip();
       const cg = await SpecShip.open(projectPath);
+      // The branch-broken check parses link targets at the ref (REQ-MULTIDEV-002).
+      await cg.prepareEnforce(scope);
       // --strict gates everything for this run only (REQ-ENFORCE-004.A2).
       const r = options.strict
         ? cg.getEnforce(enforce.strictEnforceConfig(), scope)
@@ -2431,7 +2433,8 @@ program
       if (scope) {
         console.log(chalk.dim(
           `  scoped to ${scope.changedFiles.length} file(s) changed since ${scope.since}` +
-          ' — drift and behaviour are link-scoped; fitness and maintainability are repo-global analyses and ran unscoped.\n',
+          ' — drift and behaviour are link-scoped; branchBroken compares against that ref;' +
+          ' fitness, maintainability and undeclaredLinks are repo-global and ran unscoped.\n',
         ));
       }
       for (const c of r.checks) {
