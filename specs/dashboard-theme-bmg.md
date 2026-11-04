@@ -123,6 +123,9 @@ implementations:
   - ui/src/assets/fonts/space-grotesk-latin.woff2
   - ui/src/assets/fonts/bricolage-latin.woff2
   - __tests__/pack-budget.ts
+  - __tests__/pack-budget.ts:MAX_PACKED_BYTES
+  - __tests__/pack-budget.ts:readPackManifest
+  - ui/src/tokens.ts:TYPE_SCALE
 
 verifies:
   - __tests__/dashtheme-fonts.test.ts:reqDashtheme002A1
