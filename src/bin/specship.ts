@@ -1113,6 +1113,10 @@ program
     // working tree (e.g. a nested worktree borrowing the main checkout's index).
     const startPath = path.resolve(pathArg || process.cwd());
     const worktreeMismatch = detectWorktreeIndexMismatch(startPath, projectPath);
+    // The agent whose shell ran this command, from its launcher env vars
+    // (REQ-AGENTSWITCH-007). Report-only: detection never changes anything.
+    const { agentFromEnv, agentDisplayName } = await import('../agents/detect');
+    const currentAgent = agentFromEnv(process.env);
 
     try {
       if (!isInitialized(projectPath)) {
@@ -1123,11 +1127,13 @@ program
             projectPath,
             indexPath: getSpecShipDir(projectPath),
             lastIndexed: null,
+            currentAgent,
           }));
           return;
         }
         console.log(chalk.bold('\nSpecShip Status\n'));
         info(`Project: ${projectPath}`);
+        info(`Agent: ${agentDisplayName(currentAgent)}`);
         warn('Not initialized');
         info('Run "specship init" to initialize');
         return;
@@ -1169,6 +1175,7 @@ program
             ? { worktreeRoot: worktreeMismatch.worktreeRoot, indexRoot: worktreeMismatch.indexRoot }
             : null,
           ...indexFreshnessJsonFields(freshness),
+          currentAgent,
         }));
         cg.destroy();
         return;
@@ -1178,6 +1185,7 @@ program
 
       // Project info
       console.log(chalk.cyan('Project:'), projectPath);
+      console.log(chalk.cyan('Agent:  '), agentDisplayName(currentAgent));
       if (worktreeMismatch) {
         warn(worktreeMismatchWarning(worktreeMismatch));
       }

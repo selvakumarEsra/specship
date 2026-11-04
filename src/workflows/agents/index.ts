@@ -20,6 +20,11 @@ export const DEFAULT_WORKFLOW_AGENT = claudeHeadlessAgent.id;
 /** Run-metadata key the chosen agent is stored under. */
 export const RUN_AGENT_KEY = 'agent';
 
+/** Every registered agent adapter, in registry order. */
+export function headlessAgents(): readonly HeadlessAgent[] {
+  return AGENTS;
+}
+
 export function knownWorkflowAgents(): string[] {
   return AGENTS.map((a) => a.id);
 }

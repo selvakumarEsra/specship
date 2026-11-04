@@ -64,8 +64,13 @@ export function handleClaudeStreamLine(line: string, emit: EmitFn, state: Stream
 
 export const claudeHeadlessAgent: HeadlessAgent = {
   id: 'claude',
+  displayName: 'Claude Code',
   // Claude Code sets CLAUDECODE=1 in the environment of the commands it runs.
   launchedFrom: (env) => env.CLAUDECODE === '1',
+  // Read from Claude Code 2.1.318's own source on 2026-11-05.
+  mcpClientNames: ['claude-code'],
+  // SessionStart is shared with Gemini CLI, so it is deliberately absent.
+  exclusiveHookEvents: ['UserPromptSubmit', 'PreToolUse', 'PostToolUse'],
   build(node, _config, env): HeadlessInvocation {
     return { bin: env.SPECSHIP_CLAUDE_BIN ?? 'claude', args: buildClaudeArgs(node), stdin: node.prompt };
   },

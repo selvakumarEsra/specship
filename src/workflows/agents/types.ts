@@ -46,8 +46,21 @@ export interface HeadlessAgentConfig {
 export interface HeadlessAgent {
   /** The name `--agent` / `SPECSHIP_WORKFLOW_AGENT` / `workflow.agent` use. */
   readonly id: string;
+  /** Human-readable host name for CLI output (e.g. in `specship status`). */
+  readonly displayName: string;
   /** True when `env` shows the command was launched from inside this host. */
   launchedFrom(env: NodeJS.ProcessEnv): boolean;
+  /**
+   * `clientInfo.name` values this host sends in the MCP `initialize` request
+   * (REQ-AGENTSWITCH-007). Matched exactly.
+   */
+  readonly mcpClientNames: readonly string[];
+  /**
+   * Hook event names only this host sends, so a payload naming one proves the
+   * host (REQ-AGENTSWITCH-007). Events several hosts share (e.g. a common
+   * session-start event) MUST NOT be listed.
+   */
+  readonly exclusiveHookEvents: readonly string[];
   /**
    * Translate a step. Returns `{ error }` — never a partial invocation — when
    * the step uses something this host cannot honour (REQ-AGENTADAPT-007.A4).

@@ -274,8 +274,18 @@ The client names were read from the installed agents' own source on
 2.1.318 sends `claude-code`.
 
 implementations:
-  - src/mcp/session.ts:MCPSession
-  - src/activation/hook-output.ts:deriveHostTraits
+  - src/agents/detect.ts:agentFromMcpClient
+  - src/agents/detect.ts:agentFromHookEvent
+  - src/agents/detect.ts:agentFromEnv
+  - src/agents/detect.ts:agentDisplayName
+  - src/workflows/agents/index.ts:headlessAgents
+  - src/mcp/session.ts:MCPSession.getDetectedAgent
+  - src/activation/hook-output.ts:detectHookAgent
+verifies:
+  - __tests__/agent-detect.test.ts:reqAgentswitch007A1
+  - __tests__/agent-detect.test.ts:reqAgentswitch007A2
+  - __tests__/agent-detect.test.ts:reqAgentswitch007A2InitializedAndHuman
+  - __tests__/agent-detect.test.ts:reqAgentswitch007A3
 
 ## Acceptance
 <!-- id: REQ-AGENTSWITCH-007.A1 -->
