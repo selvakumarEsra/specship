@@ -337,7 +337,6 @@ implementations:
   - src/installer/targets/shared.ts:atomicWriteFileSync
   - src/installer/targets/gemini.ts:writeGeminiCommandsEntries
   - src/installer/targets/gemini.ts:writeGeminiPolicyEntry
-  - src/bin/specship.ts:AUTO_MIGRATE_SKIP_COMMANDS
   - src/mcp/session.ts:MCPSession.handleInitialize
   - src/mcp/session.ts:MCPSession.runAutoMigrate
   - src/mcp/session.ts:MCPSession.handleToolsCall
