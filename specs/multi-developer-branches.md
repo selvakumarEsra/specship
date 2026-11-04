@@ -17,6 +17,7 @@ jira_issue_REQ-MULTIDEV-004: SSHIP-618
 jira_fingerprint_REQ-MULTIDEV-004: 6953e12d2b6c3a2b
 jira_issue_REQ-MULTIDEV-005: SSHIP-624
 jira_fingerprint_REQ-MULTIDEV-005: a71d8111395be015
+jira_issue_REQ-MULTIDEV-006: SSHIP-694
 ---
 
 <!-- id: MULTIDEV-DOC -->
@@ -304,3 +305,50 @@ verifies:
 - The CI publish makes no git commit or push.
 <!-- id: REQ-MULTIDEV-005.A6 -->
 - With `jira.publishFrom` absent, every existing JIRA test passes unchanged.
+
+<!-- id: REQ-MULTIDEV-006 -->
+## Links derived from code comments MUST be removed when their comment is gone
+
+A link with `code-comment` provenance is derived from the code: an
+`@implements` / `@verifies` marker on a symbol, or a requirement ID inside a
+test title. Such a link MUST exist only while the comment or title that
+derives it exists. When the file is deleted, the marker is removed, or the
+title no longer names the requirement, the next `specship sync` or
+`specship index` MUST remove the link, without reporting it as drift. When
+the spec file still declares the same target in its `implementations:` or
+`verifies:` block, the link MUST survive as a declared link instead. This is
+the code-side sibling of REQ-MULTIDEV-003.
+
+implementations:
+  - src/index.ts:SpecShip.indexSpecsInternal
+  - src/index.ts:SpecShip.indexSpecs
+  - src/index.ts:SpecShip.reconcileCodeDerivedLinks
+  - src/resolution/spec-link-resolver.ts:SpecLinkResolver.applyCodeCommentLinks
+  - src/resolution/spec-link-resolver.ts:SpecLinkResolver.applyTestTitleLinks
+  - src/db/spec-queries.ts:SpecQueries.getLinksByProvenance
+verifies:
+  - __tests__/code-comment-link-removal.test.ts:reqMultidev006A1
+  - __tests__/code-comment-link-removal.test.ts:reqMultidev006A2
+  - __tests__/code-comment-link-removal.test.ts:reqMultidev006A3
+  - __tests__/code-comment-link-removal.test.ts:reqMultidev006A4
+  - __tests__/code-comment-link-removal.test.ts:reqMultidev006A5
+
+## Acceptance
+<!-- id: REQ-MULTIDEV-006.A1 -->
+- After deleting a source file whose function carries `@implements REQ-X`
+  and running `specship sync`, REQ-X has no link to that function, and
+  `specship drifted` lists none.
+<!-- id: REQ-MULTIDEV-006.A2 -->
+- Removing the `@implements REQ-X` marker from a function in a file that
+  still exists removes the link on the next sync. The function itself is
+  still indexed.
+<!-- id: REQ-MULTIDEV-006.A3 -->
+- Deleting a test file whose `it()` titles name REQ-X removes the
+  test-title `tests` link to that file on the next sync.
+<!-- id: REQ-MULTIDEV-006.A4 -->
+- When the marker is removed but the spec still declares the same target in
+  `implementations:`, the link remains, now as a declared link, and its
+  `verified` state and evidence are kept.
+<!-- id: REQ-MULTIDEV-006.A5 -->
+- A sync with no code or spec change removes no link, and links whose
+  markers are still present keep their state and evidence.

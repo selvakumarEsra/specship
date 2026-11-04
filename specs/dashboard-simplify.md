@@ -185,6 +185,7 @@ implementations:
   - ui/src/prefs.ts:setPlanLevel
   - ui/src/spec-prose.ts:specProse
   - ui/src/spec-prose.ts:specParagraphs
+  - ui/src/pages/plan.tsx:InlineTitle
 
 verifies:
   - ui/src/__tests__/plan.test.tsx:reqDashsimple003A1
@@ -194,6 +195,7 @@ verifies:
   - ui/src/__tests__/plan.test.tsx:reqDashsimple003A5
   - ui/src/__tests__/plan.test.tsx:reqDashsimple003A6
   - ui/src/__tests__/plan.test.tsx:reqDashsimple003A7
+  - ui/src/__tests__/plan.test.tsx:reqDashsimple003A8
 
 ## Acceptance
 <!-- id: REQ-DASHSIMPLE-003.A1 -->
@@ -218,6 +220,9 @@ verifies:
 - A story's body renders as readable prose only. Its `implementations:` and
   `verifies:` blocks, `## Acceptance` heading and `<!-- id: … -->` markers
   never appear as text; acceptance criteria appear only as the story's tasks.
+<!-- id: REQ-DASHSIMPLE-003.A8 -->
+- Epic, story and task titles render inline code spans (`` `name` ``) as
+  code, never as raw backticks, and any HTML in a title shows as text.
 
 <!-- id: REQ-DASHSIMPLE-004 -->
 ## The Review screen MUST sort every requirement into completed, pending or drifted

@@ -24,6 +24,7 @@ jira_issue_REQ-JIRATEAM-009: SSHIP-670
 jira_fingerprint_REQ-JIRATEAM-009: 9e7559fe2f8f4dfc
 jira_issue_REQ-JIRATEAM-010: SSHIP-675
 jira_fingerprint_REQ-JIRATEAM-010: 70840246f63a78c6
+jira_issue_REQ-JIRATEAM-011: SSHIP-634
 ---
 
 <!-- id: JIRA-TEAM-DOC -->
@@ -476,3 +477,36 @@ verifies:
 - `enumeratePublishedSpecs` returns one ref per published requirement for
   both frontmatter forms, carrying the requirement id when known; the
   coverage report attributes each issue to its own requirement.
+
+<!-- id: REQ-JIRATEAM-011 -->
+## Publishing one spec on demand MUST anchor a new Story under its epic
+
+`specship_jira_publish` MUST resolve the epic for a Story it creates the same
+way sync auto-publish does (REQ-JIRATEAM-006): the spec file's `epicKey:`
+frontmatter first, then the binding's `jira.epicKey`. A newly created Story
+MUST be parented under that epic, and the resolved epic MUST be recorded as
+`epicKey:` in the spec's frontmatter. Re-publishing a Story that already
+exists MUST NOT re-parent it (REQ-JIRATEAM-006.A4).
+
+implementations:
+  - src/mcp/jira-tools.ts:handleSpecshipJiraPublish
+verifies:
+  - __tests__/jira/jira-publish.test.ts:reqJirateam011A1
+  - __tests__/jira/jira-publish.test.ts:reqJirateam011A2
+  - __tests__/jira/jira-publish.test.ts:reqJirateam011A3
+  - __tests__/jira/jira-publish.test.ts:reqJirateam011A4
+
+## Acceptance
+<!-- id: REQ-JIRATEAM-011.A1 -->
+- Publishing a spec whose frontmatter carries `epicKey: PROJ-1` creates a
+  Story whose parent is `PROJ-1`.
+<!-- id: REQ-JIRATEAM-011.A2 -->
+- Publishing a spec with no `epicKey:` in a repo whose binding sets
+  `jira.epicKey: PROJ-2` creates a Story parented under `PROJ-2`, and the
+  spec's frontmatter afterwards carries `epicKey: PROJ-2`.
+<!-- id: REQ-JIRATEAM-011.A3 -->
+- When the frontmatter and the binding both name an epic, the frontmatter's
+  epic wins.
+<!-- id: REQ-JIRATEAM-011.A4 -->
+- Re-publishing a spec that already has a `jira_issue` key sends no parent
+  field in the update.
