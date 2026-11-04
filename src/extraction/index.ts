@@ -17,6 +17,7 @@ import {
 } from '../types';
 import { QueryBuilder } from '../db/queries';
 import { extractFromSource } from './tree-sitter';
+import { countParseWarningFiles } from './parse-warnings';
 import { detectLanguage, isSourceFile, isLanguageSupported, isFileLevelOnlyLanguage, initGrammars, loadGrammarsForLanguages } from './grammars';
 import { logDebug, logWarn } from '../errors';
 import { validatePathWithinRoot, normalizePath } from '../utils';
@@ -96,6 +97,12 @@ export interface IndexResult {
   edgesCreated: number;
   errors: ExtractionError[];
   durationMs: number;
+  /**
+   * Files whose parse tree held an error region that may have swallowed
+   * declarations (`parse_error_region` warnings, REQ-HTMLLEX-003). Reported in
+   * the completion summary only; never persisted as a stat.
+   */
+  filesWithParseWarnings?: number;
 }
 
 /**
@@ -109,6 +116,8 @@ export interface SyncResult {
   nodesUpdated: number;
   durationMs: number;
   changedFilePaths?: string[];
+  /** Changed files carrying `parse_error_region` warnings (REQ-HTMLLEX-003). */
+  filesWithParseWarnings?: number;
   /**
    * Spec links that transitioned into `drifted` during this sync's spec
    * pass (DRIFT-PUSH-DOC). Populated by SpecShip.sync(); absent when no
@@ -1172,6 +1181,7 @@ export class ExtractionOrchestrator {
       edgesCreated: totalEdges,
       errors,
       durationMs: Date.now() - startTime,
+      filesWithParseWarnings: countParseWarningFiles(errors),
     };
   }
 
@@ -1219,6 +1229,7 @@ export class ExtractionOrchestrator {
       edgesCreated: totalEdges,
       errors,
       durationMs: Date.now() - startTime,
+      filesWithParseWarnings: countParseWarningFiles(errors),
     };
   }
 
@@ -1426,6 +1437,7 @@ export class ExtractionOrchestrator {
     let filesChecked = 0;
     let filesAdded = 0;
     let filesModified = 0;
+    let filesWithParseWarnings = 0;
     let filesRemoved = 0;
     let nodesUpdated = 0;
     const changedFilePaths: string[] = [];
@@ -1547,6 +1559,7 @@ export class ExtractionOrchestrator {
       const force = forced.has(filePath);
       const result = await this.indexFile(filePath, { force });
       nodesUpdated += result.nodes.length;
+      if (countParseWarningFiles(result.errors) > 0) filesWithParseWarnings++;
     }
 
     // Stamp once this full pass has re-extracted every stale file; a file that
@@ -1558,6 +1571,7 @@ export class ExtractionOrchestrator {
 
     return {
       filesChecked,
+      filesWithParseWarnings,
       filesAdded,
       filesModified,
       filesRemoved,

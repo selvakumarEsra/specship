@@ -36,6 +36,7 @@ import { runUpdate, detectInstallMethod, type InstallMethod } from '../update/up
 import { resolveLatestVersion } from '../update/resolve-latest';
 import { runInstaller } from '../update/run-installer';
 import { relaunchWithWasmRuntimeFlagsIfNeeded } from '../extraction/wasm-runtime-flags';
+import { formatParseWarningSummary } from '../extraction/parse-warnings';
 
 // Lazy-load heavy modules (SpecShip, runInstaller) to keep CLI startup fast.
 async function loadSpecShip(): Promise<typeof import('../index')> {
@@ -509,6 +510,7 @@ type IndexResult = {
   edgesCreated: number;
   errors: Array<{ message: string; filePath?: string; severity: string; code?: string }>;
   durationMs: number;
+  filesWithParseWarnings?: number;
 };
 
 /**
@@ -546,6 +548,10 @@ function printIndexResult(clack: typeof import('@clack/prompts'), result: IndexR
   } else {
     clack.log.warn('No files found to index');
   }
+
+  // Parse-error regions that may have swallowed declarations (REQ-HTMLLEX-003).
+  const parseWarning = formatParseWarningSummary(result.filesWithParseWarnings);
+  if (parseWarning) clack.log.warn(parseWarning);
 
   if (hasErrors) {
     const errorsByCode = new Map<string, number>();
@@ -1032,6 +1038,10 @@ program
         if (specWarnings > 0) parts.push(`${specWarnings} warning${specWarnings === 1 ? '' : 's'}`);
         clack.log.warn(`Spec parse: ${parts.join(', ')}`);
       }
+
+      // Parse-error regions that may have swallowed declarations (REQ-HTMLLEX-003).
+      const parseWarning = formatParseWarningSummary(result.filesWithParseWarnings);
+      if (parseWarning) clack.log.warn(parseWarning);
 
       pushDriftNotices(result);
       await pushJiraDriftComments(cg, result);

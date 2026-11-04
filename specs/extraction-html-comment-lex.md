@@ -163,6 +163,18 @@ It MUST NOT change what retrieval tools return.
 
 implementations:
   - src/extraction/tree-sitter.ts:TreeSitterExtractor.extract
+  - src/extraction/tree-sitter.ts:TreeSitterExtractor.reportParseErrorRegions
+  - src/extraction/parse-warnings.ts:countParseWarningFiles
+  - src/extraction/parse-warnings.ts:formatParseWarningSummary
+  - src/extraction/index.ts:ExtractionOrchestrator.sync
+  - src/bin/specship.ts:printIndexResult
+
+verifies:
+  - __tests__/extraction-parse-error-region.test.ts:reqHtmllex003A1
+  - __tests__/extraction-parse-error-region.test.ts:reqHtmllex003A1LocalsDoNotMask
+  - __tests__/extraction-parse-error-region.test.ts:reqHtmllex003A1EnclosedRegionSilent
+  - __tests__/extraction-parse-error-region.test.ts:reqHtmllex003A2
+  - __tests__/extraction-parse-error-region.test.ts:reqHtmllex003A3
 
 ## Acceptance
 <!-- id: REQ-HTMLLEX-003.A1 -->
