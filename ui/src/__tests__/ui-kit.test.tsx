@@ -8,7 +8,11 @@
  * states, built on the kit tokens. A3 renders every kept screen and proves no
  * interactive control is unstyled. A4 is a CSS contract (jsdom never
  * evaluates :hover/:active/:disabled): every kit state rule reads shared
- * state tokens and carries no literal.
+ * state tokens and carries no literal. A5 proves every mono (code/symbol)
+ * surface — stylesheet rules and inline var(--font-mono) styles — turns
+ * ligatures off, and that code text renders exactly as typed. A6 renders the
+ * Design system screen and proves its samples carry no currency, cost or
+ * token figures.
  */
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -26,7 +30,7 @@ import { ReviewPage } from '../pages/review';
 import { reviewRoutes } from './review-fixtures';
 import { TraceabilityPage } from '../pages/traceability';
 import { WorkflowsPage } from '../pages/workflows';
-import { BUTTON_VARIANTS, KIT_COMPONENT_STATES } from '../tokens';
+import { BUTTON_VARIANTS, KIT_COMPONENT_STATES, TYPE_SCALE } from '../tokens';
 
 const SRC = join(dirname(fileURLToPath(import.meta.url)), '..');
 const UI_DIR = join(SRC, '..');
@@ -357,5 +361,86 @@ describe('REQ-DASHTHEME-004.A4 — kit states use shared state tokens', () => {
     expect(TOKENS_CSS).toMatch(/--bg-active:\s*var\(--bmg-color-fill-tile\);/);
     expect(TOKENS_CSS).toMatch(/--accent-hover:\s*var\(--bmg-color-accent-hover\);/);
     expect(TOKENS_CSS).toMatch(/--accent-strong:\s*var\(--bmg-color-accent-pressed\);/);
+  });
+});
+
+// ============================================================
+// A5 — code and symbol text render without ligatures
+// ============================================================
+
+describe('REQ-DASHTHEME-004.A5 — mono text has ligatures disabled', () => {
+  it('REQ-DASHTHEME-004.A5: code and symbol text render with font ligatures disabled, so ===, => and != show as their literal characters', function reqDashtheme004A5() {
+    // One shared token carries the mono feature set, with ligatures off.
+    expect(TOKENS_CSS).toMatch(/--font-mono-features:\s*"zero",\s*"liga" 0,\s*"calt" 0;/);
+
+    const rules = cssRules(APP_CSS);
+    const ligOff = (body: string) =>
+      /font-variant-ligatures:\s*none/.test(body) && /font-feature-settings:\s*var\(--font-mono-features\)/.test(body);
+    const shared = rules.filter((r) => ligOff(r.body));
+    const covered = new Set(shared.flatMap((r) => r.selectors));
+    // The native code elements and the kit's mono classes are all covered…
+    for (const sel of ['code', 'pre', 'kbd', 'samp', '.mono', '.sp-code', '.sp-textarea']) {
+      expect(covered, sel).toContain(sel);
+    }
+    // …and so is every stylesheet rule that sets the mono face.
+    const monoRules = rules.filter((r) => /font-family:\s*var\(--font-mono\)/.test(r.body));
+    expect(monoRules.length).toBeGreaterThan(5);
+    for (const r of monoRules) {
+      for (const sel of r.selectors) {
+        expect(ligOff(r.body) || covered.has(sel), `${sel} sets the mono face but keeps ligatures`).toBe(true);
+      }
+    }
+    // No rule anywhere turns ligatures back on or sets a different mono feature set.
+    for (const r of rules) {
+      expect(r.body, r.selectors.join(', ')).not.toMatch(/font-variant-ligatures:(?!\s*none)/);
+      if (r.selectors.some((s) => covered.has(s))) {
+        expect(r.body, r.selectors.join(', ')).not.toMatch(/font-feature-settings:(?!\s*var\(--font-mono-features\))/);
+      }
+    }
+
+    // Inline styles: every element rendered with font-family var(--font-mono)
+    // (HTML style attribute or SVG font-family attribute) matches the shared rule.
+    const sharedSelector = shared.flatMap((r) => r.selectors).filter((s) => !s.includes('::')).join(', ');
+    const { container } = render(
+      <div>
+        <DesignSystemPage />
+        <code className="mono">a === b {'=>'} c != d</code>
+      </div>,
+    );
+    const inlineMono = [...container.querySelectorAll<HTMLElement>('[style], [font-family]')].filter((el) =>
+      /var\(--font-mono\)/.test(el.getAttribute('style') ?? '') || /var\(--font-mono\)/.test(el.getAttribute('font-family') ?? ''),
+    );
+    expect(inlineMono.length).toBeGreaterThan(0);
+    for (const el of inlineMono) expect(el.matches(sharedSelector), el.outerHTML.slice(0, 120)).toBe(true);
+    for (const el of container.querySelectorAll('.mono, .sp-code, code')) expect(el.matches(sharedSelector)).toBe(true);
+
+    // The code text itself is exactly what was typed — no substituted glyphs.
+    const code = container.querySelector('code.mono')!;
+    expect(code.textContent).toBe('a === b => c != d');
+  });
+});
+
+// ============================================================
+// A6 — Design system samples are counts, never money or tokens
+// ============================================================
+
+describe('REQ-DASHTHEME-004.A6 — design-system samples are counts', () => {
+  it('REQ-DASHTHEME-004.A6: Design system samples contain no currency, cost or token figures; numeric samples are counts', function reqDashtheme004A6() {
+    const { container } = render(<DesignSystemPage />);
+    const text = container.textContent ?? '';
+    expect(text.length).toBeGreaterThan(200); // the screen actually rendered
+    expect(text).not.toMatch(/[$€£¥]|\bcost\b|\btokens?\b|\bUSD\b/i);
+    // Hover titles (e.g. stacked-bar segments) are samples too.
+    for (const el of container.querySelectorAll('[title]')) {
+      expect(el.getAttribute('title')!).not.toMatch(/[$€£¥]|\bcost\b|\bUSD\b/i);
+    }
+    // No model names standing in for a cost breakdown.
+    expect(text).not.toMatch(/\b(Fable|Haiku|Sonnet|Opus)\b/);
+
+    // Every numeric type-scale sample is a plain count.
+    const numeric = TYPE_SCALE.filter((t) => /\d/.test(t.sample) && !/[a-z]/i.test(t.sample));
+    expect(numeric.length).toBeGreaterThan(0);
+    for (const t of numeric) expect(t.sample, t.label).toMatch(/^[\d,]+$/);
+    expect(screen.getAllByText('1,184').length).toBeGreaterThan(0);
   });
 });

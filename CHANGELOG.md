@@ -18,6 +18,7 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Fixes
 
 - Settings no longer shows an agent-specific transcript-ingest option.
+- Code text in the dashboard no longer renders `===`, `=>` or `!=` as ligatures, and the Design system screen's sample figures are plain counts instead of dollar amounts.
 
 ## [0.29.0] - 2026-10-27
 
