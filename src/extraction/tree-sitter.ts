@@ -4,7 +4,7 @@
  * Handles parsing source code and extracting structural information.
  */
 
-import { Node as SyntaxNode, Tree } from 'web-tree-sitter';
+import { Node as SyntaxNode, Parser, Tree } from 'web-tree-sitter';
 import * as path from 'path';
 import {
   Language,
@@ -127,6 +127,40 @@ const INSTANTIATION_KINDS: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * Languages whose grammar lexes Annex-B HTML-like comments (`<!--`, `-->`),
+ * including inside regex literals — the case parseWithLiteralMask repairs.
+ */
+const JS_FAMILY: ReadonlySet<string> = new Set(['typescript', 'tsx', 'javascript', 'jsx']);
+
+/**
+ * One pre-order walk over a tree: the start offset of every `html_comment`
+ * node, and the number of `ERROR` / missing nodes.
+ */
+function scanParseTree(tree: Tree): { htmlCommentStarts: number[]; errorCount: number } {
+  const htmlCommentStarts: number[] = [];
+  let errorCount = 0;
+  const cursor = tree.walk();
+  try {
+    for (;;) {
+      const node = cursor.currentNode;
+      if (node.type === 'html_comment') htmlCommentStarts.push(node.startIndex);
+      else if (node.type === 'ERROR' || node.isMissing) errorCount++;
+      if (cursor.gotoFirstChild()) continue;
+      while (!cursor.gotoNextSibling()) {
+        if (!cursor.gotoParent()) return { htmlCommentStarts, errorCount };
+      }
+    }
+  } finally {
+    cursor.delete();
+  }
+}
+
+/** Number of `<!--` and `-->` occurrences — the bound on mask attempts. */
+function countHtmlCommentDelimiters(source: string): number {
+  return (source.match(/<!--|-->/g) ?? []).length;
+}
+
+/**
  * TreeSitterExtractor - Main extraction class
  */
 export class TreeSitterExtractor {
@@ -147,6 +181,66 @@ export class TreeSitterExtractor {
     this.source = source;
     this.language = language || detectLanguage(filePath, source);
     this.extractor = EXTRACTORS[this.language] || null;
+  }
+
+  /**
+   * Parse `this.source`, repairing the JS-family grammar's habit of lexing
+   * `<!--` / `-->` inside regex literals as HTML-like comments, which turns the
+   * enclosing declaration into an ERROR node (REQ-HTMLLEX-001).
+   *
+   * When the first parse contains `html_comment` nodes, each comment's opening
+   * delimiter is masked with a same-length string (`<!--` → `<!-_`,
+   * `-->` → `-_>`) in a copy of the source and the copy is reparsed. Offsets,
+   * rows and columns are unchanged, and node text is always sliced from the
+   * original `this.source`. A mask is kept only when the reparse has fewer
+   * ERROR nodes, or the same number and fewer `html_comment` nodes (a
+   * mis-lexed comment can swallow the rest of a line without any ERROR).
+   * A genuine HTML comment in a legacy script makes the reparse worse, so it
+   * keeps its meaning. Non-JS languages return the first parse untouched.
+   */
+  private parseWithLiteralMask(parser: Parser): Tree | null {
+    const original = parser.parse(this.source) ?? null;
+    if (!original || !JS_FAMILY.has(this.language)) return original;
+    if (!this.source.includes('<!--') && !this.source.includes('-->')) return original;
+
+    let best = original;
+    let bestScan = scanParseTree(best);
+    if (bestScan.htmlCommentStarts.length === 0) return original;
+
+    const chars = this.source.split('');
+    const tried = new Set<number>();
+    let budget = countHtmlCommentDelimiters(this.source);
+    let improved = true;
+    while (improved && budget > 0) {
+      improved = false;
+      for (const start of bestScan.htmlCommentStarts) {
+        if (tried.has(start) || budget <= 0) continue;
+        tried.add(start);
+        const saved = chars.slice(start, start + 4);
+        if (this.source.startsWith('<!--', start)) chars[start + 3] = '_';
+        else if (this.source.startsWith('-->', start)) chars[start + 1] = '_';
+        else continue;
+        budget--;
+        const candidate = parser.parse(chars.join('')) ?? null;
+        const scan = candidate ? scanParseTree(candidate) : null;
+        if (candidate && scan && (
+          scan.errorCount < bestScan.errorCount ||
+          (scan.errorCount === bestScan.errorCount &&
+            scan.htmlCommentStarts.length < bestScan.htmlCommentStarts.length)
+        )) {
+          if (best !== original) best.delete();
+          best = candidate;
+          bestScan = scan;
+          improved = true;
+          break;
+        }
+        candidate?.delete();
+        chars.splice(start, saved.length, ...saved);
+      }
+    }
+
+    if (best !== original) original.delete();
+    return best;
   }
 
   /**
@@ -191,7 +285,7 @@ export class TreeSitterExtractor {
     }
 
     try {
-      this.tree = parser.parse(this.source) ?? null;
+      this.tree = this.parseWithLiteralMask(parser);
       if (!this.tree) {
         throw new Error('Parser returned null tree');
       }

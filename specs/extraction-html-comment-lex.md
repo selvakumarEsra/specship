@@ -63,6 +63,19 @@ comment.
 
 implementations:
   - src/extraction/tree-sitter.ts:TreeSitterExtractor.extract
+  - src/extraction/tree-sitter.ts:TreeSitterExtractor.parseWithLiteralMask
+  - src/extraction/tree-sitter.ts:scanParseTree
+  - src/extraction/tree-sitter.ts:countHtmlCommentDelimiters
+
+verifies:
+  - __tests__/extraction.test.ts:reqHtmllex001A1
+  - __tests__/extraction.test.ts:reqHtmllex001A1TieKeepsDeclaration
+  - __tests__/extraction.test.ts:reqHtmllex001A2
+  - __tests__/extraction.test.ts:reqHtmllex001A3
+  - __tests__/extraction.test.ts:reqHtmllex001A4
+  - __tests__/extraction.test.ts:reqHtmllex001A4LegacyHtmlCommentKept
+  - __tests__/extraction.test.ts:reqHtmllex001A5
+  - __tests__/extraction.test.ts:reqHtmllex001A6
 
 ## Acceptance
 <!-- id: REQ-HTMLLEX-001.A1 -->
