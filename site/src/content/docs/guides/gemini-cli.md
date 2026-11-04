@@ -127,13 +127,53 @@ tool deny-list — fails with the reason rather than running without it. An
 administrator policy that requires confirmation for shell commands makes
 those steps fail in headless mode; it is never bypassed.
 
+## Switching agents: automatic setup
+
+If SpecShip is already installed for one agent and it notices it is running
+under another supported agent, it sets itself up for the new agent without
+asking. It uses the same scope as your existing install: this project if
+SpecShip was installed per project, all projects if it was installed
+user-wide. It then prints one line naming the files it wrote and the command
+that undoes them, for example:
+
+```text
+SpecShip: set up Gemini CLI for this project — wrote .gemini/settings.json, GEMINI.md, .gemini/commands/specship/ (5 files). Undo: `specship uninstall --target gemini --local`
+```
+
+The other agent's files are left exactly as they were. This happens at most
+once per agent and scope. If a write fails, the files that attempt already
+wrote are put back as they were and the next SpecShip output reports the
+failure. SpecShip doesn't retry on its own; run
+`specship install --target gemini` to try again.
+
+SpecShip can only notice a new agent when something of its own runs under
+that agent. It checks at three points:
+
+- a SpecShip MCP session the new agent opens, for example from a user-wide
+  install or an MCP entry you added by hand;
+- a `specship` command run in the new agent's shell;
+- the SpecShip git hook, which runs `specship sync` when you commit from that
+  shell.
+
+A project where SpecShip is wired only into Claude Code, opened in a Gemini
+CLI session that never runs SpecShip, **can't be detected**. Run
+`specship install --target gemini` there yourself.
+
+To turn automatic setup off, set `SPECSHIP_AUTO_MIGRATE=0` in your
+environment, or add `"autoMigrate": false` to the project's
+`specship.config.json`. SpecShip then writes nothing and prints a one-line
+hint with the install command instead, once.
+
 ## Uninstall
 
 Remove just the Gemini wiring, keeping your indexes and the program:
 
 ```bash
-specship uninstall --target gemini --keep-data --location global
+specship uninstall --target gemini --global   # user-wide install
+specship uninstall --target gemini --local    # this project only
 ```
+
+`--local` and `--global` are short for `--keep-data --location local|global`.
 
 Only the `specship` entry is removed — other servers and settings in the file
 survive unchanged. A full `specship uninstall` (without `--keep-data`) removes
