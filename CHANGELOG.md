@@ -9,6 +9,9 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixes
+
+- JavaScript and TypeScript functions, classes and variables that contain `<!--` or `-->` inside a regular expression are no longer missing from the index. Before, those character sequences were mistaken for old-style HTML comments and the whole declaration was dropped from search, callers and impact results.
 
 ## [0.29.0] - 2026-10-27
 
