@@ -26,6 +26,31 @@ interface NodeQuery extends ProjectQuery {
   id?: string;
   file?: string;
   line?: string;
+  /** `1` → attach each match's verbatim source as `code` (REQ-DASHSIMPLE-005). */
+  includeCode?: string;
+}
+
+interface SplitSearchQuery extends ProjectQuery {
+  q?: string;
+  limit?: string;
+}
+
+/**
+ * Longest source the split view returns for one symbol. `getCode` already
+ * slices the symbol's own startLine..endLine; this caps a huge class body so a
+ * single match can't turn into a whole-file dump. File nodes get no code at all.
+ */
+export const MAX_CODE_LINES = 400;
+
+/** One symbol's verbatim source, capped to its own body (null when unavailable). */
+async function symbolCode(cg: SpecShipInstance, node: { id: string; kind: string }): Promise<{ code: string | null; codeTruncated: boolean }> {
+  if (node.kind === 'file') return { code: null, codeTruncated: false };
+  let code: string | null = null;
+  try { code = await cg.getCode(node.id); } catch { code = null; }
+  if (code == null) return { code: null, codeTruncated: false };
+  const lines = code.split('\n');
+  if (lines.length <= MAX_CODE_LINES) return { code, codeTruncated: false };
+  return { code: lines.slice(0, MAX_CODE_LINES).join('\n'), codeTruncated: true };
 }
 
 interface SearchQuery extends ProjectQuery {
@@ -114,14 +139,52 @@ export async function registerGraphRoutes(app: FastifyInstance): Promise<void> {
 
     if (matches.length === 0) return reply.code(404).send({ error: 'not found' });
 
-    const enriched = matches.map((n) => {
+    const withCode = req.query.includeCode === '1' || req.query.includeCode === 'true';
+    const enriched = await Promise.all(matches.map(async (n) => {
       const callers = cg.getCallers(n.id).map((e) => e.node);
       const callees = cg.getCallees(n.id).map((e) => e.node);
       const links = cg.getSpecQueries().getLinksByNode(n.id);
-      return { ...n, callers, callees, linkedSpecs: links };
-    });
+      const base = { ...n, callers, callees, linkedSpecs: links };
+      return withCode ? { ...base, ...(await symbolCode(cg, n)) } : base;
+    }));
 
     return { matches: enriched };
+  });
+
+  /**
+   * GET /api/graph/split-search?q= — the Graph split view's one search box
+   * (REQ-DASHSIMPLE-005): spec matches (an exact requirement id first, then
+   * the spec full-text index) and code-symbol matches, as two groups.
+   */
+  app.get('/api/graph/split-search', async (req: FastifyRequest<{ Querystring: SplitSearchQuery }>, reply) => {
+    const cg = await resolveCg(app, req, reply); if (!cg) return;
+    const q = (req.query.q ?? '').trim();
+    const limit = Math.min(Math.max(parseInt(req.query.limit ?? '8', 10) || 8, 1), 50);
+    if (!q) return { specs: [], symbols: [] };
+
+    const sq = cg.getSpecQueries();
+    type SpecHit = { id: string; title: string; kind: string; snippet: string };
+    const specs: SpecHit[] = [];
+    const seen = new Set<string>();
+    const exact = sq.getSpecById(q) ?? sq.getSpecById(q.toUpperCase());
+    if (exact) {
+      seen.add(exact.id);
+      specs.push({ id: exact.id, title: exact.title, kind: exact.kind, snippet: '' });
+    }
+    for (const hit of sq.searchSpecs(q, limit)) {
+      if (seen.has(hit.spec.id)) continue;
+      seen.add(hit.spec.id);
+      specs.push({ id: hit.spec.id, title: hit.spec.title, kind: hit.spec.kind, snippet: hit.snippet });
+    }
+
+    // Spec nodes live in the code graph too; the specs group already covers them.
+    const symbols = cg.searchNodes(q, { limit: limit * 2 })
+      .map((r) => r.node)
+      .filter((n) => (n.kind as string) !== 'spec')
+      .slice(0, limit)
+      .map((n) => ({ id: n.id, name: n.name, kind: n.kind, filePath: n.filePath, startLine: n.startLine }));
+
+    return { specs: specs.slice(0, limit), symbols };
   });
 
   app.post('/api/graph/explore', async (req: FastifyRequest<{ Body: ExploreBody; Querystring: ProjectQuery }>, reply) => {

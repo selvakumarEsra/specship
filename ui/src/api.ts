@@ -125,6 +125,16 @@ export interface GraphNodeDetail extends NodeRef {
   callers: NodeRef[];
   callees: NodeRef[];
   linkedSpecs: LinkedSpec[];
+  /** Verbatim source of the symbol's own body — only with `includeCode`. */
+  code?: string | null;
+  /** True when `code` was cut at the server's line cap. */
+  codeTruncated?: boolean;
+}
+
+/** GET /api/graph/split-search — the split view's grouped matches (REQ-DASHSIMPLE-005). */
+export interface SplitSearchResponse {
+  specs: Array<{ id: string; title: string; kind: string; snippet: string }>;
+  symbols: Array<{ id: string; name: string; kind: string; filePath: string; startLine?: number }>;
 }
 
 export interface GraphNodeResponse {
@@ -435,8 +445,11 @@ export const api = {
   refresh: (project?: string | null) => postJson<StatusResponse>(q('/api/refresh', project)),
   graphFull: (project?: string | null, limit = 250) =>
     getJson<GraphFullResponse>(q(`/api/graph/full?limit=${limit}`, project)),
-  graphNode: (id: string, project?: string | null) =>
-    getJson<GraphNodeResponse>(q(`/api/graph/node?id=${encodeURIComponent(id)}`, project)),
+  graphNode: (id: string, project?: string | null, opts: { includeCode?: boolean } = {}) =>
+    getJson<GraphNodeResponse>(q(`/api/graph/node?id=${encodeURIComponent(id)}${opts.includeCode ? '&includeCode=1' : ''}`, project)),
+  // One search box over specs + code symbols (REQ-DASHSIMPLE-005).
+  splitSearch: (qs: string, project?: string | null) =>
+    getJson<SplitSearchResponse>(q(`/api/graph/split-search?q=${encodeURIComponent(qs)}`, project)),
   graphHealth: (project?: string | null) =>
     getJson<GraphHealthResponse>(q('/api/graph/health', project)),
   specs: (project?: string | null) => getJson<SpecsResponse>(q('/api/specs', project)),

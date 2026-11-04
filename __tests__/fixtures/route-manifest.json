@@ -84,13 +84,16 @@
       "tested": "waived: no direct test yet"
     },
     "GET /api/graph/node": {
-      "tested": "ui/src/__tests__/control-states.test.tsx, ui/src/__tests__/graph.test.tsx"
+      "tested": "__tests__/graph-split-routes.test.ts, ui/src/__tests__/control-states.test.tsx, ui/src/__tests__/graph-split.test.tsx, ui/src/__tests__/graph.test.tsx"
     },
     "GET /api/graph/nodes": {
       "tested": "waived: no direct test yet"
     },
     "GET /api/graph/search": {
       "tested": "ui/src/__tests__/command-palette.test.tsx"
+    },
+    "GET /api/graph/split-search": {
+      "tested": "__tests__/graph-split-routes.test.ts, ui/src/__tests__/graph-split.test.tsx"
     },
     "GET /api/graph/stats": {
       "tested": "waived: no direct test yet"
