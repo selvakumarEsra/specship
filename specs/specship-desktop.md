@@ -397,6 +397,12 @@ implementations:
 <!-- id: REQ-DESKTOP-012 -->
 ## The Specs panel MUST render explicit empty, loading, and error states
 
+> **PARTLY SUPERSEDED 2026-11-04** by REQ-DASHSIMPLE-004.A8 — the
+> no-selection clause and A1 are replaced: with requirements indexed, the
+> empty detail panel only invites picking a requirement and no longer shows
+> the indexing hint or the copyable `specship init -i` command. The loading,
+> error and unknown-state clauses (A2–A4) still apply. Kept for history.
+
 With no spec selected the panel renders a guidance empty state: the spec
 glyph, a "pick a spec from the tree" heading, and an indexing hint carrying
 a copyable `specship init -i` command. While detail data loads, the panel
@@ -411,7 +417,8 @@ implementations:
 ## Acceptance
 <!-- id: REQ-DESKTOP-012.A1 -->
 - With no selection, the empty state shows the guidance heading and the
-  copyable command.
+  copyable command. *(Superseded 2026-11-04 by REQ-DASHSIMPLE-004.A8 — the
+  copyable command is removed.)*
 <!-- id: REQ-DESKTOP-012.A2 -->
 - While loading, skeleton blocks render in place of the sections; the
   panel is never blank.
