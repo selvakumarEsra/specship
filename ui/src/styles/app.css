@@ -1,6 +1,6 @@
 /* ============================================================
    SpecShip Desktop — Design System
-   Dark-only (BookMyGame UI tokens, REQ-DASHTHEME-001). Graph as hero. Geist + Geist Mono.
+   Dark-only (BookMyGame UI tokens, REQ-DASHTHEME-001). Graph as hero. Space Grotesk + Bricolage Grotesque + Geist Mono (REQ-DASHTHEME-002).
    ============================================================ */
 
 /* Tokens live in tokens.css (REQ-DASHTHEME-001) — imported first by main.tsx. */
@@ -48,6 +48,9 @@ html, body {
   background-clip: content-box;
 }
 ::-webkit-scrollbar-thumb:hover { background: var(--border-active); background-clip: content-box; }
+
+/* Headings and large numerals take the display face (REQ-DASHTHEME-002). */
+h1, h2, h3, h4, .sp-title, [data-page-title], .display-num { font-family: var(--font-display); }
 
 .mono { font-family: var(--font-mono); font-feature-settings: "zero"; }
 .tnum { font-variant-numeric: tabular-nums; }

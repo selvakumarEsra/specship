@@ -1,13 +1,26 @@
 /*
- * Self-hosted Geist (REQ-DESKTOP-017.A4): the snapshot loaded Geist from
- * fonts.googleapis.com; the app instead bundles the OFL-licensed variable
- * fonts from the @fontsource-variable devDependencies (imported in main.tsx,
- * emitted into dist/ as same-origin assets). Fontsource registers the
- * families as "Geist Variable" / "Geist Mono Variable", so put those ahead
- * of the token sheet's CDN-era names — every weight the design uses
- * (400–700 incl. 450/650) resolves from the variable font.
+ * Design-system fonts, served locally (REQ-DASHTHEME-002).
+ *
+ * Space Grotesk (body) and Bricolage Grotesque (headings + large numerals)
+ * are the BookMyGame UI design system's own files, copied byte-for-byte from
+ * specs/dashboard-theme-bmg/snapshot/fonts/ into ui/src/assets/fonts/. The
+ * @font-face rules below are the snapshot's fonts/fonts.css verbatim (same
+ * family names, weight ranges, unicode-range, font-display) with only the
+ * url() paths adjusted. Vite emits the files into dist/assets as hashed
+ * same-origin assets, so no font host is ever contacted and the dashboard
+ * renders its fonts offline. No npm font package is involved (DASH-LEAN).
+ *
+ * The design system defines no monospace face, so code, symbol names and IDs
+ * stay on the self-hosted Geist Mono variable font (@fontsource-variable/
+ * geist-mono, imported in main.tsx).
  */
+@font-face{font-family:'Bricolage Grotesque';font-style:normal;font-weight:200 800;font-stretch:100%;font-display:swap;src:url(../assets/fonts/bricolage-latin-ext.woff2) format('woff2');unicode-range:U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;}
+@font-face{font-family:'Bricolage Grotesque';font-style:normal;font-weight:200 800;font-stretch:100%;font-display:swap;src:url(../assets/fonts/bricolage-latin.woff2) format('woff2');unicode-range:U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;}
+@font-face{font-family:'Space Grotesk';font-style:normal;font-weight:300 700;font-stretch:100%;font-display:swap;src:url(../assets/fonts/space-grotesk-latin-ext.woff2) format('woff2');unicode-range:U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;}
+@font-face{font-family:'Space Grotesk';font-style:normal;font-weight:300 700;font-stretch:100%;font-display:swap;src:url(../assets/fonts/space-grotesk-latin.woff2) format('woff2');unicode-range:U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;}
+
 :root {
-  --font-ui: "Geist Variable", "Geist", system-ui, -apple-system, sans-serif;
+  --font-ui: "Space Grotesk", system-ui, -apple-system, sans-serif;
+  --font-display: "Bricolage Grotesque", "Space Grotesk", system-ui, -apple-system, sans-serif;
   --font-mono: "Geist Mono Variable", "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
 }

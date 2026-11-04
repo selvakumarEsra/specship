@@ -113,6 +113,24 @@ correctly offline. Code, symbol names and IDs keep a monospace face, since the
 design system defines none. The fonts the dashboard ships today are removed
 once nothing uses them.
 
+implementations:
+  - ui/src/components/dashboard-modules.tsx:StatTile
+  - ui/src/components/dashboard-modules.tsx:CacheCard
+  - ui/src/main.tsx
+  - ui/src/styles/fonts.css
+  - ui/src/styles/tokens.css
+  - ui/src/styles/app.css
+  - ui/src/assets/fonts/space-grotesk-latin.woff2
+  - ui/src/assets/fonts/bricolage-latin.woff2
+  - __tests__/pack-budget.ts
+
+verifies:
+  - __tests__/dashtheme-fonts.test.ts:reqDashtheme002A1
+  - __tests__/dashtheme-fonts.test.ts:reqDashtheme002A2
+  - __tests__/dashtheme-fonts.test.ts:reqDashtheme002A3
+  - __tests__/dashtheme-fonts.test.ts:reqDashtheme002A4
+  - __tests__/dashtheme-fonts.test.ts:reqDashtheme002A5
+
 ## Acceptance
 <!-- id: REQ-DASHTHEME-002.A1 -->
 - The body font-family resolves to Space Grotesk, and headings to Bricolage

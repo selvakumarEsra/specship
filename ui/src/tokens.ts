@@ -72,7 +72,7 @@ export const RADIUS_TOKENS: TokenSwatch[] = [
 export const TYPE_SCALE: Array<{ label: string; varName: string; sample: string; mono?: boolean }> = [
   { label: 'Big number', varName: '--fs-big', sample: '$1,184.42' },
   { label: 'Page title', varName: '--fs-title', sample: 'Page title' },
-  { label: 'Body & labels', varName: '--fs-base', sample: 'Body & labels — Geist' },
+  { label: 'Body & labels', varName: '--fs-base', sample: 'Body & labels — Space Grotesk' },
   { label: 'Secondary', varName: '--fs-sm', sample: 'Secondary text' },
   { label: 'Caption / pills', varName: '--fs-xs', sample: 'CAPTIONS & PILLS' },
   { label: 'Mono', varName: '--fs-sm', sample: 'validateSession()', mono: true },

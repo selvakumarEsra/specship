@@ -12,6 +12,7 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### New Features
 
 - The dashboard is now dark-only; the theme toggle and Theme setting are gone.
+- The dashboard now uses the Space Grotesk and Bricolage Grotesque fonts from its design system. They ship with the dashboard, so it looks the same offline.
 
 ## [0.29.0] - 2026-10-27
 

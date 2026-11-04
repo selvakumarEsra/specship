@@ -162,7 +162,7 @@ export function StatTile({ icon, label, value, delta, deltaInvert, spark, sparkC
         <span className="eyebrow" style={{ letterSpacing: '0.04em' }}>{label}</span>
       </div>
       <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-end', gap: 8 }}>
-        <div className="tabular" style={{ fontSize: 23, fontWeight: 650, letterSpacing: '-0.02em', lineHeight: 1 }}>{value}</div>
+        <div className="tabular display-num" style={{ fontSize: 23, fontWeight: 650, letterSpacing: '-0.02em', lineHeight: 1 }}>{value}</div>
         {spark && spark.length > 1 && <Sparkline data={spark} color={sparkColor || color || 'var(--accent)'} fill w={64} h={22} />}
       </div>
       {note
@@ -413,7 +413,7 @@ export function CacheCard({ cache, range, noIngest, onIngested }: {
         : (
           <>
             <div className="row" style={{ alignItems: 'flex-end', gap: 10 }}>
-              <div className="tabular" style={{ fontSize: 38, fontWeight: 700, letterSpacing: '-0.03em', lineHeight: 0.9, color: 'var(--node-route)' }}>
+              <div className="tabular display-num" style={{ fontSize: 38, fontWeight: 700, letterSpacing: '-0.03em', lineHeight: 0.9, color: 'var(--node-route)' }}>
                 {Math.round(cache.readRate * 100)}%
               </div>
               <div style={{ paddingBottom: 3 }}>

@@ -192,7 +192,8 @@
   --cell-border: rgba(0,0,0,0.26);            /* treemap cell outline */
 
   /* ---- Typography ---- */
-  --font-ui: "Geist", system-ui, -apple-system, sans-serif;
+  --font-ui: "Space Grotesk", system-ui, -apple-system, sans-serif;
+  --font-display: "Bricolage Grotesque", "Space Grotesk", system-ui, -apple-system, sans-serif;
   --font-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
   --fs-big: var(--bmg-font-size-h0);
   --fs-title: var(--bmg-font-size-h2);
