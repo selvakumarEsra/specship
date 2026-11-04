@@ -39,6 +39,8 @@ import {
   SyncResult,
   extractFromSource,
   initGrammars,
+  loadGrammarsForLanguages,
+  detectLanguage,
 } from './extraction';
 import { MarkdownSpecExtractor } from './extraction/specs/markdown-spec-extractor';
 import type { SpecExtractionResult } from './extraction/specs/types';
@@ -52,6 +54,7 @@ import {
   SpecLinkResolverStats,
   DriftTransition,
   canonicalQualifiedName,
+  qualifiedNameVariants,
 } from './resolution/spec-link-resolver';
 import { computeSpecFunnel, SpecFunnel } from './resolution/brief-link-resolver';
 import { computeDomainGapSeed, DomainGapSeed } from './resolution/domain-gap-seed';
@@ -102,10 +105,11 @@ import {
   EnforceReport,
   EnforceScope,
   RequirementVerification,
+  BrokenAtRefEntry,
 } from './enforce/enforce';
 import { scanDisableComments, SuppressionFinding } from './enforce/suppressions';
 import { loadMutationDeps } from './enforce/mutation';
-import { workingTreeDiffText } from './enforce/changed-files';
+import { workingTreeDiffText, existedAtRef } from './enforce/changed-files';
 import { computeBehaviourSurface, BehaviourSurface } from './behaviour/behaviour-surface';
 import {
   generateFlowDiagram,
@@ -115,6 +119,12 @@ import {
 import { ContextBuilder, createContextBuilder } from './context';
 import { Mutex, FileLock } from './utils';
 import { FileWatcher, WatchOptions, PendingFile, LockUnavailableError } from './sync';
+import {
+  readGitHead,
+  uncommittedTrackedFingerprint,
+  computeIndexFreshness,
+  IndexFreshness,
+} from './sync/worktree';
 
 // Re-export types for consumers
 export * from './types';
@@ -210,12 +220,13 @@ export type { FlowDiagramOptions, FlowDiagramConfig, FlowDiagramResult, FlowGrap
 // Architecture-fitness harness (FITNESS-DOC / REQ-FITNESS-001…003).
 export { evaluateFitness, loadFitnessRules, FITNESS_CONFIG_FILE } from './fitness/fitness';
 // Enforcement mode (ENFORCE-DOC / REQ-ENFORCE-001…003).
-export { evaluateEnforcement, loadEnforceConfig, ENFORCE_CONFIG_FILE, normalizePath } from './enforce/enforce';
+export { evaluateEnforcement, loadEnforceConfig, ENFORCE_CONFIG_FILE, normalizePath, undeclaredLinkFindings, branchBrokenFindings } from './enforce/enforce';
 // Change-scoped gating (REQ-AUTHG-006) — `specship check --since <ref>`.
-export { changedFilesSince, InvalidRefError, workingTreeDiffText } from './enforce/changed-files';
+export { changedFilesSince, InvalidRefError, workingTreeDiffText, existedAtRef } from './enforce/changed-files';
 // Suppression-comment scan (REQ-QGATE-004).
 export { scanDisableComments, formatSuppressionFinding } from './enforce/suppressions';
 export type { SuppressionFinding } from './enforce/suppressions';
+export type { IndexFreshness, IndexStaleReason } from './sync/worktree';
 // Mutation-score gate (REQ-QGATE-002).
 export { parseMutationReport, loadMutationDeps, DEFAULT_MUTATION_THRESHOLD, DEFAULT_MUTATION_REPORT } from './enforce/mutation';
 export type { MutationConfig, MutationDeps, MutationFileStats } from './enforce/mutation';
@@ -231,6 +242,7 @@ export type {
   CheckOutcome,
   CheckName,
   RequirementVerification,
+  BrokenAtRefEntry,
 } from './enforce/enforce';
 export type {
   FitnessRule,
@@ -496,11 +508,68 @@ export class SpecShip {
     const mutation = cfg.mutation !== undefined || cfg.gate?.mutation === true
       ? loadMutationDeps(this.projectRoot, cfg.mutation)
       : undefined;
+    // Merge checks (REQ-MULTIDEV-002): every link row feeds the
+    // undeclared-links check; a `--since` run also compares each currently
+    // orphaned/broken link against its file's blob at the ref.
+    const links = sq.getAllLinks();
+    const brokenAtRef = scope?.since ? this.linksBrokenSinceRef(scope.since) : undefined;
     return evaluateEnforcement(
-      { drift, fitness: this.getFitness(), maintainability: this.getMaintainability(), requirements, suppressions, mutation },
+      {
+        drift, fitness: this.getFitness(), maintainability: this.getMaintainability(), requirements, suppressions, mutation,
+        links, brokenAtRef,
+      },
       cfg,
       scope,
     );
+  }
+
+  /**
+   * Load the grammars `getEnforce` needs to parse link-target files at a
+   * `--since` ref (REQ-MULTIDEV-002). `getEnforce` is synchronous; call this
+   * first. Without it a target whose grammar isn't loaded counts as not
+   * resolving at the ref, so it is never reported (silent beats wrong).
+   */
+  async prepareEnforce(scope?: EnforceScope): Promise<void> {
+    if (!scope?.since) return;
+    const files = new Set(this.specQueries.getLinksByState(['orphaned', 'broken']).map((l) => l.targetFilePath));
+    if (files.size === 0) return;
+    await initGrammars();
+    await loadGrammarsForLanguages([...files].map((f) => detectLanguage(f)));
+  }
+
+  /**
+   * Each orphaned/broken link, marked with whether its target resolved at
+   * `ref` (REQ-MULTIDEV-002.A2/A3). Reads the file's blob from git and parses
+   * it in memory — no index of the ref is needed. The qualified-name match is
+   * the spec-link resolver's (every `.` ⇄ `::` separator variant), so a
+   * spec-declared `Class.method` finds an extracted `Class::method`. Each
+   * file is parsed once.
+   */
+  private linksBrokenSinceRef(ref: string): BrokenAtRefEntry[] {
+    const namesAtRef = new Map<string, Set<string>>();
+    const namesIn = (file: string): Set<string> => {
+      const cached = namesAtRef.get(file);
+      if (cached) return cached;
+      const names = new Set<string>();
+      const blob = existedAtRef(this.projectRoot, ref, file);
+      if (blob !== null) {
+        try {
+          for (const n of extractFromSource(file, blob).nodes) {
+            // Exact qualified name only — the resolver's getNodesByQualifiedNameExact.
+            if (n.qualifiedName) names.add(n.qualifiedName);
+          }
+        } catch {
+          // unparseable at the ref → treated as unresolved
+        }
+      }
+      namesAtRef.set(file, names);
+      return names;
+    };
+    return this.specQueries.getLinksByState(['orphaned', 'broken']).map((link) => {
+      const names = namesIn(link.targetFilePath);
+      const resolvedAtRef = qualifiedNameVariants(link.targetQualifiedName).some((v) => names.has(v));
+      return { link, resolvedAtRef, ref };
+    });
   }
 
   /**
@@ -942,12 +1011,61 @@ export class SpecShip {
           /* a diagram fault must never fail an index */
         }
 
+        if (result.success) this.recordIndexedRevision();
         this.refreshStatuslineCache();
         return result;
       } finally {
         this.fileLock.release();
       }
     });
+  }
+
+  /**
+   * Record the git branch, commit and uncommitted-tracked-state fingerprint
+   * this index was built against (REQ-MULTIDEV-004). Called only at the end of
+   * a full `indexAll()` / `sync()` — never from `indexFiles()` — so the record
+   * always describes a complete pass. Outside git it writes nothing.
+   * Best-effort: never fails the index.
+   */
+  private recordIndexedRevision(): void {
+    try {
+      const head = readGitHead(this.projectRoot);
+      if (!head) return;
+      this.queries.setMetadata('indexed_commit', head.commit);
+      this.queries.setMetadata('indexed_branch', head.branch ?? '');
+      this.queries.setMetadata(
+        'indexed_worktree_fingerprint',
+        uncommittedTrackedFingerprint(this.projectRoot) ?? '',
+      );
+    } catch {
+      /* best-effort */
+    }
+  }
+
+  /**
+   * Compare the recorded index revision with the checkout's live HEAD and
+   * uncommitted tracked state (REQ-MULTIDEV-004). Read-only: never syncs.
+   * Null outside git or when no revision was recorded.
+   */
+  getIndexFreshness(): IndexFreshness | null {
+    try {
+      const indexedCommit = this.queries.getMetadata('indexed_commit');
+      if (!indexedCommit) return null;
+      const head = readGitHead(this.projectRoot);
+      if (!head) return null;
+      const indexedBranch = this.queries.getMetadata('indexed_branch') || null;
+      const recordedFp = this.queries.getMetadata('indexed_worktree_fingerprint');
+      const currentFp = uncommittedTrackedFingerprint(this.projectRoot);
+      // Unknown on either side → don't claim a working-tree change (silent beats wrong).
+      const worktreeChanged = !!recordedFp && !!currentFp && recordedFp !== currentFp;
+      return computeIndexFreshness(
+        { branch: indexedBranch, commit: indexedCommit },
+        head,
+        worktreeChanged,
+      );
+    } catch {
+      return null;
+    }
   }
 
   /**
@@ -1058,12 +1176,15 @@ export class SpecShip {
       candidatesApplied: 0, commentLinksApplied: 0, reattached: 0, transitions,
     };
     let specFilesChanged = 0;
+    // No early return when specs/ is missing: a checkout without the
+    // directory must still prune the rows of files that are gone
+    // (REQ-MULTIDEV-003).
     const specRoots = this.defaultSpecRoots();
-    if (specRoots.length === 0) return { transitions, errors: totalErrors, warnings: totalWarnings };
     const specFiles: string[] = [];
     for (const root of specRoots) {
       this.collectSpecFiles(root, specFiles);
     }
+    const present = new Set(specFiles.map((p) => path.relative(this.projectRoot, p)));
 
     for (const absPath of specFiles) {
       const rel = path.relative(this.projectRoot, absPath);
@@ -1101,6 +1222,11 @@ export class SpecShip {
       }
     }
 
+    // Prune AFTER the per-file loop: a spec id that moved from a.md to b.md
+    // has already been re-homed (source_path = b.md), so deleting a.md's rows
+    // by source_path cannot take it (REQ-MULTIDEV-003, REQ-VSTATE-001).
+    specFilesChanged += this.pruneMissingSpecFiles(present);
+
     if (specFilesChanged > 0 || forceResolve) {
       const allFiles = this.queries.getAllFiles().map((f) => f.path);
       this.specLinkResolver.applyCodeCommentLinks(allFiles);
@@ -1132,6 +1258,8 @@ export class SpecShip {
   async indexSpecs(roots?: string[]): Promise<{
     filesProcessed: number;
     filesSkipped: number;
+    /** Spec files pruned because they no longer exist (REQ-MULTIDEV-003). */
+    filesRemoved: number;
     specsExtracted: number;
     linkCandidates: number;
     resolverStats: SpecLinkResolverStats;
@@ -1146,6 +1274,7 @@ export class SpecShip {
         return {
           filesProcessed: 0,
           filesSkipped: 0,
+          filesRemoved: 0,
           specsExtracted: 0,
           linkCandidates: 0,
           resolverStats: {
@@ -1237,6 +1366,14 @@ export class SpecShip {
           totalErrors += result.errors.filter((e) => e.severity === 'error').length;
         }
 
+        // Drop specs whose spec file is gone (REQ-MULTIDEV-003). Explicit
+        // roots scope the prune to those roots; default roots prune all.
+        const present = new Set(specFiles.map((p) => path.relative(this.projectRoot, p)));
+        const filesRemoved = this.pruneMissingSpecFiles(
+          present,
+          roots && roots.length > 0 ? roots : undefined
+        );
+
         // After spec changes settle, also scan code docstrings for
         // `@implements REQ-X` markers. Bounded to the files that already
         // have nodes in the graph (full-graph scan is acceptable here —
@@ -1259,6 +1396,7 @@ export class SpecShip {
         return {
           filesProcessed: processed,
           filesSkipped: skipped,
+          filesRemoved,
           specsExtracted: totalSpecs,
           linkCandidates: totalCandidates,
           resolverStats: stats,
@@ -1269,6 +1407,40 @@ export class SpecShip {
         this.fileLock.release();
       }
     });
+  }
+
+  /**
+   * Remove indexed spec files that no longer exist in the checkout — a
+   * deleted file, or one missing on the branch just checked out
+   * (REQ-MULTIDEV-003). `deleteSpecFile` cascades to the file's specs,
+   * acceptance criteria, links and virtual `spec` nodes, so the removed links
+   * never reach drift. No drift transitions are emitted.
+   *
+   * A row is pruned only when its path was not collected this pass AND is
+   * absent on disk — a file that merely failed to read keeps its rows. With
+   * explicit `roots`, only rows under those roots are considered.
+   *
+   * Returns the number of spec files removed.
+   */
+  private pruneMissingSpecFiles(present: Set<string>, roots?: string[]): number {
+    const scopes = roots?.map((r) => {
+      const rel = path.relative(this.projectRoot, path.resolve(this.projectRoot, r));
+      return rel === '' ? '' : rel.split(path.sep).join('/');
+    });
+    const inScope = (p: string): boolean => {
+      if (!scopes) return true;
+      const norm = p.split(path.sep).join('/');
+      return scopes.some((s) => s === '' || norm === s || norm.startsWith(s + '/'));
+    };
+    let removed = 0;
+    for (const row of this.specQueries.getAllSpecFiles()) {
+      if (present.has(row.path)) continue;
+      if (!inScope(row.path)) continue;
+      if (fs.existsSync(path.join(this.projectRoot, row.path))) continue;
+      this.specQueries.deleteSpecFile(row.path);
+      removed++;
+    }
+    return removed;
   }
 
   /**
@@ -1459,6 +1631,7 @@ export class SpecShip {
           /* a diagram fault must never fail a sync */
         }
 
+        this.recordIndexedRevision();
         this.refreshStatuslineCache();
         return result;
       } finally {

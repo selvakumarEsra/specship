@@ -26,11 +26,11 @@ describe('REQ-BUNDLE-WEB-002 — build-bundle.sh cleans before building', () => 
 });
 
 /**
- * REQ-OFFLINE-006 — bundles ship no Node runtime. The build must not download
+ * REQ-OFFINSTALL-006 — bundles ship no Node runtime. The build must not download
  * one (A1) and both launchers must resolve `node` from PATH, gate its version,
  * and keep `--liftoff-only` on the node command line (A2).
  */
-describe('REQ-OFFLINE-006 — the bundle uses the machine Node, not a vendored one', () => {
+describe('REQ-OFFINSTALL-006 — the bundle uses the machine Node, not a vendored one', () => {
   it('never downloads or stages a Node runtime (A1)', () => {
     expect(src).not.toMatch(/nodejs\.org\/dist/);
     expect(src).not.toMatch(/NODE_URL/);

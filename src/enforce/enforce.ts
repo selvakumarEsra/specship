@@ -22,8 +22,11 @@ import { FitnessReport } from '../fitness/fitness';
 import { MaintainabilityReport, highPrecisionClean } from '../graph/maintainability';
 import { SuppressionFinding, formatSuppressionFinding } from './suppressions';
 import { MutationConfig, MutationDeps } from './mutation';
+import { canonicalQualifiedName } from '../resolution/spec-link-resolver';
 
-export type CheckName = 'drift' | 'fitness' | 'maintainability' | 'behaviour' | 'suppressions' | 'mutation';
+export type CheckName =
+  | 'drift' | 'fitness' | 'maintainability' | 'behaviour' | 'suppressions' | 'mutation'
+  | 'undeclaredLinks' | 'branchBroken';
 
 /**
  * Project-relative, forward-slashed, no `./` prefix. Link target paths, spec
@@ -42,6 +45,10 @@ export interface GateConfig {
   behaviour?: boolean;
   suppressions?: boolean;
   mutation?: boolean;
+  /** Links that exist only in the index (REQ-MULTIDEV-002). */
+  undeclaredLinks?: boolean;
+  /** Links the branch broke relative to `--since <ref>` (REQ-MULTIDEV-002). */
+  branchBroken?: boolean;
 }
 
 export interface EnforceConfig {
@@ -82,6 +89,74 @@ export interface EnforceDeps {
   suppressions?: SuppressionFinding[];
   /** Mutation-score snapshot (REQ-QGATE-002); absent → check omitted (A1). */
   mutation?: MutationDeps;
+  /**
+   * Every spec-link row in the index (REQ-MULTIDEV-002) — feeds the
+   * undeclared-links check. Absent → the check is omitted.
+   */
+  links?: SpecLink[];
+  /**
+   * Currently orphaned/broken links, each marked with whether its target
+   * resolved at the `--since` ref (REQ-MULTIDEV-002). Present only for a
+   * `--since` run; absent → the branch-broken check is omitted.
+   */
+  brokenAtRef?: BrokenAtRefEntry[];
+}
+
+/** One orphaned/broken link and whether its target existed at the ref. */
+export interface BrokenAtRefEntry {
+  link: SpecLink;
+  resolvedAtRef: boolean;
+  /** The ref compared against, for the finding text. */
+  ref: string;
+}
+
+/**
+ * Provenances a fresh clone re-derives from the checked-out files: the spec
+ * file's `implementations:` / `verifies:` blocks and `@implements` /
+ * `@verifies` code comments.
+ */
+const DECLARED_PROVENANCES = new Set(['spec-declaration', 'code-comment']);
+
+function linkKey(l: SpecLink): string {
+  // Canonical dotted qname (REQ-LINKFIX-002) so `Class.method` and
+  // `Class::method` rows count as one logical link.
+  return [l.specId, normalizePath(l.targetFilePath), canonicalQualifiedName(l.targetQualifiedName), l.kind].join('\u0000');
+}
+
+/**
+ * Undeclared links (REQ-MULTIDEV-002.A1): an `agent-asserted` row with no
+ * declared twin — no `spec-declaration` or `code-comment` row for the same
+ * spec, target and kind. A fresh clone never sees it.
+ */
+export function undeclaredLinkFindings(links: SpecLink[]): string[] {
+  const declared = new Set(links.filter((l) => DECLARED_PROVENANCES.has(l.provenance)).map(linkKey));
+  const seen = new Set<string>();
+  const findings: string[] = [];
+  for (const l of links) {
+    if (l.provenance !== 'agent-asserted') continue;
+    const key = linkKey(l);
+    if (declared.has(key) || seen.has(key)) continue;
+    seen.add(key);
+    findings.push(
+      `${l.specId} → ${l.targetFilePath}:${l.targetQualifiedName} — undeclared (${l.provenance}): ` +
+        'add it to implementations:/verifies: or an @implements comment',
+    );
+  }
+  return findings;
+}
+
+/**
+ * Branch-broken links (REQ-MULTIDEV-002.A2/A3): orphaned/broken now, but the
+ * target resolved at the ref — so this branch broke it. A link already
+ * unresolved at the ref is not reported.
+ */
+export function branchBrokenFindings(entries: BrokenAtRefEntry[]): string[] {
+  return entries
+    .filter((e) => e.resolvedAtRef)
+    .map(
+      (e) =>
+        `${e.link.specId} → ${e.link.targetFilePath}:${e.link.targetQualifiedName} — ${e.link.state} on this branch, resolved at ${e.ref}`,
+    );
 }
 
 /**
@@ -255,6 +330,20 @@ export function evaluateEnforcement(
     }
   }
 
+  // --- undeclared links (REQ-MULTIDEV-002) ---
+  if (deps.links !== undefined) {
+    const findings = undeclaredLinkFindings(deps.links);
+    checks.push({ check: 'undeclaredLinks', gating: gate.undeclaredLinks === true, passed: findings.length === 0, findings });
+  }
+
+  // --- branch-broken links (REQ-MULTIDEV-002) — only for a `--since` run ---
+  if (deps.brokenAtRef !== undefined) {
+    const findings = branchBrokenFindings(deps.brokenAtRef);
+    checks.push({
+      check: 'branchBroken', gating: gate.branchBroken === true, passed: findings.length === 0, findings, scoped: true,
+    });
+  }
+
   const gatedFailures = checks.filter((c) => c.gating && !c.passed && !c.skipped).map((c) => c.check);
   return { checks, gatedFailures, passed: gatedFailures.length === 0 };
 }
@@ -278,14 +367,21 @@ export function loadEnforceConfig(projectRoot: string): EnforceConfig {
 }
 
 /** All check names, for `--strict` / `--enable-gate` validation. */
-export const ALL_CHECKS: CheckName[] = ['drift', 'fitness', 'maintainability', 'behaviour', 'suppressions', 'mutation'];
+export const ALL_CHECKS: CheckName[] = [
+  'drift', 'fitness', 'maintainability', 'behaviour', 'suppressions', 'mutation', 'undeclaredLinks', 'branchBroken',
+];
 
 /**
  * The `--strict` override (REQ-ENFORCE-004.A2): every check gates for this
  * run only. Nothing is read from or written to the project config.
  */
 export function strictEnforceConfig(): EnforceConfig {
-  return { gate: { drift: true, fitness: true, maintainability: true, behaviour: true, suppressions: true, mutation: true } };
+  return {
+    gate: {
+      drift: true, fitness: true, maintainability: true, behaviour: true, suppressions: true, mutation: true,
+      undeclaredLinks: true, branchBroken: true,
+    },
+  };
 }
 
 /**

@@ -20,6 +20,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { execFileSync } from 'child_process';
+import { createHash } from 'crypto';
 
 /**
  * Absolute, symlink-resolved toplevel of the git working tree that `dir`
@@ -103,6 +104,126 @@ export function worktreeMismatchNotice(m: WorktreeIndexMismatch): string {
     `and symbols changed only here are missing. Run "specship init -i" here for a ` +
     `worktree-local index.`
   );
+}
+
+// =============================================================================
+// Indexed revision + staleness (REQ-MULTIDEV-004)
+// =============================================================================
+
+/** Run git in `dir`; returns trimmed stdout, or null on any failure. Never throws. */
+function git(dir: string, args: string[]): string | null {
+  try {
+    return execFileSync('git', args, {
+      cwd: dir,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+      windowsHide: true,
+      maxBuffer: 256 * 1024 * 1024,
+    });
+  } catch {
+    return null;
+  }
+}
+
+/** Pathspec limiting git output to `dir`, excluding SpecShip's own `.specship/`. */
+const NON_SPECSHIP_PATHSPEC = ['--', '.', ':(exclude).specship'];
+
+/**
+ * The checkout's current HEAD: commit sha plus branch name (`null` on a
+ * detached HEAD). Returns null outside a git repo, when git is missing, or
+ * when the repo has no commit yet. Never throws.
+ */
+export function readGitHead(dir: string): { branch: string | null; commit: string } | null {
+  const commit = git(dir, ['rev-parse', '--verify', '-q', 'HEAD'])?.trim();
+  if (!commit) return null;
+  // `symbolic-ref -q` exits non-zero with no output on a detached HEAD.
+  const branch = git(dir, ['symbolic-ref', '--short', '-q', 'HEAD'])?.trim() || null;
+  return { branch, commit };
+}
+
+/**
+ * Fingerprint of the uncommitted tracked state under `dir` (outside
+ * `.specship/`): a hash over `git status --porcelain --untracked-files=no`
+ * plus `git diff HEAD`. Two calls return the same value exactly when the
+ * working tree's tracked changes are identical — so an index synced after an
+ * edit is fresh until the edits change again. Null when git can't answer.
+ */
+export function uncommittedTrackedFingerprint(dir: string): string | null {
+  const status = git(dir, ['status', '--porcelain', '--untracked-files=no', ...NON_SPECSHIP_PATHSPEC]);
+  if (status === null) return null;
+  if (status.trim().length === 0) return 'clean';
+  const diff = git(dir, ['diff', 'HEAD', '--no-ext-diff', '--binary', ...NON_SPECSHIP_PATHSPEC]);
+  if (diff === null) return null;
+  return createHash('sha256').update(status).update('\0').update(diff).digest('hex');
+}
+
+export type IndexStaleReason = 'commit-moved' | 'uncommitted-changes';
+
+export interface IndexFreshness {
+  /** Branch the index was built on; null when built on a detached HEAD. */
+  indexedBranch: string | null;
+  indexedCommit: string;
+  /** Branch currently checked out; null on a detached HEAD. */
+  headBranch: string | null;
+  headCommit: string;
+  stale: boolean;
+  reasons: IndexStaleReason[];
+}
+
+/**
+ * Pure staleness verdict. `worktreeChanged` is true when the checkout's
+ * uncommitted tracked changes differ from those present at index time.
+ */
+export function computeIndexFreshness(
+  recorded: { branch: string | null; commit: string },
+  head: { branch: string | null; commit: string },
+  worktreeChanged: boolean,
+): IndexFreshness {
+  const reasons: IndexStaleReason[] = [];
+  if (recorded.commit !== head.commit) reasons.push('commit-moved');
+  if (worktreeChanged) reasons.push('uncommitted-changes');
+  return {
+    indexedBranch: recorded.branch,
+    indexedCommit: recorded.commit,
+    headBranch: head.branch,
+    headCommit: head.commit,
+    stale: reasons.length > 0,
+    reasons,
+  };
+}
+
+/** One-line staleness notice naming `specship sync` as the fix. */
+export function indexStaleNotice(f: IndexFreshness): string {
+  const short = (c: string) => c.slice(0, 7);
+  const parts: string[] = [];
+  if (f.reasons.includes('commit-moved')) {
+    parts.push(`indexed at ${short(f.indexedCommit)}, HEAD ${short(f.headCommit)}`);
+  }
+  if (f.reasons.includes('uncommitted-changes')) {
+    parts.push('uncommitted changes differ from when it was indexed');
+  }
+  return `Index may be stale (${parts.join('; ')}) — run \`specship sync\``;
+}
+
+/** `ref (branch)` / `ref (detached)` label for human output. */
+export function formatRevision(branch: string | null, commit: string): string {
+  return `${commit.slice(0, 7)} (${branch ?? 'detached'})`;
+}
+
+/**
+ * The `specship status --json` fields for a freshness verdict. Empty when
+ * freshness is null (no git / nothing recorded), so the keys are absent.
+ */
+export function indexFreshnessJsonFields(f: IndexFreshness | null): Record<string, unknown> {
+  if (!f) return {};
+  return {
+    indexedBranch: f.indexedBranch,
+    indexedCommit: f.indexedCommit,
+    headBranch: f.headBranch,
+    headCommit: f.headCommit,
+    indexStale: f.stale,
+    staleReasons: f.reasons,
+  };
 }
 
 /** Resolve symlinks where possible so tmp/realpath quirks don't break equality. */

@@ -8,7 +8,7 @@
 # network access.
 #
 # Requires Node >= 22.5.0 and < 25.0.0 on PATH — the bundle ships no runtime
-# (REQ-OFFLINE-006).
+# (REQ-OFFINSTALL-006).
 #
 # Usage (from the extracted bundle directory):
 #   ./install.sh                 install; asks where to wire Claude Code
@@ -25,7 +25,7 @@ set -eu
 # Bundle root = the directory holding this script.
 BUNDLE="$(cd "$(dirname "$0")" && pwd)"
 
-# Resolve the machine's Node and gate its version (REQ-OFFLINE-006). The floor
+# Resolve the machine's Node and gate its version (REQ-OFFINSTALL-006). The floor
 # guarantees the built-in node:sqlite (FTS5); the ceiling matches the Node 25
 # hard exit in the CLI. Called before anything is installed or wired, so an
 # unsuitable machine is left untouched.
@@ -80,7 +80,7 @@ if [ "$UNINSTALL" -eq 1 ]; then
   exit 0
 fi
 
-# Gate on the machine's Node before touching anything (REQ-OFFLINE-006.A3):
+# Gate on the machine's Node before touching anything (REQ-OFFINSTALL-006.A3):
 # an unsupported machine gets no install dir, no symlink, and no wiring.
 resolve_node
 
@@ -101,7 +101,7 @@ echo "Installed to $DEST"
 echo "Linked     $BIN_DIR/specship"
 
 # 3. Wire Claude Code via the machine's resolved Node (no npm, no network).
-#    REQ-OFFLINE-005: the wiring target is asked, never assumed — a blind
+#    REQ-OFFINSTALL-005: the wiring target is asked, never assumed — a blind
 #    project-local install from here would land in the bundle directory.
 if [ "$SKIP_CLAUDE" -eq 0 ]; then
   if [ "$WIRE_GLOBAL" -eq 0 ] && [ -z "$WIRE_PATH" ]; then
@@ -123,7 +123,7 @@ if [ "$SKIP_CLAUDE" -eq 0 ]; then
       esac
     else
       # No TTY, no flags: global is the only safe default — never local
-      # into the bundle directory (REQ-OFFLINE-005.A2).
+      # into the bundle directory (REQ-OFFINSTALL-005.A2).
       WIRE_GLOBAL=1
     fi
   fi

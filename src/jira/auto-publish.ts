@@ -31,6 +31,12 @@ import {
 } from './publish';
 import { readSpecJiraKey } from './spec-writer';
 import { postMilestoneComment, type MilestoneJiraClient } from './milestone-comment';
+import {
+  detectRepoIdentity,
+  resolveCiPublishGate,
+  specIssueLabel,
+  type CiPublishGateContext,
+} from './ci-publish';
 import * as fs from 'fs';
 
 export type AutoPublishStatus =
@@ -39,7 +45,12 @@ export type AutoPublishStatus =
   | 'opted_out'
   | 'failed'
   /** Would be published, but the pass ran in plan-only mode (REQ-THRU-006). */
-  | 'pending';
+  | 'pending'
+  /**
+   * Would be published, but `jira.publishFrom: "ci"` defers it to a CI run
+   * on the publish branch (REQ-MULTIDEV-005). No JIRA write happened.
+   */
+  | 'pending_ci';
 
 export interface AutoPublishResultRow {
   specId: string;
@@ -57,12 +68,20 @@ export interface AutoPublishReport {
    *   - 'not-opted-in'    → bound, but `jira.autoPublish` is not `true`
    *                         (REQ-THRU-006): nothing was written; `pending`
    *                         counts what an explicit publish would push
+   *   - 'pending-ci'      → `jira.publishFrom: "ci"` and this run is not CI
+   *                         on the publish branch (REQ-MULTIDEV-005): no
+   *                         JIRA write; rows are `pending_ci`
    */
-  skipped?: 'unbound' | 'no-credentials' | 'not-opted-in';
+  skipped?: 'unbound' | 'no-credentials' | 'not-opted-in' | 'pending-ci';
   /** Requirements that would be published/refreshed (plan-only passes). */
   pending?: number;
   /** Human-readable note when `skipped` is set (surfaced by the caller). */
   note?: string;
+  /**
+   * Why publishing was deferred to CI (REQ-MULTIDEV-005) — always says
+   * "pending CI publication" and, in CI, names the publish branch.
+   */
+  deferral?: string;
   results: AutoPublishResultRow[];
 }
 
@@ -88,6 +107,10 @@ export interface AutoPublishDeps {
   projectRoot: string;
   /** Test seam: build a JIRA client from resolved creds. Default: JiraClient. */
   makeClient?: (creds: ReturnType<typeof resolveJiraCredentials>) => PublishJiraClient;
+  /** Test seam for the CI-publish gate (env + branch). Default: process env + git. */
+  ciContext?: CiPublishGateContext;
+  /** Test seam for the dedupe label's repo identity. Default: origin basename. */
+  repoIdentity?: string;
 }
 
 export interface RunAutoPublishOptions {
@@ -160,6 +183,31 @@ export async function runAutoPublish(
   if (!binding.binding) {
     return { skipped: 'unbound', results: [] };
   }
+
+  // REQ-MULTIDEV-005: under `jira.publishFrom: "ci"`, only CI on the
+  // publish branch writes. Everywhere else: no client, no JIRA write, and
+  // every would-publish row is reported as pending CI publication.
+  const gate = resolveCiPublishGate(binding.binding, {
+    cwd: deps.projectRoot,
+    ...deps.ciContext,
+  });
+  if (gate.mode === 'deferred' && !opts.dryRun) {
+    const planned = planAutoPublish(deps).map((r) =>
+      r.status === 'pending' ? { ...r, status: 'pending_ci' as const, note: gate.reason } : r,
+    );
+    const pending = planned.filter((r) => r.status === 'pending_ci').length;
+    return {
+      skipped: 'pending-ci',
+      pending,
+      deferral: gate.reason,
+      note: gate.reason,
+      results: planned,
+    };
+  }
+  const ciPublish = gate.mode === 'publish';
+  const repoIdentity = ciPublish
+    ? deps.repoIdentity ?? detectRepoIdentity(deps.projectRoot)
+    : '';
 
   const optedIn = binding.binding.autoPublish === true || opts.explicit === true;
   if (!optedIn || opts.dryRun) {
@@ -303,20 +351,29 @@ export async function runAutoPublish(
           // team-managed project without a `Story` type publishes as `Task`.
           ...bindingIssueTypes(deps.projectRoot),
           ...(specEpicKey ? { epicKey: specEpicKey } : {}),
+          // REQ-MULTIDEV-005.A5: CI publish finds its earlier issue by a
+          // repo-scoped label, since the key never reaches the spec file.
+          ...(ciPublish
+            ? { dedupe: { label: specIssueLabel(repoIdentity, spec.id) } }
+            : {}),
         },
         existingKey,
       );
       // Frontmatter write-back stamps jira_issue: and the fingerprint. Never
       // re-id or rename here — auto-publish runs on every sync and must be
       // safe on files that already carry links or share a file with siblings.
-      writeBackJiraIdentity(absPath, result.key, {
-        fingerprint: result.fingerprint,
-        reId: null,
-        renameTo: null,
-        ...(result.epicKey ? { epicKey: result.epicKey } : {}),
-        // REQ-JIRATEAM-010.A2: per-requirement keys in multi-REQ files.
-        ...(soleRequirement ? {} : { forSpecId: spec.id }),
-      });
+      // REQ-MULTIDEV-005.A7: CI publish never touches the tree — the label
+      // search is the identity, so the checkout stays clean.
+      if (!ciPublish) {
+        writeBackJiraIdentity(absPath, result.key, {
+          fingerprint: result.fingerprint,
+          reId: null,
+          renameTo: null,
+          ...(result.epicKey ? { epicKey: result.epicKey } : {}),
+          // REQ-JIRATEAM-010.A2: per-requirement keys in multi-REQ files.
+          ...(soleRequirement ? {} : { forSpecId: spec.id }),
+        });
+      }
       const status: AutoPublishStatus =
         result.created || result.subtasksCreated > 0 ? 'published' : 'unchanged';
       results.push({
@@ -450,17 +507,27 @@ export interface AutoPublishCounts {
   optedOut: number;
   failed: number;
   pending: number;
+  /** Rows deferred to CI publication (REQ-MULTIDEV-005). */
+  pendingCi: number;
 }
 
 /** Tally a report's rows by status. */
 export function countAutoPublishReport(report: AutoPublishReport): AutoPublishCounts {
-  const counts: AutoPublishCounts = { published: 0, unchanged: 0, optedOut: 0, failed: 0, pending: 0 };
+  const counts: AutoPublishCounts = {
+    published: 0,
+    unchanged: 0,
+    optedOut: 0,
+    failed: 0,
+    pending: 0,
+    pendingCi: 0,
+  };
   for (const r of report.results) {
     if (r.status === 'published') counts.published++;
     else if (r.status === 'unchanged') counts.unchanged++;
     else if (r.status === 'opted_out') counts.optedOut++;
     else if (r.status === 'failed') counts.failed++;
     else if (r.status === 'pending') counts.pending++;
+    else if (r.status === 'pending_ci') counts.pendingCi++;
   }
   return counts;
 }
@@ -527,6 +594,10 @@ export function summarizeAutoPublishReport(report: AutoPublishReport): string {
   if (report.skipped === 'not-opted-in') {
     // Nothing held back → nothing to say; sync stays quiet.
     return report.pending ? pendingPublicationNote(report.pending) : '';
+  }
+  if (report.skipped === 'pending-ci') {
+    const n = report.pending ?? 0;
+    return `JIRA publish deferred: ${n} spec(s) ${report.deferral ?? 'pending CI publication'}`;
   }
   if (report.skipped === 'no-credentials') {
     return `JIRA auto-publish skipped: ${report.note ?? 'no credentials'}`;

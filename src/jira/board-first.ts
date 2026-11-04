@@ -21,9 +21,16 @@ import { JiraClient } from './client';
 import type { JiraIssue } from './types';
 
 export type WorkAnchor = {
-  issueKey: string;
+  /**
+   * The anchoring issue. Absent only for `epic-pending-ci` (REQ-MULTIDEV-005):
+   * under `jira.publishFrom: "ci"` work starts on the epic before CI creates
+   * the issue.
+   */
+  issueKey?: string;
   summary: string;
-  source: 'explicit' | 'picked' | 'epic-child';
+  source: 'explicit' | 'picked' | 'epic-child' | 'epic-pending-ci';
+  /** The epic anchor, set for `epic-pending-ci`. */
+  epicKey?: string;
 };
 
 export type AnchorUnbound = { status: 'unbound' };
@@ -52,6 +59,12 @@ export interface ResolveWorkAnchorOptions {
   cwd: string;
   explicitIssueKey?: string;
   pickedIssueKey?: string;
+  /**
+   * The spec's own `epicKey` frontmatter (REQ-MULTIDEV-005). Under
+   * `jira.publishFrom: "ci"` it — or the binding default — anchors the work
+   * in place of an issue key. Ignored when the setting is absent.
+   */
+  specEpicKey?: string;
   /** Test seam. Default: resolve credentials + new JiraClient. */
   makeClient?: () => AnchorJiraClient;
 }
@@ -83,6 +96,23 @@ export async function resolveWorkAnchor(
         source: explicit ? 'explicit' : 'picked',
       },
     };
+  }
+
+  // REQ-MULTIDEV-005.A4: CI-publish repos create the issue only after merge,
+  // so the epic (spec frontmatter first, then the binding default) is a
+  // sufficient anchor. No epic → the normal refusal below still applies.
+  if (binding.publishFrom === 'ci') {
+    const epicKey = opts.specEpicKey?.trim() || binding.epicKey;
+    if (epicKey) {
+      return {
+        status: 'anchored',
+        anchor: {
+          epicKey,
+          summary: `epic ${epicKey} — issue pending CI publication`,
+          source: 'epic-pending-ci',
+        },
+      };
+    }
   }
 
   if (!binding.epicKey) {

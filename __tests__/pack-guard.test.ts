@@ -27,7 +27,11 @@ const MAX_PACKED_BYTES = 2_400_000;
 // Raised 6.25 MB → 6.35 MB (2026-10-27): the design.md extractor/checker
 // (dist/design-md/, DESIGNMD-DOC) and the shipped design-md skill add ~46 KB;
 // checked for stale dist files first — none.
-const MAX_UNPACKED_BYTES = 6_350_000;
+// Raised 6.35 MB → 6.40 MB (2026-11-04): MULTIDEV-DOC (cross-file id lint,
+// undeclared/branch-broken link checks, spec-file pruning, indexed-revision
+// status, CI-only JIRA publishing) adds ~50 KB of compiled dist — main packs
+// 6,316,289 B, this branch 6,366,362 B; diffed file-by-file, no stale assets.
+const MAX_UNPACKED_BYTES = 6_400_000;
 // Raised 530 → 560 (2026-10-26) after investigating a 531-file build: no stale
 // dist assets; the growth is new feature modules (dist/spec-quality/,
 // dist/pulse/, and the 0.30/0.31 knowledge + throughput modules that follow).
