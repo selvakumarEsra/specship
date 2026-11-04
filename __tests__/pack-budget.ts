@@ -35,7 +35,11 @@ export const MAX_PACKED_BYTES = 2_450_000;
 // ~50 KB is the compiled MULTIDEV code (diffed file-by-file against main on
 // feat/multidev-branches); the rest is the dashboard's new screens net of the
 // deleted agent pages and Geist fonts. Clean build, no stale assets.
-export const MAX_UNPACKED_BYTES = 6_400_000;
+// Raised 6.40 MB → 6.45 MB (2026-11-05, REQ-AGENTSWITCH-006): HEAD packs
+// 6,398,315 B / 583 files on a clean build; the installed-agents record
+// (dist/installer/agent-record.*) plus the install/update replay wiring adds
+// 21,037 B / 2 files. Both measured with `npm pack --dry-run`; no stale dist.
+export const MAX_UNPACKED_BYTES = 6_450_000;
 // Raised 530 → 560 (2026-10-26) after investigating a 531-file build: no stale
 // dist assets; the growth is new feature modules (dist/spec-quality/,
 // dist/pulse/, and the 0.30/0.31 knowledge + throughput modules that follow).

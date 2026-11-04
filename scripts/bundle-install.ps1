@@ -106,6 +106,19 @@ if (($userPath -split ';') -notcontains $binDir) {
 # 3. Wire Claude Code via the machine's resolved Node (no npm, no network).
 #    REQ-OFFINSTALL-005: the wiring target is asked, never assumed — a blind
 #    project-local install from here would land in the bundle directory.
+# REQ-AGENTSWITCH-006.A3: with no explicit wiring flag, reinstall for every
+# agent in the installed-agents record first. Exit 3 = nothing recorded, so
+# fall through to the first-install Claude Code wiring below.
+if (-not $SkipClaude -and -not $Global -and -not $Path) {
+  $replayJs = Join-Path $dest 'lib\dist\bin\specship.js'
+  & $nodeExe --liftoff-only $replayJs install --replay-recorded
+  if ($LASTEXITCODE -eq 0) {
+    $SkipClaude = $true
+  } elseif ($LASTEXITCODE -ne 3) {
+    Write-Warning "specship: reinstalling the recorded agents failed (exit $LASTEXITCODE) - wiring Claude Code instead."
+  }
+}
+
 if (-not $SkipClaude) {
   if (-not $Global -and -not $Path) {
     if ([Environment]::UserInteractive -and -not [Console]::IsInputRedirected) {

@@ -321,6 +321,41 @@ program
   .description('Code intelligence and knowledge graph for any codebase')
   .version(packageJson.version);
 
+/**
+ * Commands that run on every agent turn / tool call (the installed hooks, the
+ * status line) or as the long-lived MCP server. They must stay exactly as
+ * fast as before, so the installed-agents record is never checked on them.
+ */
+const AGENT_RECORD_SKIP_COMMANDS = new Set([
+  'serve',
+  'cheatsheet',
+  'spec-nudge',
+  'steer-nudge',
+  'search-intercept',
+  'statusline',
+  'sync',
+  'sync-if-dirty',
+  'mark-dirty',
+  'auto-sync',
+  'hook',
+]);
+
+// REQ-AGENTSWITCH-006.A2: any other command rebuilds a missing/unreadable
+// installed-agents record from the agents' configs. A present record costs one
+// file read and no write. Silent: the record never blocks or fails a command.
+program.hook('preAction', (_root, actionCommand) => {
+  let top = actionCommand;
+  while (top.parent && top.parent !== program) top = top.parent;
+  if (AGENT_RECORD_SKIP_COMMANDS.has(top.name())) return;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { ensureAgentRecord } = require('../installer/agent-record') as typeof import('../installer/agent-record');
+    ensureAgentRecord(process.cwd());
+  } catch {
+    /* advisory */
+  }
+});
+
 // =============================================================================
 // Helper Functions
 // =============================================================================
@@ -3198,7 +3233,12 @@ program
   // exactly as before.
   .option('-t, --target <ids>', 'Agents to wire, comma-separated: "claude" (default) | "gemini" | "claude,gemini". Also selects the snippet `--print-config` prints. Legacy: "auto"/"all" = claude, "none" = skip')
   .option('--trust', 'Gemini only (REQ-GEMINI-009): write ~/.gemini/policies/specship.toml auto-allowing SpecShip\'s read-only tools. Opt-in — an admin policy still wins and run_shell_command is unaffected')
+  // REQ-AGENTSWITCH-006.A3: reinstall for every recorded agent. Run by
+  // `specship update` (through the new binary) and the bundle installer; exits
+  // 3 when nothing is recorded so the bundle installer can fall back.
+  .addOption(new Option('--replay-recorded', 'Reinstall for every agent in the installed-agents record').hideHelp())
   .action(async (opts: {
+    replayRecorded?: boolean;
     target?: string;
     location?: string;
     yes?: boolean;
@@ -3213,6 +3253,21 @@ program
     printConfig?: boolean;
     path?: string;
   }) => {
+    if (opts.replayRecorded) {
+      const { reinstallRecordedAgents } = await import('../installer');
+      const reports = reinstallRecordedAgents();
+      if (reports.length === 0) {
+        info('No agents recorded — nothing to reinstall.');
+        process.exit(3);
+      }
+      for (const r of reports) {
+        if (r.status === 'reinstalled') success(r.detail);
+        else warn(r.detail);
+      }
+      if (reports.some((r) => r.status === 'failed')) process.exit(1);
+      return;
+    }
+
     if (opts.printConfig) {
       const loc = (opts.location === 'local' ? 'local' : 'global') as 'global' | 'local';
       // Only `gemini` selects the non-default snippet; every other value
@@ -4629,6 +4684,9 @@ program
         detect: (): InstallMethod => detectInstallMethod(__dirname, installDir),
         resolveLatest: (method) => resolveLatestVersion(method),
         runInstaller: (method) => runInstaller(method, { installDir, binDir }),
+        // REQ-AGENTSWITCH-006.A3: the old code is still loaded in this
+        // process, so the reinstall runs through the NEW binary.
+        reinstallAgents: () => replayRecordedAgents(detectInstallMethod(__dirname, installDir), binDir),
         installDir,
         binDir,
       },
@@ -4641,6 +4699,29 @@ program
     }
     if (result.exitCode !== 0) process.exit(result.exitCode);
   });
+
+/**
+ * Run `specship install --replay-recorded` on the freshly installed binary and
+ * return its output lines. Exit 3 means nothing was recorded.
+ */
+function replayRecordedAgents(method: InstallMethod, binDir: string): Promise<string[]> {
+  const bundleLink = path.join(binDir, 'specship');
+  const bin = method === 'bundle' && fs.existsSync(bundleLink) ? bundleLink : 'specship';
+  return new Promise((resolve, reject) => {
+    const { execFile } = require('child_process') as typeof import('child_process');
+    execFile(
+      bin,
+      ['install', '--replay-recorded'],
+      { encoding: 'utf8', shell: process.platform === 'win32', windowsHide: true },
+      (err, stdout) => {
+        const lines = String(stdout ?? '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+        const code = (err as { code?: unknown } | null)?.code;
+        if (!err || code === 3) resolve(lines);
+        else reject(new Error(lines.at(-1) ?? err.message));
+      },
+    );
+  });
+}
 
 /**
  * specship jira — connect SpecShip to a JIRA instance (REQ-JIRA-001).

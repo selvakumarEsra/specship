@@ -103,6 +103,19 @@ echo "Linked     $BIN_DIR/specship"
 # 3. Wire Claude Code via the machine's resolved Node (no npm, no network).
 #    REQ-OFFINSTALL-005: the wiring target is asked, never assumed — a blind
 #    project-local install from here would land in the bundle directory.
+# REQ-AGENTSWITCH-006.A3: with no explicit wiring flag, reinstall for every
+# agent in the installed-agents record first. Exit 3 = nothing recorded, so
+# fall through to the first-install Claude Code wiring below.
+if [ "$SKIP_CLAUDE" -eq 0 ] && [ "$WIRE_GLOBAL" -eq 0 ] && [ -z "$WIRE_PATH" ]; then
+  rc=0
+  "$NODE" --liftoff-only "$DEST/lib/dist/bin/specship.js" install --replay-recorded || rc=$?
+  if [ "$rc" -eq 0 ]; then
+    SKIP_CLAUDE=1
+  elif [ "$rc" -ne 3 ]; then
+    echo "specship: reinstalling the recorded agents failed (exit $rc) — wiring Claude Code instead." >&2
+  fi
+fi
+
 if [ "$SKIP_CLAUDE" -eq 0 ]; then
   if [ "$WIRE_GLOBAL" -eq 0 ] && [ -z "$WIRE_PATH" ]; then
     if [ -t 0 ]; then

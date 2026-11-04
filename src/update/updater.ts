@@ -44,6 +44,12 @@ export interface UpdateDeps {
   /** Perform the real update for a method. Throws when the underlying updater
    *  (bundle installer / npm) exits non-zero. */
   runInstaller: (method: InstallMethod) => Promise<void>;
+  /**
+   * Reinstall SpecShip for every agent in the installed-agents record
+   * (REQ-AGENTSWITCH-006.A3), via the NEW binary. Returns output lines.
+   * Optional; a throw is reported as a warning, never as a failed update.
+   */
+  reinstallAgents?: () => Promise<string[]>;
   /** Bundle install dir (for messages). */
   installDir: string;
   /** Bundle symlink dir (for messages). */
@@ -190,6 +196,20 @@ export async function runUpdate(deps: UpdateDeps, opts: UpdateOptions = {}): Pro
     };
   }
 
+  // Reinstall for every recorded agent (REQ-AGENTSWITCH-006.A3). The binary
+  // is already updated, so a failure here is a warning, not a failed update.
+  const agentLines: string[] = [];
+  if (deps.reinstallAgents) {
+    try {
+      agentLines.push(...(await deps.reinstallAgents()));
+    } catch (err) {
+      agentLines.push(
+        `Warning: could not reinstall for the recorded agents: ${errMsg(err)}`,
+        'Run `specship install --replay-recorded` to retry.',
+      );
+    }
+  }
+
   // Success → report old → new + remind to restart (REQ-CLI-UPDATE-001.A1, 005.A1).
   return {
     exitCode: 0,
@@ -200,6 +220,7 @@ export async function runUpdate(deps: UpdateDeps, opts: UpdateOptions = {}): Pro
     changed: true,
     lines: [
       `Updated ${currentVersion} → ${latestVersion}.`,
+      ...agentLines,
       'Restart any running `specship serve` / Claude Code MCP session to pick up the new version.',
     ],
   };

@@ -180,6 +180,45 @@ describe('REQ-OFFINSTALL-001 — installing from an extracted bundle (no npm/com
     expect(out).toMatch(/claude wired \(stub\)/);
   });
 
+  // REQ-AGENTSWITCH-006.A3 — the bundle installer replays the recorded agents
+  // first; only an empty record (exit 3) falls back to the Claude default.
+  function bundleInstallerReplaysRecordedAgentsElseWiresClaude(): void {
+    const shimDir = path.join(work, 'replay-shim');
+    fs.mkdirSync(shimDir, { recursive: true });
+    const mode = path.join(work, 'replay-mode');
+    fs.writeFileSync(
+      path.join(shimDir, 'node'),
+      `#!/bin/sh
+[ "$1" = "-v" ] && { echo "v24.16.0"; exit 0; }
+[ "$1" = "--liftoff-only" ] && shift
+shift
+if [ "$1" = "install" ] && [ "\${2:-}" = "--replay-recorded" ]; then
+  if [ "$(cat "${mode}")" = "empty" ]; then echo "nothing recorded"; exit 3; fi
+  echo "replayed recorded agents"; exit 0
+fi
+[ "$1" = "install" ] && { echo "claude wired (stub)"; exit 0; }
+exit 0
+`,
+      { mode: 0o755 },
+    );
+    const run = (): string => execFileSync('/bin/sh', [path.join(bundle, 'install.sh')], {
+      env: { ...process.env, PATH: `${shimDir}:/usr/bin:/bin`, SPECSHIP_INSTALL_DIR: installDir, SPECSHIP_BIN_DIR: binDir },
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+
+    fs.writeFileSync(mode, 'recorded');
+    const replayed = run();
+    expect(replayed).toMatch(/replayed recorded agents/);
+    expect(replayed).not.toMatch(/claude wired \(stub\)/);
+
+    fs.writeFileSync(mode, 'empty');
+    const fallback = run();
+    expect(fallback).toMatch(/nothing recorded/);
+    expect(fallback).toMatch(/claude wired \(stub\)/);
+  }
+  it('REQ-AGENTSWITCH-006.A3: replays recorded agents, falls back to Claude when none are recorded', bundleInstallerReplaysRecordedAgentsElseWiresClaude);
+
   it('--skip-claude installs onto PATH but does not wire Claude Code (REQ-OFFINSTALL-002 A2)', () => {
     const out = runInstaller(['--skip-claude']);
     expect(out).not.toMatch(/claude wired \(stub\)/);
