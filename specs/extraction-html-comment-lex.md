@@ -150,13 +150,14 @@ implementations:
 <!-- id: REQ-HTMLLEX-003.A1 -->
 - Extracting a file containing a genuinely malformed function (for example a
   missing closing brace) returns an `errors[]` entry with
-  `severity: 'warning'`, a stable `code` [needs review: name, e.g.
-  `parse_error_region`], the `filePath`, and the region's start `line`.
+  `severity: 'warning'`, `code: 'parse_error_region'`, the `filePath`, and
+  the region's start `line`.
 <!-- id: REQ-HTMLLEX-003.A2 -->
 - A file that parses with no error regions emits no such warning. After
   REQ-HTMLLEX-001, none of this repository's nine previously affected files
   emits one.
 <!-- id: REQ-HTMLLEX-003.A3 -->
 - `specship index` and `specship sync` report the count of files carrying
-  this warning in their completion summary [needs review: exact surface;
-  status/doctor optional], and the file's other nodes are still stored.
+  this warning in their completion summary, and the file's other nodes are
+  still stored. The count is not persisted; `specship status` and
+  `specship doctor` are unchanged.
