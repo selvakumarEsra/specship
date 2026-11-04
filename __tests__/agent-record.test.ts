@@ -12,6 +12,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { spawnSync } from 'child_process';
 import {
   agentRecordPath,
   ensureAgentRecord,
@@ -226,10 +227,15 @@ async function reqAgentswitch006A4(): Promise<void> {
 
   const parsed = JSON.parse(raw);
   expect(Object.keys(parsed).sort()).toEqual(['entries', 'schemaVersion']);
-  const allowed = new Set(['agent', 'scope', 'projectRoot', 'version', 'recordedAt']);
+  const allowed = new Set(['agent', 'scope', 'projectRoot', 'version', 'recordedAt', 'choices']);
   expect(parsed.entries.length).toBeGreaterThanOrEqual(2);
   for (const entry of parsed.entries) {
     for (const key of Object.keys(entry)) expect(allowed.has(key)).toBe(true);
+    // Install choices are booleans only, never config values.
+    for (const [k, v] of Object.entries(entry.choices ?? {})) {
+      expect(['sdd', 'autoAllow', 'statusLine']).toContain(k);
+      expect(typeof v).toBe('boolean');
+    }
   }
   // Rebuild-from-config output is whitelisted the same way.
   for (const entry of rebuildAgentRecord(projectP).entries) {
@@ -237,9 +243,58 @@ async function reqAgentswitch006A4(): Promise<void> {
   }
 }
 
+/** A2 — one bad or unknown entry never discards the rest of the record. */
+function reqAgentswitch006A2SkipsBadEntry(): void {
+  const otherProject = path.join(tmpHome, 'other-project');
+  fs.mkdirSync(path.dirname(agentRecordPath()), { recursive: true });
+  writeJson(agentRecordPath(), {
+    schemaVersion: 1,
+    entries: [
+      { agent: 'claude', scope: 'global', version: '0.1.0', recordedAt: '2026-11-05T00:00:00Z' },
+      { agent: 'gemini', scope: 'local', projectRoot: otherProject, version: '0.1.0', recordedAt: '2026-11-05T00:00:00Z' },
+      { agent: 'some-future-agent', scope: 'global', version: '9.0.0', recordedAt: '2026-11-05T00:00:00Z' },
+      { agent: 'gemini', scope: 'local' },
+    ],
+  });
+  const record = ensureAgentRecord(projectP);
+  expect(record.entries.map((e) => `${e.agent}:${e.scope}:${e.projectRoot ?? ''}`)).toEqual([
+    'claude:global:',
+    `gemini:local:${otherProject}`,
+  ]);
+}
+
+/** A3 — a reinstall repeats the choices the user installed with. */
+function reqAgentswitch006A3KeepsChoices(): void {
+  recordInstall('claude', 'global', undefined, '0.1.0', process.env, { sdd: false, autoAllow: false, statusLine: false });
+  const claudeInstall = vi.spyOn(claudeTarget, 'install').mockImplementation(() => ({ ok: true }) as never);
+  reinstallRecordedAgents();
+  expect(claudeInstall).toHaveBeenCalledTimes(1);
+  expect(claudeInstall.mock.calls[0][1]).toMatchObject({ sdd: false, autoAllow: false, installStatusLine: false });
+  expect(readAgentRecord()!.entries[0]!.choices).toEqual({ sdd: false, autoAllow: false, statusLine: false });
+}
+
+/** A3 — the CLI path `specship update` actually runs on the new binary. */
+function reqAgentswitch006A3ReplayCli(): void {
+  const BIN = path.resolve(__dirname, '../dist/bin/specship.js');
+  const env = { ...process.env, HOME: tmpHome, USERPROFILE: tmpHome, SPECSHIP_INSTALL_DIR: installDir };
+  const run = () => spawnSync(process.execPath, [BIN, 'install', '--replay-recorded'], { cwd: projectP, env, encoding: 'utf8' });
+
+  // Nothing recorded and nothing to rebuild from → exit 3, which update treats as "nothing to do".
+  expect(run().status).toBe(3);
+
+  recordInstall('gemini', 'local', projectP, '0.1.0', env, { sdd: false, autoAllow: false, statusLine: false });
+  const replay = run();
+  expect(replay.status, replay.stdout + replay.stderr).toBe(0);
+  expect(replay.stdout).toMatch(/Gemini CLI .*reinstalled/);
+  expect(fs.existsSync(path.join(projectP, '.gemini', 'settings.json'))).toBe(true);
+}
+
 describe('REQ-AGENTSWITCH-006 — installed-agents record', () => {
   it('REQ-AGENTSWITCH-006.A1: install --target gemini --local records Gemini for P; uninstall removes it', reqAgentswitch006A1);
   it('REQ-AGENTSWITCH-006.A2: a deleted or unreadable record is rebuilt from agent configs with a SpecShip MCP entry', reqAgentswitch006A2);
   it('REQ-AGENTSWITCH-006.A3: specship update reinstalls every recorded agent', reqAgentswitch006A3);
   it('REQ-AGENTSWITCH-006.A4: the record contains no tokens, keys or environment values', reqAgentswitch006A4);
+  it('REQ-AGENTSWITCH-006.A2: an unknown or malformed entry is skipped, other entries are kept', reqAgentswitch006A2SkipsBadEntry);
+  it('REQ-AGENTSWITCH-006.A3: a reinstall repeats the recorded install choices', reqAgentswitch006A3KeepsChoices);
+  it('REQ-AGENTSWITCH-006.A3: install --replay-recorded on the built CLI reinstalls, exit 3 when nothing is recorded', reqAgentswitch006A3ReplayCli);
 });

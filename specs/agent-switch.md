@@ -228,6 +228,8 @@ implementations:
   - src/installer/agent-record.ts:rebuildAgentRecord
   - src/installer/agent-record.ts:ensureAgentRecord
   - src/installer/agent-record.ts:writeAgentRecord
+  - src/installer/agent-record.ts:readAgentRecord
+  - src/installer/index.ts:runInstallerWithOptions
   - src/installer/index.ts:reinstallRecordedAgents
   - src/installer/index.ts:uninstallTargets
   - src/update/updater.ts:runUpdate
@@ -237,6 +239,9 @@ verifies:
   - __tests__/agent-record.test.ts:reqAgentswitch006A2
   - __tests__/agent-record.test.ts:reqAgentswitch006A3
   - __tests__/agent-record.test.ts:reqAgentswitch006A4
+  - __tests__/agent-record.test.ts:reqAgentswitch006A2SkipsBadEntry
+  - __tests__/agent-record.test.ts:reqAgentswitch006A3KeepsChoices
+  - __tests__/agent-record.test.ts:reqAgentswitch006A3ReplayCli
 
 ## Acceptance
 <!-- id: REQ-AGENTSWITCH-006.A1 -->

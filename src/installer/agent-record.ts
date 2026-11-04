@@ -33,6 +33,19 @@ export interface AgentRecordEntry {
   version: string;
   /** ISO-8601 time the entry was written. */
   recordedAt: string;
+  /**
+   * The opt-in choices that install was made with, so a reinstall (update,
+   * bundle) repeats them instead of re-enabling what the user turned off.
+   * Booleans only — never config contents (A4). Absent for entries rebuilt
+   * from config files, where the original choices are unknown.
+   */
+  choices?: InstallChoices;
+}
+
+export interface InstallChoices {
+  sdd?: boolean;
+  autoAllow?: boolean;
+  statusLine?: boolean;
 }
 
 export interface AgentRecord {
@@ -77,6 +90,14 @@ function sanitizeEntry(raw: unknown): AgentRecordEntry | null {
     if (typeof r.projectRoot !== 'string' || r.projectRoot.length === 0) return null;
     entry.projectRoot = r.projectRoot;
   }
+  if (r.choices && typeof r.choices === 'object') {
+    const c = r.choices as Record<string, unknown>;
+    const choices: InstallChoices = {};
+    for (const k of ['sdd', 'autoAllow', 'statusLine'] as const) {
+      if (typeof c[k] === 'boolean') choices[k] = c[k] as boolean;
+    }
+    if (Object.keys(choices).length > 0) entry.choices = choices;
+  }
   return entry;
 }
 
@@ -98,10 +119,13 @@ export function readAgentRecord(env: NodeJS.ProcessEnv = process.env): AgentReco
   const p = parsed as Record<string, unknown>;
   if (p.schemaVersion !== 1 || !Array.isArray(p.entries)) return null;
   const entries: AgentRecordEntry[] = [];
+  // A malformed entry (or one naming an agent this version doesn't know,
+  // e.g. written by a newer SpecShip) is skipped, never a reason to discard
+  // and rebuild the whole record — a rebuild only sees the current project,
+  // so it would drop every other project's local entries.
   for (const e of p.entries) {
     const clean = sanitizeEntry(e);
-    if (!clean) return null;
-    entries.push(clean);
+    if (clean) entries.push(clean);
   }
   return { schemaVersion: 1, entries };
 }
@@ -139,9 +163,22 @@ function sameKey(e: AgentRecordEntry, agent: TargetId, scope: Location, projectR
   return path.resolve(e.projectRoot ?? '') === path.resolve(projectRoot ?? '');
 }
 
-function makeEntry(agent: TargetId, scope: Location, projectRoot: string | undefined, version: string): AgentRecordEntry {
+function makeEntry(
+  agent: TargetId,
+  scope: Location,
+  projectRoot: string | undefined,
+  version: string,
+  choices?: InstallChoices,
+): AgentRecordEntry {
   const entry: AgentRecordEntry = { agent, scope, version, recordedAt: new Date().toISOString() };
   if (scope === 'local') entry.projectRoot = path.resolve(projectRoot ?? process.cwd());
+  if (choices) {
+    const clean: InstallChoices = {};
+    for (const k of ['sdd', 'autoAllow', 'statusLine'] as const) {
+      if (typeof choices[k] === 'boolean') clean[k] = choices[k];
+    }
+    if (Object.keys(clean).length > 0) entry.choices = clean;
+  }
   return entry;
 }
 
@@ -152,12 +189,13 @@ export function recordInstall(
   projectRoot: string | undefined,
   version: string = currentSpecshipVersion(),
   env: NodeJS.ProcessEnv = process.env,
+  choices?: InstallChoices,
 ): AgentRecord {
   // A missing/unreadable record is rebuilt first, so other agents' entries
   // are not lost when this install is the first write.
   const current = readAgentRecord(env) ?? rebuildAgentRecord(projectRoot ?? process.cwd(), ALL_TARGETS, version);
   const entries = current.entries.filter((e) => !sameKey(e, agent, scope, projectRoot));
-  entries.push(makeEntry(agent, scope, projectRoot, version));
+  entries.push(makeEntry(agent, scope, projectRoot, version, choices));
   const record: AgentRecord = { schemaVersion: 1, entries };
   writeAgentRecord(record, env);
   return record;
