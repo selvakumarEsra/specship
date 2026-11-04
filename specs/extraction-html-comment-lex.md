@@ -108,7 +108,11 @@ implementations:
   - src/extraction/index.ts:ExtractionOrchestrator.isExtractionStale
   - src/extraction/index.ts:ExtractionOrchestrator.stampExtractionVersion
   - src/extraction/index.ts:ExtractionOrchestrator.storeExtractionResult
+  - src/extraction/index.ts:ExtractionOrchestrator.isStaleLanguage
+  - src/extraction/index.ts:ExtractionOrchestrator.indexFile
+  - src/extraction/index.ts:ExtractionOrchestrator.indexFileWithContent
   - src/extraction/index.ts:EXTRACTION_VERSION
+  - src/extraction/index.ts:EXTRACTION_VERSION_KEY
 
 verifies:
   - __tests__/htmllex-recovery.test.ts:reqHtmllex002A1
