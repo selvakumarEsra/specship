@@ -258,6 +258,28 @@ implementations:
   - src/jira/auto-publish.ts:autoPublishSpecsOnSync
   - src/jira/publish.ts:publishSpecToJira
   - src/jira/repo-config.ts:loadRepoJiraBinding
+  - src/jira/repo-config.ts:readRepoJiraBinding
+  - src/jira/ci-publish.ts:resolveCiPublishGate
+  - src/jira/ci-publish.ts:ciPublishGateFor
+  - src/jira/ci-publish.ts:detectCurrentBranch
+  - src/jira/ci-publish.ts:detectRepoIdentity
+  - src/jira/ci-publish.ts:specIssueLabel
+  - src/jira/auto-publish.ts:runAutoPublish
+  - src/jira/auto-publish.ts:summarizeAutoPublishReport
+  - src/jira/board-first.ts:resolveWorkAnchor
+  - src/mcp/jira-tools.ts:handleSpecshipJiraPublish
+  - src/mcp/jira-tools.ts:handleSpecshipJiraAnchor
+  - commands/specship/spec.md
+
+verifies:
+  - __tests__/jira/jira-ci-publish.test.ts:reqMultidev005A1
+  - __tests__/jira/jira-ci-publish.test.ts:reqMultidev005A2
+  - __tests__/jira/jira-ci-publish.test.ts:reqMultidev005A3
+  - __tests__/jira/jira-ci-publish.test.ts:reqMultidev005A4
+  - __tests__/jira/jira-ci-publish.test.ts:reqMultidev005A5
+  - __tests__/jira/jira-ci-publish.test.ts:reqMultidev005A5OtherRepoLabelNotMatched
+  - __tests__/jira/jira-ci-publish.test.ts:reqMultidev005A6
+  - __tests__/jira/jira-ci-publish.test.ts:reqMultidev005A7
 
 ## Acceptance
 <!-- id: REQ-MULTIDEV-005.A1 -->

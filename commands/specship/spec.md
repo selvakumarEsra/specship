@@ -484,6 +484,15 @@ Steps for the gate:
    `specship workflow run`. The fix is named (either `jira.epicKey` in
    `specship.config.json` or a `specship_jira_pick <KEY>`).
 
+**CI-publish repos (REQ-MULTIDEV-005).** When `specship.config.json` sets
+`jira.publishFrom: "ci"`, JIRA issues are created only by CI on the publish
+branch (`jira.publishBranch`, default `main`) after merge. Pass the spec's
+frontmatter `epicKey` as `epic_key` to `specship_jira_anchor`: an epic-only
+anchor (spec `epicKey` or the binding's `jira.epicKey`) then returns
+`anchored` with source `epic-pending-ci` and no issue key — proceed with the
+workflow, do not write a `jira:` key, and tell the user the spec stays
+pending CI publication. With no epic anchor at all it is still refused.
+
 Note: `explore`, `search`, `callers`, `callees`, `impact`, `status`,
 `coverage`, and `track` are read-only retrieval and are NOT gated.
 

@@ -37,6 +37,7 @@ export interface PublishJiraClient {
     summary: string;
     description?: string;
     parentKey?: string;
+    labels?: string[];
   }): Promise<{ key: string; id: string }>;
   updateIssue(
     key: string,
@@ -45,6 +46,14 @@ export interface PublishJiraClient {
   getIssue(key: string): Promise<JiraIssueResult>;
   /** The user's accessible projects (REQ-JIRAPUB-009) — the picker source. */
   listProjects(): Promise<Array<{ key: string; name: string }>>;
+  /**
+   * Issues in `projectKey` carrying `label`, oldest first (REQ-MULTIDEV-005
+   * dedupe). Optional so narrow test fakes still satisfy the slice.
+   */
+  searchIssuesByLabel?(
+    projectKey: string,
+    label: string,
+  ): Promise<Array<{ key: string; summary: string }>>;
 }
 
 export interface AdvanceJiraClient {
@@ -151,6 +160,13 @@ export interface PublishOptions {
    * creating an unanchored Story. Default: false (backwards compat).
    */
   requireEpic?: boolean;
+  /**
+   * CI-publish dedupe (REQ-MULTIDEV-005). Set ONLY in CI publish mode. A
+   * create stamps `label` on the Story; with no `existingKey`, publish first
+   * searches the project for an issue carrying `label` and updates it
+   * instead of creating a duplicate. Absent → behaviour unchanged.
+   */
+  dedupe?: { label: string };
 }
 
 export interface PublishResult {
@@ -166,6 +182,11 @@ export interface PublishResult {
    * when no epic is anchored.
    */
   epicKey?: string;
+  /**
+   * True when the key was found by the CI-publish label search rather than
+   * read from the spec file (REQ-MULTIDEV-005).
+   */
+  foundByLabel?: boolean;
   /**
    * True when the caller passed `opts.epicKey` but the Story's live parent
    * differs and update-time re-parenting was skipped (REQ-JIRATEAM-006.A4).
@@ -247,6 +268,23 @@ export async function publishSpecToJira(
   let existingSummaries: Set<string>;
   let liveParentKey: string | undefined;
   let reparentSkipped = false;
+  let foundByLabel = false;
+
+  // REQ-MULTIDEV-005.A5: a CI run cannot write the key back to git, so a
+  // later run still sees no `jira_issue`. Find the issue an earlier run
+  // created via the repo-scoped label before creating another one.
+  if (!existingKey && opts.dedupe) {
+    const found = await findIssueByDedupeLabel(
+      client,
+      opts.projectKey,
+      opts.dedupe.label,
+      fingerprint,
+    );
+    if (found) {
+      existingKey = found;
+      foundByLabel = true;
+    }
+  }
 
   if (existingKey) {
     await client.updateIssue(existingKey, fields);
@@ -276,6 +314,7 @@ export async function publishSpecToJira(
       summary: fields.summary,
       description: fields.description,
       ...(epicKey ? { parentKey: epicKey } : {}),
+      ...(opts.dedupe ? { labels: [opts.dedupe.label] } : {}),
     });
     key = made.key;
     created = true;
@@ -306,7 +345,40 @@ export async function publishSpecToJira(
     fingerprint,
     ...(created && epicKey ? { epicKey } : {}),
     ...(reparentSkipped ? { reparentSkipped: true } : {}),
+    ...(foundByLabel ? { foundByLabel: true } : {}),
   };
+}
+
+/**
+ * Resolve an existing issue by its dedupe label (REQ-MULTIDEV-005). Prefers
+ * the hit whose live content fingerprint equals `fingerprint`; otherwise the
+ * oldest hit (the search returns oldest first). Null when the client cannot
+ * search or nothing carries the label.
+ */
+async function findIssueByDedupeLabel(
+  client: PublishJiraClient,
+  projectKey: string,
+  label: string,
+  fingerprint: string,
+): Promise<string | null> {
+  if (typeof client.searchIssuesByLabel !== 'function') return null;
+  const hits = await client.searchIssuesByLabel(projectKey, label);
+  if (hits.length === 0) return null;
+  if (hits.length > 1) {
+    for (const h of hits) {
+      try {
+        const detail = await client.getIssue(h.key);
+        const live = issueContentFingerprint(
+          detail.issue.summary ?? '',
+          detail.issue.description ?? '',
+        );
+        if (live === fingerprint) return h.key;
+      } catch {
+        /* fall through to the oldest hit */
+      }
+    }
+  }
+  return hits[0]!.key;
 }
 
 // ---------------------------------------------------------------------------

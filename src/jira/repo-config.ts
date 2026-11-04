@@ -138,6 +138,14 @@ export function readRepoJiraBinding(
   if (typeof j.epicKey === 'string' && j.epicKey.trim())
     binding.epicKey = j.epicKey.trim();
   if (j.autoPublish === true) binding.autoPublish = true;
+  // REQ-MULTIDEV-005: only the literal "ci" opts in; anything else is ignored.
+  if (j.publishFrom === 'ci') {
+    binding.publishFrom = 'ci';
+    binding.publishBranch =
+      typeof j.publishBranch === 'string' && j.publishBranch.trim()
+        ? j.publishBranch.trim()
+        : 'main';
+  }
   return { binding, path: configPath };
 }
 

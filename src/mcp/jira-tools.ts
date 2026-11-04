@@ -62,6 +62,12 @@ import {
 } from '../jira/publish';
 import { enumeratePublishedSpecs } from '../jira/published-specs';
 import {
+  ciPublishGateFor,
+  detectRepoIdentity,
+  specIssueLabel,
+  type CiPublishGateContext,
+} from '../jira/ci-publish';
+import {
   postMilestoneComment,
   type MilestoneJiraClient,
 } from '../jira/milestone-comment';
@@ -490,6 +496,11 @@ export const jiraToolDefinitions: ToolDefinition[] = [
           description:
             'Optional: the key just picked from a specship_jira_issues list — routed as the anchor.',
         },
+        epic_key: {
+          type: 'string',
+          description:
+            'Optional: the spec\'s frontmatter epicKey. On a repo with jira.publishFrom "ci" it anchors work before the issue exists.',
+        },
       },
     },
   },
@@ -878,6 +889,11 @@ export async function handleSpecshipJiraAnchor(
       ? args.picked_issue_key.trim()
       : undefined;
 
+  const specEpicKey =
+    typeof args.epic_key === 'string' && args.epic_key.trim()
+      ? args.epic_key.trim()
+      : undefined;
+
   try {
     // A resolve that needs to call JIRA (explicit/picked key, or the pickable
     // list on refusal) will hit `resolveJiraCredentials` inside the default
@@ -891,10 +907,18 @@ export async function handleSpecshipJiraAnchor(
       cwd: process.cwd(),
       explicitIssueKey,
       pickedIssueKey,
+      ...(specEpicKey ? { specEpicKey } : {}),
     });
     if (res.status === 'unbound') {
       return textResult(
         'Anchor: unbound — repo has no JIRA binding; work-creating flows proceed unchanged.',
+      );
+    }
+    if (res.status === 'anchored' && !res.anchor.issueKey) {
+      return textResult(
+        `Anchor: epic ${res.anchor.epicKey} (source: ${res.anchor.source}) — ` +
+          'no issue key yet; the spec stays pending CI publication and its issue ' +
+          'is created by CI after merge.',
       );
     }
     if (res.status === 'anchored') {
@@ -1781,6 +1805,10 @@ export interface JiraPublishDeps {
   projectRoot: string;
   /** Client factory seam (default: resolve creds + new JiraClient). */
   makeJiraClient?: () => PublishJiraClient;
+  /** CI-publish gate seam (REQ-MULTIDEV-005): env + branch. */
+  ciContext?: CiPublishGateContext;
+  /** Dedupe-label repo identity seam. Default: origin remote basename. */
+  repoIdentity?: string;
 }
 
 /** The structural slice of SpecQueries the publish handler reads. */
@@ -1813,6 +1841,18 @@ export async function handleSpecshipJiraPublish(
   args: Record<string, unknown>,
   deps: JiraPublishDeps,
 ): Promise<ToolResult> {
+  // REQ-MULTIDEV-005: under `jira.publishFrom: "ci"` only CI on the publish
+  // branch writes to JIRA — anywhere else, defer with no client and no write.
+  const gate = ciPublishGateFor(deps.projectRoot, deps.ciContext ?? {});
+  if (gate.mode === 'deferred') {
+    const who =
+      typeof args.spec_id === 'string' && args.spec_id.trim()
+        ? args.spec_id.trim()
+        : 'This spec';
+    return textResult(`${who}: ${gate.reason} No JIRA write was made.`);
+  }
+  const ciPublish = gate.mode === 'publish';
+
   const notConfigured = notConfiguredResult();
   if (notConfigured) return notConfigured;
 
@@ -1902,10 +1942,35 @@ export async function handleSpecshipJiraPublish(
     const result = await publishSpecToJira(
       client,
       source,
-      // REQ-JIRATEAM-009: honor the binding's issue-type overrides.
-      { projectKey, ...bindingIssueTypes(deps.projectRoot) },
+      {
+        projectKey,
+        // REQ-JIRATEAM-009: honor the binding's issue-type overrides.
+        ...bindingIssueTypes(deps.projectRoot),
+        // REQ-MULTIDEV-005.A5: find a prior CI-created issue by label.
+        ...(ciPublish
+          ? {
+              dedupe: {
+                label: specIssueLabel(
+                  deps.repoIdentity ?? detectRepoIdentity(deps.projectRoot),
+                  specId,
+                ),
+              },
+            }
+          : {}),
+      },
       existingKey,
     );
+
+    // REQ-MULTIDEV-005.A7: CI publish never writes to the checkout.
+    if (ciPublish) {
+      const verb = result.created ? 'Created' : 'Updated';
+      return textResult(
+        `${verb} ${result.key} (${result.subtasksCreated} Sub-task${
+          result.subtasksCreated === 1 ? '' : 's'
+        } created) from CI. The spec file was not modified; later CI runs find ` +
+          'this issue by its SpecShip label.',
+      );
+    }
 
     // Write-back (REQ-JIRAPUB-002). Re-id + rename ONLY on first publish of a
     // link-less file whose only requirement is this one.
@@ -2671,7 +2736,11 @@ export async function handleSpecshipJiraReconcile(
       ];
       const creds = resolveJiraCredentials();
       const projectKey = creds.project;
-      if (projectKey) {
+      // REQ-MULTIDEV-005: the re-publish is a JIRA write — defer it too.
+      const gate = ciPublishGateFor(deps.projectRoot);
+      if (gate.mode === 'deferred') {
+        notes.push(`skipped re-publish: ${gate.reason}`);
+      } else if (projectKey) {
         const result = await publishSpecToJira(
           publishClient,
           {

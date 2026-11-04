@@ -106,6 +106,14 @@ export interface JiraRepoBinding {
    * publishes explicitly.
    */
   autoPublish?: boolean;
+  /**
+   * CI-only publishing (REQ-MULTIDEV-005). When `"ci"`, every JIRA create or
+   * update of a spec issue is deferred unless the run is in CI (`CI=true`)
+   * on `publishBranch`. Any other value is ignored (setting absent).
+   */
+  publishFrom?: 'ci';
+  /** Branch CI publishes from under `publishFrom: "ci"`. Default `main`. */
+  publishBranch?: string;
 }
 
 /**
