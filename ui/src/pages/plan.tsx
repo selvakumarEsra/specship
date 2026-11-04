@@ -151,14 +151,14 @@ function EpicSection({ epic, plan, level }: { epic: PlanEpic; plan: PlanResponse
   return (
     <section data-plan-epic={epic.key ?? epic.title}>
       <h2>
-        {epic.title}
+        <InlineTitle text={epic.title} />
         {epic.key && <> <JiraKey jiraKey={epic.key} baseUrl={plan.jiraBaseUrl} /></>}
       </h2>
       {level === 'epics' ? (
         <p className="muted">{count} {count === 1 ? 'story' : 'stories'}</p>
       ) : epic.docs.map((d) => (
         <div key={d.id} data-plan-doc={d.id}>
-          {epic.docs.length > 1 && <p className="eyebrow">{d.title}</p>}
+          {epic.docs.length > 1 && <p className="eyebrow"><InlineTitle text={d.title} /></p>}
           {d.stories.map((s) => (
             <StorySection key={s.specId} story={s} plan={plan} showTasks={level === 'all'} />
           ))}
@@ -173,7 +173,7 @@ function StorySection({ story, plan, showTasks }: { story: PlanStory; plan: Plan
   return (
     <section data-plan-story={story.specId} data-status={status}>
       <h3>
-        <a href={reviewHref(story.specId)} onClick={(e) => openInReview(e, story.specId)}>{story.title}</a>
+        <a href={reviewHref(story.specId)} onClick={(e) => openInReview(e, story.specId)}><InlineTitle text={story.title} /></a>
       </h3>
       <p className="row gap-6" style={{ flexWrap: 'wrap', fontSize: 'var(--fs-sm)' }}>
         <StatePill state={status} />
@@ -207,10 +207,20 @@ function TaskItem({ task }: { task: PlanTask }) {
   const tone = VERDICT_PILL[task.verdict] ?? {};
   return (
     <li data-plan-task={task.specId} data-verdict={task.verdict}>
-      <a href={reviewHref(task.specId)} onClick={(e) => openInReview(e, task.specId)}>{task.title}</a>{' '}
+      <a href={reviewHref(task.specId)} onClick={(e) => openInReview(e, task.specId)}><InlineTitle text={task.title} /></a>{' '}
       <Pill color={tone.color} bg={tone.bg}>{task.verdict}</Pill>
     </li>
   );
+}
+
+/**
+ * A title with its inline `code` spans rendered as code (REQ-DASHSIMPLE-003.A8).
+ * Built from React text nodes, never HTML, so markup in a title shows as text.
+ */
+// @implements REQ-DASHSIMPLE-003
+export function InlineTitle({ text }: { text: string }) {
+  const parts = String(text ?? '').split(/`([^`]+)`/);
+  return <>{parts.map((p, i) => (i % 2 === 1 ? <code key={i} className="sp-code">{p}</code> : p))}</>;
 }
 
 /** A JIRA key: a link when a base URL is configured, plain text otherwise (A4). */

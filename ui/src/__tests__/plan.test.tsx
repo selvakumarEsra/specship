@@ -315,6 +315,30 @@ async function reqDashsimple003A7(): Promise<void> {
   expect(within(tasks).getAllByRole('listitem')).toHaveLength(4);
 }
 
+async function reqDashsimple003A8(): Promise<void> {
+  // Titles at every level render `code` spans as code; markup stays text.
+  const p = plan(null);
+  p.epics[0]!.title = 'Epic for `buildPlan`';
+  const s0 = p.epics[0]!.docs[0]!.stories[0]!;
+  p.epics[0]!.docs[0]!.stories[0] = {
+    ...s0,
+    title: 'Story `specProse` MUST <b>strip</b>',
+    tasks: s0.tasks.map((t, i) => (i === 0 ? { ...t, title: 'Task calls `renderProse()`' } : t)),
+  };
+  mockFetch(p);
+  render(<PlanPage project={null} query={{}} />);
+  await screen.findByTestId('plan-reader');
+  const epic = document.querySelector('[data-plan-epic="SSHIP-600"] h2') as HTMLElement;
+  const storyHead = document.querySelector('[data-plan-story="REQ-A-001"] h3') as HTMLElement;
+  const task = document.querySelector('[data-plan-task="REQ-A-001.A1"]') as HTMLElement;
+  for (const [el, code] of [[epic, 'buildPlan'], [storyHead, 'specProse'], [task, 'renderProse()']] as const) {
+    expect(el.textContent).not.toContain('`');
+    expect(el.querySelector('code')?.textContent).toBe(code);
+  }
+  expect(storyHead.querySelector('b')).toBeNull();
+  expect(storyHead.textContent).toContain('<b>strip</b>');
+}
+
 describe('Plan reader (REQ-DASHSIMPLE-003)', () => {
   it('REQ-DASHSIMPLE-003.A1: documents sharing an epicKey render as one epic, stories in file order', reqDashsimple003A1);
   it('REQ-DASHSIMPLE-003.A2: each story lists its criteria as tasks with their test-evidence state', reqDashsimple003A2);
@@ -323,6 +347,7 @@ describe('Plan reader (REQ-DASHSIMPLE-003)', () => {
   it('REQ-DASHSIMPLE-003.A5: the reader column is capped at 75ch with no side panels inside', reqDashsimple003A5);
   it('REQ-DASHSIMPLE-003.A6: the level toggle changes depth and the choice survives a reload', reqDashsimple003A6);
   it('REQ-DASHSIMPLE-003.A7: a story body renders as readable prose only, criteria only as tasks', reqDashsimple003A7);
+  it('REQ-DASHSIMPLE-003.A8: titles render inline code as code, never raw backticks or live markup', reqDashsimple003A8);
 
   it('filters by epic, story and task titles', async () => {
     mockFetch(plan(null));
