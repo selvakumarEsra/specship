@@ -1,14 +1,14 @@
 /**
  * ⌘K command palette (REQ-DESKTOP-019): overlay + input searching pages,
- * graph nodes, spec requirements, and recent prompts from live data as the
- * user types; arrows to select, Enter to jump, Escape/backdrop to close.
- * Specs and recent prompts load once per open and filter client-side; node
+ * graph nodes and spec requirements from live data as the user types; arrows
+ * to select, Enter to jump, Escape/backdrop to close. Specs load once per
+ * open and filter client-side; node
  * search hits /api/graph/search per keystroke (debounced). Every fetch
  * degrades to an empty list — a 409 `no_project` or an empty index leaves
  * the palette on pages-only with the "No matches" row, never an error (A4).
  */
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
-import { api, type RecentPrompt, type SpecDoc } from '../api';
+import { api, type SpecDoc } from '../api';
 import { go } from '../router';
 import { Icon } from './icons';
 
@@ -18,7 +18,7 @@ export interface PalettePage {
   icon: string;
 }
 
-export type PaletteResultType = 'page' | 'node' | 'spec' | 'prompt';
+export type PaletteResultType = 'page' | 'node' | 'spec';
 
 interface PaletteResult {
   key: string;
@@ -32,14 +32,14 @@ interface PaletteResult {
 /** Per-type caps keep the merged list scannable when everything matches. */
 const MAX_NODES = 8;
 const MAX_SPECS = 6;
-const MAX_PROMPTS = 6;
 const SEARCH_DEBOUNCE_MS = 150;
 
-const TYPE_BADGE: Record<PaletteResultType, string> = { page: 'Page', node: 'Node', spec: 'Spec', prompt: 'Prompt' };
+const TYPE_BADGE: Record<PaletteResultType, string> = { page: 'Page', node: 'Node', spec: 'Spec' };
 
 const kbd: CSSProperties = { fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', background: 'var(--bg-canvas)', border: '1px solid var(--border-subtle)', borderRadius: 4, padding: '2px 6px' };
 
 // @implements REQ-DESKTOP-019
+// @implements REQ-DASHSIMPLE-001
 export function CommandPalette({ open, onClose, pages, project = null }: {
   open: boolean;
   onClose: () => void;
@@ -49,7 +49,6 @@ export function CommandPalette({ open, onClose, pages, project = null }: {
   const [q, setQ] = useState('');
   const [sel, setSel] = useState(0);
   const [specs, setSpecs] = useState<SpecDoc[]>([]);
-  const [prompts, setPrompts] = useState<RecentPrompt[]>([]);
   const [nodes, setNodes] = useState<PaletteResult[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
   const searchGen = useRef(0);
@@ -63,12 +62,11 @@ export function CommandPalette({ open, onClose, pages, project = null }: {
     }
   }, [open]);
 
-  // Specs + recent prompts load once per open; both are small and filter
-  // client-side per keystroke.
+  // Specs load once per open; the list is small and filters client-side
+  // per keystroke.
   useEffect(() => {
     if (!open) return;
     api.specs(project).then((r) => setSpecs(r.specs ?? []), () => setSpecs([]));
-    api.recentPrompts(project).then((r) => setPrompts(r.prompts ?? []), () => setPrompts([]));
   }, [open, project]);
 
   // Node search is server-side (FTS over the whole graph) — debounced per
@@ -109,15 +107,9 @@ export function CommandPalette({ open, onClose, pages, project = null }: {
     ? specs
         .filter((s) => (s.id + ' ' + s.title).toLowerCase().includes(needle))
         .slice(0, MAX_SPECS)
-        .map((s) => ({ key: 'spec:' + s.id, label: s.id, sublabel: s.title, icon: 'book', type: 'spec', nav: () => go('specs', { param: s.id }) }))
+        .map((s) => ({ key: 'spec:' + s.id, label: s.id, sublabel: s.title, icon: 'book', type: 'spec', nav: () => go('review', { param: s.id }) }))
     : [];
-  const promptRows: PaletteResult[] = needle
-    ? prompts
-        .filter((p) => p.text.toLowerCase().includes(needle))
-        .slice(0, MAX_PROMPTS)
-        .map((p) => ({ key: 'prompt:' + p.id, label: p.text, sublabel: new Date(p.ts).toLocaleString(), icon: 'chat', type: 'prompt', nav: () => go('sessions', { param: p.session_id }) }))
-    : [];
-  const results: PaletteResult[] = [...pageRows, ...(needle ? nodes : []), ...specRows, ...promptRows];
+  const results: PaletteResult[] = [...pageRows, ...(needle ? nodes : []), ...specRows];
 
   useEffect(() => {
     if (!open) return;
@@ -147,7 +139,7 @@ export function CommandPalette({ open, onClose, pages, project = null }: {
             ref={inputRef}
             value={q}
             onChange={(e) => { setQ(e.target.value); setSel(0); }}
-            placeholder="Search pages, nodes, specs, prompts…"
+            placeholder="Search pages, nodes, specs…"
             style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', color: 'var(--text-primary)', fontSize: 15, fontFamily: 'var(--font-ui)' }}
           />
           <kbd style={kbd}>esc</kbd>

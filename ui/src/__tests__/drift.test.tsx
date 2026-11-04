@@ -84,9 +84,10 @@ describe('DriftPage (REQ-DESKTOP-022)', () => {
     expect(reattach.disabled).toBe(false);
     expect(reattach.title).toContain('spec-relink');
 
-    // Open spec deep-links to the Specs screen with the selection.
+    // Open spec deep-links to Review (the old Specs route redirects there,
+    // REQ-DASHSIMPLE-001.A2) with the selection.
     fireEvent.click(screen.getAllByText('Open spec')[0]!);
-    expect(location.pathname).toBe('/specs');
+    expect(location.pathname).toBe('/review');
     expect(location.search).toContain('sel=REQ-A-2');
   });
 
@@ -113,14 +114,14 @@ describe('DriftPage (REQ-DESKTOP-022)', () => {
     expect(screen.getByText(/Every spec link is intact/)).toBeTruthy();
   });
 
-  it('A4: the sidebar Drift-queue badge equals the queue row count, not the status roll-up', async () => {
+  it('A4: the sidebar Review badge equals the drift queue row count, not the status roll-up', async () => {
     mockFetch(APP_ROUTES);
     render(<App />);
 
-    // "Drift queue" is both the nav label and the page title — badge lives on
-    // the one inside the sidebar link.
+    // The drift badge moved onto the Review nav entry (REQ-DASHSIMPLE-001) —
+    // it lives on the label inside the sidebar link.
     const navItem = () =>
-      screen.getAllByText('Drift queue').find((e) => e.closest('a'))!.closest('a') as HTMLElement;
+      screen.getAllByText('Review').find((e) => e.closest('a'))!.closest('a') as HTMLElement;
     await waitFor(() => {
       expect(within(navItem()).getByText('3')).toBeTruthy();
     });

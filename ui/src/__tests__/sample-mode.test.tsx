@@ -23,10 +23,6 @@ const APP_ROUTES: Record<string, unknown> = {
   '/api/projects': { claudeRoot: '', projects: [] },
   '/api/workflows/runs': { runs: [] },
   '/api/drift': { links: [] },
-  '/api/claude/tips': { tips: [] },
-  '/api/memory': { totalTokens: 10, instructionCount: 1, noteCount: 0, importCount: 0, files: [
-    { id: 'u', level: 'user', type: 'instruction', name: 'CLAUDE.md', scope: '~/.claude', path: '~/.claude/CLAUDE.md', tokens: 10, lines: 3, modified: null, body: 'Be terse.', imports: [] },
-  ] },
 };
 
 function mockFetch(routes: Record<string, unknown>) {
@@ -45,11 +41,11 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 describe('SAMPLE / live-data integrity (REQ-DESKTOP-030)', () => {
   it('A1: a live screen backed by a real endpoint shows no SAMPLE badge', async () => {
-    history.replaceState(null, '', '/memory');
+    history.replaceState(null, '', '/runs');
     mockFetch(APP_ROUTES);
     render(<App />);
-    // Memory binds its live file(s)…
-    expect(await screen.findByText('Be terse.')).toBeTruthy();
+    // Runs binds its live (empty) run list…
+    expect(await screen.findByText('No runs yet')).toBeTruthy();
     // …and nothing on a real-endpoint screen wears the SAMPLE badge.
     expect(document.querySelector('[data-sample-badge]')).toBeNull();
   });

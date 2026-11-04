@@ -140,7 +140,7 @@ export function PageHead({ icon, title, sub, actions }: { icon?: string; title: 
         </div>
       )}
       <div className="grow" style={{ minWidth: 0 }}>
-        <div style={{ fontSize: 'var(--fs-title)', fontWeight: 600, letterSpacing: '-0.01em' }}>{title}</div>
+        <div data-page-title="" style={{ fontSize: 'var(--fs-title)', fontWeight: 600, letterSpacing: '-0.01em' }}>{title}</div>
         {sub && <div className="secondary" style={{ marginTop: 2 }}>{sub}</div>}
       </div>
       {actions && <div className="row gap-8">{actions}</div>}

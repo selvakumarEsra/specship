@@ -67,6 +67,19 @@ supersedes the sidebar layout fixed by REQ-DESKTOP-018.
 
 implementations:
   - ui/src/App.tsx:App
+  - ui/src/App.tsx:NAV
+  - ui/src/App.tsx:PALETTE_PAGES
+  - ui/src/router.ts:resolveRedirect
+  - ui/src/router.ts:parse
+  - ui/src/components/command-palette.tsx:CommandPalette
+
+verifies:
+  - ui/src/__tests__/navigation.test.tsx:reqDashsimple001A1
+  - ui/src/__tests__/navigation.test.tsx:reqDashsimple001A2
+  - ui/src/__tests__/navigation.test.tsx:reqDashsimple001A3
+  - ui/src/__tests__/navigation.test.tsx:reqDashsimple001A4
+  - ui/src/__tests__/navigation.test.tsx:reqDashsimple001A5
+  - __tests__/ui-build-guard.test.ts:reqDashsimple001A6
 
 ## Acceptance
 <!-- id: REQ-DASHSIMPLE-001.A1 -->

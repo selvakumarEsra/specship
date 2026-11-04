@@ -185,8 +185,9 @@ describe('DashboardPage (REQ-DESKTOP-020)', () => {
     fireEvent.click(screen.getByText('Open graph'));
     expect(location.pathname).toBe('/graph');
 
+    // Heatmap is a retired route (REQ-DASHSIMPLE-001.A2) — it lands on Overview.
     fireEvent.click(screen.getByText('Open heatmap'));
-    expect(location.pathname).toBe('/heatmap');
+    expect(location.pathname).toBe('/dashboard');
   });
 
   it('A4: zero ingested sessions renders enable-ingest guidance, not zeros', async () => {

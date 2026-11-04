@@ -41,6 +41,22 @@ function writeJson(rel: string, value: unknown): string {
   return p;
 }
 
+/**
+ * REQ-DASHSIMPLE-001.A6 — after the dashboard simplification the real
+ * ui/package.json still passes the dependency check, and its runtime
+ * dependencies are exactly react + react-dom.
+ */
+function reqDashsimple001A6(): void {
+  const pkgPath = path.join(uiDir, 'package.json');
+  expect(assertRuntimeDepsAllowlist(pkgPath)).toEqual([]);
+  const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8')) as { dependencies?: Record<string, string> };
+  expect(Object.keys(pkg.dependencies ?? {}).sort()).toEqual(['react', 'react-dom']);
+}
+
+describe('dashboard simplification keeps the lean dependency set (REQ-DASHSIMPLE-001)', () => {
+  it('REQ-DASHSIMPLE-001.A6: check-ui-deps passes with runtime deps exactly react + react-dom', reqDashsimple001A6);
+});
+
 describe('runtime dependency allowlist (A2/A5)', () => {
   it('passes on the real ui/package.json', () => {
     expect(assertRuntimeDepsAllowlist(path.join(uiDir, 'package.json'))).toEqual([]);

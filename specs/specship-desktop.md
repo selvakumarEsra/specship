@@ -579,6 +579,8 @@ implementations:
 <!-- id: REQ-DESKTOP-018 -->
 ## The app shell MUST render the sidebar, status strip, and top bar per the snapshot, with deep-linkable routes
 
+> **SUPERSEDED 2026-11-04** by REQ-DASHSIMPLE-001 — sidebar layout replaced by the agent-agnostic navigation.
+
 The sidebar renders two collapsible groups — Project (Dashboard, Graph,
 Specs, Drift queue, Runs) and Claude Code (Sessions, Heatmap, Costs,
 Compare projects, Memory, MCP, Tips) — plus Design system and Settings
