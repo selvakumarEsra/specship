@@ -10,6 +10,8 @@
  * payload tells the command which host called it (REQ-GEMINI-010).
  */
 
+import { agentFromHookEvent, type DetectedAgent } from '../agents/detect';
+
 export interface HookPayload {
   prompt: string;
   cwd: string | null;
@@ -144,9 +146,25 @@ export const GEMINI_CLI_TRAITS: HostTraits = {
 
 const GEMINI_EVENTS = new Set(['BeforeAgent', 'BeforeTool', 'AfterTool']);
 
+/**
+ * How to FORMAT the reply to a hook payload. Falls back to Claude Code traits
+ * for payloads naming no (or a shared) event — the backward-compatibility
+ * contract of REQ-AGENTADAPT-002.A2. That fallback is a formatting default,
+ * not evidence: use {@link detectHookAgent} to ask which agent sent it.
+ */
 export function deriveHostTraits(payload: HookPayload): HostTraits {
   if (payload.hookEventName && GEMINI_EVENTS.has(payload.hookEventName)) {
     return GEMINI_CLI_TRAITS;
   }
   return CLAUDE_CODE_TRAITS;
+}
+
+/**
+ * Which agent SENT a hook payload (REQ-AGENTSWITCH-007). Only an event name a
+ * single agent sends counts as proof; a shared event such as `SessionStart`,
+ * or a payload naming no event, is `unknown` — unlike {@link deriveHostTraits},
+ * which still picks a formatting default for those.
+ */
+export function detectHookAgent(payload: HookPayload): DetectedAgent {
+  return agentFromHookEvent(payload.hookEventName);
 }

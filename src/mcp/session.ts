@@ -18,6 +18,7 @@ import { MCPEngine } from './engine';
 import { tools } from './tools';
 import { resolveServerInstructions } from './server-instructions';
 import { SpecShipPackageVersion } from './version';
+import { agentFromMcpClient, type DetectedAgent, UNKNOWN_AGENT } from '../agents/detect';
 
 /**
  * MCP Server Info — kept on the session because some clients log it. The
@@ -85,6 +86,7 @@ export class MCPSession {
   private resolvePromise: Promise<void> | null = null;
   private explicitProjectPath: string | null;
   private removeTierListener: (() => void) | null = null;
+  private detectedAgent: DetectedAgent = UNKNOWN_AGENT;
 
   constructor(
     private transport: JsonRpcTransport,
@@ -117,6 +119,15 @@ export class MCPSession {
     this.removeTierListener?.();
     this.removeTierListener = null;
     this.transport.stop();
+  }
+
+  /**
+   * The agent this session serves, from the MCP client name sent at
+   * `initialize` (REQ-AGENTSWITCH-007); `unknown` until then or when the
+   * name matches no supported agent.
+   */
+  getDetectedAgent(): DetectedAgent {
+    return this.detectedAgent;
   }
 
   /** Underlying transport — exposed for daemon-side close hooks. */
@@ -171,9 +182,12 @@ export class MCPSession {
       rootUri?: string;
       workspaceFolders?: Array<{ uri: string; name: string }>;
       capabilities?: { roots?: unknown };
+      clientInfo?: { name?: string; version?: string };
     } | undefined;
 
     this.clientSupportsRoots = !!params?.capabilities?.roots;
+    // Detection only — the reply below is identical whatever the client is.
+    this.detectedAgent = agentFromMcpClient(params?.clientInfo);
 
     // Explicit project signal, strongest first: client-provided rootUri /
     // workspaceFolders (LSP-style), else the --path the server was launched

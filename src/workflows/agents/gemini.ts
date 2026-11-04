@@ -87,8 +87,13 @@ export function handleGeminiStreamLine(line: string, emit: EmitFn, state: Stream
 
 export const geminiHeadlessAgent: HeadlessAgent = {
   id: 'gemini',
+  displayName: 'Gemini CLI',
   // Gemini CLI sets GEMINI_CLI=1 for the shell commands it runs.
   launchedFrom: (env) => env.GEMINI_CLI === '1',
+  // Read from Gemini CLI 0.28.0's own source on 2026-11-05.
+  mcpClientNames: ['gemini-cli-mcp-client'],
+  // SessionStart is shared with Claude Code, so it is deliberately absent.
+  exclusiveHookEvents: ['BeforeAgent', 'BeforeTool', 'AfterTool'],
   build(node, config, env): HeadlessInvocation | { error: string } {
     if (node.denied_tools && node.denied_tools.length > 0) {
       return { error: `denied_tools (${node.denied_tools.join(', ')}) cannot be enforced on Gemini CLI — it has no deny flag` };
