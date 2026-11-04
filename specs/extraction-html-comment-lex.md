@@ -133,6 +133,7 @@ verifies:
   - __tests__/htmllex-recovery.test.ts:reqHtmllex002A3
   - __tests__/htmllex-recovery.test.ts:reqHtmllex002A4
   - __tests__/htmllex-recovery.test.ts:reqHtmllex002ScopedSyncDoesNotStamp
+  - __tests__/htmllex-recovery.test.ts:reqHtmllex002A2FailedFileStillStamps
 
 ## Acceptance
 <!-- id: REQ-HTMLLEX-002.A1 -->

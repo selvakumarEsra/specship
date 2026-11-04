@@ -707,10 +707,8 @@ export class ExtractionOrchestrator {
 
     // REQ-HTMLLEX-002: a stored index from an older extractor holds files whose
     // hash is current but whose declarations were dropped. Force re-extraction
-    // of the affected languages; the version is stamped only if every such file
-    // was re-extracted.
+    // of the affected languages, then stamp once the pass completes.
     const stale = this.isExtractionStale();
-    const staleUnrecovered = new Set<string>();
 
     if (signal?.aborted) {
       return {
@@ -954,7 +952,6 @@ export class ExtractionOrchestrator {
         if (error || content === null || stats === null) {
           processed++;
           filesErrored++;
-          if (stale && this.isStaleLanguage(detectLanguage(filePath))) staleUnrecovered.add(filePath);
           errors.push({
             message: `Failed to read file: ${error instanceof Error ? error.message : String(error)}`,
             filePath,
@@ -990,7 +987,6 @@ export class ExtractionOrchestrator {
         } catch (parseErr) {
           processed++;
           filesErrored++;
-          if (stale && this.isStaleLanguage(detectLanguage(filePath, content))) staleUnrecovered.add(filePath);
           errors.push({
             message: parseErr instanceof Error ? parseErr.message : String(parseErr),
             filePath,
@@ -1006,8 +1002,6 @@ export class ExtractionOrchestrator {
         if (result.nodes.length > 0 || result.errors.length === 0) {
           const language = detectLanguage(filePath, content);
           this.storeExtractionResult(filePath, content, language, stats, result, stale && this.isStaleLanguage(language));
-        } else if (stale && this.isStaleLanguage(detectLanguage(filePath, content))) {
-          staleUnrecovered.add(filePath);
         }
 
         if (result.errors.length > 0) {
@@ -1090,7 +1084,6 @@ export class ExtractionOrchestrator {
           const language = detectLanguage(filePath, content);
           const stats = await fsp.stat(path.join(this.rootDir, filePath));
           this.storeExtractionResult(filePath, content, language, stats, result, stale && this.isStaleLanguage(language));
-          staleUnrecovered.delete(filePath);
 
           const idx = errors.indexOf(errEntry);
           if (idx >= 0) errors.splice(idx, 1);
@@ -1142,8 +1135,7 @@ export class ExtractionOrchestrator {
             const language = detectLanguage(filePath, fullContent);
             const stats = await fsp.stat(path.join(this.rootDir, filePath));
             this.storeExtractionResult(filePath, fullContent, language, stats, result, stale && this.isStaleLanguage(language));
-            staleUnrecovered.delete(filePath);
-
+  
             const idx = errors.indexOf(errEntry);
             if (idx >= 0) errors.splice(idx, 1);
             filesErrored--;
@@ -1162,9 +1154,12 @@ export class ExtractionOrchestrator {
       (parseWorker as import('worker_threads').Worker).terminate().catch(() => {});
     }
 
-    // Every stale file was re-extracted by this complete pass (aborts return
-    // early above) — record it so the next sync doesn't redo the recovery.
-    if (stale && staleUnrecovered.size === 0) {
+    // This complete pass (aborts return early above) re-extracted every stale
+    // file. A file that failed to read or parse is already reported in
+    // `errors`; parsing is deterministic, so retrying it on every sync would
+    // only re-extract the whole JS/TS tree forever (REQ-HTMLLEX-002.A2). It is
+    // re-extracted as soon as its content changes.
+    if (stale) {
       this.stampExtractionVersion();
     }
 
@@ -1540,7 +1535,6 @@ export class ExtractionOrchestrator {
 
     // Index changed files
     const total = filesToIndex.length;
-    let staleRecoveryComplete = true;
     for (let i = 0; i < filesToIndex.length; i++) {
       const filePath = filesToIndex[i]!;
       onProgress?.({
@@ -1553,16 +1547,12 @@ export class ExtractionOrchestrator {
       const force = forced.has(filePath);
       const result = await this.indexFile(filePath, { force });
       nodesUpdated += result.nodes.length;
-      // A forced file that failed to read/parse kept its stale extraction —
-      // leave the index unstamped so the next full sync retries it.
-      if (force && result.nodes.length === 0 && result.errors.some((e) => e.severity === 'error')) {
-        staleRecoveryComplete = false;
-      }
     }
 
-    // Stamp only after this complete full pass re-extracted every stale file.
-    // File-scoped paths (indexFiles / indexFile) never stamp.
-    if (stale && staleRecoveryComplete) {
+    // Stamp once this full pass has re-extracted every stale file; a file that
+    // failed is reported in its result and is not retried on every sync
+    // (REQ-HTMLLEX-002.A2). File-scoped paths (indexFiles / indexFile) never stamp.
+    if (stale) {
       this.stampExtractionVersion();
     }
 

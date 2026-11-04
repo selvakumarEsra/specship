@@ -11,7 +11,7 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixes
 
-- JavaScript and TypeScript functions, classes and variables that contain `<!--` or `-->` inside a regular expression are no longer missing from the index. Before, those character sequences were mistaken for old-style HTML comments and the whole declaration was dropped from search, callers and impact results. Existing indexes are repaired automatically on the next sync — no reindex needed.
+- JavaScript and TypeScript functions, classes and variables that contain HTML-comment text (`<!--` or `-->`) inside a regex are no longer missing from the index. Before, those characters were mistaken for an old-style HTML comment and the whole declaration was dropped from search, callers and impact results. Existing indexes are repaired automatically on the next sync, with no reindex needed.
 
 ## [0.29.0] - 2026-10-27
 

@@ -166,6 +166,29 @@ describe.skipIf(!fts5Available)('stale-extraction recovery on sync (REQ-HTMLLEX-
     expect(hasNode('stripComments')).toBe(true);
     expect(queries().getMetadata(EXTRACTION_VERSION_KEY)).toBe(String(EXTRACTION_VERSION));
   });
+
+  // chmod 000 doesn't block reads on Windows or for root.
+  it.runIf(process.platform !== 'win32' && process.getuid?.() !== 0)(
+    'REQ-HTMLLEX-002.A2: a stale file that fails to read does not leave the index re-extracting on every sync',
+    async function reqHtmllex002A2FailedFileStillStamps() {
+      const locked = path.join(dir, 'src', 'locked.ts');
+      fs.writeFileSync(locked, 'export function lockedFn(): number { return 1; }\n', 'utf-8');
+      await cg.sync();
+      simulatePreFixIndex();
+      fs.chmodSync(locked, 0o000);
+      try {
+        await cg.sync();
+        expect(hasNode('stripComments')).toBe(true);
+        expect(queries().getMetadata(EXTRACTION_VERSION_KEY)).toBe(String(EXTRACTION_VERSION));
+
+        const second = await cg.sync();
+        expect(second.filesModified).toBe(0);
+        expect(second.nodesUpdated).toBe(0);
+      } finally {
+        fs.chmodSync(locked, 0o644);
+      }
+    },
+  );
 });
 
 describe('REQ-HTMLLEX-002 changelog', () => {
