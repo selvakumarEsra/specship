@@ -25,11 +25,9 @@ import {
 } from './install-defaults';
 import { allTargets, getTarget, listTargetIds } from './targets/registry';
 import type { AgentTarget, Location, TargetId } from './targets/types';
-import { CLAUDE_CODE_TRAITS, DEFAULT_HOST_TRAITS } from '../activation/hook-output';
+import { DEFAULT_HOST_TRAITS } from '../activation/hook-output';
 
 /** Claude Code scope hints for the location prompts, from its host profile. */
-const CLAUDE_LOCAL_HINT = `./.mcp.json + ./${CLAUDE_CODE_TRAITS.configDir}/settings.json`;
-const CLAUDE_GLOBAL_HINT = `~/${CLAUDE_CODE_TRAITS.userConfigFile} + ~/${CLAUDE_CODE_TRAITS.configDir}/settings.json`;
 import { detectInstallMethod } from '../update/updater';
 import { agentFromEnv } from '../agents/detect';
 import { recordInstall, recordUninstall, ensureAgentRecord, type AgentRecordEntry } from './agent-record';
@@ -175,11 +173,7 @@ export function resolveInstallTargets(target?: string, env: NodeJS.ProcessEnv = 
 
 /** Primary config path per target, for the location prompt's hint line. */
 function describeFirstPaths(targets: readonly AgentTarget[], loc: Location): string {
-  return targets
-    .map((t) => t.describePaths(loc)[0])
-    .filter((p): p is string => typeof p === 'string')
-    .map(tildify)
-    .join(' + ');
+  return targets.map((t) => t.locationHint(loc)).filter(Boolean).join(' + ');
 }
 
 /**
@@ -229,9 +223,10 @@ export async function runInstallerWithOptions(
     clack.outro('Skipped — no agent configured.');
     return;
   }
-  // Everything Claude-shaped below (permissions, status line) is skipped when
-  // Claude isn't selected — those prompts have no meaning for another agent.
-  const installClaude = selectedTargets.some((t) => t.id === 'claude');
+  // Auto-allow and the status line default on only for agents whose host
+  // profile says so (REQ-AGENTSWITCH-019.A4).
+  const autoAllowHost = selectedTargets.some((t) => t.traits.autoAllowByDefault);
+  const statusLineHost = selectedTargets.some((t) => t.traits.hasStatusLine);
 
   // Step 1 (INSTALL-SCOPE-DOC, REQ-SCOPE-001): `specship install` is
   // WIRING-ONLY — binary acquisition (npm i -g, or the offline bundle's
@@ -267,12 +262,7 @@ export async function runInstallerWithOptions(
     const agents = selectedTargets.map((t) => t.displayName).join(' / ');
     const sel = await clack.select({
       message: `Apply ${agents} config to just this project, or all of them?`,
-      options: installClaude
-        ? [
-          { value: 'local'  as const, label: 'Just this project (recommended)', hint: CLAUDE_LOCAL_HINT },
-          { value: 'global' as const, label: 'All projects', hint: CLAUDE_GLOBAL_HINT },
-        ]
-        : [
+      options: [
           { value: 'local'  as const, label: 'Just this project (recommended)', hint: describeFirstPaths(selectedTargets, 'local') },
           { value: 'global' as const, label: 'All projects', hint: describeFirstPaths(selectedTargets, 'global') },
         ],
@@ -287,8 +277,8 @@ export async function runInstallerWithOptions(
 
   // Step 3: auto-allow permissions — defaulted, never asked (REQ-SLIM-003.A1).
   // `--no-permissions` is the opt-out; the summary names it.
-  const autoAllow = resolveAutoAllow(opts.autoAllow, installClaude);
-  const autoAllowDefaulted = opts.autoAllow === undefined && installClaude;
+  const autoAllow = resolveAutoAllow(opts.autoAllow, autoAllowHost);
+  const autoAllowDefaulted = opts.autoAllow === undefined && autoAllowHost;
 
   // Step 3b: status-line segment (SHIP-STATUSLINE-DOC) — default-ON and no
   // longer prompted (REQ-SLIM-003.A1). `--skip-statusline` opts out. A status
@@ -296,8 +286,8 @@ export async function runInstallerWithOptions(
   // (REQ-SLIM-003.A4): the authoritative guard is `writeStatusLineEntry`,
   // which returns `kept` for a foreign entry; we read `statusLineState` here
   // only to report the outcome and show the composable snippet.
-  const installStatusLine = resolveStatusLine(opts.statusLine, installClaude);
-  const statusLineDefaulted = opts.statusLine === undefined && installClaude;
+  const installStatusLine = resolveStatusLine(opts.statusLine, statusLineHost);
+  const statusLineDefaulted = opts.statusLine === undefined && statusLineHost;
   let statusLineOutcome: StatusLineOutcome = 'skipped';
   if (installStatusLine) {
     const state = statusLineState(location);
@@ -600,7 +590,6 @@ export function reinstallRecordedAgents(
       reports.push({ entry, status: 'skipped', detail: `${target.displayName} (${tildify(where)}): project no longer exists — skipped` });
       continue;
     }
-    const isClaude = target.id === 'claude';
     const prevCwd = process.cwd();
     try {
       if (entry.scope === 'local' && entry.projectRoot) process.chdir(entry.projectRoot);
@@ -609,9 +598,9 @@ export function reinstallRecordedAgents(
       // non-interactive install.
       const c = entry.choices;
       const choices = {
-        autoAllow: c?.autoAllow ?? resolveAutoAllow(undefined, isClaude),
+        autoAllow: c?.autoAllow ?? resolveAutoAllow(undefined, target.traits.autoAllowByDefault),
         sdd: c?.sdd ?? true,
-        statusLine: c?.statusLine ?? resolveStatusLine(undefined, isClaude),
+        statusLine: c?.statusLine ?? resolveStatusLine(undefined, target.traits.hasStatusLine),
       };
       target.install(entry.scope, {
         autoAllow: choices.autoAllow,
@@ -687,12 +676,7 @@ async function wiringOnlyUninstall(
       message: 'Remove SpecShip from just this project, or all of them?',
       // Hints name the selected targets' own files — never Claude's for a
       // `--target gemini` uninstall (REQ-AGENTSWITCH-002.A2).
-      options: targets.length === 1 && targets[0] === claudeTarget
-        ? [
-          { value: 'local'  as const, label: 'Just this project (local)', hint: CLAUDE_LOCAL_HINT },
-          { value: 'global' as const, label: 'All projects (global)', hint: CLAUDE_GLOBAL_HINT },
-        ]
-        : [
+      options: [
           { value: 'local'  as const, label: 'Just this project (local)', hint: describeFirstPaths(targets, 'local') },
           { value: 'global' as const, label: 'All projects (global)', hint: describeFirstPaths(targets, 'global') },
         ],

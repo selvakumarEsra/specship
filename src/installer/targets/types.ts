@@ -99,6 +99,13 @@ export interface InstallOptions {
   trust?: boolean;
 }
 
+/** A project an agent has been used in, as the agent itself recorded it. */
+export interface RecentProject {
+  root: string;
+  /** Epoch ms of the agent's newest activity there; 0 when unknown. */
+  lastTouched: number;
+}
+
 export interface AgentTarget {
   /** Stable id; matches the `TargetId` union. */
   readonly id: TargetId;
@@ -117,6 +124,8 @@ export interface AgentTarget {
    * (REQ-AGENTSWITCH-018.A4). Absent when there is none.
    */
   readonly switchNote?: string;
+  /** Projects this agent's own files say it was used in (REQ-AGENTSWITCH-019.A1). */
+  recentProjects?(home: string): RecentProject[];
   /** Whether this target supports the given install location. */
   supportsLocation(loc: Location): boolean;
   detect(loc: Location): DetectionResult;
@@ -134,6 +143,8 @@ export interface AgentTarget {
    * the filesystem.
    */
   printConfig(loc: Location): string;
+  /** The files an install at `loc` writes first, for the location prompt's hint. */
+  locationHint(loc: Location): string;
   /** Filesystem paths this target would write to at this location. */
   describePaths(loc: Location): string[];
 }

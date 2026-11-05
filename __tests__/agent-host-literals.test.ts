@@ -59,6 +59,7 @@ describe('REQ-AGENTSWITCH-001 — host facts come from one per-agent profile', (
     const hits = scanHostLiterals(tmp);
     expect(hits).toEqual([
       { file: 'server/src/routes/leak.ts', literal: '~/.claude.json', line: 1 },
+      { file: 'server/src/routes/leak.ts', literal: '.claude.json', line: 1 },
       { file: 'src/engine/leak.ts', literal: 'CLAUDE.md', line: 1 },
       { file: 'src/workflows/defaults/w.yaml', literal: '.gemini/', line: 3 },
     ]);
@@ -67,7 +68,7 @@ describe('REQ-AGENTSWITCH-001 — host facts come from one per-agent profile', (
       expect(HOST_LITERALS).toContain(lit);
     }
     // An unlisted hit fails the check.
-    expect(checkAllowlist(hits, []).unlisted).toHaveLength(3);
+    expect(checkAllowlist(hits, []).unlisted).toHaveLength(4);
 
     // The real tree: every hit is on the allowlist, and no entry is stale.
     const real = checkAllowlist(scanHostLiterals(REPO), HOST_LITERAL_ALLOWLIST);
@@ -80,6 +81,23 @@ describe('REQ-AGENTSWITCH-001 — host facts come from one per-agent profile', (
     expect(checkAllowlist(twice, [entry]).miscounted).toHaveLength(1);
     // Shared code carries no host literal at all: the allowlist is empty.
     expect(HOST_LITERAL_ALLOWLIST).toEqual([]);
+  }
+
+  it('REQ-AGENTSWITCH-019.A5 — the guard also catches hook events, edit matchers, MCP name forms and user config files', reqAgentswitch019A5);
+  function reqAgentswitch019A5(): void {
+    const leaks = [
+      "const e = 'PostToolUse';",
+      "const m = 'Edit|Write';",
+      "const t = 'mcp_specship_' + name;",
+      "const q = `specship__${name}`;",
+      "const f = path.join(home, '.claude.json');",
+    ];
+    fs.mkdirSync(path.join(tmp, 'src', 'reflect'), { recursive: true });
+    fs.writeFileSync(path.join(tmp, 'src', 'reflect', 'leak.ts'), leaks.join('\n') + '\n');
+    const lines = new Set(scanHostLiterals(tmp).map((h) => h.line));
+    expect([...lines].sort()).toEqual([1, 2, 3, 4, 5]);
+    // The current tree passes with an empty allowlist.
+    expect(checkAllowlist(scanHostLiterals(REPO), []).unlisted).toEqual([]);
   }
 
   it('REQ-AGENTSWITCH-001.A2 — the listed leaks are fixed and every remaining literal has a reason', reqAgentswitch001A2);

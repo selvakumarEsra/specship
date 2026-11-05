@@ -107,6 +107,15 @@ export interface HostTraits {
   id: 'claude' | 'gemini';
   /** Human-readable product name for agent- and user-facing text. */
   displayName: string;
+  /**
+   * Whether `specship install` auto-allows SpecShip's read-only tools by
+   * default. Claude Code's permission allowlist is local and reversible;
+   * Gemini CLI's equivalent is a policy file, strictly opt-in via `--trust`
+   * (REQ-GEMINI-009, REQ-AGENTSWITCH-019.A4).
+   */
+  autoAllowByDefault: boolean;
+  /** Whether the host has a status line SpecShip can wire (REQ-AGENTSWITCH-010). */
+  hasStatusLine: boolean;
   /** The project/user memory file the host reads (`<root>/<memoryFile>`). */
   memoryFile: string;
   /** The host's per-project and per-user config directory name. */
@@ -157,6 +166,8 @@ export interface HostTraits {
 export const CLAUDE_CODE_TRAITS: HostTraits = {
   id: 'claude',
   displayName: 'Claude Code',
+  autoAllowByDefault: true,
+  hasStatusLine: true,
   memoryFile: 'CLAUDE.md',
   configDir: '.claude',
   userConfigFile: '.claude.json',
@@ -182,6 +193,8 @@ export const CLAUDE_CODE_TRAITS: HostTraits = {
 export const GEMINI_CLI_TRAITS: HostTraits = {
   id: 'gemini',
   displayName: 'Gemini CLI',
+  autoAllowByDefault: false,
+  hasStatusLine: false,
   memoryFile: 'GEMINI.md',
   configDir: '.gemini',
   userConfigFile: '.gemini/settings.json',

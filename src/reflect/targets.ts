@@ -18,7 +18,7 @@
  */
 
 import * as path from 'path';
-import { CLAUDE_CODE_TRAITS, DEFAULT_HOST_TRAITS, type HostTraits } from '../activation/hook-output';
+import { DEFAULT_HOST_TRAITS, type HostTraits } from '../activation/hook-output';
 import { proposalHash } from './hash';
 import {
   Proposal,
@@ -183,8 +183,8 @@ function translateHook(
   host: HostTraits,
 ): { event: string; matcher: string; command: string } {
   return {
-    event: h.event === CLAUDE_CODE_TRAITS.postEditEvent ? host.postEditEvent : h.event,
-    matcher: h.matcher === CLAUDE_CODE_TRAITS.writeToolMatcher ? host.writeToolMatcher : h.matcher,
+    event: h.event === DEFAULT_HOST_TRAITS.postEditEvent ? host.postEditEvent : h.event,
+    matcher: h.matcher === DEFAULT_HOST_TRAITS.writeToolMatcher ? host.writeToolMatcher : h.matcher,
     command: h.command,
   };
 }

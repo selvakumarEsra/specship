@@ -29,6 +29,8 @@ export interface SlugResolverOptions {
   claudeRoot?: string;
   /** Override for tests. Defaults to the installed-agents record. */
   recordPath?: string;
+  /** Home directory other agents' own project lists are read from. Defaults to `os.homedir()`. */
+  home?: string;
 }
 
 /** Claude Code's encoding: every char outside [A-Za-z0-9] becomes '-'. */

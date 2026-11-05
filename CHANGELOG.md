@@ -50,6 +50,9 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - SpecShip now works with Gemini CLI 0.33.0 and later (checked up to 0.67.0). The explorer subagent and workflow steps use the tool names the installed Gemini CLI expects, so Gemini no longer rejects the subagent, and the dashboard reads Gemini's newer session files and counts their SpecShip calls. Older Gemini CLI versions keep working as before.
 - A Gemini CLI install or automatic switch now tells you to trust the project folder. From 0.33.0, Gemini CLI loads a project's `GEMINI.md`, hooks, skills and MCP server only in a trusted folder. SpecShip never trusts a folder for you.
 - With Gemini CLI 0.36.0 or later, the install no longer says subagents are off by default, because they are now on.
+- `specship desktop` and the dashboard's project picker now find projects you have used only with Gemini CLI 0.33.0 or later, from Gemini's own project list, even when SpecShip's install record doesn't name them.
+- Hook suggestions from `specship reflect` on Gemini CLI now name Gemini's hook event and edit tools from the start.
+- `specship install --print-config --target <agent>` prints the snippet for any supported agent.
 - Plan screen titles show inline code as code instead of raw backticks.
 - The dashboard's Memory screen now lists Gemini CLI's `GEMINI.md` files (user, project and one folder deep) next to Claude Code's `CLAUDE.md` files, each tagged with its agent. The MCP servers screen now also lists the servers in Gemini CLI's user and project `settings.json`; these are shown read-only.
 - The bundled Claude Design import workflow now points the agent at that agent's own skills folder, so it no longer names a Claude Code path when it runs on Gemini CLI.

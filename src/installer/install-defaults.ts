@@ -51,17 +51,18 @@ export interface InstallDefaultsSummaryInput {
  * `--yes` gets the same default as an interactive run: the default IS the
  * default, and `--skip-statusline` is the opt-out for automation.
  */
-export function resolveStatusLine(flag: boolean | undefined, installClaude: boolean): boolean {
-  if (!installClaude) return false;
+export function resolveStatusLine(flag: boolean | undefined, hasStatusLine: boolean): boolean {
+  if (!hasStatusLine) return false;
   return flag ?? true;
 }
 
 /**
  * Resolve the auto-allow default: ON unless `--no-permissions` (or an explicit
- * caller value) said otherwise, and never for a non-Claude target.
+ * caller value) said otherwise, and never for a target whose host profile
+ * keeps auto-allow opt-in (REQ-AGENTSWITCH-019.A4).
  */
-export function resolveAutoAllow(flag: boolean | undefined, installClaude: boolean): boolean {
-  if (!installClaude) return false;
+export function resolveAutoAllow(flag: boolean | undefined, autoAllowByDefault: boolean): boolean {
+  if (!autoAllowByDefault) return false;
   return flag ?? true;
 }
 

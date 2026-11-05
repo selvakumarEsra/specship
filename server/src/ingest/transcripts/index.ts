@@ -16,4 +16,4 @@ export function transcriptAdapters(): readonly TranscriptAdapter[] {
 export { claudeTranscriptAdapter, decodeProjectSlug, listClaudeTranscriptFiles } from './claude.js';
 export { geminiTranscriptAdapter, normalizeGeminiToolName, parseGeminiSession, geminiProjectHash, GEMINI_TOOL_NAMES } from './gemini.js';
 export { normalizeToolName } from './types.js';
-export type { TranscriptAdapter, JsonlTranscriptAdapter, DocumentTranscriptAdapter, ParsedSession, ParsedPrompt, ParsedToolCall, TranscriptFile, ListContext } from './types.js';
+export type { DiscoveredProject, TranscriptAdapter, JsonlTranscriptAdapter, DocumentTranscriptAdapter, ParsedSession, ParsedPrompt, ParsedToolCall, TranscriptFile, ListContext } from './types.js';

@@ -42,6 +42,8 @@ jira_issue_REQ-AGENTSWITCH-017: SSHIP-765
 jira_fingerprint_REQ-AGENTSWITCH-017: 78e6bd95942448ff
 jira_issue_REQ-AGENTSWITCH-018: SSHIP-768
 jira_fingerprint_REQ-AGENTSWITCH-018: 188d7a0c10b2afa4
+jira_issue_REQ-AGENTSWITCH-019: SSHIP-775
+jira_fingerprint_REQ-AGENTSWITCH-019: e5d46873f1b957f9
 ---
 
 <!-- id: AGENTSWITCH-DOC -->
@@ -865,3 +867,62 @@ The real-binary check (A5) is `scripts/e2e/gemini-switch.sh` and
 <!-- id: REQ-AGENTSWITCH-018.A5 -->
 - Against the real Gemini CLI 0.67.0 with the project folder trusted, the
   end-to-end switch check and the model-loop check both pass.
+
+<!-- id: REQ-AGENTSWITCH-019 -->
+## Shared code MUST take every host difference from the agent's profile
+
+A review of shared code on 2026-11-06 found five places that still decided
+by agent id or carried a host's own names. Project discovery for the
+dashboard read only Claude Code's transcript folders. Hook proposals named
+Claude Code's hook event and edit tools. The memory-note label named
+`~/.claude`. `install --print-config` picked its target with an id check.
+The install defaults for auto-allow and the status line also checked the
+id. The host-literal guard missed all five because it did not list those
+strings.
+
+Shared code MUST read these differences from the host profile or the target
+registry. Discovering recent projects MUST ask every host's adapter, and the
+dashboard's project list MUST include each project an agent's own registry
+names. The
+guard MUST also watch hook event names, edit-tool matchers, both hosts' MCP
+tool-name forms and their user config files, and its allowlist MUST stay
+empty.
+
+implementations:
+  - src/agents/recent-project.ts:pickRecentInitializedProject
+  - src/installer/targets/claude-projects.ts:claudeRecentProjects
+  - src/installer/targets/gemini-projects.ts:geminiRecentProjects
+  - server/src/ingest/transcripts/gemini.ts:listGeminiProjects
+  - server/src/routes/projects.ts:enumerate
+  - src/reflect/miner.ts:ruleRepeatedCommands
+  - src/installer/install-defaults.ts:resolveAutoAllow
+  - src/installer/install-defaults.ts:resolveStatusLine
+  - src/installer/targets/claude.ts:ClaudeCodeTarget.locationHint
+  - src/installer/targets/gemini.ts:GeminiCliTarget.locationHint
+
+verifies:
+  - __tests__/agent-agnostic-sweep.test.ts:reqAgentswitch019A1
+  - __tests__/reflect-engine.test.ts:reqAgentswitch019A2
+  - __tests__/agent-agnostic-sweep.test.ts:reqAgentswitch019A3
+  - __tests__/agent-agnostic-sweep.test.ts:reqAgentswitch019A4
+  - __tests__/agent-host-literals.test.ts:reqAgentswitch019A5
+
+## Acceptance
+<!-- id: REQ-AGENTSWITCH-019.A1 -->
+- A project used only with Gemini CLI, and not in SpecShip's install record,
+  is found by recent-project discovery from Gemini's own project registry.
+<!-- id: REQ-AGENTSWITCH-019.A2 -->
+- A repeated-command hook proposal mined for Gemini CLI names `AfterTool`
+  and `write_file|replace`. Mined for Claude Code it names `PostToolUse` and
+  `Edit|Write`.
+<!-- id: REQ-AGENTSWITCH-019.A3 -->
+- `specship install --print-config --target gemini` prints the Gemini
+  snippet. An unknown target still prints the Claude Code snippet, as it
+  does today.
+<!-- id: REQ-AGENTSWITCH-019.A4 -->
+- Auto-allow and the status line still default on for Claude Code and off
+  for Gemini CLI, and the defaults come from the host profile, not the id.
+<!-- id: REQ-AGENTSWITCH-019.A5 -->
+- The host-literal guard fails on a new `'PostToolUse'`, `'Edit|Write'`,
+  `'mcp_specship_'`, `'specship__'` or `'.claude.json'` in shared code, and
+  passes on the current tree with an empty allowlist.

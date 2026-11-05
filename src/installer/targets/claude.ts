@@ -17,6 +17,8 @@
  * out of the way on install and uninstall.
  */
 
+import type { RecentProject } from './types';
+import { claudeRecentProjects } from './claude-projects';
 import * as fs from 'fs';
 import { CLAUDE_CODE_TRAITS } from '../../activation/hook-output';
 import * as path from 'path';
@@ -347,6 +349,9 @@ class ClaudeCodeTarget implements AgentTarget {
   readonly id = 'claude' as const;
   readonly traits = CLAUDE_CODE_TRAITS;
   readonly displayName = CLAUDE_CODE_TRAITS.displayName;
+  recentProjects(home: string): RecentProject[] {
+    return claudeRecentProjects(home);
+  }
   readonly docsUrl = 'https://docs.claude.com/en/docs/claude-code';
 
   supportsLocation(_loc: Location): boolean {
@@ -629,6 +634,12 @@ class ClaudeCodeTarget implements AgentTarget {
     const target = mcpJsonPath(loc);
     const snippet = JSON.stringify({ mcpServers: { specship: getMcpServerConfig() } }, null, 2);
     return `# Add to ${target}\n\n${snippet}\n`;
+  }
+
+  locationHint(loc: Location): string {
+    return loc === 'local'
+      ? `./.mcp.json + ./${CLAUDE_CODE_TRAITS.configDir}/settings.json`
+      : `~/${CLAUDE_CODE_TRAITS.userConfigFile} + ~/${CLAUDE_CODE_TRAITS.configDir}/settings.json`;
   }
 
   describePaths(loc: Location): string[] {

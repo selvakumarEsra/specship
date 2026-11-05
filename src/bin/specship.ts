@@ -1700,7 +1700,11 @@ memory
  * agent's memory file shows (REQ-AGENTSWITCH-003).
  */
 function memoryTargetLabel(p: { targetKind: string; targetPath: string }, projectRoot: string): string {
-  if (p.targetKind !== 'claude_md') return 'portable ~/.claude memory note';
+  if (p.targetKind !== 'claude_md') {
+    const dir = path.dirname(p.targetPath);
+    const home = os.homedir();
+    return `portable memory note in ${dir.startsWith(home) ? '~' + dir.slice(home.length) : dir}`;
+  }
   const file = path.basename(p.targetPath);
   const inProject = !path.relative(path.resolve(projectRoot), p.targetPath).startsWith('..');
   return inProject ? `project ${file}` : `portable user ${file}`;
@@ -3224,16 +3228,12 @@ program
 
     if (opts.printConfig) {
       const loc = (opts.location === 'local' ? 'local' : 'global') as 'global' | 'local';
-      // Only `gemini` selects the non-default snippet; every other value
-      // (including the vestigial "auto" / "all" / "none") stays Claude, so
-      // existing invocations print exactly what they printed before.
-      if (opts.target === 'gemini') {
-        const { geminiTarget } = await import('../installer/targets/gemini');
-        process.stdout.write(geminiTarget.printConfig(loc));
-        return;
-      }
-      const { claudeTarget } = await import('../installer/targets/claude');
-      process.stdout.write(claudeTarget.printConfig(loc));
+      // A registered target id prints that target's snippet; any other value
+      // (including the vestigial "auto" / "all" / "none") prints the default
+      // host's, so existing invocations print exactly what they printed before.
+      const { getTarget } = await import('../installer/targets/registry');
+      const target = getTarget(String(opts.target ?? '')) ?? getTarget(DEFAULT_HOST_TRAITS.id)!;
+      process.stdout.write(target.printConfig(loc));
       return;
     }
 

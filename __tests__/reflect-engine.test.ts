@@ -170,6 +170,18 @@ describe('reflect miner', () => {
     expect(r4!.targetPath).toBe(path.join(ctx.projectRoot, '.claude', 'settings.json'));
   });
 
+  it('REQ-AGENTSWITCH-019.A2 a mined hook names the host’s own event and edit tools', reqAgentswitch019A2);
+  function reqAgentswitch019A2(): void {
+    for (const s of ['s1', 's2']) {
+      seedSession(s);
+      const p = seedPrompt(s, 'work');
+      for (let i = 0; i < 3; i++) seedTool(s, p, 'Bash', 'npm test');
+    }
+    const hookFor = (host: typeof CLAUDE_CODE_TRAITS) => mineProposals(db, { ...ctx, host }).find((x) => x.type === 'hook')!.payload;
+    expect(hookFor(GEMINI_CLI_TRAITS)).toMatchObject({ event: 'AfterTool', matcher: 'write_file|replace', entry: { command: 'npm test' } });
+    expect(hookFor(CLAUDE_CODE_TRAITS)).toMatchObject({ event: 'PostToolUse', matcher: 'Edit|Write', entry: { command: 'npm test' } });
+  }
+
   it('proposes a high-severity caution for destructive commands (R5 → memory_rule/project)', () => {
     seedSession('s1');
     const p = seedPrompt('s1', 'cleanup');

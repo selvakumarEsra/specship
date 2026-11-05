@@ -47,6 +47,7 @@ import { CANONICAL_TOOLS, specshipServerName, canonicalMcpToolName } from '../..
 import { summarizeToolInput, toEpochMs } from './shared.js';
 import {
   normalizeToolName,
+  type DiscoveredProject,
   type DocumentTranscriptAdapter,
   type ListContext,
   type ParsedPrompt,
@@ -363,11 +364,47 @@ export function listGeminiTranscriptFiles(root: string, ctx: ListContext = {}): 
   return out;
 }
 
+/**
+ * Projects in Gemini CLI's registry (`~/.gemini/projects.json`, 0.33.0+:
+ * `{ projects: { <root>: <short id> } }`), with the session count and newest
+ * session under `tmp/<short id>/chats` (REQ-AGENTSWITCH-019.A1).
+ */
+export function listGeminiProjects(home: string): DiscoveredProject[] {
+  const dir = path.join(home, GEMINI_PROFILE.configDir);
+  let projects: Record<string, unknown>;
+  try {
+    const parsed = JSON.parse(fs.readFileSync(path.join(dir, 'projects.json'), 'utf-8')) as unknown;
+    if (!isRec(parsed) || !isRec(parsed['projects'])) return [];
+    projects = parsed['projects'] as Record<string, unknown>;
+  } catch {
+    return [];
+  }
+  const out: DiscoveredProject[] = [];
+  for (const [root, id] of Object.entries(projects)) {
+    if (!path.isAbsolute(root)) continue;
+    let sessionCount = 0;
+    let lastModifiedMs = 0;
+    if (typeof id === 'string' && id && !/[\\/]/.test(id)) {
+      const chats = path.join(dir, 'tmp', id, 'chats');
+      try {
+        for (const f of fs.readdirSync(chats, { withFileTypes: true })) {
+          if (!f.isFile() || !isSessionFile(f.name)) continue;
+          sessionCount++;
+          try { lastModifiedMs = Math.max(lastModifiedMs, fs.statSync(path.join(chats, f.name)).mtimeMs); } catch { /* gone */ }
+        }
+      } catch { /* no sessions yet */ }
+    }
+    out.push({ path: root, sessionCount, lastModifiedMs });
+  }
+  return out;
+}
+
 export const geminiTranscriptAdapter: DocumentTranscriptAdapter = {
   id: GEMINI_PROFILE.id,
   format: 'document',
   defaultRoot: (home) => path.join(home, GEMINI_PROFILE.configDir, 'tmp'),
   listFiles: listGeminiTranscriptFiles,
+  listProjects: listGeminiProjects,
   watches: (fileName) => {
     const parts = fileName.split(/[\\/]/);
     return parts.length >= 2 && parts[parts.length - 2] === 'chats' && isSessionFile(fileName);

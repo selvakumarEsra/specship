@@ -32,6 +32,8 @@
  *     project `<cwd>/.gemini/settings.json` (Storage.getWorkspaceSettingsPath).
  */
 
+import type { RecentProject } from './types';
+import { geminiRecentProjects } from './gemini-projects';
 import * as fs from 'fs';
 import { geminiMcpToolName, geminiVersionSupports, probeGeminiVersion } from '../../workflows/agents/gemini-version';
 import { GEMINI_CLI_TRAITS } from '../../activation/hook-output';
@@ -951,6 +953,9 @@ export class GeminiCliTarget implements AgentTarget {
   readonly id = 'gemini' as const;
   readonly traits = GEMINI_CLI_TRAITS;
   readonly displayName = GEMINI_CLI_TRAITS.displayName;
+  recentProjects(home: string): RecentProject[] {
+    return geminiRecentProjects(home);
+  }
   readonly switchNote = GEMINI_FOLDER_TRUST_NOTE;
   readonly docsUrl = 'https://google-gemini.github.io/gemini-cli/docs/cli/configuration.html';
 
@@ -1110,6 +1115,12 @@ export class GeminiCliTarget implements AgentTarget {
   printConfig(loc: Location): string {
     const snippet = JSON.stringify({ mcpServers: { specship: geminiEntry() } }, null, 2);
     return `# Add to ${settingsPath(loc)}\n\n${snippet}\n`;
+  }
+
+  locationHint(loc: Location): string {
+    const first = this.describePaths(loc)[0] ?? '';
+    const home = os.homedir();
+    return first.startsWith(home + path.sep) ? '~' + first.slice(home.length) : first;
   }
 
   describePaths(loc: Location): string[] {

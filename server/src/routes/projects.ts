@@ -20,6 +20,7 @@ import path from 'node:path';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { createSlugResolver, encodeProjectSlug, type SlugResolverOptions } from '../ingest/project-paths.js';
 import { recordedProjects } from '../ingest/recorded-projects.js';
+import { transcriptAdapters } from '../ingest/transcripts/index.js';
 import { CLAUDE_PROFILE } from '../host-profiles.js';
 
 export interface ProjectEntry {
@@ -57,6 +58,18 @@ export async function enumerate(claudeRoot: string, resolverOpts?: SlugResolverO
   // only source for an agent whose session folders cannot be mapped back to a
   // path. Listed once: a project already found above keeps that entry.
   const seen = new Set(fromTranscripts.map((p) => p.path));
+  // Agents that keep their own project list (REQ-AGENTSWITCH-019.A1).
+  const fromAgents: ProjectEntry[] = [];
+  const home = resolverOpts?.home ?? os.homedir();
+  for (const adapter of transcriptAdapters()) {
+    let found: ReturnType<NonNullable<typeof adapter.listProjects>> = [];
+    try { found = adapter.listProjects?.(home) ?? []; } catch { /* one agent's files never block another's */ }
+    for (const p of found) {
+      if (seen.has(p.path)) continue;
+      seen.add(p.path);
+      fromAgents.push({ ...(await projectState(p.path)), slug: encodeProjectSlug(p.path), path: p.path, sessionCount: p.sessionCount, lastModifiedMs: p.lastModifiedMs, driftCount: null });
+    }
+  }
   const fromRecord: ProjectEntry[] = [];
   for (const rec of recordedProjects(resolverOpts?.recordPath)) {
     if (seen.has(rec.path)) continue;
@@ -77,7 +90,17 @@ export async function enumerate(claudeRoot: string, resolverOpts?: SlugResolverO
       driftCount: null,
     });
   }
-  return [...fromTranscripts, ...fromRecord].sort(byRecency);
+  return [...fromTranscripts, ...fromAgents, ...fromRecord].sort(byRecency);
+}
+
+async function projectState(p: string): Promise<{ exists: boolean; initialized: boolean }> {
+  let exists = false;
+  let initialized = false;
+  try { exists = (await fs.stat(p)).isDirectory(); } catch { /* gone */ }
+  if (exists) {
+    try { initialized = (await fs.stat(path.join(p, '.specship'))).isDirectory(); } catch { /* not initialized */ }
+  }
+  return { exists, initialized };
 }
 
 /** Recent activity first; ties broken by path. */

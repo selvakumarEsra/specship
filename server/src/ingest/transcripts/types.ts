@@ -76,6 +76,19 @@ interface AdapterBase {
   watches(fileName: string): boolean;
   /** Map the agent's tool name onto the shared set. */
   normalizeToolName(raw: string): string;
+  /**
+   * Projects the agent's own files map to a real path, when the agent keeps
+   * such a list (REQ-AGENTSWITCH-019.A1). Absent when its folders already
+   * name the project (they are walked by the caller).
+   */
+  listProjects?(home: string): DiscoveredProject[];
+}
+
+/** A project an agent's own files point at. */
+export interface DiscoveredProject {
+  path: string;
+  sessionCount: number;
+  lastModifiedMs: number;
 }
 
 export interface JsonlTranscriptAdapter extends AdapterBase {

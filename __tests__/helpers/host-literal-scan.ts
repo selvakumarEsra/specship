@@ -23,6 +23,19 @@ export const HOST_LITERALS = [
   'Claude Code',
   'Gemini CLI',
   "'.claude'",
+  // REQ-AGENTSWITCH-019.A5: hook events, edit-tool matchers, both MCP
+  // tool-name forms and the user config files — the strings the 2026-11-06
+  // review found in shared code with the guard silent.
+  "'PreToolUse'",
+  "'PostToolUse'",
+  "'BeforeTool'",
+  "'AfterTool'",
+  "'Edit|Write'",
+  "'write_file|replace'",
+  'mcp_specship_',
+  'specship__',
+  '.claude.json',
+  "'.gemini'",
 ] as const;
 
 /** Shared-code roots, relative to the repo root. */
