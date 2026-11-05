@@ -222,6 +222,8 @@ implementations:
   - server/src/canonical-tools.ts:canonicalMcpToolName
   - server/src/ingest/transcripts/types.ts:normalizeToolName
   - server/src/ingest/transcripts/claude.ts:claudeTranscriptAdapter
+  - server/src/ingest/transcripts/claude.ts:listClaudeTranscriptFiles
+  - server/src/ingest/transcripts/gemini.ts:geminiProjectHash
   - server/src/ingest/transcripts/gemini.ts:geminiTranscriptAdapter
   - server/src/ingest/transcripts/gemini.ts:normalizeGeminiToolName
   - server/src/ingest/transcripts/gemini.ts:parseGeminiSession
@@ -230,6 +232,8 @@ implementations:
   - server/src/ingest/ingestor.ts:ingestAll
   - server/src/ingest/ingestor.ts:ingestFile
   - server/src/ingest/ingestor.ts:resolveIngestRoots
+  - server/src/ingest/watcher.ts:startWatcher
+  - server/src/routes/mcp.ts:collectUsage
   - server/src/ingest/specship-classify.ts:isSpecshipTool
   - src/analytics/specship-impact.ts:isSpecshipTool
   - src/reflect/miner.ts:mineProposals
