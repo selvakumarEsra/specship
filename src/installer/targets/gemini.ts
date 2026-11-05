@@ -66,6 +66,7 @@ import {
 } from '../instructions-template';
 import { GOVERNANCE_TIER_COMMANDS, RETRIEVAL_TIER_COMMANDS, SHIPPED_SKILLS, claudeMdPath } from './claude';
 import { readAddedContextFiles, setAddedContextFiles } from '../agent-record';
+import { noSurfaceNotes } from './feature-parity';
 import {
   GEMINI_COMMAND_HEADER_MARKER,
   geminiCommandSet,
@@ -308,8 +309,9 @@ export function removeGeminiContextFilesEntry(
  * so the note no longer lists them; nor slash commands, which REQ-GEMINI-005
  * renders as Gemini TOML; nor skills and the explorer subagent, which
  * REQ-AGENTSWITCH-005 installs when the Gemini version supports them (with its
- * own skip / experimental notes). What remains is the status line and the
- * permissions auto-allow list (REQ-GEMINI-009 covers the opt-in policy file).
+ * own skip / experimental notes). Auto-allow is the policy file
+ * (REQ-GEMINI-009). Surfaces Gemini has no equivalent for (the status line)
+ * each get their own line from `noSurfaceNotes()` (REQ-AGENTSWITCH-010.A4).
  * A command the renderer had to exclude gets its own note from
  * `writeGeminiCommandsEntries`.
  */
@@ -321,8 +323,7 @@ const CAPABILITY_NOTE =
   'does this only when the project has one). Gemini never reads ' +
   '~/.claude/CLAUDE.md — copy anything you need from it into ~/.gemini/GEMINI.md. ' +
   'Skills and the specship-explorer subagent are installed when the Gemini ' +
-  'CLI version supports them (see the notes below). No status line — Gemini ' +
-  'CLI has no equivalent surface. The tool playbook ' +
+  'CLI version supports them (see the notes below). The tool playbook ' +
   'itself still lives in the MCP server instructions.';
 
 /**
@@ -1016,11 +1017,13 @@ export class GeminiCliTarget implements AgentTarget {
 
   /**
    * Writes the MCP entry, GEMINI.md steering, hooks, the rendered slash
-   * commands and (with `--trust`) the policy TOML. `autoAllow` and
+   * commands and (with `trust`) the policy TOML. `autoAllow` and
    * `installStatusLine` are accepted and IGNORED — Gemini CLI has no
-   * permissions list or status line to write them to, and faking one would be
-   * worse than the note (REQ-GEMINI-006). Nothing under `.claude/` is ever
-   * touched (REQ-GEMINI-006.A2).
+   * permissions list or status line to write them to; auto-allow arrives as
+   * `trust` (from `--trust`, or a switch carrying a Claude install's
+   * auto-allow over, REQ-AGENTSWITCH-010.A3), and the status line is named
+   * as unavailable in the notes (REQ-GEMINI-006, REQ-AGENTSWITCH-010.A4).
+   * Nothing under `.claude/` is ever touched (REQ-GEMINI-006.A2).
    */
   install(loc: Location, opts: InstallOptions): WriteResult {
     const integrations: string[] = [
@@ -1056,7 +1059,9 @@ export class GeminiCliTarget implements AgentTarget {
     // REQ-GEMINI-009: strictly opt-in. Omitting `--trust` NEVER touches the
     // policy file — a prior `--trust` install is preserved byte-identical
     // (parity with REQ-INTEG-001.A3).
-    const notes: string[] = [CAPABILITY_NOTE, ...commands.notes];
+    // REQ-AGENTSWITCH-010.A4: every feature Gemini has no surface for is
+    // named on its own line (from GEMINI_PARITY), never dropped silently.
+    const notes: string[] = [CAPABILITY_NOTE, ...noSurfaceNotes(), ...commands.notes];
     // Skills + explorer subagent (REQ-AGENTSWITCH-005), gated on the installed
     // Gemini CLI version. An unknown or older version is skipped WITH a note —
     // never guessed, never fatal (the install still exits 0).

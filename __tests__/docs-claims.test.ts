@@ -78,11 +78,16 @@ export function capabilityMatrixRows(markdown: string): Array<{ surface: string;
     .map((cells) => ({ surface: cells[0]!, gemini: cells[2] ?? '' }));
 }
 
-/** The surfaces the installer's capability note says a Gemini install lacks ("No X and no Y"). */
-export function unsupportedSurfacesInNote(note: string): string[] {
-  // The note's one "No X and no Y — …" sentence lists them.
-  const m = note.match(/\bNo ([^—.]+?)\s+—/);
-  return m ? m[1]!.split(/\s+and no\s+/i).map(norm) : [];
+/**
+ * The surfaces the installer's notes say a Gemini install lacks — one
+ * "<Surface>: unavailable in Gemini CLI — <reason>." line each
+ * (REQ-AGENTSWITCH-010.A4).
+ */
+export function unsupportedSurfacesInNotes(notes: readonly string[]): string[] {
+  return notes.flatMap((n) => {
+    const m = /^(.+?): unavailable in Gemini CLI —/.exec(n);
+    return m ? [norm(m[1]!)] : [];
+  });
 }
 
 function capabilityMatrixMatchesTheInstaller(): void {
@@ -100,9 +105,7 @@ function capabilityMatrixMatchesTheInstaller(): void {
     else process.env.USERPROFILE = prev.u;
     fs.rmSync(home, { recursive: true, force: true });
   }
-  const note = notes.find((n) => /no equivalent surface/.test(n));
-  expect(note, 'the Gemini install prints its capability note').toBeTruthy();
-  const lacking = unsupportedSurfacesInNote(note!).sort();
+  const lacking = unsupportedSurfacesInNotes(notes).sort();
   // The explorer subagent and skills install on a supporting Gemini CLI (REQ-AGENTSWITCH-005).
   expect(lacking).toEqual(['status line']);
 

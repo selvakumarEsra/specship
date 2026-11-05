@@ -243,8 +243,12 @@ export function maybeAutoMigrate(
   beginWriteJournal();
   try {
     if (where.projectRoot && where.projectRoot !== prevCwd) process.chdir(where.projectRoot);
+    // Auto-allow carries over as `trust` too (REQ-AGENTSWITCH-010.A3): a
+    // target with a separate opt-in auto-allow surface reads that field, the
+    // rest ignore it. A direct install still needs its own explicit opt-in.
     const result = target.install(where.scope, {
       autoAllow: choices.autoAllow ?? false,
+      trust: choices.autoAllow === true,
       installStatusLine: choices.statusLine ?? false,
       sdd: choices.sdd,
     });

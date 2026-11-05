@@ -317,6 +317,27 @@ const SPECSHIP_STATUSLINE = {
   _specship: true,
 } as const;
 
+/**
+ * Every kind of artifact `ClaudeCodeTarget.install` writes, one per install
+ * step below (REQ-AGENTSWITCH-010). Adding a step means adding its kind here;
+ * the parity test then fails until `GEMINI_PARITY` maps it to a Gemini
+ * surface or records why Gemini has none.
+ */
+export const CLAUDE_ARTIFACT_KINDS = [
+  'mcp',                   // 1. MCP server entry
+  'permissions',           // 2. auto-allow permissions list
+  'sync-hooks',            // 2c. PostToolUse + SessionStart sync / cheatsheet hooks
+  'commands',              // 4. /specship:* slash commands
+  'agents',                // 4. specship-explorer subagent
+  'sdd-instructions',      // 5. SDD rule block in CLAUDE.md
+  'sdd-hook',              // 5. UserPromptSubmit spec-nudge hook
+  'skills',                // 5. spec-author / design-md skills
+  'steer-hook',            // 5b. UserPromptSubmit steer-nudge hook
+  'search-intercept-hook', // 5c. PreToolUse search interceptor
+  'statusline',            // 6. status-line segment
+] as const;
+export type ClaudeArtifactKind = (typeof CLAUDE_ARTIFACT_KINDS)[number];
+
 /** True when a `statusLine` object is one SpecShip wrote (carries our marker). */
 function isOurStatusLine(sl: unknown): boolean {
   return !!sl && typeof sl === 'object' && (sl as { _specship?: unknown })._specship === true;
