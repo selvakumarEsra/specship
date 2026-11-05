@@ -2174,16 +2174,16 @@ describe('REQ-SLIM-003 — interactive install asks at most one question', () =>
   });
 
   describe('status line (REQ-SLIM-003.A1)', () => {
-    it('defaults ON when no flag was given', () => {
+    it('defaults ON when no flag was given', function reqSlim003StatusLineDefaultsOn() {
       expect(resolveStatusLine(undefined, true)).toBe(true);
     });
 
-    it('is never installed for a target that has no status line', () => {
+    it('is never installed for a target that has no status line', function reqSlim003StatusLineNeedsSurface() {
       expect(resolveStatusLine(undefined, false)).toBe(false);
       expect(resolveStatusLine(true, false)).toBe(false);
     });
 
-    it('REQ-SLIM-003.A3: --statusline and --skip-statusline still decide it', () => {
+    it('REQ-SLIM-003.A3: --statusline and --skip-statusline still decide it', function reqSlim003A3StatusLineFlags() {
       expect(resolveStatusLine(true, true)).toBe(true);
       expect(resolveStatusLine(false, true)).toBe(false);
     });
@@ -2196,7 +2196,7 @@ describe('REQ-SLIM-003 — interactive install asks at most one question', () =>
       expect(readSettings().statusLine._specship).toBe(true);
     });
 
-    it('REQ-SLIM-003.A4: an existing status line is neither prompted about nor overwritten', () => {
+    it('REQ-SLIM-003.A4: an existing status line is neither prompted about nor overwritten', function reqSlim003A4ExistingStatusLineKept() {
       fs.mkdirSync(path.dirname(settingsPath()), { recursive: true });
       fs.writeFileSync(
         settingsPath(),
@@ -2219,12 +2219,12 @@ describe('REQ-SLIM-003 — interactive install asks at most one question', () =>
   });
 
   describe('auto-allow permissions (REQ-SLIM-003.A1)', () => {
-    it('defaults ON when no flag was given, OFF for a non-Claude target', () => {
+    it('defaults ON when no flag was given, OFF for a non-Claude target', function reqSlim003AutoAllowDefaults() {
       expect(resolveAutoAllow(undefined, true)).toBe(true);
       expect(resolveAutoAllow(undefined, false)).toBe(false);
     });
 
-    it('REQ-SLIM-003.A3: --no-permissions still opts out', () => {
+    it('REQ-SLIM-003.A3: --no-permissions still opts out', function reqSlim003A3NoPermissions() {
       expect(resolveAutoAllow(false, true)).toBe(false);
     });
   });

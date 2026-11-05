@@ -77,6 +77,14 @@ implementations:
   - src/installer/init-offer.ts:decideInstallInit
   - src/installer/targets/claude.ts:writeStatusLineEntry
 
+verifies:
+  - __tests__/installer-targets.test.ts:reqSlim003StatusLineDefaultsOn
+  - __tests__/installer-targets.test.ts:reqSlim003StatusLineNeedsSurface
+  - __tests__/installer-targets.test.ts:reqSlim003A3StatusLineFlags
+  - __tests__/installer-targets.test.ts:reqSlim003A4ExistingStatusLineKept
+  - __tests__/installer-targets.test.ts:reqSlim003AutoAllowDefaults
+  - __tests__/installer-targets.test.ts:reqSlim003A3NoPermissions
+
 ## Acceptance
 <!-- id: REQ-SLIM-003.A1 -->
 - An interactive `specship install` asks only the install-location question; status line (default: on, never overwriting an existing status line) and initial indexing (default: yes) proceed without prompting.
