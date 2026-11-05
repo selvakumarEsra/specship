@@ -10,6 +10,9 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### New Features
+- SpecShip now ships a Gemini CLI extension. Install it with `gemini extensions install <package>/gemini-extension` (or `gemini extensions link`) to get the MCP server, the `/specship:*` commands, the skills, the explorer subagent, the hooks and the steering context, the same set `specship install --target gemini` writes.
+- `specship install` with no `--target` now wires the coding agent it runs under: Gemini CLI when run from a Gemini CLI shell, Claude Code otherwise. `--target` always wins.
+- The offline bundle installers and the `offline-install` wrappers accept `--target claude|gemini` (`-Target` on Windows), and `--skip-wire` / `-SkipWire` as an agent-neutral name for `--skip-claude`.
 
 - `specship index` and `specship sync` now tell you how many files have syntax errors that may have hidden some of their functions or classes from the index, instead of skipping them without a word. Everything else in those files is still indexed, and search results don't change.
 - `specship check` now reports links that won't survive a merge: links that exist only in your local index and aren't declared in a spec file or code comment, and, with `--since <ref>`, links that worked at that ref but are broken on your branch (for example after a rename). Both are advisory by default; gate on them with `--strict` or `specship check --enable-gate undeclaredLinks branchBroken`. They need only the checked-out files and git, so they work in a fresh CI clone.
@@ -27,6 +30,10 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixes
 
+- The dashboard project picker and `specship desktop` now find projects used only with Gemini CLI, not just projects with Claude Code transcripts.
+- Skills, commands and the explorer subagent installed for Gemini CLI no longer tell Gemini users to run `claude mcp add`, call Claude-only tools, or edit `CLAUDE.md`; the `design-md` skill reference is kept when Gemini has that skill.
+- The Claude Code plugin now wires the same hooks as `specship install` (it was missing the steering nudge, the search interceptor and the session drift summary), enables no integration unless you opt in, and carries the package version.
+- Install, health-check, update and server messages name the coding agent involved instead of always saying Claude Code.
 - When SpecShip sets itself up for Gemini CLI on a project whose Claude Code install auto-allows SpecShip's read-only tools, the Gemini setup now auto-allows them too, instead of silently dropping that choice. An install made without auto-allow still writes no policy, and `specship install --target gemini` on its own still needs `--trust`.
 - A Gemini CLI install now names the status line as unavailable in Gemini CLI on a line of its own, instead of burying it in a longer note.
 - On Gemini CLI, the memory-file audit now checks `GEMINI.md` instead of reporting a missing `CLAUDE.md`, and covers both files when a project uses both agents, naming the file each finding is about. Reflection proposals applied from Gemini CLI now write to `GEMINI.md` (project rules), `~/.gemini/GEMINI.md` (rules for every project) and `.gemini/settings.json` with Gemini's own hook event and tool names, instead of Claude Code's files.

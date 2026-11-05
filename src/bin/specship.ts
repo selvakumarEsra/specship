@@ -1211,7 +1211,7 @@ program
  */
 program
   .command('statusline')
-  .description(`Print a SpecShip status-line segment (${hostTraitsFor('claude').displayName} only — reads its status-line JSON on stdin)`)
+  .description('Print a SpecShip status-line segment (Claude-only surface — reads the status-line JSON the agent pipes on stdin)')
   .action(async () => {
     const { buildSegment } = await import('../statusline/index');
     let raw = '';
@@ -3167,7 +3167,7 @@ program
  */
 program
   .command('install')
-  .description(`Install the specship MCP server into your coding agent (${agentNames()})`)
+  .description('Install the specship MCP server into your coding agent (choose one with --target)')
   .option('-l, --location <where>', 'Install location: "global" or "local". Default: prompt (local)')
   .option('-y, --yes', 'Non-interactive: defaults to --location=local (the only question an interactive install asks)')
   .option('--no-permissions', 'Skip writing the auto-allow permissions list (written by default)')
@@ -3176,7 +3176,7 @@ program
   .option('--path <repo>', 'Target repo to wire and initialize (default: current directory). Project-local files and the .specship index land there')
   .option('--with-jira', 'Enable the optional JIRA integration (talks to your Atlassian instance; off by default — the core install is 100% local)')
   .option('--with-designer', 'Enable the optional Designer integration (EXPERIMENTAL — drives claude.ai/design via a debug Chrome session and may break without notice; off by default)')
-  .option('--statusline', `(default; ${hostTraitsFor('claude').displayName} only) Wire the SpecShip status-line segment; never overwrites an existing status line`)
+  .option('--statusline', '(default; Claude-only surface) Wire the SpecShip status-line segment; never overwrites an existing status line')
   .option('--skip-statusline', 'Do not add the status-line segment (it is added by default)')
   .option('--skip-index', 'Do not index the current project (it is indexed by default)')
   .option('--print-config', 'Print the target agent\'s MCP config snippet and exit (no file writes); pick the agent with --target')

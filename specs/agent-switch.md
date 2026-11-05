@@ -770,6 +770,15 @@ pricing input, the Gemini command renderer, and the Claude-only installer
 helpers. Shared modules MUST reach that code only through the adapter
 registries.
 
+implementations:
+  - server/src/ingest/transcripts/claude-jsonl.ts:parseLine
+  - server/src/ingest/transcripts/shared.ts:summarizeToolInput
+  - src/installer/targets/gemini-commands.ts:renderGeminiCommand
+  - src/installer/targets/claude-config-writer.ts:hasPermissions
+
+verifies:
+  - __tests__/adapter-boundary.test.ts:reqAgentswitch017A1
+
 ## Acceptance
 <!-- id: REQ-AGENTSWITCH-017.A1 -->
 - The Claude transcript parser lives under the Claude transcript adapter.

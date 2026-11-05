@@ -11,6 +11,7 @@ description: Every SpecShip command and the flags it accepts.
 | `specship index [path]` | Index all files in the project |
 | `specship sync [path]` | Sync changes since last index |
 | `specship status [path]` | Show index status and statistics |
+| `specship statusline` | Print a SpecShip status-line segment (Claude-only surface — reads the status-line JSON the agent pipes on stdin) |
 | `specship query <search>` | Search for symbols in the codebase |
 | `specship files` | Show project file structure from the index |
 | `specship reflect [path-or-verb] [hash]` | Mine ingested transcripts for self-improvement proposals; review them with apply <hash> [--yes] / undo <hash> / dismi… |
@@ -38,6 +39,7 @@ description: Every SpecShip command and the flags it accepts.
 | `specship callees <symbol>` | Find all functions/methods that a specific symbol calls |
 | `specship impact <symbol>` | Analyze what code is affected by changing a symbol |
 | `specship affected [files...]` | Find test files affected by changed source files |
+| `specship install` | Install the specship MCP server into your coding agent (choose one with --target) |
 | `specship doctor [path]` | Diagnose a SpecShip install (runtime · FTS5 · MCP boot · index). Exits non-zero on a usage-blocking failure. |
 | `specship starter-prompt [path]` | Print a suggested first flow/impact prompt for this project (used by the /specship:explore door). |
 | `specship cheatsheet` | Print the SpecShip session cheat-sheet (used by the SessionStart hook). |
