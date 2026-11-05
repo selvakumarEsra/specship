@@ -23,6 +23,10 @@ import { CANONICAL_TOOLS, specshipToolPrefix } from '../src/analytics/canonical-
 import { sessionsTouchingFiles } from '../src/reflect/session-outcomes';
 import type { SqliteDatabase } from '../src/db/sqlite-adapter';
 import { runMigrations, getCurrentVersion } from '../src/db/migrations';
+import { mineProposals } from '../src/reflect/miner';
+import { startWatcher } from '../server/src/ingest/watcher';
+import { geminiTranscriptAdapter } from '../server/src/ingest/transcripts/gemini';
+import { GEMINI_CLI_TRAITS } from '../src/activation/hook-output';
 
 const FIXTURES = path.join(__dirname, 'fixtures', 'transcripts');
 const SCHEMA = fs.readFileSync(path.join(__dirname, '..', 'src', 'db', 'schema.sql'), 'utf-8');
@@ -218,4 +222,70 @@ describe('REQ-AGENTSWITCH-004 — per-agent transcript adapters', () => {
     expect(() => runMigrations(raw, getCurrentVersion(raw))).not.toThrow();
   }
   it('REQ-AGENTSWITCH-004: migration v12 upgrades an existing database without touching its rows', reqAgentswitch004MigratesExistingDb);
+  /** Reflect mining runs over ingested Gemini sessions and proposes into Gemini's own memory file. */
+  function reqAgentswitch004ReflectMinesGemini(): void {
+    const project = fs.realpathSync(fs.mkdtempSync(path.join(tmp, 'mine-')));
+    const geminiSession = (id: string): string => JSON.stringify({
+      sessionId: id,
+      startTime: '2026-11-02T09:00:00.000Z',
+      lastUpdated: '2026-11-02T09:05:00.000Z',
+      messages: [
+        { id: `${id}-u`, timestamp: '2026-11-02T09:00:00.000Z', type: 'user', content: [{ text: 'where is the renderer?' }] },
+        {
+          id: `${id}-g`, timestamp: '2026-11-02T09:00:01.000Z', type: 'gemini', content: 'reading', model: 'gemini-3.5-flash',
+          toolCalls: Array.from({ length: 16 }, (_, i) => ({
+            id: `${id}-tc-${i}`, name: 'read_file', args: { absolute_path: `${project}/src/f${i}.ts` },
+            result: [{ functionResponse: { id: `${id}-tc-${i}`, name: 'read_file', response: { output: 'x'.repeat(200) } } }],
+            status: 'success', timestamp: '2026-11-02T09:00:02.000Z',
+          })),
+        },
+      ],
+    });
+    const root = path.join(tmp, 'gemini-tmp');
+    const chats = path.join(root, geminiProjectHash(project), 'chats');
+    fs.mkdirSync(chats, { recursive: true });
+    fs.writeFileSync(path.join(chats, 'session-2026-11-02T09-00-aaaaaaaa.json'), geminiSession('gem-a'));
+    fs.writeFileSync(path.join(chats, 'session-2026-11-02T09-01-bbbbbbbb.json'), geminiSession('gem-b'));
+    expect(ingestAll(db, { roots: { gemini: root }, projectPaths: [project] }).errors).toBe(0);
+
+    const proposals = mineProposals(db as unknown as SqliteDatabase, {
+      projectRoot: project,
+      homeDir: path.join(tmp, 'home'),
+      host: GEMINI_CLI_TRAITS,
+    });
+    const cold = proposals.find((p) => p.title === 'Query SpecShip before reading or grepping');
+    expect(cold, 'read-heavy Gemini sessions with no SpecShip calls trigger R8').toBeDefined();
+    expect(cold!.targetPath).toMatch(/GEMINI\.md$/);
+  }
+  it('REQ-AGENTSWITCH-004: reflect mining runs over Gemini sessions and targets GEMINI.md', reqAgentswitch004ReflectMinesGemini);
+  /** The ingest watcher picks up a new Gemini chat file; a missing root is a no-op. */
+  async function reqAgentswitch004WatcherSeesGemini(): Promise<void> {
+    expect(geminiTranscriptAdapter.watches('abc123/chats/session-x.json')).toBe(true);
+    expect(geminiTranscriptAdapter.watches('abc123/logs.json')).toBe(false);
+    expect(geminiTranscriptAdapter.watches('abc123/chats/notes.txt')).toBe(false);
+
+    const project = fs.realpathSync(fs.mkdtempSync(path.join(tmp, 'watch-')));
+    const root = path.join(tmp, 'gemini-watch-root');
+    fs.mkdirSync(path.join(root, geminiProjectHash(project), 'chats'), { recursive: true });
+    const handle = startWatcher(db, {
+      roots: { gemini: root, claude: path.join(tmp, 'no-such-claude-root') },
+      projectPaths: [project],
+      initialIngest: false,
+      debounceMs: 20,
+    });
+    try {
+      const body = fs.readFileSync(path.join(FIXTURES, 'gemini-session.json'), 'utf-8');
+      fs.writeFileSync(path.join(root, geminiProjectHash(project), 'chats', 'session-2026-11-02T09-00-cccccccc.json'), body);
+      const deadline = Date.now() + 5000;
+      let host: string | undefined;
+      while (Date.now() < deadline && !host) {
+        await new Promise((r) => setTimeout(r, 50));
+        host = (db.prepare(`SELECT host FROM claude_sessions LIMIT 1`).get() as { host?: string } | undefined)?.host;
+      }
+      expect(host, 'the watcher ingested the new Gemini session').toBe('gemini');
+    } finally {
+      handle.stop();
+    }
+  }
+  it('REQ-AGENTSWITCH-004: the ingest watcher picks up a new Gemini chat file', reqAgentswitch004WatcherSeesGemini, 15_000);
 });

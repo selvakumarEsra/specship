@@ -6,6 +6,7 @@ import * as path from 'path';
 import {
   addServer,
   configuredServers,
+  mcpUsageKey,
   deriveState,
   McpConfigError,
   probeServer,
@@ -357,3 +358,26 @@ describe('probeServer — never throws, timeout = failed (A3, A4)', () => {
     expect(await probeServer({ url: `http://127.0.0.1:${port}/gone` }, 1500)).toBe('failed');
   });
 });
+
+/** REQ-AGENTSWITCH-004 — Gemini CLI servers are listed, and Gemini calls are credited to them. */
+describe('Gemini CLI entries on the MCP screen (REQ-AGENTSWITCH-004)', () => {
+  it('lists Gemini user and project servers under gemini: keys, project winning', geminiServersListed);
+  function geminiServersListed(): void {
+    const geminiUser = path.join(tmp, 'gemini-user-settings.json');
+    writeJson(geminiUser, { mcpServers: { specship: { command: 'from-user' }, other: { command: 'o' } } });
+    fs.mkdirSync(path.join(projectRoot, '.gemini'), { recursive: true });
+    writeJson(path.join(projectRoot, '.gemini', 'settings.json'), { mcpServers: { specship: { command: 'from-project' } } });
+    writeJson(claudeJsonPath, { mcpServers: { specship: { command: 'claude-one' } } });
+    const servers = configuredServers({ claudeJsonPath, projectRoot, geminiSettingsPath: geminiUser });
+    expect(servers.get('specship')).toMatchObject({ host: 'claude', entry: { command: 'claude-one' } });
+    expect(servers.get('gemini:specship')).toMatchObject({ host: 'gemini', scope: 'project', container: 'gemini', entry: { command: 'from-project' } });
+    expect(servers.get('gemini:other')).toMatchObject({ host: 'gemini', scope: 'user' });
+  }
+  it('credits a Gemini CLI call to the gemini: entry and a Claude Code call to the bare entry', geminiCallsCredited);
+  function geminiCallsCredited(): void {
+    expect(mcpUsageKey('gemini', 'specship')).toBe('gemini:specship');
+    expect(mcpUsageKey('claude', 'specship')).toBe('specship');
+    expect(mcpUsageKey(null, 'specship')).toBe('specship');
+  }
+});
+

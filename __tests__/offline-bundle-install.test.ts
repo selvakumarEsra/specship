@@ -219,6 +219,43 @@ exit 0
   }
   it('REQ-AGENTSWITCH-006.A3: replays recorded agents, falls back to Claude when none are recorded', bundleInstallerReplaysRecordedAgentsElseWiresClaude);
 
+  // REQ-AGENTSWITCH-001 — a first bundle install wires the chosen agent, not always Claude Code.
+  function bundleInstallerWiresTheChosenAgent(): void {
+    const shimDir = path.join(work, 'target-shim');
+    fs.mkdirSync(shimDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(shimDir, 'node'),
+      `#!/bin/sh
+[ "$1" = "-v" ] && { echo "v24.16.0"; exit 0; }
+[ "$1" = "--liftoff-only" ] && shift
+shift
+if [ "$1" = "install" ] && [ "\${2:-}" = "--replay-recorded" ]; then echo "nothing recorded"; exit 3; fi
+[ "$1" = "install" ] && { echo "wired with: $*"; exit 0; }
+exit 0
+`,
+      { mode: 0o755 },
+    );
+    const run = (args: string[], extraEnv: Record<string, string> = {}): string => {
+      const env: NodeJS.ProcessEnv = { ...process.env, PATH: `${shimDir}:/usr/bin:/bin`, SPECSHIP_INSTALL_DIR: installDir, SPECSHIP_BIN_DIR: binDir, ...extraEnv };
+      if (!('GEMINI_CLI' in extraEnv)) delete env.GEMINI_CLI;
+      if (!('CLAUDECODE' in extraEnv)) delete env.CLAUDECODE;
+      return execFileSync('/bin/sh', [path.join(bundle, 'install.sh'), ...args], { env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    };
+    // Explicit --target gemini.
+    const explicit = run(['--target', 'gemini', '--global']);
+    expect(explicit).toMatch(/Wiring Gemini CLI globally/);
+    expect(explicit).toMatch(/wired with: install --target gemini -y --location global/);
+    // Run from a Gemini CLI shell, no flag: Gemini is the default.
+    expect(run(['--global'], { GEMINI_CLI: '1' })).toMatch(/wired with: install --target gemini/);
+    // Elsewhere, no flag: Claude Code, the documented default.
+    expect(run(['--global'])).toMatch(/wired with: install --target claude/);
+    // --skip-wire is the agent-neutral name for --skip-claude.
+    expect(run(['--skip-wire'])).not.toMatch(/wired with:/);
+    // An unknown agent is refused before anything is wired.
+    expect(() => run(['--target', 'cursor', '--global'])).toThrow();
+  }
+  it('REQ-AGENTSWITCH-001: a first bundle install wires --target / the current agent, not always Claude Code', bundleInstallerWiresTheChosenAgent);
+
   it('--skip-claude installs onto PATH but does not wire Claude Code (REQ-OFFINSTALL-002 A2)', () => {
     const out = runInstaller(['--skip-claude']);
     expect(out).not.toMatch(/claude wired \(stub\)/);

@@ -53,7 +53,11 @@ export interface AllowlistEntry {
   reason: string;
 }
 
+/** The offline bundle installers: shared across agents, so scanned too. */
+const SCANNED_SCRIPTS = new Set(['scripts/bundle-install.sh', 'scripts/bundle-install.ps1']);
+
 function isScanned(rel: string): boolean {
+  if (SCANNED_SCRIPTS.has(rel)) return true;
   if (rel.endsWith('.d.ts')) return false;
   if (rel.endsWith('.ts')) return true;
   return rel.startsWith('src/workflows/defaults/') && rel.endsWith('.yaml');
@@ -65,7 +69,7 @@ function isAdapter(rel: string): boolean {
 
 function isCommentLine(rel: string, line: string): boolean {
   const t = line.trim();
-  if (rel.endsWith('.yaml')) return t.startsWith('#');
+  if (rel.endsWith('.yaml') || rel.endsWith('.sh') || rel.endsWith('.ps1')) return t.startsWith('#');
   return t.startsWith('//') || t.startsWith('*') || t.startsWith('/*');
 }
 
@@ -88,6 +92,7 @@ function walk(root: string, dir: string, out: string[]): void {
 export function scanHostLiterals(repoRoot: string): HostLiteralHit[] {
   const files: string[] = [];
   for (const r of SHARED_ROOTS) walk(repoRoot, path.join(repoRoot, r), files);
+  for (const script of SCANNED_SCRIPTS) if (fs.existsSync(path.join(repoRoot, script))) files.push(script);
   const hits: HostLiteralHit[] = [];
   for (const rel of files.sort()) {
     if (!isScanned(rel) || isAdapter(rel)) continue;

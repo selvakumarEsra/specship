@@ -10,14 +10,19 @@
   Requires Node >= 22.5.0 and < 25.0.0 on PATH — the bundle ships no runtime
   (REQ-OFFINSTALL-006).
 
+.PARAMETER Target
+  The coding agent a first install wires: claude or gemini. Default: the agent
+  whose shell runs this (GEMINI_CLI=1 means Gemini CLI), else Claude Code.
+  Agents already recorded as installed are reinstalled whatever this says.
+
 .PARAMETER SkipClaude
-  Install onto PATH only; leave Claude Code config untouched.
+  Install onto PATH only; leave the agent's config untouched (alias: -SkipWire).
 
 .PARAMETER Global
-  Wire Claude Code globally (all projects) without asking.
+  Wire the agent globally (all projects) without asking.
 
 .PARAMETER Path
-  Wire Claude Code for a specific repo (project-local; indexes that repo).
+  Wire the agent for a specific repo (project-local; indexes that repo).
 
 .PARAMETER Uninstall
   Remove the install directory and its PATH entry.
@@ -26,6 +31,7 @@
   .\install.ps1
   .\install.ps1 -Global
   .\install.ps1 -Path C:\dev\my-repo
+  .\install.ps1 -Target gemini
   .\install.ps1 -SkipClaude
   .\install.ps1 -Uninstall
 
@@ -34,6 +40,9 @@
 #>
 [CmdletBinding()]
 param(
+  [ValidateSet('claude', 'gemini')]
+  [string]$Target,
+  [Alias('SkipWire')]
   [switch]$SkipClaude,
   [switch]$Global,
   [string]$Path,
@@ -103,7 +112,12 @@ if (($userPath -split ';') -notcontains $binDir) {
   Write-Host "Added $binDir to your user PATH (open a new terminal to pick it up)."
 }
 
-# 3. Wire Claude Code via the machine's resolved Node (no npm, no network).
+if (-not $Target) {
+  if ($env:GEMINI_CLI -eq '1' -and $env:CLAUDECODE -ne '1') { $Target = 'gemini' } else { $Target = 'claude' }
+}
+$agentName = if ($Target -eq 'gemini') { 'Gemini CLI' } else { 'Claude Code' }
+
+# 3. Wire the coding agent via the machine's resolved Node (no npm, no network).
 #    REQ-OFFINSTALL-005: the wiring target is asked, never assumed — a blind
 #    project-local install from here would land in the bundle directory.
 # REQ-AGENTSWITCH-006.A3: with no explicit wiring flag, reinstall for every
@@ -115,7 +129,7 @@ if (-not $SkipClaude -and -not $Global -and -not $Path) {
   if ($LASTEXITCODE -eq 0) {
     $SkipClaude = $true
   } elseif ($LASTEXITCODE -ne 3) {
-    Write-Warning "specship: reinstalling the recorded agents failed (exit $LASTEXITCODE) - wiring Claude Code instead."
+    Write-Warning "specship: reinstalling the recorded agents failed (exit $LASTEXITCODE) - wiring $agentName instead."
   }
 }
 
@@ -123,9 +137,9 @@ if (-not $SkipClaude) {
   if (-not $Global -and -not $Path) {
     if ([Environment]::UserInteractive -and -not [Console]::IsInputRedirected) {
       Write-Host ""
-      Write-Host "Wire Claude Code:"
-      Write-Host "  [1] globally  - SpecShip loads in every project (~/.claude.json)"
-      Write-Host "  [2] one repo  - project-local, indexes that repo (./.mcp.json)"
+      Write-Host "Wire ${agentName}:"
+      Write-Host "  [1] globally  - SpecShip loads in every project (your user config)"
+      Write-Host "  [2] one repo  - project-local, indexes that repo (the repo's config)"
       Write-Host "  [s] skip      - wire later with: specship install"
       $choice = Read-Host "Choice [1/2/s] (default 1)"
       switch ($choice) {
@@ -148,13 +162,13 @@ if (-not $SkipClaude) {
       Write-Error "specship: -Path '$Path' is not a directory"
       exit 1
     }
-    Write-Host "Wiring Claude Code for $Path ..."
+    Write-Host "Wiring $agentName for $Path ..."
     Push-Location $Path
-    try { & $nodeExe --liftoff-only $cliJs install --target claude -y --location local }
+    try { & $nodeExe --liftoff-only $cliJs install --target $Target -y --location local }
     finally { Pop-Location }
   } else {
-    Write-Host "Wiring Claude Code globally..."
-    & $nodeExe --liftoff-only $cliJs install --target claude -y --location global --skip-index
+    Write-Host "Wiring $agentName globally..."
+    & $nodeExe --liftoff-only $cliJs install --target $Target -y --location global --skip-index
   }
 }
 

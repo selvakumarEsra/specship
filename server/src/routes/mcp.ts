@@ -435,8 +435,7 @@ function collectUsage(cg: SpecShipInstance): Map<string, ServerUsage> {
   // `mcp__<server>__<tool>` name (REQ-AGENTSWITCH-004), so the bare server
   // name is the match key; a Gemini CLI call is credited to the Gemini entry
   // (`gemini:<server>`) that inventory lists for it.
-  const keyFor = (host: string | null, server: string) =>
-    host === GEMINI_PROFILE.id ? GEMINI_KEY_PREFIX + server : server;
+  const keyFor = mcpUsageKey;
   for (const u of usage) {
     const m = parse(u.tool_name);
     if (!m) continue;
@@ -566,6 +565,15 @@ export async function registerMcpRoutes(app: FastifyInstance): Promise<void> {
       throw err;
     }
   });
+}
+
+/**
+ * The inventory key a recorded MCP call is credited to: a Gemini CLI call to
+ * server `x` belongs to the `gemini:x` entry, any other agent's to `x`
+ * (REQ-AGENTSWITCH-004 — calls carry the shared name plus their host).
+ */
+export function mcpUsageKey(host: string | null, server: string): string {
+  return host === GEMINI_PROFILE.id ? GEMINI_KEY_PREFIX + server : server;
 }
 
 /** True when transcripts contain any mcp__<name>__* call (a `gemini:` key matches Gemini CLI calls by bare server name). */
