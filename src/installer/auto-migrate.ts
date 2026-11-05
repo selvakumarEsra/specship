@@ -32,7 +32,7 @@ import {
   type AgentRecordEntry,
   type InstallChoices,
 } from './agent-record';
-import { ALL_TARGETS } from './targets/registry';
+import { allTargets } from './targets/registry';
 import { beginWriteJournal, endWriteJournal, rollbackJournal } from './targets/shared';
 import type { AgentTarget, Location, TargetId } from './targets/types';
 
@@ -194,7 +194,7 @@ export function maybeAutoMigrate(
 ): MigrationOutcome {
   // Unknown evidence never triggers a change — and costs no file access.
   if (!agent || agent === UNKNOWN_AGENT) return { kind: 'none' };
-  const pool = opts.targets ?? ALL_TARGETS;
+  const pool = opts.targets ?? allTargets();
   // Only targets the registry allows are ever installed.
   const target = pool.find((t) => t.id === agent);
   if (!target) return { kind: 'none' };

@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { resolveSetting, projectSettingsPath, installSettingsPath } from '../src/config/runtime-settings';
+import { DEFAULT_HOST_TRAITS } from '../src/activation/hook-output';
 import { buildSteeringNudge, STEERING_TEXT } from '../src/activation/steering';
 import { detectModelTier } from '../src/mcp/model-context';
 
@@ -59,9 +60,9 @@ describe('runtime settings resolution', () => {
   });
 
   it('002.A1: a repo settings file silences the steering nudge durably', () => {
-    expect(buildSteeringNudge(repo, {}, home)).toBe(STEERING_TEXT);
+    expect(buildSteeringNudge(repo, DEFAULT_HOST_TRAITS, {}, home)).toBe(STEERING_TEXT);
     writeProject({ SPECSHIP_NO_STEERING: '1' });
-    expect(buildSteeringNudge(repo, {}, home)).toBeNull();
+    expect(buildSteeringNudge(repo, DEFAULT_HOST_TRAITS, {}, home)).toBeNull();
   });
 
   it('002.A2+A3: compaction and model tier resolve through the chain', () => {

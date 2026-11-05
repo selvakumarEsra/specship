@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { DEFAULT_HOST_TRAITS } from '../src/activation/hook-output';
 import { buildSteeringNudge, STEERING_TEXT, STEERING_TEXT_LITE } from '../src/activation/steering';
 import { recordSessionModel } from '../src/mcp/model-context';
 import { getStaticTools } from '../src/mcp/tools';
@@ -43,9 +44,9 @@ describe('REQ-LOWMODEL-002 — tier-aware steering', () => {
     fs.mkdirSync(path.join(dir, '.specship'));
     try {
       recordSessionModel(dir, 'claude-fable-5');
-      expect(buildSteeringNudge(dir, {})).toBe(STEERING_TEXT);
+      expect(buildSteeringNudge(dir, DEFAULT_HOST_TRAITS, {})).toBe(STEERING_TEXT);
       recordSessionModel(dir, 'claude-haiku-4-5');
-      expect(buildSteeringNudge(dir, {})).toBe(STEERING_TEXT_LITE);
+      expect(buildSteeringNudge(dir, DEFAULT_HOST_TRAITS, {})).toBe(STEERING_TEXT_LITE);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }

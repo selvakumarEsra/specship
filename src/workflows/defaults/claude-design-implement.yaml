@@ -131,7 +131,7 @@ nodes:
       ── BRANCH B — Source URL is set (live fetch) ──
 
       B1. Fetch the design content from $INPUT.CONNECTOR_URL. Try in order:
-            a. The `designer` MCP — `mcp__specship__designer_snapshot`
+            a. The `designer` MCP — its `designer_snapshot` tool
                (reads the real rendered HTML over CDP from inside the
                cross-origin preview iframe). This is the only path that
                reliably returns the real design for a claude.ai/design URL.
@@ -176,7 +176,7 @@ nodes:
          Then fill design.md's authored sections — Screens & layout,
          Components & states, Interactions & motion, Responsive behaviour,
          Assets — following the design-md skill
-         (~/.claude/skills/design-md/SKILL.md and its
+         ($AGENT_SKILLS_DIR/design-md/SKILL.md and its
          references/authored-sections.md): every value copied verbatim
          from the generated block with its selector, every styled state
          listed, no approximate wording. Run
@@ -215,7 +215,7 @@ nodes:
       - mcp__specship__specship_node
       - mcp__specship__specship_spec
     prompt: |
-      Use the spec-author skill (~/.claude/skills/spec-author/SKILL.md
+      Use the spec-author skill ($AGENT_SKILLS_DIR/spec-author/SKILL.md
       and its references/) to draft a SpecShip-compatible spec for the
       Claude Design import. Inputs available on disk:
 

@@ -19,7 +19,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { resolveInstallDir } from '../update/updater';
-import { ALL_TARGETS } from './targets/registry';
+import { allTargets } from './targets/registry';
 import { journalFile } from './targets/shared';
 import type { AgentTarget, Location, TargetId } from './targets/types';
 
@@ -80,7 +80,7 @@ export function currentSpecshipVersion(): string {
 // (REQ-AGENTSWITCH-009), so the registry may still be loading when it runs.
 let knownAgentsCache: Set<string> | null = null;
 function knownAgents(): Set<string> {
-  if (!knownAgentsCache) knownAgentsCache = new Set<string>(ALL_TARGETS.map((t) => t.id));
+  if (!knownAgentsCache) knownAgentsCache = new Set<string>(allTargets().map((t) => t.id));
   return knownAgentsCache;
 }
 
@@ -235,7 +235,7 @@ export function recordInstall(
 ): AgentRecord {
   // A missing/unreadable record is rebuilt first, so other agents' entries
   // are not lost when this install is the first write.
-  const current = readAgentRecord(env) ?? rebuildAgentRecord(projectRoot ?? process.cwd(), ALL_TARGETS, version);
+  const current = readAgentRecord(env) ?? rebuildAgentRecord(projectRoot ?? process.cwd(), allTargets(), version);
   const prior = current.entries.find((e) => sameKey(e, agent, scope, projectRoot));
   const entries = current.entries.filter((e) => !sameKey(e, agent, scope, projectRoot));
   const next = makeEntry(agent, scope, projectRoot, version, choices);
@@ -295,7 +295,7 @@ export function setAddedContextFiles(
 ): void {
   const root = scope === 'local' ? (projectRoot ?? process.cwd()) : undefined;
   const clean = cleanFileNames([...names]);
-  const current = readAgentRecord(env) ?? rebuildAgentRecord(root ?? process.cwd(), ALL_TARGETS);
+  const current = readAgentRecord(env) ?? rebuildAgentRecord(root ?? process.cwd(), allTargets());
   const entries = current.entries.map((e) => ({ ...e }));
   let entry = entries.find((e) => sameKey(e, agent, scope, root));
   if (!entry) {
@@ -316,7 +316,7 @@ export function setAddedContextFiles(
  */
 export function rebuildAgentRecord(
   projectRoot: string = process.cwd(),
-  targets: readonly AgentTarget[] = ALL_TARGETS,
+  targets: readonly AgentTarget[] = allTargets(),
   version: string = currentSpecshipVersion(),
 ): AgentRecord {
   const entries: AgentRecordEntry[] = [];

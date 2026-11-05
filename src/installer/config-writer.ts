@@ -18,6 +18,7 @@ import {
   writePermissionsEntry,
 } from './targets/claude';
 import { readJsonFile } from './targets/shared';
+import { CLAUDE_CODE_TRAITS } from '../activation/hook-output';
 
 export type InstallLocation = 'global' | 'local';
 
@@ -51,10 +52,10 @@ export function hasMcpConfig(location: InstallLocation): boolean {
 
 export function hasPermissions(location: InstallLocation): boolean {
   const file = location === 'global'
-    ? path.join(os.homedir(), '.claude', 'settings.json')
-    : path.join(process.cwd(), '.claude', 'settings.json');
+    ? path.join(os.homedir(), CLAUDE_CODE_TRAITS.configDir, 'settings.json')
+    : path.join(process.cwd(), CLAUDE_CODE_TRAITS.configDir, 'settings.json');
   const settings = readJsonFile(file);
   const allow = settings.permissions?.allow;
   if (!Array.isArray(allow)) return false;
-  return allow.some((p: string) => p.startsWith('mcp__specship__'));
+  return allow.some((p: string) => p.startsWith(CLAUDE_CODE_TRAITS.toolPrefix));
 }

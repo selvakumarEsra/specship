@@ -31,7 +31,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { resolveSetting } from '../config/runtime-settings';
-import { CLAUDE_CODE_TRAITS } from './hook-output';
+import { CLAUDE_CODE_TRAITS, type HostTraits } from './hook-output';
 
 /**
  * The one redirect line. Explicitly advisory ("your search still runs") so
@@ -203,15 +203,27 @@ export interface SearchInterceptInput {
   /** Injectable clock for tests. */
   now?: Date;
 
-  /** Transcript substrings signaling specship tool_use. Default: Claude form. */
-  specshipToolMarkers?: string[];
-  /** Transcript file format. Default: Claude JSONL. */
-  transcriptFormat?: 'jsonl' | 'single-json';
-  /** Strict mode (host supports a BeforeTool deny AND user opted in). */
+  /**
+   * The calling host's profile (REQ-AGENTSWITCH-001.A3) — required. Supplies
+   * the transcript format and specship tool markers, the deny-eligible
+   * search tools, the shell tool and whether a deny is honoured at all.
+   */
+  traits: HostTraits;
+  /** The intercepted tool's name, from the hook payload. */
+  toolName?: string | null;
+  /** The intercepted tool's input, from the hook payload. */
+  toolInput?: Record<string, unknown>;
+  /** Strict mode requested (applied only when the host supports a BeforeTool deny). */
   strict?: boolean;
-  /** Whether the intercepted tool is a built-in search eligible for deny. */
+  /**
+   * Whether the intercepted tool is a built-in search eligible for deny.
+   * Default: `toolName` is one of the profile's `denyEligibleTools`.
+   */
   denyEligible?: boolean;
-  /** When the intercepted tool is a shell runner, the raw command string. */
+  /**
+   * When the intercepted tool is a shell runner, the raw command string.
+   * Default: `toolInput.command` when `toolName` is the profile's `shellTool`.
+   */
   shellCommand?: string | null;
   /** Search pattern/needle to echo in the deny reason, when known. */
   searchPattern?: string | null;
@@ -250,16 +262,24 @@ export function buildSearchIntercept(input: SearchInterceptInput): SearchInterce
     cwd,
     sessionId,
     transcriptPath,
+    traits,
+    toolName = null,
+    toolInput = {},
     env = process.env,
     homedir,
     now = new Date(),
-    specshipToolMarkers = CLAUDE_CODE_TRAITS.specshipToolMarkers,
-    transcriptFormat = 'jsonl',
-    strict = false,
-    denyEligible = false,
-    shellCommand = null,
     searchPattern = null,
   } = input;
+  const { specshipToolMarkers, transcriptFormat } = traits;
+  const strict = (input.strict ?? false) && traits.supportsBeforeToolDeny;
+  const denyEligible =
+    input.denyEligible ?? (toolName !== null && traits.denyEligibleTools.includes(toolName));
+  const shellCommand =
+    input.shellCommand !== undefined
+      ? input.shellCommand
+      : traits.shellTool !== null && toolName === traits.shellTool && typeof toolInput.command === 'string'
+        ? toolInput.command
+        : null;
 
   if (resolveSetting('SPECSHIP_NO_STEERING', cwd, env, homedir) === '1') return null;
   try {

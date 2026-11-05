@@ -1,8 +1,10 @@
 /**
  * MCP servers routes — inventory, live status, and control (REQ-DESKTOP-026).
  *
- * Three real sources, merged (this fork is Claude Code only, so Claude
- * Code's config surfaces ARE the inventory — no other clients are read):
+ * Three real sources, merged (each supported agent's config surfaces are
+ * the inventory; per-agent file names come from `host-profiles.ts`,
+ * REQ-AGENTSWITCH-001 — Gemini CLI's user and project `settings.json`
+ * entries are listed read-only under `gemini:<name>` keys):
  *   1. Claude Code's own config — `~/.claude.json` (global `mcpServers` +
  *      `projects[<root>].mcpServers`) and `<projectRoot>/.mcp.json`, the
  *      same files `specship install` writes. Disabled servers come from
@@ -32,6 +34,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { SpecShipInstance } from '../project-registry.js';
+import { CLAUDE_PROFILE, GEMINI_PROFILE, type HostId } from '../host-profiles.js';
 
 type DbHandle = { prepare: (s: string) => { all: (...a: unknown[]) => unknown[] } };
 
@@ -50,14 +53,22 @@ export interface McpConfigEntry {
   [key: string]: unknown;
 }
 
-/** The two files the inventory reads; projectRoot null = user scope only. */
+/** The files the inventory reads; projectRoot null = user scope only. */
 export interface McpConfigPaths {
   claudeJsonPath: string;
   projectRoot: string | null;
+  /**
+   * Gemini CLI's user settings file (REQ-AGENTSWITCH-001). When set, its
+   * `mcpServers` and the project's own Gemini settings file are read too.
+   */
+  geminiSettingsPath?: string;
 }
 
 /** Which config structure owns an entry — decides how enable/disable edits. */
-export type McpConfigContainer = 'user' | 'project-local' | 'mcpjson';
+export type McpConfigContainer = 'user' | 'project-local' | 'mcpjson' | 'gemini';
+
+/** Inventory key prefix for a Gemini CLI entry, so it never collides with a Claude Code one of the same name. */
+export const GEMINI_KEY_PREFIX = GEMINI_PROFILE.id + ':';
 
 export interface ConfiguredServer {
   name: string;
@@ -67,6 +78,8 @@ export interface ConfiguredServer {
   configFile: string;
   disabled: boolean;
   container: McpConfigContainer;
+  /** The agent that loads this entry. */
+  host: HostId;
 }
 
 export type McpProbeResult = 'ok' | 'failed';
@@ -92,7 +105,8 @@ function readJson(p: string): Record<string, any> | null {
 export function configuredServers(paths: McpConfigPaths): Map<string, ConfiguredServer> {
   const out = new Map<string, ConfiguredServer>();
   const claudeJson = readJson(paths.claudeJsonPath);
-  const add = (name: string, cfg: Omit<ConfiguredServer, 'name'>) => out.set(name, { name, ...cfg });
+  const add = (name: string, cfg: Omit<ConfiguredServer, 'name' | 'host'>) =>
+    out.set(name, { name, host: CLAUDE_PROFILE.id, ...cfg });
 
   for (const [name, entry] of Object.entries((claudeJson?.['mcpServers'] ?? {}) as Record<string, McpConfigEntry>)) {
     add(name, { scope: 'user', entry, configFile: paths.claudeJsonPath, disabled: false, container: 'user' });
@@ -109,10 +123,23 @@ export function configuredServers(paths: McpConfigPaths): Map<string, Configured
       add(name, { scope: 'project', entry, configFile: paths.claudeJsonPath, disabled: true, container: 'project-local' });
     }
     const disabledMcpjson = new Set<string>((proj?.['disabledMcpjsonServers'] ?? []) as string[]);
-    const mcpJsonPath = path.join(paths.projectRoot, '.mcp.json');
+    const mcpJsonPath = path.join(paths.projectRoot, CLAUDE_PROFILE.projectMcpFile);
     const mcpJson = readJson(mcpJsonPath);
     for (const [name, entry] of Object.entries((mcpJson?.['mcpServers'] ?? {}) as Record<string, McpConfigEntry>)) {
       add(name, { scope: 'project', entry, configFile: mcpJsonPath, disabled: disabledMcpjson.has(name), container: 'mcpjson' });
+    }
+  }
+  if (paths.geminiSettingsPath) {
+    // Gemini CLI: user settings, then the project's settings (project wins).
+    const files: Array<[string, 'user' | 'project']> = [[paths.geminiSettingsPath, 'user']];
+    if (paths.projectRoot) files.push([path.join(paths.projectRoot, GEMINI_PROFILE.projectMcpFile), 'project']);
+    for (const [file, scope] of files) {
+      const settings = readJson(file);
+      for (const [name, entry] of Object.entries((settings?.['mcpServers'] ?? {}) as Record<string, McpConfigEntry>)) {
+        out.set(GEMINI_KEY_PREFIX + name, {
+          name, scope, entry, configFile: file, disabled: false, container: 'gemini', host: GEMINI_PROFILE.id,
+        });
+      }
     }
   }
   return out;
@@ -296,6 +323,9 @@ export function setServerEnabled(paths: McpConfigPaths, name: string, enabled: b
   const cfg = configuredServers(paths).get(name);
   if (!cfg) throw new McpConfigError(`unknown MCP server "${name}"`, 404);
   if (cfg.disabled === !enabled) return cfg;
+  if (cfg.container === 'gemini') {
+    throw new McpConfigError(`${GEMINI_PROFILE.displayName} servers are edited in ${cfg.configFile}`, 400);
+  }
 
   if (cfg.container === 'mcpjson') {
     editJsonFile(paths.claudeJsonPath, (data) => {
@@ -348,16 +378,16 @@ export function addServer(paths: McpConfigPaths, input: AddServerInput): Configu
 
   if (input.scope === 'project') {
     if (!paths.projectRoot) throw new McpConfigError('no project open — cannot write .mcp.json', 400);
-    const mcpJsonPath = path.join(paths.projectRoot, '.mcp.json');
+    const mcpJsonPath = path.join(paths.projectRoot, CLAUDE_PROFILE.projectMcpFile);
     editJsonFile(mcpJsonPath, (data) => {
       data['mcpServers'] = { ...(data['mcpServers'] ?? {}), [name]: entry };
     });
-    return { name, scope: 'project', entry, configFile: mcpJsonPath, disabled: false, container: 'mcpjson' };
+    return { name, scope: 'project', entry, configFile: mcpJsonPath, disabled: false, container: 'mcpjson', host: CLAUDE_PROFILE.id };
   }
   editJsonFile(paths.claudeJsonPath, (data) => {
     data['mcpServers'] = { ...(data['mcpServers'] ?? {}), [name]: entry };
   });
-  return { name, scope: 'user', entry, configFile: paths.claudeJsonPath, disabled: false, container: 'user' };
+  return { name, scope: 'user', entry, configFile: paths.claudeJsonPath, disabled: false, container: 'user', host: CLAUDE_PROFILE.id };
 }
 
 // ---- Routes -----------------------------------------------------------------
@@ -435,8 +465,9 @@ function collectUsage(cg: SpecShipInstance): Map<string, ServerUsage> {
 
 export async function registerMcpRoutes(app: FastifyInstance): Promise<void> {
   const paths = (): McpConfigPaths => ({
-    claudeJsonPath: path.join(os.homedir(), '.claude.json'),
+    claudeJsonPath: path.join(os.homedir(), CLAUDE_PROFILE.userConfigFile),
     projectRoot: app.primaryCg?.getProjectRoot?.() ?? null,
+    geminiSettingsPath: path.join(os.homedir(), GEMINI_PROFILE.userConfigFile),
   });
 
   function requirePrimary(reply: FastifyReply): SpecShipInstance | null {
@@ -470,7 +501,8 @@ export async function registerMcpRoutes(app: FastifyInstance): Promise<void> {
       const command = entry.url ?? [entry.command, ...(entry.args ?? [])].filter(Boolean).join(' ');
       const state = deriveState(cfg, use?.last ? { lastMs: use.last } : null, probes.get(name) ?? null);
       return {
-        id: name, name,
+        id: name, name: cfg?.name ?? name,
+        host: cfg?.host ?? null,
         scope: cfg?.scope ?? 'unknown',
         state, transport, command,
         configFile: cfg?.configFile ?? null,

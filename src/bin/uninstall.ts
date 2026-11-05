@@ -16,10 +16,10 @@ try {
   // Lazy require so any module-level error in the registry can't
   // bubble out and abort the npm uninstall.
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { ALL_TARGETS } = require('../installer/targets/registry') as
+  const { allTargets } = require('../installer/targets/registry') as
     typeof import('../installer/targets/registry');
 
-  for (const target of ALL_TARGETS) {
+  for (const target of allTargets()) {
     if (!target.supportsLocation('global')) continue;
     try {
       target.uninstall('global');

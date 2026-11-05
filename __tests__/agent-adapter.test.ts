@@ -5,6 +5,7 @@ import * as path from 'path';
 import { buildSteeringNudge, STEERING_TEXT, STEERING_TEXT_LITE } from '../src/activation/steering';
 import {
   CLAUDE_CODE_TRAITS,
+  DEFAULT_HOST_TRAITS,
   GEMINI_CLI_TRAITS,
   deriveHostTraits,
   parseHookPayload,
@@ -47,24 +48,24 @@ function claudeSteeringTextIsByteIdentical(): void {
   // A Claude payload and a payload with no event name both get the legacy text.
   for (const raw of [JSON.stringify({ hook_event_name: 'UserPromptSubmit' }), 'plain prompt']) {
     const traits = deriveHostTraits(parseHookPayload(raw));
-    expect(buildSteeringNudge(dir, {}, dir, traits.toolPrefix)).toBe(LEGACY_STEERING_TEXT);
+    expect(buildSteeringNudge(dir, traits, {}, dir)).toBe(LEGACY_STEERING_TEXT);
   }
-  expect(buildSteeringNudge(dir, {}, dir)).toBe(LEGACY_STEERING_TEXT);
+  expect(buildSteeringNudge(dir, DEFAULT_HOST_TRAITS, {}, dir)).toBe(LEGACY_STEERING_TEXT);
 }
 
 function geminiSteeringNamesTheBareTool(): void {
   const traits = deriveHostTraits(parseHookPayload(JSON.stringify({ hook_event_name: 'BeforeAgent' })));
-  const text = buildSteeringNudge(dir, {}, dir, traits.toolPrefix);
+  const text = buildSteeringNudge(dir, traits, {}, dir);
   expect(text).toContain(' specship_explore ');
   expect(text).not.toContain('mcp__specship__');
 }
 
 function liteTierFollowsTheHostToolForm(): void {
-  const gemini = buildSteeringNudge(dir, LITE_ENV, dir, GEMINI_CLI_TRAITS.toolPrefix);
+  const gemini = buildSteeringNudge(dir, GEMINI_CLI_TRAITS, LITE_ENV, dir);
   expect(gemini).toContain('Do not spawn subagents');
   expect(gemini).toContain(' specship_explore ');
   expect(gemini).not.toContain('mcp__specship__');
-  expect(buildSteeringNudge(dir, LITE_ENV, dir, CLAUDE_CODE_TRAITS.toolPrefix)).toBe(LEGACY_STEERING_TEXT_LITE);
+  expect(buildSteeringNudge(dir, CLAUDE_CODE_TRAITS, LITE_ENV, dir)).toBe(LEGACY_STEERING_TEXT_LITE);
 }
 
 function traitsComeOnlyFromTheAdapter(): void {

@@ -94,7 +94,26 @@ active host MUST use the Claude Code profile, as today.
 implementations:
   - src/activation/hook-output.ts:HostTraits
   - src/activation/hook-output.ts:deriveHostTraits
+  - src/activation/hook-output.ts:hostTraitsFor
+  - src/activation/hook-output.ts:DEFAULT_HOST_TRAITS
+  - src/activation/hook-output.ts:ALL_HOST_TRAITS
   - src/installer/targets/types.ts:AgentTarget
+  - src/installer/targets/registry.ts:allTargets
+  - src/activation/steering.ts:renderSteering
+  - src/activation/steering.ts:buildSteeringNudge
+  - src/activation/search-intercept.ts:SearchInterceptInput
+  - src/activation/search-intercept.ts:buildSearchIntercept
+  - src/workflows/executor.ts:withAgentVariables
+  - server/src/host-profiles.ts:ServerHostProfile
+  - server/src/host-profiles.ts:HOST_PROFILES
+  - server/src/routes/memory.ts:collectMemoryFiles
+  - server/src/routes/memory.ts:collectProject
+  - server/src/routes/mcp.ts:configuredServers
+
+verifies:
+  - __tests__/agent-host-literals.test.ts:reqAgentswitch001A1
+  - __tests__/agent-host-literals.test.ts:reqAgentswitch001A2
+  - __tests__/agent-host-literals.test.ts:reqAgentswitch001A3
 
 ## Acceptance
 <!-- id: REQ-AGENTSWITCH-001.A1 -->

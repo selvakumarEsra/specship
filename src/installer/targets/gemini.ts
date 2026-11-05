@@ -32,6 +32,7 @@
  */
 
 import * as fs from 'fs';
+import { GEMINI_CLI_TRAITS } from '../../activation/hook-output';
 import * as os from 'os';
 import * as path from 'path';
 import {
@@ -727,7 +728,8 @@ export function removeGeminiPolicyEntry(): WriteResult['files'][number] {
 
 export class GeminiCliTarget implements AgentTarget {
   readonly id = 'gemini' as const;
-  readonly displayName = 'Gemini CLI';
+  readonly traits = GEMINI_CLI_TRAITS;
+  readonly displayName = GEMINI_CLI_TRAITS.displayName;
   readonly docsUrl = 'https://google-gemini.github.io/gemini-cli/docs/cli/configuration.html';
 
   supportsLocation(_loc: Location): boolean {

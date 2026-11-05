@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { buildSteeringNudge, STEERING_TEXT } from '../src/activation/steering';
-import { parseHookPayload, buildHookAdditionalContext } from '../src/activation/hook-output';
+import { parseHookPayload, buildHookAdditionalContext, DEFAULT_HOST_TRAITS } from '../src/activation/hook-output';
 
 /**
  * STEER-HOOK-DOC (specs/retrieval-steering-hook.md) — the steer-nudge hook
@@ -22,12 +22,12 @@ describe('buildSteeringNudge (REQ-STEER-002)', () => {
   });
 
   it('A1: emits nothing in a directory without .specship/', () => {
-    expect(buildSteeringNudge(dir, {})).toBeNull();
+    expect(buildSteeringNudge(dir, DEFAULT_HOST_TRAITS, {})).toBeNull();
   });
 
   it('emits the steering line in an initialized project', () => {
     fs.mkdirSync(path.join(dir, '.specship'));
-    expect(buildSteeringNudge(dir, {})).toBe(STEERING_TEXT);
+    expect(buildSteeringNudge(dir, DEFAULT_HOST_TRAITS, {})).toBe(STEERING_TEXT);
     expect(STEERING_TEXT).toContain('specship_explore');
     // Broadened wording (REQ-STEER-001, 2026-07-13): covers all code work,
     // not just flow questions, and keeps the explore-first ordering.
@@ -37,12 +37,12 @@ describe('buildSteeringNudge (REQ-STEER-002)', () => {
 
   it('A2: emits nothing with SPECSHIP_NO_STEERING=1 even when initialized', () => {
     fs.mkdirSync(path.join(dir, '.specship'));
-    expect(buildSteeringNudge(dir, { SPECSHIP_NO_STEERING: '1' })).toBeNull();
+    expect(buildSteeringNudge(dir, DEFAULT_HOST_TRAITS, { SPECSHIP_NO_STEERING: '1' })).toBeNull();
   });
 
   it('a .specship FILE (not dir) does not trigger steering', () => {
     fs.writeFileSync(path.join(dir, '.specship'), 'not a dir');
-    expect(buildSteeringNudge(dir, {})).toBeNull();
+    expect(buildSteeringNudge(dir, DEFAULT_HOST_TRAITS, {})).toBeNull();
   });
 });
 

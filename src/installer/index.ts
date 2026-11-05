@@ -23,8 +23,13 @@ import {
   describeIndexLaterHint,
   type StatusLineOutcome,
 } from './install-defaults';
-import { ALL_TARGETS, getTarget, listTargetIds } from './targets/registry';
+import { allTargets, getTarget, listTargetIds } from './targets/registry';
 import type { AgentTarget, Location, TargetId } from './targets/types';
+import { CLAUDE_CODE_TRAITS } from '../activation/hook-output';
+
+/** Claude Code scope hints for the location prompts, from its host profile. */
+const CLAUDE_LOCAL_HINT = `./.mcp.json + ./${CLAUDE_CODE_TRAITS.configDir}/settings.json`;
+const CLAUDE_GLOBAL_HINT = `~/${CLAUDE_CODE_TRAITS.userConfigFile} + ~/${CLAUDE_CODE_TRAITS.configDir}/settings.json`;
 import { detectInstallMethod } from '../update/updater';
 import { recordInstall, recordUninstall, ensureAgentRecord, type AgentRecordEntry } from './agent-record';
 import { planPurge, executePurge, assertSafeToRemove, type PurgeEnv, type PurgeExecDeps } from './purge';
@@ -255,8 +260,8 @@ export async function runInstallerWithOptions(
       message: `Apply ${agents} config to just this project, or all of them?`,
       options: installClaude
         ? [
-          { value: 'local'  as const, label: 'Just this project (recommended)', hint: './.mcp.json + ./.claude/settings.json' },
-          { value: 'global' as const, label: 'All projects', hint: '~/.claude.json + ~/.claude/settings.json' },
+          { value: 'local'  as const, label: 'Just this project (recommended)', hint: CLAUDE_LOCAL_HINT },
+          { value: 'global' as const, label: 'All projects', hint: CLAUDE_GLOBAL_HINT },
         ]
         : [
           { value: 'local'  as const, label: 'Just this project (recommended)', hint: describeFirstPaths(selectedTargets, 'local') },
@@ -567,7 +572,7 @@ export function reinstallRecordedAgents(
   opts: { projectRoot?: string; targets?: readonly AgentTarget[] } = {},
 ): ReinstallReport[] {
   const record = ensureAgentRecord(opts.projectRoot ?? process.cwd());
-  const pool = opts.targets ?? ALL_TARGETS;
+  const pool = opts.targets ?? allTargets();
   const reports: ReinstallReport[] = [];
   for (const entry of record.entries) {
     const target = pool.find((t) => t.id === entry.agent);
@@ -658,8 +663,8 @@ async function wiringOnlyUninstall(
     const sel = await clack.select({
       message: 'Remove SpecShip from just this project, or all of them?',
       options: [
-        { value: 'local'  as const, label: 'Just this project (local)', hint: './.mcp.json + ./.claude/settings.json' },
-        { value: 'global' as const, label: 'All projects (global)', hint: '~/.claude.json + ~/.claude/settings.json' },
+        { value: 'local'  as const, label: 'Just this project (local)', hint: CLAUDE_LOCAL_HINT },
+        { value: 'global' as const, label: 'All projects (global)', hint: CLAUDE_GLOBAL_HINT },
       ],
       initialValue: 'local' as const,
     });
@@ -735,7 +740,7 @@ async function purgeUninstall(
   // 1. Every registered target's wiring at BOTH locations — a purge that left
   //    a Gemini MCP entry behind wouldn't be a complete removal.
   for (const location of ['global', 'local'] as Location[]) {
-    for (const report of uninstallTargets(ALL_TARGETS, location)) {
+    for (const report of uninstallTargets(allTargets(), location)) {
       if (report.status === 'removed') {
         for (const p of report.removedPaths) {
           clack.log.success(`${report.displayName} (${location}): removed ${tildify(p)}`);

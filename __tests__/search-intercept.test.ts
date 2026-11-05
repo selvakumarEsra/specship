@@ -8,6 +8,7 @@ import {
   interceptStatePath,
   SEARCH_INTERCEPT_TEXT,
 } from '../src/activation/search-intercept';
+import { CLAUDE_CODE_TRAITS, GEMINI_CLI_TRAITS } from '../src/activation/hook-output';
 
 /**
  * STEER-HOOK-DOC (specs/retrieval-steering-hook.md) — the search-intercept
@@ -25,6 +26,7 @@ describe('buildSearchIntercept', () => {
     sessionId: 'session-a',
     transcriptPath: null,
     env: {},
+    traits: CLAUDE_CODE_TRAITS,
     ...overrides,
   });
 
@@ -144,10 +146,7 @@ describe('buildSearchIntercept — Gemini host', () => {
   let dir: string;
   let transcript: string;
 
-  const geminiCaps = {
-    specshipToolMarkers: ['"name":"specship__', '"name": "specship__'],
-    transcriptFormat: 'single-json' as const,
-  };
+  const geminiCaps = { traits: GEMINI_CLI_TRAITS };
 
   const input = (overrides: Partial<Parameters<typeof buildSearchIntercept>[0]> = {}) => ({
     cwd: dir,
