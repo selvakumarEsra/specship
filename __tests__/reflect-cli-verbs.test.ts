@@ -61,7 +61,7 @@ describe.skipIf(!fts5Available)('REQ-AUDFIX-002 — reflect review verbs', () =>
     try { fs.rmSync(proj, { recursive: true, force: true }); } catch { /* ignore */ }
   });
 
-  it('REQ-AUDFIX-002.A1: apply previews without --yes and writes only with --yes, marking the proposal applied', () => {
+  it('REQ-AUDFIX-002.A1: apply previews without --yes and writes only with --yes, marking the proposal applied', function reqAudfix002A1() {
     const p = captureStyle('Use tabs', 'Indent with tabs, never spaces.');
     const prefix = p.contentHash.slice(0, 12);
     const before = fs.existsSync(conventionsPath()) ? fs.readFileSync(conventionsPath(), 'utf-8') : null;
@@ -83,7 +83,7 @@ describe.skipIf(!fts5Available)('REQ-AUDFIX-002 — reflect review verbs', () =>
     expect(errors).toEqual([]);
   });
 
-  it('REQ-AUDFIX-002.A2: undo reverses an applied proposal', () => {
+  it('REQ-AUDFIX-002.A2: undo reverses an applied proposal', function reqAudfix002A2Undo() {
     const p = captureStyle('Use tabs', 'Indent with tabs, never spaces.');
     const prefix = p.contentHash.slice(0, 8);
     expect(runReflectVerb(cg, 'apply', prefix, { yes: true }, sink)).toBe(0);
@@ -100,7 +100,7 @@ describe.skipIf(!fts5Available)('REQ-AUDFIX-002 — reflect review verbs', () =>
     expect(errors.join('\n')).toMatch(/not applied/);
   });
 
-  it('REQ-AUDFIX-002.A2: dismiss hides a proposal from future sweeps', () => {
+  it('REQ-AUDFIX-002.A2: dismiss hides a proposal from future sweeps', function reqAudfix002A2Dismiss() {
     const p = captureStyle('Prefer named exports', 'Never use default exports.');
     expect(runReflectVerb(cg, 'dismiss', p.contentHash.slice(0, 6), {}, sink)).toBe(0);
     expect(cg.reflectGet(p.contentHash)!.state).toBe('dismissed');
@@ -111,7 +111,7 @@ describe.skipIf(!fts5Available)('REQ-AUDFIX-002 — reflect review verbs', () =>
     expect(cg.reflectGet(p.contentHash)!.state).toBe('dismissed');
   });
 
-  it('REQ-AUDFIX-002.A3: a prefix matching no proposal exits non-zero, names the problem, writes nothing', () => {
+  it('REQ-AUDFIX-002.A3: a prefix matching no proposal exits non-zero, names the problem, writes nothing', function reqAudfix002A3NoMatch() {
     const p = captureStyle('Use tabs', 'Indent with tabs, never spaces.');
     const missing = p.contentHash.startsWith('ffff') ? '0000' : 'ffff';
     for (const verb of ['apply', 'undo', 'dismiss'] as const) {
@@ -123,7 +123,7 @@ describe.skipIf(!fts5Available)('REQ-AUDFIX-002 — reflect review verbs', () =>
     expect(cg.reflectGet(p.contentHash)!.state).toBe('open');
   });
 
-  it('REQ-AUDFIX-002.A3: an ambiguous prefix exits non-zero, names the problem, writes nothing', () => {
+  it('REQ-AUDFIX-002.A3: an ambiguous prefix exits non-zero, names the problem, writes nothing', function reqAudfix002A3Ambiguous() {
     const p = captureStyle('Use tabs', 'Indent with tabs, never spaces.');
     // Two persisted proposals that share the prefix "abcd".
     const twins = ['abcd1111', 'abcd2222'].map((h) => ({ ...p, contentHash: h + p.contentHash.slice(8) }));
@@ -145,7 +145,7 @@ describe.skipIf(!fts5Available)('REQ-AUDFIX-002 — reflect review verbs', () =>
 describe('REQ-AUDFIX-002 — prefix resolution + pointers (no DB)', () => {
   const mk = (h: string): Proposal => ({ contentHash: h, title: h } as unknown as Proposal);
 
-  it('REQ-AUDFIX-002.A3: rejects empty, too-short, unknown and ambiguous prefixes', () => {
+  it('REQ-AUDFIX-002.A3: rejects empty, too-short, unknown and ambiguous prefixes', function reqAudfix002A3PrefixRules() {
     const list = [mk('abcd1111'), mk('abcd2222'), mk('ef012345')];
     expect(resolveProposalPrefix(list, undefined).ok).toBe(false);
     const short = resolveProposalPrefix(list, 'ab');
@@ -158,7 +158,7 @@ describe('REQ-AUDFIX-002 — prefix resolution + pointers (no DB)', () => {
     expect(one.ok && one.proposal.contentHash).toBe('ef012345');
   });
 
-  it('REQ-AUDFIX-002.A1: only apply/undo/dismiss are treated as verbs (a path stays a path)', () => {
+  it('REQ-AUDFIX-002.A1: only apply/undo/dismiss are treated as verbs (a path stays a path)', function reqAudfix002A1VerbsOnly() {
     expect(isReflectVerb('apply')).toBe(true);
     expect(isReflectVerb('undo')).toBe(true);
     expect(isReflectVerb('dismiss')).toBe(true);
@@ -166,7 +166,7 @@ describe('REQ-AUDFIX-002 — prefix resolution + pointers (no DB)', () => {
     expect(isReflectVerb(undefined)).toBe(false);
   });
 
-  it('REQ-AUDFIX-002.A4: the sync learned line and the cheatsheet line point at `specship reflect`, not a dashboard page', () => {
+  it('REQ-AUDFIX-002.A4: the sync learned line and the cheatsheet line point at `specship reflect`, not a dashboard page', function reqAudfix002A4() {
     const line = learnedNotice('Use tabs');
     expect(line).toContain('`specship reflect`');
     expect(line).not.toMatch(/dashboard|Improvements/i);

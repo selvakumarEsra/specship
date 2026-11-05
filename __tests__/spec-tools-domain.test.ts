@@ -229,21 +229,21 @@ describe.skipIf(!fts5Available)('REQ-DOMAIN-005 — domain facts surface through
     if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true });
   });
 
-  it('A1: specship_spec on the requirement returns its linked domain facts', async () => {
+  it('A1: specship_spec on the requirement returns its linked domain facts', async function reqDomain005A1() {
     const out = textOf(await handleSpecshipSpec(cg, { spec_id: 'REQ-PAY-004' }));
     expect(out).toContain('## Domain facts');
     expect(out).toContain('DOM-PAY-001');
     expect(out).toContain('final transfer of funds');
   });
 
-  it('A2: specship_explore naming the domain term includes the fact body', async () => {
+  it('A2: specship_explore naming the domain term includes the fact body', async function reqDomain005A2() {
     const res = await handler.execute('specship_explore', { query: 'Settlement' });
     const out = res.content.map((c) => c.text).join('\n');
     expect(out).toContain('Domain facts');
     expect(out).toContain('final transfer of funds');
   });
 
-  it('A2: explore surfaces a pure domain term even when no code matches', async () => {
+  it('A2: explore surfaces a pure domain term even when no code matches', async function reqDomain005A2PureTerm() {
     // A rule fact with no co-named code symbol — explore must still surface it.
     cg.getSpecQueries().insertSpec({
       id: 'DOM-RULE-001',

@@ -79,6 +79,16 @@ implementations:
   - src/reflect/store.ts:ReflectStore.setState
   - src/activation/cheatsheet.ts:buildCheatsheetPayload
 
+verifies:
+  - __tests__/reflect-cli-verbs.test.ts:reqAudfix002A1
+  - __tests__/reflect-cli-verbs.test.ts:reqAudfix002A1VerbsOnly
+  - __tests__/reflect-cli-verbs.test.ts:reqAudfix002A2Undo
+  - __tests__/reflect-cli-verbs.test.ts:reqAudfix002A2Dismiss
+  - __tests__/reflect-cli-verbs.test.ts:reqAudfix002A3NoMatch
+  - __tests__/reflect-cli-verbs.test.ts:reqAudfix002A3Ambiguous
+  - __tests__/reflect-cli-verbs.test.ts:reqAudfix002A3PrefixRules
+  - __tests__/reflect-cli-verbs.test.ts:reqAudfix002A4
+
 ## Acceptance
 <!-- id: REQ-AUDFIX-002.A1 -->
 - `specship reflect apply <hash>` shows the before→after preview and writes only with `--yes`; the proposal becomes `applied`.

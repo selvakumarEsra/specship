@@ -110,7 +110,7 @@ function waitFor<T>(
  * pointer landed.
  */
 describe('REQ-DOMAIN-005 — no new MCP tool; instructions pointer present', () => {
-  it('A3: the MCP tool list is unchanged in count and has no domain-named tool', () => {
+  it('A3: the MCP tool list is unchanged in count and has no domain-named tool', function reqDomain005A3() {
     // 8 core (search/callers/callees/impact/node/explore/status/files) —
     //   status also carries server identity since specship_version folded into
     //   it (REQ-SURF-006)
@@ -131,7 +131,7 @@ describe('REQ-DOMAIN-005 — no new MCP tool; instructions pointer present', () 
     expect(tools.some((t) => /domain/i.test(t.name))).toBe(false);
   });
 
-  it('mentions domain facts in the server instructions (the one permitted pointer)', () => {
+  it('mentions domain facts in the server instructions (the one permitted pointer)', function reqDomain005InstructionsPointer() {
     expect(SERVER_INSTRUCTIONS.toLowerCase()).toContain('domain');
   });
 });

@@ -56,6 +56,10 @@ every platform SpecShip supports without depending on a shell interpreter.
 implementations:
   - src/activation/cheatsheet.ts:buildCheatsheetPayload
 
+verifies:
+  - __tests__/cheatsheet.test.ts:reqCheat001A1
+  - __tests__/cheatsheet.test.ts:reqCheat001A2
+
 ## Acceptance
 <!-- id: REQ-CHEAT-001.A1 -->
 - `specship cheatsheet` exits 0 and writes to stdout a single JSON object
@@ -76,6 +80,11 @@ the cheat-sheet is a map of the product, not a single tip.
 
 implementations:
   - src/activation/cheatsheet.ts:CHEATSHEET_TEXT
+
+verifies:
+  - __tests__/cheatsheet.test.ts:reqCheat002A1
+  - __tests__/cheatsheet.test.ts:reqCheat002A2
+  - __tests__/cheatsheet.test.ts:reqCheat002A3
 
 ## Acceptance
 <!-- id: REQ-CHEAT-002.A1 -->
@@ -111,6 +120,10 @@ their hook config, matching the existing `SPECSHIP_NO_STEERING` opt-out.
 
 implementations:
   - src/activation/cheatsheet.ts:buildCheatsheetPayload
+
+verifies:
+  - __tests__/cheatsheet.test.ts:reqCheat004A1
+  - __tests__/cheatsheet.test.ts:reqCheat004A2
 
 ## Acceptance
 <!-- id: REQ-CHEAT-004.A1 -->

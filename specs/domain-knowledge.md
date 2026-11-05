@@ -173,6 +173,13 @@ pointer MAY be added to the MCP server instructions.
 implementations:
   - src/mcp/server-instructions.ts:SERVER_INSTRUCTIONS
 
+verifies:
+  - __tests__/spec-tools-domain.test.ts:reqDomain005A1
+  - __tests__/spec-tools-domain.test.ts:reqDomain005A2
+  - __tests__/spec-tools-domain.test.ts:reqDomain005A2PureTerm
+  - __tests__/mcp-initialize.test.ts:reqDomain005A3
+  - __tests__/mcp-initialize.test.ts:reqDomain005InstructionsPointer
+
 ## Acceptance
 <!-- id: REQ-DOMAIN-005.A1 -->
 - `specship_spec` on a requirement returns its linked domain facts.
