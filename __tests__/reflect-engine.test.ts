@@ -12,6 +12,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { DatabaseConnection } from '../src/db';
+import { CLAUDE_CODE_TRAITS, GEMINI_CLI_TRAITS } from '../src/activation/hook-output';
 import { SqliteDatabase } from '../src/db/sqlite-adapter';
 import {
   mineProposals,
@@ -418,5 +419,74 @@ describe('apply / preview / undo (REQ-REFLECT-003 / 004)', () => {
     expect(undoProposal(p, ctx.homeDir)).toBe('undone');
     const stripped = JSON.parse(fs.readFileSync(p.targetPath, 'utf-8'));
     expect(stripped.hooks).toBeUndefined();
+  });
+});
+
+// --- REQ-AGENTSWITCH-003: reflect proposals target the active agent ---
+
+describe('reflect proposals per agent (REQ-AGENTSWITCH-003)', () => {
+  function reqAgentswitch003A2() {
+    const gctx: ReflectContext = { ...ctx, host: GEMINI_CLI_TRAITS };
+    // Callers keep writing hooks in the default host's vocabulary.
+    const p = buildProposal(gctx, {
+      type: 'hook', severity: 'info', nameSeed: 'npm test',
+      title: 'Automate npm test', body: 'b', content: 'npm test',
+      hook: { event: 'PostToolUse', matcher: 'Edit|Write', command: 'npm test' },
+      evidence: { sessions: [], prompts: [], detail: 'd' },
+    });
+    expect(p.targetPath).toBe(path.join(ctx.projectRoot, '.gemini', 'settings.json'));
+    expect(applyProposal(p, ctx.homeDir)).toBe('applied');
+    const settings = JSON.parse(fs.readFileSync(p.targetPath, 'utf-8'));
+    expect(settings.hooks.AfterTool).toEqual([
+      { matcher: 'write_file|replace', hooks: [{ type: 'command', command: 'npm test' }] },
+    ]);
+    expect(settings.hooks.PostToolUse).toBeUndefined();
+    expect(fs.existsSync(path.join(ctx.projectRoot, '.claude', 'settings.json'))).toBe(false);
+  }
+  it('REQ-AGENTSWITCH-003.A2: a Gemini hook proposal lands in .gemini/settings.json under AfterTool', reqAgentswitch003A2);
+
+  function reqAgentswitch003A3() {
+    const gctx: ReflectContext = { ...ctx, host: GEMINI_CLI_TRAITS };
+    const p = buildProposal(gctx, {
+      type: 'memory_rule', scope: 'project', severity: 'high', nameSeed: 'foo.ts',
+      title: 'Prefer specship_explore', body: 'b', content: 'Use specship_explore for foo.ts.',
+      evidence: { sessions: ['s1'], prompts: [], detail: 'd' },
+    });
+    expect(p.targetPath).toBe(path.join(ctx.projectRoot, 'GEMINI.md'));
+    fs.writeFileSync(p.targetPath, '# My project\n\nHand-written notes.\n');
+    expect(applyProposal(p, ctx.homeDir)).toBe('applied');
+    const body = fs.readFileSync(p.targetPath, 'utf-8');
+    expect(body).toContain('Hand-written notes.');
+    const id = (p.payload as { markerId: string }).markerId;
+    expect(body).toContain(`<!-- SPECSHIP_LEARNING:${id} -->`);
+    expect(body).toContain(`<!-- /SPECSHIP_LEARNING:${id} -->`);
+    expect(fs.existsSync(path.join(ctx.projectRoot, 'CLAUDE.md'))).toBe(false);
+
+    // A portable rule goes to Gemini's user-wide memory file, as a marked block.
+    const portable = buildProposal(gctx, {
+      type: 'memory_rule', scope: 'portable', severity: 'warn', nameSeed: 'prefer-search',
+      title: 'Prefer specship_search', body: 'habit', content: 'Use specship_search.',
+      evidence: { sessions: [], prompts: [], detail: 'd' },
+    });
+    expect(portable.targetPath).toBe(path.join(ctx.homeDir, '.gemini', 'GEMINI.md'));
+    expect(applyProposal(portable, ctx.homeDir)).toBe('applied');
+    expect(fs.readFileSync(portable.targetPath, 'utf-8')).toContain(
+      `SPECSHIP_LEARNING:${(portable.payload as { markerId: string }).markerId}`,
+    );
+    expect(undoProposal(portable, ctx.homeDir)).toBe('undone');
+  }
+  it('REQ-AGENTSWITCH-003.A3: a Gemini memory proposal lands in a SpecShip-marked GEMINI.md block', reqAgentswitch003A3);
+
+  it('keeps Claude proposals byte-identical when no host is given', () => {
+    const input = {
+      type: 'hook' as const, severity: 'info' as const, nameSeed: 'npm test',
+      title: 'Automate npm test', body: 'b', content: 'npm test',
+      hook: { event: 'PostToolUse', matcher: 'Edit|Write', command: 'npm test' },
+      evidence: { sessions: [], prompts: [], detail: 'd' },
+    };
+    const none = buildProposal(ctx, input);
+    expect(buildProposal({ ...ctx, host: CLAUDE_CODE_TRAITS }, input)).toEqual(none);
+    expect(none.targetPath).toBe(path.join(ctx.projectRoot, '.claude', 'settings.json'));
+    expect(none.payload).toMatchObject({ event: 'PostToolUse', matcher: 'Edit|Write' });
   });
 });

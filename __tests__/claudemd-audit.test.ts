@@ -13,7 +13,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
-import { auditClaudeMd, runClaudeMdAudit, readClaudeMdAudit } from '../src/claudemd/audit';
+import { auditClaudeMd, runClaudeMdAudit, readClaudeMdAudit, auditMemoryFiles } from '../src/claudemd/audit';
 
 describe('claudemd audit', () => {
   let dir: string;
@@ -144,5 +144,53 @@ describe('claudemd audit', () => {
     write('.claude/worktrees/w1/CLAUDE.md', '# copy\n');
     const a = auditClaudeMd(dir);
     expect(a.files).toEqual(['CLAUDE.md']);
+  });
+});
+
+// --- REQ-AGENTSWITCH-003: the audit covers each installed agent's memory file ---
+
+describe('memory-file audit per agent (REQ-AGENTSWITCH-003)', () => {
+  let root: string;
+  beforeEach(() => {
+    root = fs.mkdtempSync(path.join(os.tmpdir(), 'cmd-audit-agents-'));
+    fs.mkdirSync(path.join(root, '.specship'));
+  });
+  afterEach(() => {
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+  const long = (n: number) => Array.from({ length: n }, (_, i) => `line ${i}`).join('\n');
+
+  function reqAgentswitch003A1() {
+    fs.mkdirSync(path.join(root, '.gemini'));
+    fs.writeFileSync(path.join(root, 'GEMINI.md'), long(250));
+    const audit = auditClaudeMd(root);
+    expect(audit.files).toEqual(['GEMINI.md']);
+    expect(audit.findings).toContainEqual(expect.objectContaining({ kind: 'root-too-long', file: 'GEMINI.md' }));
+    expect(audit.findings.filter((f) => `${f.file} ${f.detail}`.includes('CLAUDE.md'))).toEqual([]);
+    expect(auditMemoryFiles(audit)).toEqual(['GEMINI.md']);
+  }
+  it('REQ-AGENTSWITCH-003.A1: a Gemini-only project is audited on GEMINI.md, never CLAUDE.md', reqAgentswitch003A1);
+
+  it('covers both memory files on a two-agent project and names each finding\'s file', () => {
+    fs.writeFileSync(path.join(root, 'CLAUDE.md'), long(250));
+    fs.mkdirSync(path.join(root, '.gemini'));
+    fs.writeFileSync(path.join(root, 'GEMINI.md'), '# root\n');
+    fs.mkdirSync(path.join(root, 'src'));
+    fs.writeFileSync(path.join(root, 'src', 'GEMINI.md'), long(130));
+    const audit = auditClaudeMd(root);
+    expect(audit.files).toEqual(['CLAUDE.md', 'GEMINI.md', 'src/GEMINI.md']);
+    expect(audit.findings).toContainEqual(expect.objectContaining({ kind: 'root-too-long', file: 'CLAUDE.md' }));
+    expect(audit.findings).toContainEqual(expect.objectContaining({ kind: 'nested-too-long', file: 'src/GEMINI.md' }));
+    expect(auditMemoryFiles(audit)).toEqual(['CLAUDE.md', 'GEMINI.md']);
+  });
+
+  it('re-audits when a GEMINI.md changes (fingerprint covers every agent)', () => {
+    fs.mkdirSync(path.join(root, '.gemini'));
+    fs.writeFileSync(path.join(root, 'GEMINI.md'), '# root\n');
+    const first = runClaudeMdAudit(root)!;
+    fs.writeFileSync(path.join(root, 'GEMINI.md'), long(250));
+    const second = runClaudeMdAudit(root)!;
+    expect(second.hash).not.toBe(first.hash);
+    expect(second.findings.map((f) => f.kind)).toContain('root-too-long');
   });
 });

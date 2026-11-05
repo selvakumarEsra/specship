@@ -9,6 +9,8 @@
  * per-proposal apply (REQ-REFLECT-005).
  */
 
+import type { HostTraits } from '../activation/hook-output';
+
 /** The kind of durable artifact a proposal produces. */
 export type ProposalType = 'memory_rule' | 'skill' | 'hook' | 'style_rule' | 'domain_fact';
 
@@ -100,4 +102,10 @@ export interface ReflectContext {
    * the miner has no graph access. Absent → the domain-fact lane is silent.
    */
   domainGapEntities?: Array<{ name: string; kind: string }>;
+  /**
+   * The agent the proposals are for (REQ-AGENTSWITCH-003): its memory file,
+   * settings file and hook names pick the write targets. Absent → the
+   * default host (Claude Code), so pre-adapter callers are byte-identical.
+   */
+  host?: HostTraits;
 }

@@ -1,8 +1,9 @@
 /**
  * CLAUDE.md governance audit (CLAUDEMD-DOC).
  *
- * Deterministic structure/reference checks over a project's CLAUDE.md
- * hierarchy — root router + nested module files. Detection only: rewrites
+ * Deterministic structure/reference checks over a project's agent memory-file
+ * hierarchies — root router + nested module files — one per agent the project
+ * is set up for (REQ-AGENTSWITCH-003: CLAUDE.md, GEMINI.md). Detection only: rewrites
  * are drafted in-session through the check door and human-gated
  * (REQ-CLAUDEMD-004); nothing in this module writes to a CLAUDE.md.
  *
@@ -15,6 +16,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { writeJsonAtomic, readJsonSafe } from '../statusline/paths';
 import { getSpecShipDir } from '../directory';
+import { agentsInProject, ALL_HOST_TRAITS, DEFAULT_HOST_TRAITS, type HostTraits } from '../activation/hook-output';
 
 export type ClaudeMdFindingKind =
   | 'missing-root'
@@ -36,7 +38,7 @@ export interface ClaudeMdAudit {
   at: number;
   /** Fingerprint of the inputs that produced this audit (REQ-CLAUDEMD-001.A2). */
   hash: string;
-  /** Project-relative paths of every CLAUDE.md discovered. */
+  /** Project-relative paths of every agent memory file discovered. */
   files: string[];
   findings: ClaudeMdFinding[];
 }
@@ -65,10 +67,11 @@ function auditPath(projectRoot: string): string {
  * files and per-directory package-manifest presence for the
  * module-candidate check. Never throws — unreadable dirs are skipped.
  */
-function discover(projectRoot: string): {
+function discover(projectRoot: string, hosts: readonly HostTraits[]): {
   claudeMds: string[];
   manifestDirs: string[];
 } {
+  const memoryFiles = new Set(hosts.map((h) => h.memoryFile));
   const claudeMds: string[] = [];
   const manifestDirs: string[] = [];
   const walk = (dir: string, depth: number): void => {
@@ -85,7 +88,7 @@ function discover(projectRoot: string): {
       if (e.isDirectory()) {
         if (SKIP_DIRS.has(e.name) || e.name.startsWith('.')) continue;
         walk(abs, depth + 1);
-      } else if (e.name === 'CLAUDE.md') {
+      } else if (memoryFiles.has(e.name)) {
         claudeMds.push(rel);
       } else if (depth > 0 && (e.name === 'package.json' || e.name === 'pyproject.toml' || e.name === 'Cargo.toml' || e.name === 'go.mod')) {
         manifestDirs.push(path.dirname(rel).split(path.sep).join('/'));
@@ -97,7 +100,12 @@ function discover(projectRoot: string): {
 }
 
 /** Cheap non-crypto fingerprint over discovery + file stats (FNV-1a). */
-function fingerprint(projectRoot: string, claudeMds: string[], manifestDirs: string[]): string {
+function fingerprint(
+  projectRoot: string,
+  claudeMds: string[],
+  manifestDirs: string[],
+  hosts: readonly HostTraits[],
+): string {
   let h = 0x811c9dc5;
   const mix = (s: string) => {
     for (let i = 0; i < s.length; i++) {
@@ -105,6 +113,12 @@ function fingerprint(projectRoot: string, claudeMds: string[], manifestDirs: str
       h = Math.imul(h, 0x01000193);
     }
   };
+  // Which agents are audited changes the findings (a newly installed agent's
+  // missing root file), so it is part of the input. The default-host-only
+  // case mixes nothing, keeping pre-adapter fingerprints unchanged.
+  if (!(hosts.length === 1 && hosts[0] === DEFAULT_HOST_TRAITS)) {
+    for (const host of hosts) mix(`h:${host.id}`);
+  }
   for (const rel of claudeMds) {
     mix(rel);
     try {
@@ -158,9 +172,10 @@ function dupCandidates(body: string): Set<string> {
  * Pure given the filesystem; never throws.
  */
 export function auditClaudeMd(projectRoot: string): ClaudeMdAudit {
-  const { claudeMds, manifestDirs } = discover(projectRoot);
+  const hosts = agentsInProject(projectRoot);
+  const { claudeMds, manifestDirs } = discover(projectRoot, hosts);
   const findings: ClaudeMdFinding[] = [];
-  const hash = fingerprint(projectRoot, claudeMds, manifestDirs);
+  const hash = fingerprint(projectRoot, claudeMds, manifestDirs, hosts);
 
   const bodies = new Map<string, string>();
   for (const rel of claudeMds) {
@@ -171,17 +186,37 @@ export function auditClaudeMd(projectRoot: string): ClaudeMdAudit {
     }
   }
 
-  const rootRel = claudeMds.find((p) => p === 'CLAUDE.md') ?? null;
+  // Each agent's memory files form their own hierarchy (REQ-AGENTSWITCH-003):
+  // the root/nested, duplication and coverage checks never mix agents.
+  for (const host of hosts) {
+    const name = host.memoryFile;
+    const files = claudeMds.filter((p) => path.posix.basename(p) === name);
+    auditHierarchy(projectRoot, name, files, bodies, manifestDirs, findings);
+  }
+
+  return { v: 1, at: Date.now(), hash, files: claudeMds, findings };
+}
+
+/** The deterministic checks over one agent's memory-file hierarchy. */
+function auditHierarchy(
+  projectRoot: string,
+  name: string,
+  files: string[],
+  bodies: Map<string, string>,
+  manifestDirs: string[],
+  findings: ClaudeMdFinding[],
+): void {
+  const rootRel = files.find((p) => p === name) ?? null;
   if (!rootRel) {
     findings.push({
       kind: 'missing-root',
-      file: 'CLAUDE.md',
-      detail: 'no root CLAUDE.md — sessions start without project grounding',
+      file: name,
+      detail: `no root ${name} — sessions start without project grounding`,
     });
   }
 
   // Size caps (root router bar / nested cap).
-  for (const rel of claudeMds) {
+  for (const rel of files) {
     const body = bodies.get(rel);
     if (body === undefined) continue;
     const lines = body.split('\n').length;
@@ -189,7 +224,7 @@ export function auditClaudeMd(projectRoot: string): ClaudeMdAudit {
       findings.push({
         kind: 'root-too-long',
         file: rel,
-        detail: `${lines} lines (router bar is ${ROOT_MAX_LINES}) — split module content into nested CLAUDE.md files`,
+        detail: `${lines} lines (router bar is ${ROOT_MAX_LINES}) — split module content into nested ${name} files`,
       });
     } else if (rel !== rootRel && lines > NESTED_MAX_LINES) {
       findings.push({
@@ -203,7 +238,7 @@ export function auditClaudeMd(projectRoot: string): ClaudeMdAudit {
   // Verbatim duplication root ↔ nested.
   if (rootRel) {
     const rootLines = dupCandidates(bodies.get(rootRel) ?? '');
-    for (const rel of claudeMds) {
+    for (const rel of files) {
       if (rel === rootRel) continue;
       const body = bodies.get(rel);
       if (body === undefined) continue;
@@ -219,10 +254,10 @@ export function auditClaudeMd(projectRoot: string): ClaudeMdAudit {
     }
   }
 
-  // Stale path references. A mention resolves relative to the CLAUDE.md's
+  // Stale path references. A mention resolves relative to the memory file's
   // own directory first (nested files naturally use module-relative paths),
   // then the project root.
-  for (const rel of claudeMds) {
+  for (const rel of files) {
     const body = bodies.get(rel);
     if (body === undefined) continue;
     const ownDir = path.join(projectRoot, path.dirname(rel));
@@ -237,10 +272,10 @@ export function auditClaudeMd(projectRoot: string): ClaudeMdAudit {
     }
   }
 
-  // Module candidates: own manifest, no own CLAUDE.md (and none in a parent
+  // Module candidates: own manifest, no own memory file (and none in a parent
   // BELOW root — root coverage alone is what makes it a candidate).
   const nestedDirs = new Set(
-    claudeMds.filter((p) => p !== 'CLAUDE.md').map((p) => path.dirname(p).split(path.sep).join('/'))
+    files.filter((p) => p !== name).map((p) => path.dirname(p).split(path.sep).join('/'))
   );
   for (const dir of manifestDirs) {
     const covered = [...nestedDirs].some((n) => dir === n || dir.startsWith(`${n}/`));
@@ -248,12 +283,10 @@ export function auditClaudeMd(projectRoot: string): ClaudeMdAudit {
       findings.push({
         kind: 'module-candidate',
         file: dir,
-        detail: 'has its own package manifest but no CLAUDE.md — consider a nested file if it carries distinct invariants or verification',
+        detail: `has its own package manifest but no ${name} — consider a nested file if it carries distinct invariants or verification`,
       });
     }
   }
-
-  return { v: 1, at: Date.now(), hash, files: claudeMds, findings };
 }
 
 /**
@@ -263,8 +296,9 @@ export function auditClaudeMd(projectRoot: string): ClaudeMdAudit {
 export function runClaudeMdAudit(projectRoot: string): ClaudeMdAudit | null {
   try {
     const stored = readJsonSafe<ClaudeMdAudit>(auditPath(projectRoot));
-    const { claudeMds, manifestDirs } = discover(projectRoot);
-    const hash = fingerprint(projectRoot, claudeMds, manifestDirs);
+    const hosts = agentsInProject(projectRoot);
+    const { claudeMds, manifestDirs } = discover(projectRoot, hosts);
+    const hash = fingerprint(projectRoot, claudeMds, manifestDirs, hosts);
     if (stored?.v === 1 && stored.hash === hash) return stored;
     const audit = auditClaudeMd(projectRoot);
     writeJsonAtomic(auditPath(projectRoot), audit);
@@ -272,6 +306,24 @@ export function runClaudeMdAudit(projectRoot: string): ClaudeMdAudit | null {
   } catch {
     return null; // a governance pass must never affect the sync
   }
+}
+
+/**
+ * The memory file a finding is about (REQ-AGENTSWITCH-003): the finding's own
+ * file when it is one, else the memory file its detail names (a
+ * module-candidate finding points at a directory).
+ */
+export function findingMemoryFile(f: ClaudeMdFinding): string {
+  const names = ALL_HOST_TRAITS.map((h) => h.memoryFile);
+  const base = path.posix.basename(f.file);
+  if (names.includes(base)) return base;
+  return names.find((n) => f.detail.includes(n)) ?? DEFAULT_HOST_TRAITS.memoryFile;
+}
+
+/** The distinct memory files an audit's findings are about, in registry order. */
+export function auditMemoryFiles(audit: ClaudeMdAudit): string[] {
+  const hit = new Set(audit.findings.map(findingMemoryFile));
+  return ALL_HOST_TRAITS.map((h) => h.memoryFile).filter((n) => hit.has(n));
 }
 
 /** Reader for surfacing (sync --drift-summary, check door, status). */

@@ -16,6 +16,7 @@
  */
 
 import { SqliteDatabase } from '../db/sqlite-adapter';
+import { DEFAULT_HOST_TRAITS } from '../activation/hook-output';
 import { buildProposal } from './targets';
 import { Proposal, ReflectContext } from './types';
 
@@ -665,6 +666,7 @@ function ruleReferenceDoc(db: SqliteDatabase, ctx: ReflectContext, forms: PathFo
     s: number;
     sessions: string;
   }>;
+  const memoryFile = (ctx.host ?? DEFAULT_HOST_TRAITS).memoryFile;
   return rows.map((r) => {
     const base = r.file.split('/').pop() || r.file;
     return buildProposal(ctx, {
@@ -672,8 +674,8 @@ function ruleReferenceDoc(db: SqliteDatabase, ctx: ReflectContext, forms: PathFo
       scope: 'project',
       severity: 'warn',
       nameSeed: `reference-${base}`,
-      title: `Reference ${base} from CLAUDE.md`,
-      body: `${base} was read in ${r.s} separate sessions — context the agent keeps rediscovering. Pointing at it from CLAUDE.md (or importing it with @path) keeps it on hand without a Read each time.`,
+      title: `Reference ${base} from ${memoryFile}`,
+      body: `${base} was read in ${r.s} separate sessions — context the agent keeps rediscovering. Pointing at it from ${memoryFile} (or importing it with @path) keeps it on hand without a Read each time.`,
       content: `\`${base}\` is frequently-needed context. Add a short pointer to it here (or import it with \`@${r.file}\`) so its guidance is always in context instead of re-Read each session.`,
       evidence: {
         sessions: (r.sessions || '').split(',').filter(Boolean).slice(0, 8),

@@ -119,6 +119,8 @@ import {
   FlowDiagramResult,
 } from './diagram/flow-diagram';
 import { ContextBuilder, createContextBuilder } from './context';
+import { hostTraitsFor } from './activation/hook-output';
+import { agentFromEnv } from './agents/detect';
 import { Mutex, FileLock } from './utils';
 import { FileWatcher, WatchOptions, PendingFile, LockUnavailableError } from './sync';
 import {
@@ -668,7 +670,14 @@ export class SpecShip {
     } catch {
       domainGapEntities = undefined;
     }
-    return { projectRoot: this.projectRoot, homeDir: os.homedir(), domainGapEntities };
+    // Proposals target the agent this process serves (REQ-AGENTSWITCH-003);
+    // an undetectable agent maps to the default host.
+    return {
+      projectRoot: this.projectRoot,
+      homeDir: os.homedir(),
+      domainGapEntities,
+      host: hostTraitsFor(agentFromEnv()),
+    };
   }
 
   /**
