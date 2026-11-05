@@ -349,3 +349,25 @@ export function packageAssetPath(...segments: string[]): string {
   const fromRoot = path.join(__dirname, '..', '..', '..', ...segments);
   return fs.existsSync(fromDist) ? fromDist : fromRoot;
 }
+
+/**
+ * After a target removed the skill files it shipped (`names`, relative to
+ * `root`), drop the per-skill directories that are now empty — deepest first,
+ * so `references/` goes before its parent. A user-authored file left inside
+ * keeps its directory alive, and `root` itself is never removed. Shared by the
+ * Claude and Gemini skills removers so both prune identically
+ * (REQ-AUTHG-007.A3, REQ-AGENTSWITCH-005.A1).
+ */
+export function pruneEmptySkillDirs(root: string, names: readonly string[]): void {
+  const dirs = [...new Set(names.map((name) => path.dirname(path.join(root, name))))]
+    .sort((a, b) => b.split(path.sep).length - a.split(path.sep).length);
+  const skillRoots = [...new Set(names.map((name) => path.join(root, name.split('/')[0]!)))];
+  for (const dir of [...dirs, ...skillRoots]) {
+    if (dir === root) continue;
+    try {
+      if (fs.existsSync(dir) && fs.readdirSync(dir).length === 0) fs.rmdirSync(dir);
+    } catch {
+      // Leave the directory in place if it can't be removed — never fatal.
+    }
+  }
+}

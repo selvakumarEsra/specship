@@ -141,7 +141,8 @@ You still need `specship init -i` in each project (step 3) so there's an index t
 | `/specship:*` slash commands | ✓ | ✓ rendered as Gemini TOML commands |
 | Workflow prompt steps (`specship workflow run`, `/specship:spec implement`) | ✓ | ✓ with `--agent gemini`, or automatically when launched from Gemini CLI — single steps checked live; a full implement run has not been measured |
 | Auto-approved SpecShip tools | ✓ | ✓ read-only tools only, opt-in with `--trust`; an administrator policy still wins |
-| `specship-explorer` subagent | ✓ | — |
+| Skills (`spec-author`, `design-md`) | ✓ | ✓ with Gemini CLI 0.28.0 or newer; skipped with a note otherwise |
+| `specship-explorer` subagent | ✓ | ✓ with Gemini CLI 0.28.0 or newer — Gemini subagents are experimental and off until you set `experimental.enableAgents` |
 | Status-line segment | ✓ | — |
 <!-- capability-matrix:end -->
 

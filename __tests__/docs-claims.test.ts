@@ -103,7 +103,8 @@ function capabilityMatrixMatchesTheInstaller(): void {
   const note = notes.find((n) => /no equivalent surface/.test(n));
   expect(note, 'the Gemini install prints its capability note').toBeTruthy();
   const lacking = unsupportedSurfacesInNote(note!).sort();
-  expect(lacking).toEqual(['specship explorer subagent', 'status line']);
+  // The explorer subagent and skills install on a supporting Gemini CLI (REQ-AGENTSWITCH-005).
+  expect(lacking).toEqual(['status line']);
 
   for (const doc of CAPABILITY_MATRIX_DOCS) {
     const rows = capabilityMatrixRows(fs.readFileSync(path.join(ROOT, doc), 'utf8'));

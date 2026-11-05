@@ -9,9 +9,12 @@ sets up Claude Code alone.
 
 What Gemini CLI gets is the SpecShip **MCP server** — the same server Claude
 Code launches, with the same code-graph and spec tools — plus a `GEMINI.md`
-steering block, hooks, and the `/specship:*` commands. Two Claude Code
-surfaces have no Gemini equivalent and are not installed: the
-`specship-explorer` subagent and the status line. See
+steering block, hooks, and the `/specship:*` commands. With Gemini CLI
+0.28.0 or newer it also gets the `spec-author` and `design-md` skills and the
+`specship-explorer` subagent (Gemini subagents are experimental: set
+`experimental.enableAgents` to use it); an older or undetected Gemini CLI gets
+a note naming what was skipped. The status line has no Gemini equivalent and
+is not installed. See
 [the full comparison](#what-gemini-cli-gets--and-doesnt).
 
 ## Install
@@ -92,7 +95,8 @@ needs; Gemini Pro gets full output. Set `SPECSHIP_MODEL` to force a tier. See
 | `/specship:*` slash commands | ✓ | ✓ rendered as Gemini TOML commands |
 | Workflow prompt steps (`specship workflow run`, `/specship:spec implement`) | ✓ | ✓ with `--agent gemini`, or automatically when launched from Gemini CLI — single steps checked live; a full implement run has not been measured |
 | Auto-approved SpecShip tools | ✓ | ✓ read-only tools only, opt-in with `--trust`; an administrator policy still wins |
-| `specship-explorer` subagent | ✓ | — |
+| Skills (`spec-author`, `design-md`) | ✓ | ✓ with Gemini CLI 0.28.0 or newer; skipped with a note otherwise |
+| `specship-explorer` subagent | ✓ | ✓ with Gemini CLI 0.28.0 or newer — Gemini subagents are experimental and off until you set `experimental.enableAgents` |
 | Status-line segment | ✓ | — |
 <!-- capability-matrix:end -->
 

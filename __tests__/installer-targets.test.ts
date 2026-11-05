@@ -71,8 +71,13 @@ function setHome(dir: string): { restore: () => void } {
     USERPROFILE: process.env.USERPROFILE,
     APPDATA: process.env.APPDATA,
     XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME,
+    SPECSHIP_GEMINI_VERSION: process.env.SPECSHIP_GEMINI_VERSION,
   };
   process.env.HOME = dir;
+  // Pin the Gemini version probe to "not found" so these suites don't depend
+  // on whether the host has `gemini` on PATH (REQ-AGENTSWITCH-005 gates skills
+  // and the subagent on it; that path is covered in gemini-skills-agents.test.ts).
+  process.env.SPECSHIP_GEMINI_VERSION = 'none';
   process.env.USERPROFILE = dir;
   process.env.APPDATA = path.join(dir, '.config');
   process.env.XDG_CONFIG_HOME = path.join(dir, '.config');
@@ -82,6 +87,7 @@ function setHome(dir: string): { restore: () => void } {
       if (prev.USERPROFILE === undefined) delete process.env.USERPROFILE; else process.env.USERPROFILE = prev.USERPROFILE;
       if (prev.APPDATA === undefined) delete process.env.APPDATA; else process.env.APPDATA = prev.APPDATA;
       if (prev.XDG_CONFIG_HOME === undefined) delete process.env.XDG_CONFIG_HOME; else process.env.XDG_CONFIG_HOME = prev.XDG_CONFIG_HOME;
+      if (prev.SPECSHIP_GEMINI_VERSION === undefined) delete process.env.SPECSHIP_GEMINI_VERSION; else process.env.SPECSHIP_GEMINI_VERSION = prev.SPECSHIP_GEMINI_VERSION;
     },
   };
 }
@@ -1360,9 +1366,10 @@ describe('Gemini target — specifics', () => {
   }
 
   /**
-   * REQ-AUTHG-007.A1 — the spec-author skill is a Claude-only asset. Gemini has
-   * no skills surface, so even a governance-tier (`sdd: true`) install must not
-   * write one, in either scope.
+   * REQ-AUTHG-007.A1 — nothing Claude-shaped is written for Gemini, and with no
+   * skills-capable Gemini CLI found (the probe is pinned to "none" here) no
+   * Gemini skill is written either. A supporting version installs them under
+   * `.gemini/skills` — REQ-AGENTSWITCH-005.A1, gemini-skills-agents.test.ts.
    */
   function geminiInstallWritesNoSkill(): void {
     geminiTarget.install('local', { autoAllow: true, sdd: true });
@@ -1682,7 +1689,7 @@ describe('Gemini target — specifics', () => {
   it('uninstall on a virgin home returns not-found without throwing (REQ-GEMINI-002.A2)', geminiUninstallOnVirginHomeIsNotFound);
   it('re-install preserves an integration a previous install enabled (REQ-GEMINI-003.A2)', geminiReinstallPreservesIntegrations);
   it('names every unsupported surface in one note and writes nothing else (REQ-GEMINI-006.A1, REQ-GEMINI-006.A2)', geminiInstallNotesUnsupportedSurfaces);
-  it('never installs the spec-author skill (REQ-AUTHG-007.A1)', geminiInstallWritesNoSkill);
+  it('never installs the spec-author skill without a skills-capable Gemini CLI (REQ-AUTHG-007.A1)', geminiInstallWritesNoSkill);
   it('npm-uninstall sweeps the Gemini entry too (REQ-GEMINI-008)', geminiEntrySweptByRegistryUninstall);
   it('install preserves user content outside the markers (REQ-GEMINI-004.A1)', geminiInstallPreservesUserGeminiMdContent);
   it('uninstall strips only our block, deletes an empty file (REQ-GEMINI-004.A2)', geminiUninstallStripsOnlyOurBlock);
@@ -1720,7 +1727,7 @@ describe('Gemini target — specifics', () => {
       .map((f) => f.replace(/\.toml$/, '')).sort();
     expect(geminiNames).toEqual(claudeNames);
     expect(geminiNames).toEqual([...SHIPPED].sort());
-    expect(result.notes?.join('\n')).not.toMatch(/skipped/);
+    expect(result.notes?.join('\n')).not.toMatch(/skipped \//);
 
     for (const name of SHIPPED) {
       const source = fs.readFileSync(path.join(repoCommandsDir, 'specship', `${name}.md`), 'utf-8');

@@ -41,9 +41,15 @@ new file + one registry entry.
   Being in `allTargets()` does NOT make it install by default:
   `resolveInstallTargets` maps absent / `claude` / `auto` / `all` to Claude
   alone, so Gemini is reachable only by naming it (`--target gemini`,
-  `--target claude,gemini`). Everything Gemini has no equivalent for
-  (the explorer subagent, the status line) is left unwritten and named in
-  `WriteResult.notes` — never faked, never half-installed (REQ-GEMINI-006).
+  `--target claude,gemini`). Sixth, the `spec-author` / `design-md` skills
+  under `<gemini dir>/skills/` and the `specship-explorer` subagent under
+  `<gemini dir>/agents/` (REQ-AGENTSWITCH-005), gated on
+  `probeGeminiVersion()` ≥ 0.28.0 — an older or unknown version is skipped
+  with a note and the install still exits 0; `SPECSHIP_GEMINI_VERSION`
+  overrides the probe (tests pin it). Uninstall always strips both.
+  Everything Gemini has no equivalent for (the status line) is left
+  unwritten and named in `WriteResult.notes` — never faked, never
+  half-installed (REQ-GEMINI-006).
   Don't add any OTHER agent target without an equally explicit
   ask — this fork's selling point is the smaller surface.
 - Any installer change needs matching coverage in
