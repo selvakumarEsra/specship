@@ -382,7 +382,20 @@ instead be configured to read the project's `CLAUDE.md` alongside
 MCP servers, user commands and user skills MUST NOT be copied or moved.
 
 implementations:
-  - src/installer/targets/gemini.ts
+  - src/installer/targets/gemini.ts:writeGeminiContextFilesEntry
+  - src/installer/targets/gemini.ts:removeGeminiContextFilesEntry
+  - src/installer/targets/gemini.ts:GeminiCliTarget.install
+  - src/installer/targets/gemini.ts:GeminiCliTarget.uninstall
+  - src/installer/agent-record.ts:AgentRecordEntry
+  - src/installer/agent-record.ts:readAddedContextFiles
+  - src/installer/agent-record.ts:setAddedContextFiles
+  - src/installer/agent-record.ts:recordInstall
+verifies:
+  - __tests__/agent-switch-user-content.test.ts:reqAgentswitch009A1
+  - __tests__/agent-switch-user-content.test.ts:reqAgentswitch009A2
+  - __tests__/agent-switch-user-content.test.ts:reqAgentswitch009A3
+  - __tests__/agent-switch-user-content.test.ts:reqAgentswitch009A4
+  - __tests__/agent-switch-user-content.test.ts:reqAgentswitch009NoClaudeMd
 
 ## Acceptance
 <!-- id: REQ-AGENTSWITCH-009.A1 -->

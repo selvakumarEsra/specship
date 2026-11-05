@@ -81,7 +81,7 @@ function instructionsPath(loc: Location): string {
  * `~/.claude/CLAUDE.md`. The spec-driven-development steering rule goes here so
  * the agent actually reads it.
  */
-function claudeMdPath(loc: Location): string {
+export function claudeMdPath(loc: Location): string {
   return loc === 'global'
     ? path.join(os.homedir(), '.claude', 'CLAUDE.md')
     : path.join(process.cwd(), 'CLAUDE.md');

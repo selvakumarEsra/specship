@@ -20,6 +20,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { resolveInstallDir } from '../update/updater';
 import { ALL_TARGETS } from './targets/registry';
+import { journalFile } from './targets/shared';
 import type { AgentTarget, Location, TargetId } from './targets/types';
 
 export const AGENT_RECORD_FILE = 'installed-agents.json';
@@ -40,6 +41,14 @@ export interface AgentRecordEntry {
    * from config files, where the original choices are unknown.
    */
   choices?: InstallChoices;
+  /**
+   * Context file names SpecShip itself added to the agent's context-file
+   * setting (REQ-AGENTSWITCH-009), so uninstall removes only those and never
+   * a name the user listed. Bare file names only — SpecShip state, never
+   * user content. Absent when SpecShip added none, and for entries rebuilt
+   * from config files (then uninstall leaves the setting untouched).
+   */
+  addedContextFiles?: string[];
 }
 
 export interface InstallChoices {
@@ -67,7 +76,25 @@ export function currentSpecshipVersion(): string {
   }
 }
 
-const KNOWN_AGENTS = new Set<string>(ALL_TARGETS.map((t) => t.id));
+// Built on first use, not at module load: a target module imports this file
+// (REQ-AGENTSWITCH-009), so the registry may still be loading when it runs.
+let knownAgentsCache: Set<string> | null = null;
+function knownAgents(): Set<string> {
+  if (!knownAgentsCache) knownAgentsCache = new Set<string>(ALL_TARGETS.map((t) => t.id));
+  return knownAgentsCache;
+}
+
+/** A bare file name: no directory part, no `..`, nothing to traverse with. */
+function isBareFileName(v: unknown): v is string {
+  return typeof v === 'string' && v.length > 0 && v.length <= 255
+    && v === path.basename(v) && !/[\\/]/.test(v) && v !== '.' && v !== '..';
+}
+
+function cleanFileNames(raw: unknown): string[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const names = [...new Set(raw.filter(isBareFileName))];
+  return names.length > 0 ? names : undefined;
+}
 
 /**
  * Whitelist one entry (A4): only the five known fields survive, each
@@ -77,7 +104,7 @@ const KNOWN_AGENTS = new Set<string>(ALL_TARGETS.map((t) => t.id));
 function sanitizeEntry(raw: unknown): AgentRecordEntry | null {
   if (!raw || typeof raw !== 'object') return null;
   const r = raw as Record<string, unknown>;
-  if (typeof r.agent !== 'string' || !KNOWN_AGENTS.has(r.agent)) return null;
+  if (typeof r.agent !== 'string' || !knownAgents().has(r.agent)) return null;
   if (r.scope !== 'global' && r.scope !== 'local') return null;
   if (typeof r.version !== 'string' || typeof r.recordedAt !== 'string') return null;
   const entry: AgentRecordEntry = {
@@ -98,6 +125,8 @@ function sanitizeEntry(raw: unknown): AgentRecordEntry | null {
     }
     if (Object.keys(choices).length > 0) entry.choices = choices;
   }
+  const added = cleanFileNames(r.addedContextFiles);
+  if (added) entry.addedContextFiles = added;
   return entry;
 }
 
@@ -151,16 +180,29 @@ export function writeAgentRecord(record: AgentRecord, env: NodeJS.ProcessEnv = p
     // missing / unreadable → write
   }
   fs.mkdirSync(path.dirname(file), { recursive: true });
+  // Inside an open write journal (auto-migrate), a rollback restores the
+  // record too — not only the target's files.
+  journalFile(file);
   const tmp = `${file}.${process.pid}.tmp`;
   fs.writeFileSync(tmp, next, { mode: 0o600 });
   fs.renameSync(tmp, file);
   return true;
 }
 
+/** Resolved, symlink-free root, so `/var/…` and `/private/var/…` compare equal. */
+function canonicalRoot(p: string): string {
+  const abs = path.resolve(p);
+  try {
+    return fs.realpathSync(abs);
+  } catch {
+    return abs;
+  }
+}
+
 function sameKey(e: AgentRecordEntry, agent: TargetId, scope: Location, projectRoot?: string): boolean {
   if (e.agent !== agent || e.scope !== scope) return false;
   if (scope === 'global') return true;
-  return path.resolve(e.projectRoot ?? '') === path.resolve(projectRoot ?? '');
+  return canonicalRoot(e.projectRoot ?? '') === canonicalRoot(projectRoot ?? '');
 }
 
 function makeEntry(
@@ -194,8 +236,13 @@ export function recordInstall(
   // A missing/unreadable record is rebuilt first, so other agents' entries
   // are not lost when this install is the first write.
   const current = readAgentRecord(env) ?? rebuildAgentRecord(projectRoot ?? process.cwd(), ALL_TARGETS, version);
+  const prior = current.entries.find((e) => sameKey(e, agent, scope, projectRoot));
   const entries = current.entries.filter((e) => !sameKey(e, agent, scope, projectRoot));
-  entries.push(makeEntry(agent, scope, projectRoot, version, choices));
+  const next = makeEntry(agent, scope, projectRoot, version, choices);
+  // What the target recorded during this install (or an earlier one) about
+  // names it added survives the rewrite (REQ-AGENTSWITCH-009).
+  if (prior?.addedContextFiles) next.addedContextFiles = [...prior.addedContextFiles];
+  entries.push(next);
   const record: AgentRecord = { schemaVersion: 1, entries };
   writeAgentRecord(record, env);
   return record;
@@ -216,6 +263,49 @@ export function recordUninstall(
   const record: AgentRecord = { schemaVersion: 1, entries };
   writeAgentRecord(record, env);
   return record;
+}
+
+/**
+ * The context file names SpecShip added for (agent, scope, projectRoot)
+ * (REQ-AGENTSWITCH-009). `null` when the record or entry is missing or holds
+ * none — callers must then leave the setting alone.
+ */
+export function readAddedContextFiles(
+  agent: TargetId,
+  scope: Location,
+  projectRoot?: string,
+  env: NodeJS.ProcessEnv = process.env,
+): string[] | null {
+  const root = scope === 'local' ? (projectRoot ?? process.cwd()) : undefined;
+  const entry = readAgentRecord(env)?.entries.find((e) => sameKey(e, agent, scope, root));
+  return entry?.addedContextFiles ? [...entry.addedContextFiles] : null;
+}
+
+/**
+ * Store the context file names SpecShip added for (agent, scope,
+ * projectRoot). Creates the entry when the install has not been recorded yet;
+ * the `recordInstall` that follows keeps the list. An empty list clears it.
+ */
+export function setAddedContextFiles(
+  agent: TargetId,
+  scope: Location,
+  projectRoot: string | undefined,
+  names: readonly string[],
+  env: NodeJS.ProcessEnv = process.env,
+): void {
+  const root = scope === 'local' ? (projectRoot ?? process.cwd()) : undefined;
+  const clean = cleanFileNames([...names]);
+  const current = readAgentRecord(env) ?? rebuildAgentRecord(root ?? process.cwd(), ALL_TARGETS);
+  const entries = current.entries.map((e) => ({ ...e }));
+  let entry = entries.find((e) => sameKey(e, agent, scope, root));
+  if (!entry) {
+    if (!clean) return;
+    entry = makeEntry(agent, scope, root, currentSpecshipVersion());
+    entries.push(entry);
+  }
+  if (clean) entry.addedContextFiles = clean;
+  else delete entry.addedContextFiles;
+  writeAgentRecord({ schemaVersion: 1, entries }, env);
 }
 
 /**
