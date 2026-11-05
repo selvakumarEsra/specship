@@ -17,6 +17,7 @@ import { spawnSync } from 'child_process';
 import {
   GEMINI_MIN_AGENTS,
   GEMINI_MIN_SKILLS,
+  GEMINI_SKILL_MARKER_FILE,
   geminiAgentsDir,
   geminiSkillsDir,
   geminiTarget,
@@ -156,7 +157,8 @@ function reqAgentswitch005A3(): void {
   expect(unknown).toMatch(/skipped subagent specship-explorer — needs Gemini CLI >= 0\.28\.0 \(Gemini CLI version not found\)/);
 
   // CLI level: the real binary prints the skip and exits 0.
-  if (!fs.existsSync(BIN)) return;
+  // The built CLI is required here — a missing build must fail, not silently pass.
+  expect(fs.existsSync(BIN), `${BIN} missing — run npm run build`).toBe(true);
   const run = spawnSync(
     process.execPath,
     [BIN, 'install', '--target', 'gemini', '--location', 'local', '--yes', '--skip-index'],
@@ -173,8 +175,30 @@ function reqAgentswitch005A3(): void {
   expect(out).toContain(GEMINI_MIN_AGENTS);
 }
 
+/** A1 — a skill the user authored at one of our paths is theirs: install keeps it, uninstall leaves it. */
+function reqAgentswitch005A1UserSkillKept(): void {
+  process.env.SPECSHIP_GEMINI_VERSION = GEMINI_MIN_SKILLS;
+  const skills = geminiSkillsDir('local');
+  const mine = path.join(skills, 'spec-author', 'SKILL.md');
+  const body = '---\nname: spec-author\ndescription: my own\n---\nmine\n';
+  fs.mkdirSync(path.dirname(mine), { recursive: true });
+  fs.writeFileSync(mine, body);
+
+  const installed = geminiTarget.install('local', { autoAllow: false });
+  expect(fs.readFileSync(mine, 'utf-8')).toBe(body);
+  expect(installed.files.find((f) => f.path === mine)?.action).toBe('kept');
+  // The other shipped skill (no user copy) is installed and marked.
+  expect(fs.existsSync(path.join(skills, 'design-md', 'SKILL.md'))).toBe(true);
+  expect(fs.existsSync(path.join(skills, 'design-md', GEMINI_SKILL_MARKER_FILE))).toBe(true);
+
+  geminiTarget.uninstall('local');
+  expect(fs.readFileSync(mine, 'utf-8')).toBe(body);
+  expect(fs.existsSync(path.join(skills, 'design-md'))).toBe(false);
+}
+
 describe('REQ-AGENTSWITCH-005 — Gemini skills + explorer subagent', () => {
   it('REQ-AGENTSWITCH-005.A1: a skills-capable Gemini gets spec-author + design-md; uninstall leaves user skills', reqAgentswitch005A1);
+  it('REQ-AGENTSWITCH-005.A1: a user-authored skill at a shipped path is kept by install and uninstall', reqAgentswitch005A1UserSkillKept);
   it('REQ-AGENTSWITCH-005.A2: the installed subagent names specship_explore, never mcp__specship__specship_explore', reqAgentswitch005A2);
   it('REQ-AGENTSWITCH-005.A3: without subagent support the install names the skipped subagent + needed version and exits 0', reqAgentswitch005A3, 90_000);
 });

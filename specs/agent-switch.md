@@ -277,9 +277,14 @@ implementations:
   - src/installer/targets/gemini.ts:GeminiCliTarget.install
   - src/installer/targets/gemini.ts:GeminiCliTarget.uninstall
   - src/installer/targets/shared.ts:pruneEmptySkillDirs
+  - src/installer/targets/gemini.ts:renderGeminiSkillFile
+  - src/installer/targets/gemini.ts:toGeminiToolProse
+  - src/installer/targets/gemini.ts:geminiSkillsDir
+  - src/installer/targets/gemini.ts:geminiAgentsDir
 
 verifies:
   - __tests__/gemini-skills-agents.test.ts:reqAgentswitch005A1
+  - __tests__/gemini-skills-agents.test.ts:reqAgentswitch005A1UserSkillKept
   - __tests__/gemini-skills-agents.test.ts:reqAgentswitch005A2
   - __tests__/gemini-skills-agents.test.ts:reqAgentswitch005A3
 

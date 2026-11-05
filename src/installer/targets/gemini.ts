@@ -778,7 +778,8 @@ export function probeGeminiVersion(): string | null {
     const res = spawnSync('gemini', ['--version'], {
       encoding: 'utf-8',
       windowsHide: true,
-      timeout: 15000,
+      // Short: this also runs inside automatic agent set-up (MCP sessions, git hooks).
+      timeout: 3000,
       shell: process.platform === 'win32',
     });
     if (res.status === 0) {
@@ -845,9 +846,39 @@ function writeIfChanged(dest: string, content: string): WriteResult['files'][num
  * dir (REQ-AGENTSWITCH-005.A1). Same file list as the Claude target, so the
  * two installs cannot diverge. Sibling user skills are never touched.
  */
+/** Marks a skill directory as written by SpecShip, so install and uninstall touch only their own. */
+export const GEMINI_SKILL_MARKER_FILE = '.specship-installed';
+
+/** The top-level skill directories we ship (`spec-author`, `design-md`). */
+function shippedSkillRoots(): string[] {
+  return [...new Set(SHIPPED_SKILLS.map((f) => f.split('/')[0]!))];
+}
+
+/**
+ * A skill directory is SpecShip's to write when it does not exist yet, already
+ * carries our marker, or holds no SKILL.md (an empty leftover). A directory a
+ * user authored — a SKILL.md and no marker — is theirs and is never touched.
+ */
+function ownsSkillDir(skillDir: string): boolean {
+  if (!fs.existsSync(skillDir)) return true;
+  if (fs.existsSync(path.join(skillDir, GEMINI_SKILL_MARKER_FILE))) return true;
+  return !fs.existsSync(path.join(skillDir, 'SKILL.md'));
+}
+
 export function writeGeminiSkillsEntries(loc: Location): WriteResult['files'] {
   const dir = geminiSkillsDir(loc);
-  return SHIPPED_SKILLS.map((name) => writeIfChanged(path.join(dir, name), renderGeminiSkillFile(name)));
+  const files: WriteResult['files'] = [];
+  for (const root of shippedSkillRoots()) {
+    const skillDir = path.join(dir, root);
+    const ours = SHIPPED_SKILLS.filter((f) => f.startsWith(root + '/'));
+    if (!ownsSkillDir(skillDir)) {
+      for (const f of ours) files.push({ path: path.join(dir, f), action: 'kept' });
+      continue;
+    }
+    for (const f of ours) files.push(writeIfChanged(path.join(dir, f), renderGeminiSkillFile(f)));
+    writeIfChanged(path.join(skillDir, GEMINI_SKILL_MARKER_FILE), 'Written by specship install (REQ-AGENTSWITCH-005).\n');
+  }
+  return files;
 }
 
 /**
@@ -857,12 +888,27 @@ export function writeGeminiSkillsEntries(loc: Location): WriteResult['files'] {
  */
 export function removeGeminiSkillsEntries(loc: Location): WriteResult['files'] {
   const dir = geminiSkillsDir(loc);
-  const files: WriteResult['files'] = SHIPPED_SKILLS.map((name) => {
-    const dest = path.join(dir, name);
-    if (!fs.existsSync(dest)) return { path: dest, action: 'not-found' };
-    removeFileSync(dest);
-    return { path: dest, action: 'removed' };
-  });
+  const files: WriteResult['files'] = [];
+  for (const root of shippedSkillRoots()) {
+    const skillDir = path.join(dir, root);
+    const marker = path.join(skillDir, GEMINI_SKILL_MARKER_FILE);
+    const ours = SHIPPED_SKILLS.filter((f) => f.startsWith(root + '/'));
+    // Only a directory SpecShip marked is removed; a user's own skill stays.
+    if (!fs.existsSync(marker)) {
+      for (const f of ours) {
+        const dest = path.join(dir, f);
+        files.push({ path: dest, action: fs.existsSync(dest) ? 'kept' : 'not-found' });
+      }
+      continue;
+    }
+    for (const f of ours) {
+      const dest = path.join(dir, f);
+      if (!fs.existsSync(dest)) { files.push({ path: dest, action: 'not-found' }); continue; }
+      removeFileSync(dest);
+      files.push({ path: dest, action: 'removed' });
+    }
+    removeFileSync(marker);
+  }
   pruneEmptySkillDirs(dir, SHIPPED_SKILLS);
   return files;
 }
