@@ -35,10 +35,11 @@ describe('REQ-AGENTSWITCH-017 — agent-specific code lives in the adapter layer
     // The Gemini adapter never reaches into the Claude one.
     const gemini = fs.readFileSync(path.join(ROOT, 'server/src/ingest/transcripts/gemini.ts'), 'utf-8');
     expect(gemini).not.toMatch(/claude-jsonl/);
-    // Only the Claude adapter, the ingest barrel and the line-format branch import the Claude parser.
+    // Only the Claude adapter and the ingest barrel import the Claude parser; the
+    // shared ingestor reaches the line format through the adapter interface.
     const importers = [...walkTs('server/src'), ...walkTs('src')].filter((f) =>
       /claude-jsonl/.test(fs.readFileSync(path.join(ROOT, f), 'utf-8')) && !f.endsWith('claude-jsonl.ts'));
-    expect(importers.sort()).toEqual(['server/src/ingest/index.ts', 'server/src/ingest/ingestor.ts', 'server/src/ingest/transcripts/claude.ts']);
+    expect(importers.sort()).toEqual(['server/src/ingest/index.ts', 'server/src/ingest/transcripts/claude.ts']);
     expect(HOST_LITERAL_ALLOWLIST).toEqual([]);
     expect(scanHostLiterals(ROOT)).toEqual([]);
   }

@@ -39,8 +39,6 @@ import {
 } from './types.js';
 import { computeCost, resolvePricing } from './pricing.js';
 import { toEpochMs } from './transcripts/shared.js';
-// The line-format branch below reads Claude's JSONL shape through its adapter.
-import { extractUserPrompt, toolResultLength } from './transcripts/claude-jsonl.js';
 import { classifyToolCall } from './specship-classify.js';
 import type { GraphLike } from './specship-classify.js';
 import { transcriptAdapters, decodeProjectSlug, listClaudeTranscriptFiles } from './transcripts/index.js';
@@ -668,7 +666,7 @@ function processLines(
       // Bookkeep session row first.
       insSession.run(sessionId, projectPath, filePath, ts, ts, null);
 
-      const text = extractUserPrompt(entry);
+      const text = adapter.extractUserPrompt(entry);
       const promptId = entry.promptId ?? entry.uuid ?? null;
       const isSidechain = entry.isSidechain ? 1 : 0;
 
@@ -711,7 +709,7 @@ function processLines(
       if (Array.isArray(content)) {
         for (const block of content) {
           if (block && block.type === 'tool_result' && block.tool_use_id) {
-            const len = toolResultLength(block);
+            const len = adapter.toolResultLength(block);
             const pending = pendingTools.get(block.tool_use_id);
             if (pending) {
               const cls = classifyToolCall(

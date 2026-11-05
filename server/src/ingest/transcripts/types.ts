@@ -15,7 +15,7 @@
  *                  DOM-SPECSHIP-007).
  */
 import type { HostId } from '../../host-profiles.js';
-import type { ClaudeRawEntry } from '../types.js';
+import type { ClaudeRawEntry, ClaudeContentBlock } from '../types.js';
 
 /** One transcript file and the project it belongs to. */
 export interface TranscriptFile {
@@ -82,6 +82,10 @@ export interface JsonlTranscriptAdapter extends AdapterBase {
   format: 'jsonl';
   parseLine(line: string): ClaudeRawEntry | null;
   summarizeToolInput(name: string, input: Record<string, unknown> | undefined): string;
+  /** The user-visible prompt text of a user entry (REQ-AGENTSWITCH-017). */
+  extractUserPrompt(entry: ClaudeRawEntry): string;
+  /** Size of a tool-result block, for the result-length analytics. */
+  toolResultLength(block: ClaudeContentBlock | undefined): number;
 }
 
 export interface DocumentTranscriptAdapter extends AdapterBase {

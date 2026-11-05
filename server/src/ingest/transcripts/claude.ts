@@ -12,7 +12,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { CLAUDE_PROFILE } from '../../host-profiles.js';
-import { parseLine } from './claude-jsonl.js';
+import { extractUserPrompt, parseLine, toolResultLength } from './claude-jsonl.js';
 import { summarizeToolInput } from './shared.js';
 import type { JsonlTranscriptAdapter, TranscriptFile } from './types.js';
 
@@ -60,4 +60,6 @@ export const claudeTranscriptAdapter: JsonlTranscriptAdapter = {
   normalizeToolName: (raw) => raw,
   parseLine,
   summarizeToolInput,
+  extractUserPrompt,
+  toolResultLength,
 };
