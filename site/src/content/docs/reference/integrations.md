@@ -1,9 +1,9 @@
 ---
-title: MCP & Claude Code wiring
-description: How SpecShip wires itself into Claude Code — the MCP server registration, permissions, hooks, slash commands, the opt-in Gemini CLI target, and the manual wire-up if you prefer to do it yourself.
+title: MCP & agent wiring
+description: How SpecShip wires itself into Claude Code and Gemini CLI — the MCP server registration, permissions, hooks, slash commands, the Gemini CLI target, automatic setup on an agent switch, and the manual wire-up if you prefer to do it yourself.
 ---
 
-SpecShip is built for Claude Code. The `specship install` command does the wiring for you; this page exists for two cases:
+SpecShip supports Claude Code and Gemini CLI. The `specship install` command does the wiring for you (with no `--target` it wires the agent it runs under); the sections below walk through the Claude Code install, and [Gemini CLI](#gemini-cli) covers the Gemini one; this page exists for two cases:
 
 1. **You want to know what it does**, before you let it edit your config files.
 2. **You want to wire it up by hand** — the install command refuses, or you're scripting around it.
@@ -132,9 +132,9 @@ specship uninstall --keep-data   # only unwire from Claude Code
 
 A plain `uninstall` removes SpecShip completely. That means the MCP entry, permissions, hooks, status line, slash commands and steering rule, plus the current project's `.specship/` index, the `~/.specship` directory (including saved JIRA credentials), and the `specship` program itself. It shows what it will delete and asks first; `--yes` skips the prompt. Indexes in other projects aren't found automatically, and the command says so. With `--keep-data`, only the wiring is removed; pass `--location global` to remove a global install's wiring.
 
-## Gemini CLI (opt-in)
+## Gemini CLI
 
-SpecShip is Claude Code only, with one exception: Gemini CLI. It's never wired by default.
+Gemini CLI is the second supported agent. A plain `specship install` wires it when run from a Gemini CLI shell (`GEMINI_CLI=1`); anywhere else, pass `--target gemini`.
 
 ```bash
 specship install --target gemini                  # Gemini CLI only
@@ -142,10 +142,23 @@ specship install --target claude,gemini           # both agents
 specship install --print-config --target gemini   # just print the snippet
 ```
 
-This writes the `specship` entry into Gemini CLI's `mcpServers` — `~/.gemini/settings.json` globally, or `<project>/.gemini/settings.json` with `--location local`. Any other servers and settings in that file are left alone, and re-running changes nothing. Gemini CLI gets the **MCP tools only**: no hooks, slash commands, subagent, status line or permissions auto-allow, because Gemini CLI has no equivalent for those. The install prints a note listing exactly what's missing.
+This writes the `specship` entry into Gemini CLI's `mcpServers` — `~/.gemini/settings.json` globally, or `<project>/.gemini/settings.json` with `--location local`. Any other servers and settings in that file are left alone, and re-running changes nothing. Alongside the MCP entry, a Gemini install writes:
+
+- the retrieval and spec-first steering blocks in `GEMINI.md`;
+- hooks on `BeforeAgent`, `SessionStart`, `AfterTool` and `BeforeTool` (including `run_shell_command`);
+- the `/specship:*` commands as Gemini TOML commands;
+- with Gemini CLI 0.28.0 or newer, the `spec-author` and `design-md` skills under `.gemini/skills/` and the `specship-explorer` subagent under `.gemini/agents/`. The subagent needs Gemini's `experimental.enableAgents` setting, which SpecShip does not turn on; the install prints a note;
+- `CLAUDE.md` in Gemini's `context.fileName`, so Gemini reads it in place (it is never copied);
+- with `--trust`, `~/.gemini/policies/specship.toml`, which auto-approves the read-only SpecShip tools.
+
+Only the status line has no Gemini equivalent. A Gemini CLI extension also ships in the package at `gemini-extension/` (`gemini extensions install <path-to-package>/gemini-extension`).
+
+### Automatic setup on an agent switch
+
+SpecShip records the agents it is installed for in `~/.specship/installed-agents.json`. When it notices it is running under the other agent — from the MCP client name, the agent's launcher variable (`GEMINI_CLI` / `CLAUDECODE`) when a `specship` command (including the git hook's `specship sync`) runs in its shell, or a hook event only one agent sends — it installs its own files for that agent. It prints one line naming what it wrote and the undo command (`specship uninstall --target <id> --local|--global`). The spec-driven, auto-allow and integration choices carry over, the `--trust` policy only when auto-allow was on. It works in both directions, never rewrites your own content, and puts files back if a write fails. An agent that never runs anything of SpecShip can't be detected. Opt out with `SPECSHIP_AUTO_MIGRATE=0` or `"autoMigrate": false` in `specship.config.json`.
 
 SpecShip reads the model from `GEMINI_MODEL` or `model` in `.gemini/settings.json` (read-only), so a Gemini Flash session gets the compact output meant for lightweight models. To remove just the Gemini entry, run `specship uninstall --target gemini --keep-data`. See the [Gemini CLI guide](/guides/gemini-cli/) for the full walkthrough.
 
 ## Other agents
 
-The installer and tests cover Claude Code (plus the opt-in Gemini CLI target) on purpose — a smaller surface is easier to keep correct. If you need SpecShip in another agent that speaks MCP, point that agent's MCP config at `specship serve --mcp` yourself. The protocol is standard and the server will work, but the install flow won't do the wiring for you.
+The installer and tests cover Claude Code and Gemini CLI on purpose — a smaller surface is easier to keep correct. If you need SpecShip in another agent that speaks MCP, point that agent's MCP config at `specship serve --mcp` yourself. The protocol is standard and the server will work, but the install flow won't do the wiring for you.

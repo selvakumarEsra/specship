@@ -125,7 +125,7 @@ esac
 #    project-local install from here would land in the bundle directory.
 # REQ-AGENTSWITCH-006.A3: with no explicit wiring flag, reinstall for every
 # agent in the installed-agents record first. Exit 3 = nothing recorded, so
-# fall through to the first-install Claude Code wiring below.
+# fall through to the first-install wiring of the chosen agent below.
 if [ "$SKIP_CLAUDE" -eq 0 ] && [ "$WIRE_GLOBAL" -eq 0 ] && [ -z "$WIRE_PATH" ]; then
   rc=0
   "$NODE" --liftoff-only "$DEST/lib/dist/bin/specship.js" install --replay-recorded || rc=$?

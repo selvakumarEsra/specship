@@ -9,7 +9,10 @@
   target's platform — an extracted specship-<target>\ directory, or a
   specship-<target>.zip / .tar.gz archive — and it delegates to the installer
   baked inside that bundle (install.ps1), which adds the launcher to PATH and
-  wires Claude Code via the machine's Node.
+  wires the chosen coding agent via the machine's Node. With no -Target the
+  bundle installer picks the agent whose shell runs it (GEMINI_CLI=1 means
+  Gemini CLI), else Claude Code, and reinstalls every agent already recorded
+  as installed first.
 
   Bundles come from the GitHub Releases page on a connected machine, or
   scripts/build-bundle.sh. Building from a source checkout is a different flow.
@@ -17,15 +20,26 @@
 .PARAMETER Bundle
   Path to the bundle: an extracted directory or a .zip / .tar.gz archive.
 
+.PARAMETER Target
+  The coding agent to wire: claude or gemini. Forwarded to the bundle's
+  install.ps1 as -Target.
+
 .PARAMETER SkipClaude
-  Install onto PATH only; leave Claude Code config untouched.
+  Install onto PATH only; leave the agent's config untouched (alias: -SkipWire).
+
+.PARAMETER Global
+  Wire the agent globally (all projects) without asking.
+
+.PARAMETER Path
+  Wire the agent for a specific repo (project-local; indexes that repo).
 
 .PARAMETER Undo
   Reverse the install (remove the install directory and its PATH entry).
 
 .EXAMPLE
   .\scripts\offline-install.ps1 .\specship-win32-x64.zip
-  .\scripts\offline-install.ps1 .\specship-win32-x64\ -SkipClaude
+  .\scripts\offline-install.ps1 .\specship-win32-x64.zip -Target gemini -Global
+  .\scripts\offline-install.ps1 .\specship-win32-x64\ -SkipWire
   .\scripts\offline-install.ps1 -Undo
 
   Environment:
@@ -35,7 +49,12 @@
 param(
   [Parameter(Position = 0)]
   [string]$Bundle,
+  [ValidateSet('claude', 'gemini')]
+  [string]$Target,
+  [Alias('SkipWire')]
   [switch]$SkipClaude,
+  [switch]$Global,
+  [string]$Path,
   [switch]$Undo
 )
 
@@ -92,7 +111,13 @@ try {
 
   Write-Host "[offline-install] installing from bundle: $bundleDir"
   $installer = Join-Path $bundleDir 'install.ps1'
-  if ($SkipClaude) { & $installer -SkipClaude } else { & $installer }
+  # Forward the agent choice and wiring flags to the bundle's installer.
+  $fwd = @{}
+  if ($Target) { $fwd['Target'] = $Target }
+  if ($SkipClaude) { $fwd['SkipClaude'] = $true }
+  if ($Global) { $fwd['Global'] = $true }
+  if ($Path) { $fwd['Path'] = $Path }
+  & $installer @fwd
 }
 finally {
   if ($cleanup -and (Test-Path $cleanup)) { Remove-Item -Recurse -Force $cleanup }

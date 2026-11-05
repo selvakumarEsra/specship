@@ -35,7 +35,7 @@ cd specship-<target>
 ./install.sh                        # .\install.ps1 on Windows
 ```
 
-That symlinks `specship` onto your `PATH`, then asks where to wire Claude Code — globally or a specific repo (`--global` / `--path <repo>` for scripts) — using your machine's Node (22.5–24.x); nothing is compiled on the target. From a checkout, `./scripts/offline-install.sh <bundle>` (`.ps1` on Windows) does the same given a downloaded bundle. See [Offline / air-gapped install](https://specship.cc/getting-started/installation/#offline--air-gapped-install) for the full walkthrough.
+That symlinks `specship` onto your `PATH`, then asks where to wire your coding agent — globally or a specific repo (`--global` / `--path <repo>` for scripts) — using your machine's Node (22.5–24.x); nothing is compiled on the target. Pass `--target gemini` (`-Target gemini` on Windows) to wire Gemini CLI; without it the installer wires the agent whose shell runs it, else Claude Code, and agents SpecShip was already installed for are reinstalled first. `--skip-wire` installs onto `PATH` only. From a checkout, `./scripts/offline-install.sh <bundle>` (`.ps1` on Windows) does the same given a downloaded bundle, passing those flags on. See [Offline / air-gapped install](https://specship.cc/getting-started/installation/#offline--air-gapped-install) for the full walkthrough.
 
 ### 2. Wire up Claude Code
 
@@ -72,6 +72,7 @@ An actual environment variable (shell `export`, or Claude Code's `settings.json`
 | `SPECSHIP_INTEGRATIONS` | Written by the installer for `--with-jira`/`--with-designer` — which optional tool groups the MCP server exposes |
 | `SPECSHIP_WATCH_DEBOUNCE_MS` | Auto-sync debounce window (default 2000, clamped 100ms–60s) |
 | `SPECSHIP_NO_DAEMON=1` | Disable the file watcher (sandboxed environments) |
+| `SPECSHIP_AUTO_MIGRATE=0` | Turn off automatic setup when you switch coding agents (same as `"autoMigrate": false` in `specship.config.json`) |
 
 The full generated list lives in the [CLI reference](https://specship.cc/reference/cli/#environment-variables).
 
@@ -86,15 +87,21 @@ specship install --target gemini                  # Gemini CLI only
 specship install --target claude,gemini           # both agents
 ```
 
-A plain `specship install` still wires Claude Code alone — Gemini is opt-in. The install writes, preserving any other servers, settings and hooks already there:
+A plain `specship install` wires the agent it runs under: Gemini CLI from a Gemini CLI shell, Claude Code otherwise. A Gemini install writes, preserving any other servers, settings and hooks already there:
 
 - the `specship` MCP server entry in your Gemini settings file (`~/.gemini/settings.json` globally, `<your-project>/.gemini/settings.json` with `--location local`);
 - a short block in `GEMINI.md` telling Gemini to reach for SpecShip before searching files (plus the spec-first rule, unless you pass `--no-sdd`);
 - hooks: a per-prompt reminder, the session cheat-sheet, index sync after file writes, and a one-line pointer to SpecShip the first time a session searches with Gemini's own tools or `grep`/`rg` in the shell. Set `SPECSHIP_GEMINI_STRICT=1` to redirect Gemini's built-in file-search tools to SpecShip instead; shell commands are never blocked. Gemini runs project-level hooks only in folders you've marked trusted.
+- the `/specship:*` commands as Gemini TOML commands, and — with Gemini CLI 0.28.0 or newer — the `spec-author` and `design-md` skills under `.gemini/skills/` and the `specship-explorer` subagent under `.gemini/agents/` (the subagent needs Gemini's `experimental.enableAgents` setting, which SpecShip leaves to you);
+- `CLAUDE.md` added to Gemini's `context.fileName`, so Gemini reads your existing `CLAUDE.md` in place — it is never copied.
 
 Add `--trust` to also write `~/.gemini/policies/specship.toml`, which auto-approves SpecShip's read-only tools (explore, search, callers, impact, …) so they stop asking for confirmation. Tools that write — JIRA, link changes, Designer — still ask. **An administrator policy always overrides this file**, and it does not affect Gemini's confirmation prompt for shell commands.
 
 `specship uninstall --target gemini --keep-data` removes exactly what the install wrote.
+
+**Switching agents sets SpecShip up automatically.** Once SpecShip is installed for one agent, the first time it runs under the other (an MCP session, a `specship` command or the git hook in that agent's shell) it installs its own files for that agent, carries over your spec-driven / auto-allow / integration choices, and prints one line naming what it wrote and the undo command. It works in both directions and never rewrites your own content. Opt out with `SPECSHIP_AUTO_MIGRATE=0` or `"autoMigrate": false` in `specship.config.json`. An agent that never runs anything of SpecShip can't be detected — run `specship install --target <agent>` there yourself. See [Switching agents](https://specship.cc/guides/gemini-cli/#switching-agents-automatic-setup).
+
+**Prefer an extension?** The package ships a Gemini CLI extension at `gemini-extension/`: `gemini extensions install <path-to-package>/gemini-extension` (or `gemini extensions link` for a local checkout).
 
 <details>
 <summary>Prefer to paste it in by hand?</summary>
@@ -241,7 +248,7 @@ Customize by dropping your own `<project>/.specship/workflows/<name>.yaml` (proj
 
 ## Self-Improving, With You in the Loop
 
-SpecShip observes your Claude Code sessions and gets smarter every time you use it — without ever changing anything behind your back:
+SpecShip observes your Claude Code and Gemini CLI sessions and gets smarter every time you use it — without ever changing anything behind your back:
 
 - **It crystallizes what worked.** A completed multi-step workflow run becomes a reusable recipe proposal; a command you kept correcting into a working form becomes a "use this form" rule; recurring corrections are captured with the context they followed. Run `/specship:learn` to crystallize the current session's workflow on demand.
 - **It learns your conventions and your domain.** A style correction you've repeated across sessions ("use our logger, not console.log") becomes a proposed project convention, kept in a file SpecShip owns (never your CLAUDE.md) and injected at the start of every session once applied. A term your sessions keep discussing without domain documentation gets a drafted fact file under `specs/domain/`. Capture either on demand with `/specship:learn` (style or domain lane). The background pass piggybacks on sync at most every few hours; turn it off with `reflect.autoSweep: false` in `specship.config.json`.
@@ -269,7 +276,7 @@ When Claude Code explores a codebase, it spawns **Explore agents** that scan fil
 | **Framework-aware Routes** | Recognizes web-framework routing files and links URL patterns to their handlers across 14 frameworks |
 | **Spec Traceability** | Requirements linked to the code that implements them and the tests that prove them, with drift detection, test-evidence coverage, spec lint, and a CI enforcement gate |
 | **Small-Model Ready** | On a lightweight model (Haiku, Gemini Flash) SpecShip switches to its Lite tier — compact guidance, a slimmer tool menu, and fewer files returned with complete source — so cheap models still answer in one call |
-| **Desktop UI** | Live dashboard for cost, drift, traceability, tool-call heatmap, cache analytics, and MCP servers, plus a project picker that auto-discovers every project you've used Claude Code in |
+| **Desktop UI** | Live dashboard for cost, drift, traceability, tool-call heatmap, cache analytics, and MCP servers, plus a project picker that auto-discovers every project you've used Claude Code or Gemini CLI in |
 | **Self-Improving** | Mines your sessions for what worked, what wasted, your style conventions, and your domain terms — and proposes rules, skills, conventions, and facts you approve with a preview diff. Prior-work recall built into every explore |
 | **100% Local** | The core never leaves your machine — no API keys, no external services, SQLite only. The two optional integrations that do talk to a service (JIRA → your Atlassian instance, Designer → claude.ai, experimental) are strictly opt-in: `specship install --with-jira` / `--with-designer` |
 
@@ -310,7 +317,7 @@ The handful of cases where manual `specship sync` makes sense: the watcher is di
 The home page answers four questions in one glance — **what is the structural state of my codebase, what needs attention, what did my last session cost, and what should I do about it**:
 
 - **Status strip** — node count, edge count, drift count, and index freshness for the selected project, on every page.
-- **Project picker** — auto-discovers every project under `~/.claude/projects/`, flags each as initialized or not, and switches every project-scoped page to it.
+- **Project picker** — auto-discovers every project you've opened in Claude Code (`~/.claude/projects/`) or Gemini CLI (`~/.gemini/tmp/`), flags each as initialized or not, and switches every project-scoped page to it.
 - **Stat tiles** — last session cost, tool calls in the selected range (Today / This week / This month / All time), subagent spend share, and the drift queue size.
 - **Recent neighborhood** — an interactive mini-graph around the files you most recently touched; click a node to open it in the Graph page.
 - **Tips** — rule-based findings over your transcripts (repeated file re-reads, oversized tool results, cache misses), each with a concrete fix, Apply and Dismiss.
@@ -327,7 +334,7 @@ Sessions whose model has no pricing row are marked "unpriced" rather than shown 
 | **Traceability** | One row per requirement: code links, test links, criteria met, verdict, and drift age. |
 | **Drift queue** | Every drifted / broken / orphaned link, filterable, with repair buttons that launch the fix / re-verify / re-attach workflows. |
 | **Runs + Workflows** | Launch any bundled or project-tier workflow, follow its run, approve or reject its gates, and inspect per-step artifacts. |
-| **Sessions / Heatmap / Costs / Compare projects** | The Claude Code analytics suite — per-session prompt timelines, file/tool/subagent heatmap drill-downs, daily spend and by-model breakdown, cross-project comparison. |
+| **Sessions / Heatmap / Costs / Compare projects** | The session analytics suite, over Claude Code and Gemini CLI transcripts — per-session prompt timelines, file/tool/subagent heatmap drill-downs, daily spend and by-model breakdown, cross-project comparison. |
 | **Memory** | The full `CLAUDE.md` hierarchy plus memory-tool notes, as individual sources and as the composed effective view. |
 | **MCP** | Your configured MCP servers with live status, per-tool call stats, and enable/disable. |
 | **Settings** | Appearance, database backend, transcript-ingest toggle, and the running version. |

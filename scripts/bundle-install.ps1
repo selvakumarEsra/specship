@@ -122,7 +122,7 @@ $agentName = "agent '$Target'"
 #    project-local install from here would land in the bundle directory.
 # REQ-AGENTSWITCH-006.A3: with no explicit wiring flag, reinstall for every
 # agent in the installed-agents record first. Exit 3 = nothing recorded, so
-# fall through to the first-install Claude Code wiring below.
+# fall through to the first-install wiring of the chosen agent below.
 if (-not $SkipClaude -and -not $Global -and -not $Path) {
   $replayJs = Join-Path $dest 'lib\dist\bin\specship.js'
   & $nodeExe --liftoff-only $replayJs install --replay-recorded

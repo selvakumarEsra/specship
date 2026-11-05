@@ -8,16 +8,22 @@
 # target's platform — an extracted `specship-<target>/` directory, or a
 # `specship-<target>.tar.gz` / `.zip` archive — and it delegates to the
 # installer baked inside that bundle (which symlinks the launcher onto PATH and
-# wires Claude Code via the machine's Node).
+# wires the chosen coding agent via the machine's Node). The agent is
+# --target claude|gemini; with no --target the bundle installer picks the agent
+# whose shell runs it (GEMINI_CLI=1 means Gemini CLI), else Claude Code, and
+# reinstalls every agent already recorded as installed first.
 #
 # Get a bundle from the GitHub Releases page on a connected machine, or build
 # one with scripts/build-bundle.sh. To install from a source checkout instead
 # (requires a toolchain), see the "install from source" docs.
 #
 # Usage:
-#   ./scripts/offline-install.sh <bundle>                 # install + wire Claude Code
-#   ./scripts/offline-install.sh <bundle> --skip-claude   # install only
-#   ./scripts/offline-install.sh --undo                   # reverse the install
+#   ./scripts/offline-install.sh <bundle>                   # install + wire the agent
+#   ./scripts/offline-install.sh <bundle> --target gemini   # wire Gemini CLI
+#   ./scripts/offline-install.sh <bundle> --global          # wire globally (all projects)
+#   ./scripts/offline-install.sh <bundle> --path <repo>     # wire one repo (project-local)
+#   ./scripts/offline-install.sh <bundle> --skip-wire       # install only (alias: --skip-claude)
+#   ./scripts/offline-install.sh --undo                     # reverse the install
 #
 # Environment:
 #   SPECSHIP_INSTALL_DIR  install location  (default: ~/.specship)
@@ -42,15 +48,43 @@ if [ "${1:-}" = "--undo" ] || [ "${1:-}" = "--uninstall" ]; then
 fi
 
 # --- parse args: <bundle> plus passthrough flags -----------------------------
+# Flags are forwarded to the bundle's install.sh as separate words (a --path
+# value may contain spaces), so they are collected into the positional list.
 BUNDLE_ARG=""
-PASS=""
-for a in "$@"; do
-  case "$a" in
-    --skip-claude) PASS="$PASS --skip-claude" ;;
-    -*) echo "offline-install: unknown option '$a'" >&2; exit 1 ;;
-    *) BUNDLE_ARG="$a" ;;
+TARGET_ARG=""
+GLOBAL_ARG=0
+PATH_ARG=""
+SKIP_ARG=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --skip-claude|--skip-wire) SKIP_ARG=1 ;;
+    --global) GLOBAL_ARG=1 ;;
+    --target)
+      shift
+      [ $# -gt 0 ] || { echo "offline-install: --target requires claude or gemini" >&2; exit 1; }
+      TARGET_ARG="$1" ;;
+    --target=*) TARGET_ARG="${1#--target=}" ;;
+    --path)
+      shift
+      [ $# -gt 0 ] || { echo "offline-install: --path requires a directory" >&2; exit 1; }
+      PATH_ARG="$1" ;;
+    --path=*) PATH_ARG="${1#--path=}" ;;
+    -*) echo "offline-install: unknown option '$1'" >&2; exit 1 ;;
+    *) BUNDLE_ARG="$1" ;;
   esac
+  shift
 done
+
+case "$TARGET_ARG" in
+  ''|claude|gemini) ;;
+  *) echo "offline-install: --target must be claude or gemini (got '$TARGET_ARG')" >&2; exit 1 ;;
+esac
+
+set --
+[ -n "$TARGET_ARG" ] && set -- "$@" --target "$TARGET_ARG"
+[ "$GLOBAL_ARG" -eq 1 ] && set -- "$@" --global
+[ -n "$PATH_ARG" ] && set -- "$@" --path "$PATH_ARG"
+[ "$SKIP_ARG" -eq 1 ] && set -- "$@" --skip-wire
 
 if [ -z "$BUNDLE_ARG" ]; then
   cat >&2 <<'EOF'
@@ -104,4 +138,4 @@ fi
 # --- delegate to the bundle's own offline installer --------------------------
 echo "[offline-install] installing from bundle: $BUNDLE_DIR"
 SPECSHIP_INSTALL_DIR="$INSTALL_DIR" SPECSHIP_BIN_DIR="$BIN_DIR" \
-  sh "$BUNDLE_DIR/install.sh" $PASS
+  sh "$BUNDLE_DIR/install.sh" "$@"

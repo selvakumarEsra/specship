@@ -33,6 +33,7 @@ Every block is optional; a missing or unparseable file falls back to defaults. C
   },
   "diagram": { "enabled": true, "output": "docs/flow-diagram.md", "maxNodes": 150, "depth": 6 },
   "reflect": { "autoSweep": true, "sweepCooldownHours": 6 },
+  "autoMigrate": true,
   "jira": {
     "projectKey": "PROJ",
     "epicKey": "PROJ-12",
@@ -52,6 +53,7 @@ Every block is optional; a missing or unparseable file falls back to defaults. C
 | `diagram.output` / `diagram.maxNodes` / `diagram.depth` | Output path, node budget before modules collapse into summary nodes, and call-chain depth — same as the `specship diagram` `--output` / `--max-nodes` / `--depth` flags | `docs/flow-diagram.md` / `150` / `6` |
 | `reflect.autoSweep` | Set `false` to stop the background auto-learn pass that piggybacks on `specship sync`. On-demand capture (`/specship:learn`, `specship reflect`) is unaffected. | on |
 | `reflect.sweepCooldownHours` | Minimum hours between background learning passes | `6` |
+| `autoMigrate` | Set `false` to stop SpecShip setting itself up for a newly used coding agent (Claude Code ↔ Gemini CLI). With it off, SpecShip writes nothing on a switch and prints a one-line hint with the install command, once. Same as `SPECSHIP_AUTO_MIGRATE=0`. See [Switching agents](/guides/gemini-cli/#switching-agents-automatic-setup). | on |
 | `maintainability.thresholds` | Override `highDegree`, `largeSymbolLines`, `godFileSymbols` for the maintainability check | built-in |
 | `maintainability.exclude` | Globs excluded from the maintainability check (additive) | none |
 | `fitness.rules` | Architecture-fitness rules evaluated by `specship fitness` / `specship check` | no rules |
@@ -95,6 +97,7 @@ The settings-file chain currently covers the behavior switches (`SPECSHIP_NO_STE
 | `SPECSHIP_FORCE_WATCH=1` | Force the watcher on where it's auto-disabled (WSL2 `/mnt/*` drives) | auto |
 | `SPECSHIP_WATCH_DEBOUNCE_MS` | Auto-sync debounce after a file change (clamped 100 ms – 60 s) | `2000` |
 | `SPECSHIP_NO_DAEMON=1` | Don't share one background MCP daemon across sessions — each MCP client gets its own direct server process | shared daemon |
+| `SPECSHIP_AUTO_MIGRATE=0` | Turn off automatic setup on an agent switch. When SpecShip is installed for one agent and notices it is running under the other (from the MCP client name, the agent's `GEMINI_CLI` / `CLAUDECODE` variable when a `specship` command or the git hook runs in its shell, or a hook event only one agent sends), it installs its own files for that agent and prints what it wrote and the undo command. Same as `"autoMigrate": false` in `specship.config.json` | on |
 | `SPECSHIP_SQLITE_BACKEND` | Force the SQLite backend: `node-sqlite` (Node's built-in) or `better-sqlite3` (when installed) | `better-sqlite3` if installed, else `node-sqlite` |
 
 The complete generated list of every `SPECSHIP_*` variable the code reads is in the [CLI reference](/reference/cli/#environment-variables).
@@ -106,13 +109,13 @@ Output is sized to the model running the session — `lite` (Haiku, Gemini Flash
 1. `SPECSHIP_COMPACT=0` — tuning off entirely (full output).
 2. `SPECSHIP_MODEL` — the manual override, naming a tier or a model id.
 3. The Claude Code session model, recorded by the status line / session-start hook.
-4. Gemini CLI's own configuration: the `GEMINI_MODEL` environment variable, then `model` in `.gemini/settings.json` (your project's file first, then `~/.gemini/settings.json`). This is how a Gemini CLI session gets a tier — it has no status line or hooks to read. This step only runs when the server was launched by Gemini CLI, which `specship install --target gemini` guarantees by setting `SPECSHIP_HOST=gemini` in the MCP entry. A Claude Code session in a repo that also uses Gemini CLI is never affected by these files.
+4. Gemini CLI's own configuration: the `GEMINI_MODEL` environment variable, then `model` in `.gemini/settings.json` (your project's file first, then `~/.gemini/settings.json`). This is how a Gemini CLI session gets a tier — it has no status line to read. This step only runs when the server was launched by Gemini CLI, which `specship install --target gemini` guarantees by setting `SPECSHIP_HOST=gemini` in the MCP entry. A Claude Code session in a repo that also uses Gemini CLI is never affected by these files.
 5. Nothing detected — full output, unchanged. SpecShip never trims for a model it can't identify.
 
-Gemini settings are only ever read, never written, and an unreadable or malformed settings file is simply treated as "unknown model".
+Model detection only ever reads Gemini settings, never writes them, and an unreadable or malformed settings file is simply treated as "unknown model".
 
 ## Where data lives
 
 - **`<repo>/.specship/`** — the project's SQLite database (`specship.db`) and per-project state (`settings.json`, learned conventions). Nothing leaves your machine.
 - **`<repo>/specship.config.json`** — the optional, checked-in project file above.
-- **`~/.specship/`** — user-level state: machine-wide `settings.json`, workflow worktrees, and `jira.json` credentials if you configured JIRA.
+- **`~/.specship/`** — user-level state: machine-wide `settings.json`, workflow worktrees, `jira.json` credentials if you configured JIRA, and `installed-agents.json` — the record of which coding agents (and at which scope) SpecShip is installed for, which automatic setup on an agent switch and the offline installer's reinstall step read.

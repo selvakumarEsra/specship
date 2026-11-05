@@ -1,11 +1,11 @@
 ---
 title: Introduction
-description: SpecShip is a local-first code-intelligence graph, spec layer, and workflow engine for Claude Code — your agent answers structural questions in a few calls instead of re-reading the codebase.
+description: SpecShip is a local-first code-intelligence graph, spec layer, and workflow engine for Claude Code and Gemini CLI — your agent answers structural questions in a few calls instead of re-reading the codebase.
 ---
 
-SpecShip **stops your agent re-reading the codebase.** It parses your project with tree-sitter into a local SQLite knowledge graph and exposes it to **Claude Code** over MCP, so structural and flow questions — "how does X reach Y", "what calls this", "what breaks if I change it" — resolve in a few fast tool calls instead of a grep-and-Read crawl. On top of the graph sit ID-stable specs with test-evidenced links to code, and a YAML workflow engine that implements a spec in an isolated git worktree.
+SpecShip **stops your agent re-reading the codebase.** It parses your project with tree-sitter into a local SQLite knowledge graph and exposes it to **Claude Code** or **Gemini CLI** over MCP, so structural and flow questions — "how does X reach Y", "what calls this", "what breaks if I change it" — resolve in a few fast tool calls instead of a grep-and-Read crawl. On top of the graph sit ID-stable specs with test-evidenced links to code, and a YAML workflow engine that implements a spec in an isolated git worktree.
 
-SpecShip is built for **Claude Code**. Gemini CLI is supported as an opt-in, MCP-only target (`specship install --target gemini`) — see [Installation](/getting-started/installation/#gemini-cli-opt-in).
+SpecShip supports **Claude Code** and **Gemini CLI**. `specship install` wires the agent it runs under (or pass `--target gemini`), and both get the MCP tools, steering, hooks, `/specship:*` commands, skills and the explorer subagent — only the status line is Claude Code only. When you switch agents, SpecShip sets itself up for the new one automatically. See [Installation](/getting-started/installation/#gemini-cli).
 
 ## What it ships
 
@@ -16,7 +16,7 @@ SpecShip is built for **Claude Code**. Gemini CLI is supported as an opt-in, MCP
 | **Quality gates** | `specship check` gates drift, behaviour (test evidence), architecture fitness, maintainability, newly added lint suppressions, and (opt-in) mutation score. `specship lint` checks spec files; `specship coverage` shows which requirements and criteria have test evidence. |
 | **Workflows** | A YAML DAG runner. Bundled `spec-implement`, `spec-implement-mixed`, `spec-fix`, `spec-verify`, `spec-relink`, and more — plus anything you write. Runs in an isolated git worktree with approval gates. |
 | **Learning** | Human-gated learning from your real sessions: repeated code-style corrections become project conventions, undocumented domain terms become drafted fact files, and `/specship:learn` captures either on demand. Nothing is written without your approval. |
-| **Dashboard** | `specship desktop` — a loopback web UI over the same database: specs and traceability, the drift queue, workflow runs, and Claude Code session analytics ingested from `~/.claude/projects/*.jsonl`. |
+| **Dashboard** | `specship desktop` — a loopback web UI over the same database: specs and traceability, the drift queue, workflow runs, and session analytics ingested from Claude Code (`~/.claude/projects/*.jsonl`) and Gemini CLI (`~/.gemini/tmp/<project-hash>/chats/*.json`) transcripts. |
 
 Everything reads and writes the same local SQLite under `.specship/`. The core makes no network calls and has no API key and no telemetry. The two integrations that do talk to a service — **JIRA** (your Atlassian instance) and **Designer** (claude.ai, experimental) — are strictly opt-in (`--with-jira`, `--with-designer`).
 

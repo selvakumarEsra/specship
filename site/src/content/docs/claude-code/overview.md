@@ -1,9 +1,9 @@
 ---
 title: Claude Code — Overview
-description: SpecShip ingests ~/.claude/projects/*.jsonl transcripts in the background and surfaces sessions, heatmaps, costs, project comparison, memory, MCP servers, and tips in the desktop dashboard.
+description: SpecShip ingests Claude Code (~/.claude/projects/*.jsonl) and Gemini CLI (~/.gemini/tmp/<project-hash>/chats/*.json) transcripts in the background and surfaces sessions, heatmaps, costs, project comparison, memory, MCP servers, and tips in the desktop dashboard.
 ---
 
-SpecShip ships with deep integration into Claude Code's native data — the JSONL transcripts that Claude Code writes to `~/.claude/projects/<project>/<sessionId>.jsonl` for every session.
+SpecShip ships with deep integration into Claude Code's native data — the JSONL transcripts that Claude Code writes to `~/.claude/projects/<project>/<sessionId>.jsonl` for every session. Gemini CLI sessions are read too, from the chat files Gemini CLI writes to `~/.gemini/tmp/<project-hash>/chats/*.json`.
 
 A background ingest watcher (started in-process by `specship desktop`) tails those files, parses them, and writes per-session, per-prompt, and per-tool-call rows into SpecShip's SQLite. The dashboard's **Claude Code** section then exposes the data seven ways:
 
@@ -19,7 +19,7 @@ A background ingest watcher (started in-process by `specship desktop`) tails tho
 
 The **Project** section of the same dashboard covers your specs: the knowledge graph, the spec funnel, the **Traceability** matrix (every requirement's code links, proving tests, criteria met, verdict, and drift age), the drift queue, and workflow runs.
 
-Each page reads the same SQLite. No external services, no API keys, no telemetry — Claude Code's own JSONL is the source.
+Each page reads the same SQLite. No external services, no API keys, no telemetry — the agents' own transcript files are the source.
 
 ## What gets ingested
 
@@ -33,7 +33,7 @@ That's enough to drive every analytics surface — cost rollups, cache hit rates
 
 ## Why this matters
 
-Claude Code is unusual among coding agents in that **every session leaves an audit trail on disk**: the chat, every tool call, token counts, and cost. That's enough to:
+Claude Code and Gemini CLI both leave **an audit trail on disk for every session**: the chat, every tool call, token counts, and cost. That's enough to:
 
 - **Compute your real cache hit rate** — and find the sessions where it collapses.
 - **Spot expensive tools** — a `Read` that returned a whole god-file is a clear signal a structural query would do better.
@@ -56,15 +56,15 @@ When `specship desktop` starts:
 
 1. The HTTP server binds `127.0.0.1:4242` and serves both the API and the dashboard.
 2. The engine opens the project's SQLite (the current directory's project, else your most recent initialized one).
-3. The **ingest watcher** does a one-shot catch-up pass over `~/.claude/projects/`, then watches that directory.
+3. The **ingest watcher** does a one-shot catch-up pass over `~/.claude/projects/` and `~/.gemini/tmp/`, then watches those directories.
 
-The catch-up pass parses any new `.jsonl` files (and new lines on existing files). After that, every change triggers an incremental ingest after a short debounce, so new sessions land in the dashboard within about a second of Claude Code writing them. Pages load their data when you open them or change a filter.
+The catch-up pass parses any new transcript files (and new content in existing ones). After that, every change triggers an incremental ingest after a short debounce, so new sessions land in the dashboard within about a second of the agent writing them. Pages load their data when you open them or change a filter.
 
 The watcher is on by default; pass `--no-ingest` to turn it off, `--no-web` to run the API headless (no dashboard), and `--port` / `--host` to bind elsewhere. If no transcripts have been ingested yet, the analytics pages show how to ingest instead of empty charts.
 
 ## Privacy
 
-The ingest reads files **only from your local `~/.claude/projects/`**. Nothing is uploaded. Nothing is sent to any service — no API key, no telemetry, no analytics callback.
+The ingest reads files **only from your local `~/.claude/projects/` and `~/.gemini/tmp/`**. Nothing is uploaded. Nothing is sent to any service — no API key, no telemetry, no analytics callback.
 
 The data lives in whichever project's `.specship/specship.db` is hosting the analytics (called the "primary project"). Delete that DB and you delete the ingested data. Re-run the watcher and it re-ingests from the JSONL source of truth.
 

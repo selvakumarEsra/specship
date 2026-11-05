@@ -11,7 +11,6 @@ description: Every SpecShip command and the flags it accepts.
 | `specship index [path]` | Index all files in the project |
 | `specship sync [path]` | Sync changes since last index |
 | `specship status [path]` | Show index status and statistics |
-| `specship statusline` | Print a SpecShip status-line segment (reads Claude Code JSON on stdin) |
 | `specship query <search>` | Search for symbols in the codebase |
 | `specship files` | Show project file structure from the index |
 | `specship reflect [path-or-verb] [hash]` | Mine ingested transcripts for self-improvement proposals; review them with apply <hash> [--yes] / undo <hash> / dismi… |
@@ -39,7 +38,6 @@ description: Every SpecShip command and the flags it accepts.
 | `specship callees <symbol>` | Find all functions/methods that a specific symbol calls |
 | `specship impact <symbol>` | Analyze what code is affected by changing a symbol |
 | `specship affected [files...]` | Find test files affected by changed source files |
-| `specship install` | Install specship MCP server into Claude Code |
 | `specship doctor [path]` | Diagnose a SpecShip install (runtime · FTS5 · MCP boot · index). Exits non-zero on a usage-blocking failure. |
 | `specship starter-prompt [path]` | Print a suggested first flow/impact prompt for this project (used by the /specship:explore door). |
 | `specship cheatsheet` | Print the SpecShip session cheat-sheet (used by the SessionStart hook). |
@@ -86,7 +84,8 @@ Wires SpecShip into Claude Code and prepares the current repo's `.specship/` ind
 | `--skip-index` | Don't index the current project. Indexing runs by default. |
 | `--with-jira` | Enable the opt-in JIRA tools. In an interactive install it then offers to run `specship jira configure`. |
 | `--with-designer` | Enable the opt-in, experimental Designer tools. |
-| `-t, --target <ids>` | Which agents to wire: `claude` (default), `gemini`, or `claude,gemini`. Gemini CLI is opt-in and gets the MCP server entry only. |
+| `-t, --target <ids>` | Which agents to wire: `claude`, `gemini`, or `claude,gemini`. Default: the agent whose shell runs the install (`GEMINI_CLI=1` → `gemini`), else `claude`. A Gemini install writes the MCP entry, `GEMINI.md` steering, hooks, the `/specship:*` commands, and (Gemini CLI 0.28.0+) the skills and `specship-explorer` subagent; only the status line is Claude Code only. See the [Gemini CLI guide](/guides/gemini-cli/). |
+| `--trust` | Gemini CLI only: write `~/.gemini/policies/specship.toml`, auto-approving SpecShip's read-only tools. Opt-in; an administrator policy still wins. |
 | `--print-config` | Print the MCP config snippet and exit without writing anything. Prints the Claude Code snippet by default; add `--target gemini` for the Gemini CLI one. |
 
 ```bash

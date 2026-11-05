@@ -1,11 +1,12 @@
 ---
 title: Gemini CLI
-description: Opt-in support for wiring SpecShip's MCP server into Google's Gemini CLI — install it for you or print the snippet, global or per project, and what Gemini sessions do and don't get.
+description: Wiring SpecShip into Google's Gemini CLI — install it for you or print the snippet, global or per project, what Gemini sessions get, and automatic setup when you switch agents.
 ---
 
-SpecShip is built for Claude Code. **Gemini CLI is the one other agent it
-supports**, and only as an explicit opt-in: a plain `specship install` still
-sets up Claude Code alone.
+SpecShip supports two coding agents: **Claude Code** and **Gemini CLI**. A
+plain `specship install` wires the agent it runs under — Gemini CLI when you
+run it from a Gemini CLI shell (`GEMINI_CLI=1`), Claude Code otherwise. Pass
+`--target` to choose explicitly.
 
 What Gemini CLI gets is the SpecShip **MCP server** — the same server Claude
 Code launches, with the same code-graph and spec tools — plus a `GEMINI.md`
@@ -37,8 +38,30 @@ The installer adds a single `mcpServers.specship` entry. Any other MCP servers
 and settings already in that file are left untouched, re-running the install
 changes nothing, and an optional integration you enabled earlier
 (`--with-jira`, `--with-designer`) stays enabled. When it finishes, the
-install prints a note listing what a Claude Code install adds that Gemini CLI
-doesn't get, so you're never left assuming something is wired when it isn't.
+install prints a note for anything it skipped or that needs a step from you.
+That covers the status line, which is Claude Code only. It also covers the
+skills and the subagent on a Gemini CLI older than 0.28.0, and the
+`experimental.enableAgents` setting the subagent needs (SpecShip never turns
+it on for you).
+
+The install also adds `CLAUDE.md` to Gemini CLI's `context.fileName` list, so
+Gemini reads your existing `CLAUDE.md` in place alongside `GEMINI.md`. The file
+is never copied or rewritten.
+
+Pass `--trust` to also write `~/.gemini/policies/specship.toml`, a policy that
+auto-approves SpecShip's read-only tools. An administrator policy still wins,
+and shell commands still prompt.
+
+### Or install the Gemini CLI extension
+
+The npm package ships a Gemini CLI extension in its `gemini-extension/`
+folder. It provides the MCP server, the `/specship:*` commands and the
+steering context:
+
+```bash
+gemini extensions install <path-to-package>/gemini-extension
+gemini extensions link <path-to-package>/gemini-extension   # follow a local checkout
+```
 
 The tools answer from the project's SpecShip index. A `local` install
 initializes and indexes the current project for you (skip with
@@ -144,18 +167,32 @@ that undoes them, for example:
 SpecShip: set up Gemini CLI for this project — wrote .gemini/settings.json, GEMINI.md, .gemini/commands/specship/ (5 files). Undo: `specship uninstall --target gemini --local`
 ```
 
-The other agent's files are left exactly as they were. This happens at most
-once per agent and scope. If a write fails, the files that attempt already
+It works in both directions: Claude Code to Gemini CLI, and Gemini CLI to
+Claude Code. The choices you made for the first agent carry over — the
+spec-driven layer, auto-allow, and the optional integrations (`--with-jira`,
+`--with-designer`). Moving to Gemini CLI writes the `--trust` policy only
+when auto-allow was on for the first agent. Moving to Gemini CLI also adds
+`CLAUDE.md` to Gemini's `context.fileName`, so your memory text is read in
+place rather than copied.
+
+The other agent's files are left exactly as they were, and your own content in
+files SpecShip edits (anything outside its marked blocks) is never rewritten.
+SpecShip records which agents it is installed for in
+`~/.specship/installed-agents.json`. This happens at most once per agent and
+scope. If a write fails, the files that attempt already
 wrote are put back as they were and the next SpecShip output reports the
 failure. SpecShip doesn't retry on its own; run
 `specship install --target gemini` to try again.
 
 SpecShip can only notice a new agent when something of its own runs under
-that agent. It checks at three points:
+that agent. It checks at four points:
 
 - a SpecShip MCP session the new agent opens, for example from a user-wide
-  install or an MCP entry you added by hand;
-- a `specship` command run in the new agent's shell;
+  install or an MCP entry you added by hand (the agent is named by the MCP
+  client);
+- a `specship` command run in the new agent's shell (recognised by the
+  agent's launcher variable, `GEMINI_CLI` or `CLAUDECODE`);
+- a SpecShip hook event that only one of the agents sends;
 - the SpecShip git hook, which runs `specship sync` when you commit from that
   shell.
 

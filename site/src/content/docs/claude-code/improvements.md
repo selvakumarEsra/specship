@@ -1,9 +1,9 @@
 ---
 title: Self-improvement (Reflection)
-description: SpecShip mines your own Claude Code sessions for waste, wins, code-style conventions, and undocumented domain knowledge — and turns them into proposals you approve. Human-gated, deterministic, local.
+description: SpecShip mines your own Claude Code and Gemini CLI sessions for waste, wins, code-style conventions, and undocumented domain knowledge — and turns them into proposals you approve. Human-gated, deterministic, local.
 ---
 
-SpecShip runs a **learning loop** over your own Claude Code history: it
+SpecShip runs a **learning loop** over your own Claude Code and Gemini CLI history: it
 observes (the transcript ingest), detects patterns (deterministic mining rules —
 never an LLM guessing), proposes durable fixes, and — only after you approve —
 writes them into rules, skills, hooks, project conventions, or domain facts
@@ -144,7 +144,8 @@ To capture a mistake you never want repeated as a memory rule (a portable
 
 ## Recall: "Prior work" in explore
 
-When `specship_explore` resolves to files that past sessions edited, the
+When `specship_explore` resolves to files that past sessions (Claude Code or
+Gemini CLI) edited, the
 response includes a **Prior work** section — date, what was asked, files
 touched, workflow runs in that window — so the agent (and you) start from
 what was already done instead of rediscovering it. Deterministic, capped

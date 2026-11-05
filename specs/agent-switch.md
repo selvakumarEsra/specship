@@ -711,6 +711,11 @@ agent which never runs SpecShip cannot be detected. Both the README and the
 configuration reference MUST cover it. The offline installer wrappers MUST
 accept and pass on the bundle installer's agent choice.
 
+verifies:
+  - __tests__/docs-agent-claims.test.ts:reqAgentswitch015A1
+  - __tests__/docs-agent-claims.test.ts:reqAgentswitch015A2
+  - __tests__/docs-agent-claims.test.ts:reqAgentswitch015A3
+
 ## Acceptance
 <!-- id: REQ-AGENTSWITCH-015.A1 -->
 - A docs test fails on the phrases "MCP-only", "MCP tools only" or

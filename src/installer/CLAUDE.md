@@ -12,9 +12,9 @@ new file + one registry entry.
 
 ## Non-negotiable invariants
 
-- **Claude Code only, plus the ratified Gemini CLI exception** (explicit ask,
+- **Claude Code plus the ratified Gemini CLI target** (explicit ask,
   2026-08-22 — `specs/agent-target-gemini.md`, `GEMINI-TARGET-DOC`).
-  `targets/gemini.ts` implements the full `AgentTarget` contract over five
+  `targets/gemini.ts` implements the full `AgentTarget` contract over six
   surfaces — Gemini's `mcpServers` settings block (REQ-GEMINI-002/003),
   GEMINI.md steering (REQ-GEMINI-004: a marker-delimited retrieval-preference
   block plus the default-on SDD rule, generated from the same
@@ -38,10 +38,9 @@ new file + one registry entry.
   `gemini-commands.ts` from the same `commands/specship/*.md` source and tier
   lists the Claude target installs — one source, two renderers — with
   marker-guarded install/uninstall.
-  Being in `allTargets()` does NOT make it install by default:
-  `resolveInstallTargets` maps absent / `claude` / `auto` / `all` to Claude
-  alone, so Gemini is reachable only by naming it (`--target gemini`,
-  `--target claude,gemini`). Sixth, the `spec-author` / `design-md` skills
+  `resolveInstallTargets` maps absent / `auto` to the agent the command runs
+  under (`agentFromEnv`, REQ-AGENTSWITCH-013; undetectable → Claude) and
+  `claude` / `all` to Claude alone. Sixth, the `spec-author` / `design-md` skills
   under `<gemini dir>/skills/` and the `specship-explorer` subagent under
   `<gemini dir>/agents/` (REQ-AGENTSWITCH-005), gated on
   `probeGeminiVersion()` ≥ 0.28.0 — an older or unknown version is skipped
@@ -50,8 +49,21 @@ new file + one registry entry.
   Everything Gemini has no equivalent for (the status line) is left
   unwritten and named in `WriteResult.notes` — never faked, never
   half-installed (REQ-GEMINI-006).
-  Don't add any OTHER agent target without an equally explicit
-  ask — this fork's selling point is the smaller surface.
+  The install also adds `CLAUDE.md` to Gemini's `context.fileName` (read in
+  place, never copied). Don't add any OTHER agent target without an equally
+  explicit ask — this fork's selling point is the smaller surface.
+- **Agent switching (`AGENTSWITCH-DOC`).** `agent-record.ts` keeps
+  `~/.specship/installed-agents.json` (agent + scope + choices);
+  `install --replay-recorded` reinstalls each recorded agent and exits 3 when
+  nothing is recorded (the bundle installers fall through on 3).
+  `auto-migrate.ts` installs a newly detected agent: opt-out via
+  `SPECSHIP_AUTO_MIGRATE=0` / `"autoMigrate": false`, carries SDD /
+  auto-allow / integrations over, never rewrites user content, rolls back
+  every write on failure. `targets/feature-parity.ts` is the
+  REQ-AGENTSWITCH-010 parity map — a new surface on one target needs an entry
+  there. The Claude plugin and the Gemini extension are generated from real
+  installs (`scripts/sync-claude-plugin.mjs`,
+  `scripts/build-gemini-extension.mjs`); never hand-edit them.
 - Any installer change needs matching coverage in
   `__tests__/installer-targets.test.ts` and a CHANGELOG entry — installer
   regressions break every new install silently.
@@ -70,8 +82,8 @@ new file + one registry entry.
   `./.mcp.json` for the MCP entry; `~/.claude/settings.json` or
   `./.claude/settings.json` for permissions + hooks; commands/agents asset
   copies.
-- `targets/gemini.ts` — Gemini CLI's one surface: `~/.gemini/settings.json`
-  (global) / `./.gemini/settings.json` (local). The entry omits `type` —
+- `targets/gemini.ts` — Gemini CLI's settings file `~/.gemini/settings.json`
+  (global) / `./.gemini/settings.json` (local), plus the surfaces above. The entry omits `type` —
   Gemini allows only `'sse' | 'http'` there and infers stdio from `command`.
 - `targets/shared.ts` — JSON helpers (`getMcpServerConfig`,
   `getSpecShipPermissions`, `readJsonFile`/`writeJsonFile`,

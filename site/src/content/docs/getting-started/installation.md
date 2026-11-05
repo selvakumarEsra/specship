@@ -1,9 +1,9 @@
 ---
 title: Installation
-description: Install SpecShip and wire it into Claude Code.
+description: Install SpecShip and wire it into Claude Code or Gemini CLI.
 ---
 
-SpecShip is built for **Claude Code** — the installer wires one agent by default, so the surface stays small and easy to keep correct. The one exception is **Gemini CLI**, an opt-in, MCP-only target (see [Gemini CLI (opt-in)](#gemini-cli-opt-in)).
+SpecShip supports two coding agents: **Claude Code** and **Gemini CLI**. A plain `specship install` wires the agent it runs under — Gemini CLI from a Gemini CLI shell, Claude Code otherwise — and `--target` chooses explicitly. Both agents get the MCP tools, steering, hooks, the `/specship:*` commands, the skills and the explorer subagent; only the status line is Claude Code only (see [Gemini CLI](#gemini-cli)).
 
 **Requirement:** Node.js **22.5 or newer, below 25** — on every install route (npm, the one-line installer, and the offline bundle). SpecShip ships no runtime of its own; it runs on yours. An unsupported Node is caught up front with a message naming the supported range: the npm package declares the range at install time, and the `specship` command refuses to start on Node 25 (a V8 bug crashes grammar compilation there).
 
@@ -17,11 +17,14 @@ npm i -g @specship/specship        # online
 
 Or, with no npm and no network, use the [offline bundle](#offline--air-gapped-install): download the release archive, extract, and run its `install.sh` / `install.ps1`.
 
-## 2. Wire Claude Code
+## 2. Wire your coding agent
 
 ```bash
-specship install
+specship install                   # the agent this shell runs under (Claude Code by default)
+specship install --target gemini   # Gemini CLI — see the Gemini CLI section below
 ```
+
+The steps below describe the Claude Code install; the [Gemini CLI](#gemini-cli) section lists what a Gemini install writes.
 
 `specship install` is **wiring-only** — it never installs or updates the binary (and never touches npm). It:
 
@@ -43,7 +46,7 @@ A default install gives you the **full surface**: the retrieval layer (the agent
 
 ## Project-local vs global
 
-A no-flag `specship install` is **project-local** by default — it writes to `./.mcp.json` and `./.claude/settings.json`, so SpecShip's MCP tools only load for Claude Code sessions in this project. That keeps the always-on tool-list overhead out of sessions on unrelated projects.
+A no-flag `specship install` is **project-local** by default — it writes to `./.mcp.json` and `./.claude/settings.json`, so SpecShip's MCP tools load only for Claude Code sessions in this project. That keeps the always-on tool-list overhead out of sessions on unrelated projects.
 
 Pass `--location global` to write to `~/.claude.json` and `~/.claude/settings.json` instead, so a single install works in every project you open.
 
@@ -69,7 +72,8 @@ specship install --print-config               # print the MCP snippet, no file w
 | `--with-jira` | (boolean) enable the optional JIRA integration (talks to your Atlassian instance; never auto-allowed — Claude prompts per call) | off (core stays 100% local) |
 | `--with-designer` | (boolean) enable the optional Designer integration (**experimental** — drives claude.ai/design via a debug Chrome session) | off |
 | `--no-permissions` | (boolean) skip the auto-allow list | permissions on |
-| `--target <ids>` | `claude`, `gemini`, `claude,gemini` | `claude` |
+| `--target <ids>` | `claude`, `gemini`, `claude,gemini` | the agent whose shell runs the install (`GEMINI_CLI=1` → `gemini`), else `claude` |
+| `--trust` | (boolean) Gemini CLI only: write `~/.gemini/policies/specship.toml`, which auto-approves SpecShip's read-only tools (an administrator policy still wins) | off |
 | `--print-config` | print the MCP snippet and exit (Claude Code; `--target gemini` prints the Gemini CLI snippet) | — |
 
 > Integrations are remembered: a later plain `specship install` preserves an earlier `--with-*` opt-in — it never silently disables one.
@@ -78,9 +82,9 @@ The default install also wires a tiny per-prompt nudge that steers Claude Code t
 
 > `--yes` is non-interactive and resolves to a **project-local** install. Pass `--location global` alongside it for the old global behavior.
 
-## 3. Restart Claude Code
+## 3. Restart your coding agent
 
-An MCP server added to the config is **not visible to a session that's already open**. Restart Claude Code (or run `/mcp`) so it loads the `specship_*` tools.
+An MCP server added to the config is **not visible to a session that's already open**. Restart your coding agent (Claude Code or Gemini CLI) — or run `/mcp` — so it loads the `specship_*` tools.
 
 The install check that ends `specship install` is advisory — it never fails the install. To diagnose an install at any time, run:
 
@@ -102,9 +106,9 @@ specship init
 
 `specship init` builds the per-project knowledge graph index (indexing runs by default — the old `-i`/`--index` flag is accepted but no longer needed). A global install then works in every project you open.
 
-## Gemini CLI (opt-in)
+## Gemini CLI
 
-Gemini CLI can use the same SpecShip MCP server. It is **never installed by default** — a plain `specship install` sets up Claude Code alone.
+Gemini CLI uses the same SpecShip MCP server. A plain `specship install` run from a Gemini CLI shell wires Gemini CLI; anywhere else, pass `--target gemini`.
 
 ```bash
 specship install --target gemini              # Gemini CLI only
@@ -116,7 +120,19 @@ specship install --print-config --target gemini   # print the snippet, write not
 
 The entry sets `SPECSHIP_HOST=gemini`, which lets SpecShip read the session's model from Gemini CLI's own settings and size its output for it (Flash gets the compact output) — keep it if you paste the snippet by hand.
 
-**What Gemini gets:** the SpecShip MCP tools and the server's built-in guidance — nothing else. Slash commands, auto-sync and steering hooks, the `specship-explorer` subagent, the status line, and the auto-allow list are Claude Code features with no Gemini equivalent; the installer prints a note saying so. Remove the Gemini wiring alone with `specship uninstall --target gemini --keep-data`.
+**What Gemini gets:**
+
+- the SpecShip MCP tools, with the entry in `.gemini/settings.json`;
+- the retrieval and spec-first steering blocks in `GEMINI.md`;
+- hooks on Gemini's `BeforeAgent`, `SessionStart`, `AfterTool` and `BeforeTool` events (the last one also covers `run_shell_command`);
+- the `/specship:*` commands, as Gemini TOML commands;
+- the `spec-author` and `design-md` skills under `.gemini/skills/` and the `specship-explorer` subagent under `.gemini/agents/`, with Gemini CLI 0.28.0 or newer. The subagent needs Gemini's `experimental.enableAgents` setting. SpecShip never turns it on for you; the installer prints a note instead;
+- `CLAUDE.md` added to Gemini's `context.fileName`, so Gemini reads it in place. It is never copied;
+- with `--trust`, a policy at `~/.gemini/policies/specship.toml` that auto-approves the read-only SpecShip tools.
+
+Only the status line is Claude Code only. The full comparison is in the [Gemini CLI guide](/guides/gemini-cli/#what-gemini-cli-gets--and-doesnt). Remove the Gemini wiring alone with `specship uninstall --target gemini --keep-data`.
+
+**Switching agents.** Once SpecShip is installed for one agent, it sets itself up for the other the first time it runs under it, and prints one line naming what it wrote and the undo command. Turn this off with `SPECSHIP_AUTO_MIGRATE=0` or `"autoMigrate": false` in `specship.config.json`. See [Switching agents](/guides/gemini-cli/#switching-agents-automatic-setup).
 
 ## Supported platforms
 
@@ -134,7 +150,7 @@ Every release is a **prebuilt bundle** — the app with zero native addons to co
 
 **1. On a machine with internet**, grab the archive matching the *offline* machine's platform from the [Releases page](https://github.com/selvakumarEsra/specship/releases) — `specship-<target>.tar.gz` (or `.zip` on Windows), where `<target>` is one of `darwin-arm64`, `darwin-x64`, `linux-x64`, `linux-arm64`, `win32-x64`, `win32-arm64`.
 
-**2. On the offline machine**, extract the archive and run the bundle's own installer. It puts `specship` on your `PATH`, then **asks where to wire Claude Code** — globally (every project) or a specific repo (project-local, indexing that repo) — using only the bundled app and your machine's Node; nothing is compiled and nothing is fetched:
+**2. On the offline machine**, extract the archive and run the bundle's own installer. It puts `specship` on your `PATH`, then **asks where to wire your coding agent** — globally (every project) or a specific repo (project-local, indexing that repo) — using only the bundled app and your machine's Node; nothing is compiled and nothing is fetched:
 
 ```bash
 tar -xzf specship-<target>.tar.gz
@@ -142,10 +158,13 @@ cd specship-<target>
 ./install.sh                     # interactive: asks global vs one repo
 ./install.sh --global            # non-interactive: wire all projects
 ./install.sh --path ~/dev/myrepo # non-interactive: wire + index one repo
-./install.sh --skip-claude       # PATH only; wire later with `specship install`
+./install.sh --target gemini     # wire Gemini CLI instead of Claude Code
+./install.sh --skip-wire         # PATH only; wire later with `specship install`
 ```
 
-Without a terminal (scripted installs), the default is **global** — the installer never writes project wiring into the bundle directory. On Windows the same choices are `-Global`, `-Path C:\dev\myrepo`, `-SkipClaude`.
+`--target claude|gemini` picks the agent. Without it, the installer wires the agent whose shell runs it (`GEMINI_CLI=1` means Gemini CLI), else Claude Code. If SpecShip was already installed for one or more agents (recorded in `~/.specship/installed-agents.json`), a run with no wiring flag reinstalls each of those first. `--skip-wire` installs onto `PATH` only; `--skip-claude` still works as an alias.
+
+Without a terminal (scripted installs), the default is **global** — the installer never writes project wiring into the bundle directory. On Windows the same choices are `-Target gemini`, `-Global`, `-Path C:\dev\myrepo`, `-SkipWire` (alias `-SkipClaude`).
 
 On **Windows**, unzip `specship-win32-<arch>.zip` and run `.\install.ps1` from the extracted folder. On **macOS**, clear Gatekeeper quarantine on the unsigned bundle first, or the launcher is blocked: `xattr -dr com.apple.quarantine specship-<target>`.
 
@@ -155,7 +174,7 @@ The installer honors `SPECSHIP_INSTALL_DIR` (default `~/.specship`) and `SPECSHI
 cd your-repo && specship init
 ```
 
-**From a source checkout?** `scripts/offline-install.sh <bundle>` (and `scripts/offline-install.ps1` on Windows) does the same given a downloaded bundle directory or archive. This is a bundle-install path, **not a build from source** — it never runs npm or a compiler on the target.
+**From a source checkout?** `scripts/offline-install.sh <bundle>` (and `scripts/offline-install.ps1` on Windows) does the same given a downloaded bundle directory or archive, and passes `--target`, `--global`, `--path` and `--skip-wire` (`-Target`, `-Global`, `-Path`, `-SkipWire`) on to the bundle's installer. This is a bundle-install path, **not a build from source** — it never runs npm or a compiler on the target.
 
 If the offline machine has no `node` on its `PATH` — or one outside 22.5–24.x — the installer stops with a clear message instead of leaving a broken install. `npm i -g` is *not* an offline path (it resolves per-platform packages from the npm registry) — use the release archive above.
 
