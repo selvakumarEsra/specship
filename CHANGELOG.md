@@ -9,6 +9,9 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+
+## [0.30.0] - 2026-11-05
+
 ### New Features
 - SpecShip now ships a Gemini CLI extension. Install it with `gemini extensions install <package>/gemini-extension` (or `gemini extensions link`) to get the MCP server, the `/specship:*` commands, the skills, the explorer subagent, the hooks and the steering context, the same set `specship install --target gemini` writes.
 - `specship install` with no `--target` now wires the coding agent it runs under: Gemini CLI when run from a Gemini CLI shell, Claude Code otherwise. `--target` always wins.
@@ -951,3 +954,4 @@ Thanks @andreinknv for the substantive draft this release was based on.
 [0.26.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.26.0
 [0.28.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.28.0
 [0.29.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.29.0
+[0.30.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.30.0
