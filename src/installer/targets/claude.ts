@@ -33,6 +33,7 @@ import {
   getMcpServerConfig,
   jsonDeepEqual,
   packageAssetPath,
+  pruneEmptySkillDirs,
   readJsonFile,
   removeMarkedSection,
   upsertMarkedSection,
@@ -218,7 +219,7 @@ const SHIPPED_AGENTS = ['specship-explorer.md'] as const;
  * Without this, only the machine that authored the skill had the gap catalog,
  * quality rubric and review checklist; everyone else got the inline fallback.
  */
-const SHIPPED_SKILLS = [
+export const SHIPPED_SKILLS = [
   'spec-author/SKILL.md',
   'spec-author/references/format.md',
   'spec-author/references/quality-rubric.md',
@@ -1108,18 +1109,7 @@ export function writeSkillsEntries(loc: Location): WriteResult['files'] {
  */
 export function removeSkillsEntries(loc: Location): WriteResult['files'] {
   const removed = SHIPPED_SKILLS.map((name) => removeFile(path.join(skillsDir(loc), name)));
-
-  // Deepest-first so a parent is only considered after its children are gone.
-  const dirs = [...new Set(SHIPPED_SKILLS.map((name) => path.dirname(path.join(skillsDir(loc), name))))]
-    .sort((a, b) => b.split(path.sep).length - a.split(path.sep).length);
-  const skillRoots = [...new Set(SHIPPED_SKILLS.map((name) => path.join(skillsDir(loc), name.split('/')[0]!)))];
-  for (const dir of [...dirs, ...skillRoots]) {
-    try {
-      if (fs.existsSync(dir) && fs.readdirSync(dir).length === 0) fs.rmdirSync(dir);
-    } catch {
-      // Leave the directory in place if it can't be removed — never fatal.
-    }
-  }
+  pruneEmptySkillDirs(skillsDir(loc), SHIPPED_SKILLS);
   return removed;
 }
 

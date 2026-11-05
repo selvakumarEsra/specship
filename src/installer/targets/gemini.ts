@@ -7,8 +7,9 @@
  * slash commands rendered into Gemini TOML from the same
  * `commands/specship/*.md` sources the Claude target copies (REQ-GEMINI-005,
  * see `../gemini-commands.ts` for the verified format + per-command
- * decisions). What still has no Gemini equivalent (the `specship-explorer`
- * subagent, the status line, the permissions list) is left unwritten and
+ * decisions), plus the skills and the explorer subagent when the installed
+ * Gemini CLI supports them (REQ-AGENTSWITCH-005). What still has no Gemini
+ * equivalent (the status line, the permissions list) is left unwritten and
  * named in `notes` rather than half-installed (REQ-GEMINI-006).
  *
  * The target IS registered in `targets/registry.ts`, but a plain
@@ -32,6 +33,7 @@
  */
 
 import * as fs from 'fs';
+import { spawnSync } from 'child_process';
 import { GEMINI_CLI_TRAITS } from '../../activation/hook-output';
 import * as os from 'os';
 import * as path from 'path';
@@ -47,6 +49,7 @@ import {
   getMcpServerConfig,
   jsonDeepEqual,
   packageAssetPath,
+  pruneEmptySkillDirs,
   readJsonFile,
   removeFileSync,
   removeMarkedSection,
@@ -61,7 +64,7 @@ import {
   getGeminiRetrievalBlock,
   getSddRuleBlock,
 } from '../instructions-template';
-import { GOVERNANCE_TIER_COMMANDS, RETRIEVAL_TIER_COMMANDS, claudeMdPath } from './claude';
+import { GOVERNANCE_TIER_COMMANDS, RETRIEVAL_TIER_COMMANDS, SHIPPED_SKILLS, claudeMdPath } from './claude';
 import { readAddedContextFiles, setAddedContextFiles } from '../agent-record';
 import {
   GEMINI_COMMAND_HEADER_MARKER,
@@ -303,10 +306,12 @@ export function removeGeminiContextFilesEntry(
  * One note, naming every still-unsupported surface. As of REQ-GEMINI-010 the
  * prompt / session / tool hooks DO have Gemini equivalents and are installed,
  * so the note no longer lists them; nor slash commands, which REQ-GEMINI-005
- * renders as Gemini TOML. What remains is the specship-explorer subagent, the
- * status line, and the permissions auto-allow list (REQ-GEMINI-009 covers the
- * opt-in policy file). A command the renderer had to exclude gets its own
- * note from `writeGeminiCommandsEntries`.
+ * renders as Gemini TOML; nor skills and the explorer subagent, which
+ * REQ-AGENTSWITCH-005 installs when the Gemini version supports them (with its
+ * own skip / experimental notes). What remains is the status line and the
+ * permissions auto-allow list (REQ-GEMINI-009 covers the opt-in policy file).
+ * A command the renderer had to exclude gets its own note from
+ * `writeGeminiCommandsEntries`.
  */
 const CAPABILITY_NOTE =
   'Gemini CLI install wires the MCP server, writes a GEMINI.md steering ' +
@@ -315,8 +320,9 @@ const CAPABILITY_NOTE =
   'files so Gemini reads each project\'s CLAUDE.md in place (a project install ' +
   'does this only when the project has one). Gemini never reads ' +
   '~/.claude/CLAUDE.md — copy anything you need from it into ~/.gemini/GEMINI.md. ' +
-  'No specship-explorer subagent and no ' +
-  'status line — Gemini CLI has no equivalent surface. The tool playbook ' +
+  'Skills and the specship-explorer subagent are installed when the Gemini ' +
+  'CLI version supports them (see the notes below). No status line — Gemini ' +
+  'CLI has no equivalent surface. The tool playbook ' +
   'itself still lives in the MCP server instructions.';
 
 /**
@@ -726,6 +732,217 @@ export function removeGeminiPolicyEntry(): WriteResult['files'][number] {
   return { path: file, action: 'removed' };
 }
 
+// ---------------------------------------------------------------------------
+// Skills + explorer subagent (AGENTSWITCH-DOC, REQ-AGENTSWITCH-005)
+//
+// Verified against gemini-cli 0.28.0 source (not memory):
+//   - Skills: `Storage.getUserSkillsDir()` = `~/.gemini/skills`,
+//     `getProjectSkillsDir()` = `<project>/.gemini/skills`; the skill loader
+//     globs `SKILL.md` and `*/SKILL.md` — the same SKILL.md format Claude Code
+//     reads. `skills.enabled` defaults to true.
+//   - Subagents: `getUserAgentsDir()` = `~/.gemini/agents`,
+//     `getProjectAgentsDir()` = `<project>/.gemini/agents`, one `*.md` with
+//     YAML frontmatter validated by a STRICT zod schema (agents/agentLoader):
+//     only kind, name, description, display_name, tools (an ARRAY of
+//     strings), model, temperature, max_turns, timeout_mins — any other key
+//     rejects the file. `tools` entries must pass `isValidToolName`: a
+//     built-in, or an MCP `server__tool` name — so `specship__specship_explore`,
+//     never the bare `specship_explore` (rejected) nor Claude's
+//     `mcp__specship__…` form.
+//   - Subagents are OFF by default (`experimental.enableAgents` = false,
+//     labelled experimental). We install the file but never flip the setting;
+//     the install names the setting in a note instead.
+// ---------------------------------------------------------------------------
+
+/** The Gemini CLI version these surfaces were verified against. */
+export const GEMINI_MIN_SKILLS = '0.28.0';
+export const GEMINI_MIN_AGENTS = '0.28.0';
+
+/**
+ * Probe the installed Gemini CLI's version (`gemini --version`). Returns
+ * `null` when Gemini is not on PATH or prints no version. `SPECSHIP_GEMINI_VERSION`
+ * overrides the probe (tests, and users whose `gemini` is not on PATH);
+ * `none` or an empty value means "not found". The real probe is memoised per
+ * process — it costs about a second.
+ */
+let probedGeminiVersion: string | null | undefined;
+export function probeGeminiVersion(): string | null {
+  const override = process.env.SPECSHIP_GEMINI_VERSION;
+  if (override !== undefined) {
+    const v = override.trim();
+    return v === '' || v.toLowerCase() === 'none' ? null : v;
+  }
+  if (probedGeminiVersion !== undefined) return probedGeminiVersion;
+  let found: string | null = null;
+  try {
+    const res = spawnSync('gemini', ['--version'], {
+      encoding: 'utf-8',
+      windowsHide: true,
+      timeout: 15000,
+      shell: process.platform === 'win32',
+    });
+    if (res.status === 0) {
+      const m = /(\d+)\.(\d+)\.(\d+)/.exec(String(res.stdout ?? ''));
+      if (m) found = m[0];
+    }
+  } catch {
+    found = null;
+  }
+  probedGeminiVersion = found;
+  return found;
+}
+
+/** True when `version` (x.y.z, any suffix ignored) is at least `min`. */
+export function geminiVersionSupports(version: string | null, min: string): boolean {
+  if (!version) return false;
+  const parse = (v: string): number[] | null => {
+    const m = /(\d+)\.(\d+)\.(\d+)/.exec(v);
+    return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null;
+  };
+  const a = parse(version);
+  const b = parse(min);
+  if (!a || !b) return false;
+  for (let i = 0; i < 3; i++) {
+    if (a[i]! !== b[i]!) return a[i]! > b[i]!;
+  }
+  return true;
+}
+
+/** Gemini CLI's skills dir for this location (same scope as `settingsPath`). */
+export function geminiSkillsDir(loc: Location): string {
+  return path.join(path.dirname(settingsPath(loc)), 'skills');
+}
+
+/** Gemini CLI's subagents dir for this location. */
+export function geminiAgentsDir(loc: Location): string {
+  return path.join(path.dirname(settingsPath(loc)), 'agents');
+}
+
+/**
+ * Rewrite Claude Code's `mcp__specship__<tool>` names in prose to the bare
+ * name the Gemini model is shown (DOM-SPECSHIP-007), so the skill and agent
+ * bodies name tools the way Gemini does.
+ */
+function toGeminiToolProse(text: string): string {
+  return text.replace(/mcp__specship__/g, '');
+}
+
+/** Render one shipped skill file for Gemini (SKILL.md format is shared). */
+function renderGeminiSkillFile(name: string): string {
+  return toGeminiToolProse(fs.readFileSync(packageAssetPath('skills', name), 'utf-8'));
+}
+
+/** Write `content` to `dest` with the installer's idempotency contract. */
+function writeIfChanged(dest: string, content: string): WriteResult['files'][number] {
+  const existed = fs.existsSync(dest);
+  if (existed && fs.readFileSync(dest, 'utf-8') === content) return { path: dest, action: 'unchanged' };
+  atomicWriteFileSync(dest, content);
+  return { path: dest, action: existed ? 'updated' : 'created' };
+}
+
+/**
+ * Write SpecShip's skills (`spec-author`, `design-md`) under Gemini's skills
+ * dir (REQ-AGENTSWITCH-005.A1). Same file list as the Claude target, so the
+ * two installs cannot diverge. Sibling user skills are never touched.
+ */
+export function writeGeminiSkillsEntries(loc: Location): WriteResult['files'] {
+  const dir = geminiSkillsDir(loc);
+  return SHIPPED_SKILLS.map((name) => writeIfChanged(path.join(dir, name), renderGeminiSkillFile(name)));
+}
+
+/**
+ * Inverse of `writeGeminiSkillsEntries`: delete exactly the files we ship,
+ * then prune the per-skill directories left empty. A user skill — or a user
+ * file inside one of our skill dirs — survives.
+ */
+export function removeGeminiSkillsEntries(loc: Location): WriteResult['files'] {
+  const dir = geminiSkillsDir(loc);
+  const files: WriteResult['files'] = SHIPPED_SKILLS.map((name) => {
+    const dest = path.join(dir, name);
+    if (!fs.existsSync(dest)) return { path: dest, action: 'not-found' };
+    removeFileSync(dest);
+    return { path: dest, action: 'removed' };
+  });
+  pruneEmptySkillDirs(dir, SHIPPED_SKILLS);
+  return files;
+}
+
+/** Body marker identifying an agent file a SpecShip install wrote. */
+export const GEMINI_AGENT_MARKER = '<!-- Written by specship install — REQ-AGENTSWITCH-005 -->';
+const GEMINI_AGENT_FILE = 'specship-explorer.md';
+
+/**
+ * Render the shipped `agents/specship-explorer.md` as a Gemini subagent
+ * (REQ-AGENTSWITCH-005.A2). Frontmatter is rebuilt with only keys Gemini's
+ * strict schema accepts — `model: inherit` is dropped (Gemini would read it as
+ * a model id) — and `tools` becomes a YAML array of `specship__<tool>` names.
+ * The body names tools by their bare Gemini name. No `mcp__specship__` survives.
+ */
+export function renderGeminiExplorerAgent(source?: string): string {
+  const raw = source ?? fs.readFileSync(packageAssetPath('agents', GEMINI_AGENT_FILE), 'utf-8');
+  const m = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/.exec(raw);
+  if (!m) throw new Error('specship-explorer agent asset has no frontmatter');
+  const front = m[1]!;
+  const body = m[2]!;
+  const field = (key: string): string | undefined => {
+    const line = front.split(/\r?\n/).find((l) => l.startsWith(`${key}:`));
+    return line?.slice(key.length + 1).trim();
+  };
+  const name = field('name') ?? 'specship-explorer';
+  const description = field('description') ?? '';
+  const tools = (field('tools') ?? '')
+    .split(',')
+    .map((t) => t.trim())
+    .filter(Boolean)
+    .map((t) => `specship__${t.replace(/^mcp__specship__/, '')}`);
+  return [
+    '---',
+    `name: ${name}`,
+    // JSON string = valid YAML double-quoted scalar; the description carries
+    // quotes and dashes a plain scalar would mis-parse.
+    `description: ${JSON.stringify(description)}`,
+    'tools:',
+    ...tools.map((t) => `  - ${t}`),
+    '---',
+    GEMINI_AGENT_MARKER,
+    '',
+    toGeminiToolProse(body).replace(/^\s+/, ''),
+  ].join('\n');
+}
+
+/** Write the explorer subagent under Gemini's agents dir. Never overwrites a user file. */
+export function writeGeminiAgentsEntry(loc: Location): WriteResult['files'][number] {
+  const dest = path.join(geminiAgentsDir(loc), GEMINI_AGENT_FILE);
+  const content = renderGeminiExplorerAgent();
+  if (fs.existsSync(dest)) {
+    const current = fs.readFileSync(dest, 'utf-8');
+    if (current === content) return { path: dest, action: 'unchanged' };
+    if (!current.includes(GEMINI_AGENT_MARKER)) return { path: dest, action: 'kept' };
+    atomicWriteFileSync(dest, content);
+    return { path: dest, action: 'updated' };
+  }
+  atomicWriteFileSync(dest, content);
+  return { path: dest, action: 'created' };
+}
+
+/** Inverse of `writeGeminiAgentsEntry`: removes the file only if it carries our marker. */
+export function removeGeminiAgentsEntry(loc: Location): WriteResult['files'][number] {
+  const dest = path.join(geminiAgentsDir(loc), GEMINI_AGENT_FILE);
+  if (!fs.existsSync(dest)) return { path: dest, action: 'not-found' };
+  if (!fs.readFileSync(dest, 'utf-8').includes(GEMINI_AGENT_MARKER)) return { path: dest, action: 'kept' };
+  removeFileSync(dest);
+  return { path: dest, action: 'removed' };
+}
+
+const AGENTS_EXPERIMENTAL_NOTE =
+  'Gemini CLI: installed the specship-explorer subagent, but Gemini subagents are ' +
+  'experimental and off by default — set experimental.enableAgents to true in ' +
+  'Gemini settings to use it (SpecShip does not change that setting).';
+
+function foundLabel(version: string | null): string {
+  return version ? `found ${version}` : 'Gemini CLI version not found';
+}
+
 export class GeminiCliTarget implements AgentTarget {
   readonly id = 'gemini' as const;
   readonly traits = GEMINI_CLI_TRAITS;
@@ -794,6 +1011,25 @@ export class GeminiCliTarget implements AgentTarget {
     // policy file — a prior `--trust` install is preserved byte-identical
     // (parity with REQ-INTEG-001.A3).
     const notes: string[] = [CAPABILITY_NOTE, ...commands.notes];
+    // Skills + explorer subagent (REQ-AGENTSWITCH-005), gated on the installed
+    // Gemini CLI version. An unknown or older version is skipped WITH a note —
+    // never guessed, never fatal (the install still exits 0).
+    const version = probeGeminiVersion();
+    if (geminiVersionSupports(version, GEMINI_MIN_SKILLS)) {
+      files.push(...writeGeminiSkillsEntries(loc));
+    } else {
+      notes.push(
+        `Gemini CLI: skipped skills spec-author, design-md — needs Gemini CLI >= ${GEMINI_MIN_SKILLS} (${foundLabel(version)}).`,
+      );
+    }
+    if (geminiVersionSupports(version, GEMINI_MIN_AGENTS)) {
+      files.push(writeGeminiAgentsEntry(loc));
+      notes.push(AGENTS_EXPERIMENTAL_NOTE);
+    } else {
+      notes.push(
+        `Gemini CLI: skipped subagent specship-explorer — needs Gemini CLI >= ${GEMINI_MIN_AGENTS} (${foundLabel(version)}).`,
+      );
+    }
     if (opts.trust === true) {
       files.push(writeGeminiPolicyEntry());
       notes.push(TRUST_POLICY_NOTE);
@@ -847,6 +1083,11 @@ export class GeminiCliTarget implements AgentTarget {
     // the admin policies dir is never written or read.
     const policyCleanup = removeGeminiPolicyEntry();
     if (policyCleanup.action !== 'not-found') files.push(policyCleanup);
+    // REQ-AGENTSWITCH-005: always strip skills + subagent, whatever version is
+    // installed now, so uninstall reverses any earlier install.
+    files.push(...removeGeminiSkillsEntries(loc).filter((f) => f.action === 'removed'));
+    const agentCleanup = removeGeminiAgentsEntry(loc);
+    if (agentCleanup.action !== 'not-found') files.push(agentCleanup);
     return { files };
   }
 
