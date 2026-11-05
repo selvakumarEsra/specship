@@ -26,7 +26,6 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixes
 
-- The spec-driven-development rule SpecShip writes into `GEMINI.md` no longer tells Gemini CLI to use the spec-author skill, which the Gemini install doesn't provide; it points to `/specship:spec new` instead.
 - Gemini CLI sessions now get SpecShip's tool guidance and session cheat-sheet in Gemini's own terms — `read_file`, `grep_search`, `glob` and `GEMINI.md` — instead of Claude Code's tool names. Claude Code sees exactly the same text as before.
 - `specship uninstall --target gemini` now names only Gemini CLI's files and tells you to restart Gemini CLI; a full uninstall with `--target gemini` removes only Gemini's wiring and warns that other agents' wiring stays in place.
 - JavaScript and TypeScript functions, classes and variables that contain HTML-comment text (`<!--` or `-->`) inside a regex are no longer missing from the index. Before, those characters were mistaken for an old-style HTML comment and the whole declaration was dropped from search, callers and impact results. Existing indexes are repaired automatically on the next sync, with no reindex needed.

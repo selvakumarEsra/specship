@@ -221,10 +221,8 @@ verifies:
   per-tool usage text that also appears in `server-instructions.ts` (a test
   asserts no shared paragraph).
 <!-- id: REQ-GEMINI-004.A4 -->
-- The SDD portion carries the same rule as the Claude target's SDD block,
-  rendered with only the commands and skills the Gemini install provides
-  (REQ-AGENTSWITCH-002.A3 superseded the earlier byte-identical clause), and
-  is absent when the governance tier is not selected (`--no-sdd`).
+- The SDD portion is byte-identical to the Claude target's SDD rule block
+  and is absent when the governance tier is not selected (`--no-sdd`).
 <!-- id: REQ-GEMINI-004.A5 -->
 - Re-running install with nothing changed reports GEMINI.md `unchanged`; a
   block from an older version is replaced in place, not duplicated.

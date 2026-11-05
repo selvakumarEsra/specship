@@ -146,13 +146,10 @@ implementations:
   - src/installer/index.ts:runUninstaller
   - src/installer/index.ts:purgeUninstall
   - src/installer/instructions-template.ts:getSddRuleBlock
-  - src/installer/instructions-template.ts:getGeminiSddRuleBlock
-  - src/installer/targets/gemini.ts:writeGeminiSddEntry
 
 verifies:
   - __tests__/mcp-agent-instructions.test.ts:reqAgentswitch002A1
   - __tests__/installer-targets.test.ts:reqAgentswitch002A2
-  - __tests__/installer-targets.test.ts:reqAgentswitch002A3
 
 ## Acceptance
 <!-- id: REQ-AGENTSWITCH-002.A1 -->

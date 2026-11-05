@@ -59,7 +59,7 @@ import {
   SPECSHIP_SDD_SECTION_END,
   SPECSHIP_SDD_SECTION_START,
   getGeminiRetrievalBlock,
-  getGeminiSddRuleBlock,
+  getSddRuleBlock,
 } from '../instructions-template';
 import { GOVERNANCE_TIER_COMMANDS, RETRIEVAL_TIER_COMMANDS, claudeMdPath } from './claude';
 import { readAddedContextFiles, setAddedContextFiles } from '../agent-record';
@@ -117,9 +117,8 @@ export function removeGeminiInstructionsEntry(loc: Location): WriteResult['files
 
 /**
  * Write the spec-driven-development steering block into GEMINI.md
- * (REQ-GEMINI-004.A4). Same rule and markers as the Claude target's block,
- * but naming only commands the Gemini install provides — no skills
- * (REQ-AGENTSWITCH-002.A3).
+ * (REQ-GEMINI-004.A4). Generated from the SAME `getSddRuleBlock` the Claude
+ * target writes, so the two surfaces cannot drift byte-wise.
  */
 export function writeGeminiSddEntry(loc: Location): WriteResult['files'][number] {
   const file = geminiMdPath(loc);
@@ -127,7 +126,7 @@ export function writeGeminiSddEntry(loc: Location): WriteResult['files'][number]
     file,
     SPECSHIP_SDD_SECTION_START,
     SPECSHIP_SDD_SECTION_END,
-    getGeminiSddRuleBlock(),
+    getSddRuleBlock(),
   );
   return { path: file, action };
 }

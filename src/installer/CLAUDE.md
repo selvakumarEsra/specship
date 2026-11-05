@@ -17,9 +17,8 @@ new file + one registry entry.
   `targets/gemini.ts` implements the full `AgentTarget` contract over five
   surfaces — Gemini's `mcpServers` settings block (REQ-GEMINI-002/003),
   GEMINI.md steering (REQ-GEMINI-004: a marker-delimited retrieval-preference
-  block plus the default-on SDD rule, `getGeminiSddRuleBlock` — the same rule
-  as Claude's `getSddRuleBlock`, naming only commands/skills Gemini gets,
-  REQ-AGENTSWITCH-002.A3),
+  block plus the default-on SDD rule, generated from the same
+  `getSddRuleBlock` the Claude target uses so the two surfaces cannot drift),
   and the settings `hooks` block (REQ-GEMINI-010: `BeforeAgent` /
   `SessionStart` / `AfterTool` wired to the same `specship` hook commands the
   Claude target uses; those commands echo the payload's `hook_event_name`;
@@ -55,7 +54,7 @@ new file + one registry entry.
   installer **stopped writing** the `## SpecShip` block into CLAUDE.md
   (issue #529), and `install` (self-heal) and `uninstall` use it only to
   **strip** a block a previous install left behind. The SDD pair wraps
-  `getSddRuleBlock` (Claude) and `getGeminiSddRuleBlock` (Gemini), and the Gemini retrieval pair
+  `getSddRuleBlock` (shared by both targets), and the Gemini retrieval pair
   wraps `getGeminiRetrievalBlock` — an ordering rule only, never a copy of
   the tool playbook in `server-instructions.ts`.
 
