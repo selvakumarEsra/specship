@@ -12,14 +12,23 @@ import { AgentTarget, Location, TargetId } from './types';
 import { claudeTarget } from './claude';
 import { geminiTarget } from './gemini';
 
-export const ALL_TARGETS: readonly AgentTarget[] = Object.freeze([claudeTarget, geminiTarget]);
+/**
+ * Every install target, built on each call. A function, not a module-level
+ * array: the targets import modules that import this registry (the Gemini
+ * target records the context files it adds through the installed-agents
+ * record), and an array literal evaluated mid-cycle would freeze a target
+ * that is still `undefined` into the list for the life of the process.
+ */
+export function allTargets(): readonly AgentTarget[] {
+  return Object.freeze([claudeTarget, geminiTarget]);
+}
 
 export function getTarget(id: string): AgentTarget | undefined {
-  return ALL_TARGETS.find((t) => t.id === id);
+  return allTargets().find((t) => t.id === id);
 }
 
 export function listTargetIds(): TargetId[] {
-  return ALL_TARGETS.map((t) => t.id);
+  return allTargets().map((t) => t.id);
 }
 
 /**
@@ -30,7 +39,7 @@ export function detectAll(loc: Location): Array<{
   target: AgentTarget;
   detection: ReturnType<AgentTarget['detect']>;
 }> {
-  return ALL_TARGETS.map((target) => ({
+  return allTargets().map((target) => ({
     target,
     detection: target.detect(loc),
   }));

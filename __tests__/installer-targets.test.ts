@@ -22,7 +22,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { ALL_TARGETS, getTarget } from '../src/installer/targets/registry';
+import { allTargets, getTarget } from '../src/installer/targets/registry';
 import { resolveInstallTargets, uninstallTargets } from '../src/installer';
 import {
   claudeTarget,
@@ -129,9 +129,9 @@ describe('Installer targets — contract', () => {
     fs.rmSync(tmpCwd, { recursive: true, force: true });
   });
 
-  // ALL_TARGETS is just [claudeTarget] now, but the loop is preserved so
+  // allTargets() is just [claudeTarget] now, but the loop is preserved so
   // re-adding another agent automatically picks up the contract suite.
-  for (const target of ALL_TARGETS) {
+  for (const target of allTargets()) {
     describe(target.id, () => {
       const supportedLocations = (['global', 'local'] as const).filter((l) =>
         target.supportsLocation(l),
@@ -1085,8 +1085,8 @@ describe('Installer targets — registry', () => {
     expect(getTarget('not-a-real-target')).toBeUndefined();
   });
 
-  it('ALL_TARGETS contains the Claude target first, then Gemini', () => {
-    expect(ALL_TARGETS.map((t) => t.id)).toEqual(['claude', 'gemini']);
+  it('allTargets() contains the Claude target first, then Gemini', () => {
+    expect(allTargets().map((t) => t.id)).toEqual(['claude', 'gemini']);
   });
 
   it('resolveInstallTargets keeps a plain install Claude-only (REQ-GEMINI-002.A4)', () => {
@@ -1205,7 +1205,7 @@ describe('GeminiCliTarget.printConfig', () => {
   });
 
   it('is registered under its stable id (REQ-GEMINI-002)', () => {
-    expect(ALL_TARGETS.some((t) => t.id === 'gemini')).toBe(true);
+    expect(allTargets().some((t) => t.id === 'gemini')).toBe(true);
     expect(getTarget('gemini')?.id).toBe('gemini');
   });
 });
@@ -1213,7 +1213,7 @@ describe('GeminiCliTarget.printConfig', () => {
 /**
  * Gemini CLI target — Phase 1 specifics (GEMINI-TARGET-DOC, REQ-GEMINI-002/
  * 003/006). The generic install/idempotence/uninstall contract is already
- * covered by the `ALL_TARGETS` loop at the top of this file now that the
+ * covered by the `allTargets()` loop at the top of this file now that the
  * target is registered; what follows is the Gemini-only behaviour.
  */
 describe('Gemini target — specifics', () => {
@@ -1374,14 +1374,14 @@ describe('Gemini target — specifics', () => {
   }
 
   /**
-   * `src/bin/uninstall.ts` (the npm preuninstall sweep) loops `ALL_TARGETS`,
+   * `src/bin/uninstall.ts` (the npm preuninstall sweep) loops `allTargets()`,
    * so registering Gemini changes what `npm rm -g` cleans up. Asserted
    * explicitly because it's a behaviour change, not just new coverage.
    */
   function geminiEntrySweptByRegistryUninstall(): void {
     geminiTarget.install('global', { autoAllow: true });
 
-    const reports = uninstallTargets(ALL_TARGETS, 'global');
+    const reports = uninstallTargets(allTargets(), 'global');
     const gemini = reports.find((r) => r.id === 'gemini');
     expect(gemini?.status).toBe('removed');
     // Sweeps the MCP settings entry, the GEMINI.md steering file and the

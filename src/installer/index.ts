@@ -23,7 +23,7 @@ import {
   describeIndexLaterHint,
   type StatusLineOutcome,
 } from './install-defaults';
-import { ALL_TARGETS, getTarget, listTargetIds } from './targets/registry';
+import { allTargets, getTarget, listTargetIds } from './targets/registry';
 import type { AgentTarget, Location, TargetId } from './targets/types';
 import { CLAUDE_CODE_TRAITS } from '../activation/hook-output';
 
@@ -572,7 +572,7 @@ export function reinstallRecordedAgents(
   opts: { projectRoot?: string; targets?: readonly AgentTarget[] } = {},
 ): ReinstallReport[] {
   const record = ensureAgentRecord(opts.projectRoot ?? process.cwd());
-  const pool = opts.targets ?? ALL_TARGETS;
+  const pool = opts.targets ?? allTargets();
   const reports: ReinstallReport[] = [];
   for (const entry of record.entries) {
     const target = pool.find((t) => t.id === entry.agent);
@@ -740,7 +740,7 @@ async function purgeUninstall(
   // 1. Every registered target's wiring at BOTH locations — a purge that left
   //    a Gemini MCP entry behind wouldn't be a complete removal.
   for (const location of ['global', 'local'] as Location[]) {
-    for (const report of uninstallTargets(ALL_TARGETS, location)) {
+    for (const report of uninstallTargets(allTargets(), location)) {
       if (report.status === 'removed') {
         for (const p of report.removedPaths) {
           clack.log.success(`${report.displayName} (${location}): removed ${tildify(p)}`);

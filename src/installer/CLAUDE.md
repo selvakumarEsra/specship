@@ -38,7 +38,7 @@ new file + one registry entry.
   `gemini-commands.ts` from the same `commands/specship/*.md` source and tier
   lists the Claude target installs — one source, two renderers — with
   marker-guarded install/uninstall.
-  Being in `ALL_TARGETS` does NOT make it install by default:
+  Being in `allTargets()` does NOT make it install by default:
   `resolveInstallTargets` maps absent / `claude` / `auto` / `all` to Claude
   alone, so Gemini is reachable only by naming it (`--target gemini`,
   `--target claude,gemini`). Everything Gemini has no equivalent for
@@ -76,6 +76,6 @@ new file + one registry entry.
 - `npx vitest run __tests__/installer-targets.test.ts __tests__/installer.test.ts`
   — the contract suite (install idempotency, sibling MCP-server
   preservation, uninstall reverses install, byte-equal re-runs returning
-  `unchanged`) iterates over `ALL_TARGETS`; the Claude-specifics suite
+  `unchanged`) iterates over `allTargets()`; the Claude-specifics suite
   covers legacy CLAUDE.md / `.claude.json` migration and pre-0.8 hook
   cleanup.
