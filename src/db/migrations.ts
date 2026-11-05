@@ -5,6 +5,7 @@
  */
 
 import { SqliteDatabase } from './sqlite-adapter';
+import { specshipToolPrefix } from '../analytics/canonical-tools';
 
 /**
  * Current schema version
@@ -256,7 +257,7 @@ const migrations: Migration[] = [
   {
     version: 6,
     description:
-      'Add Claude Code transcript ingest tables (claude_projects/sessions/prompts/tool_calls/ingest_state/pricing) for analytics over ~/.claude/projects/*.jsonl',
+      'Add transcript ingest tables (claude_projects/sessions/prompts/tool_calls/ingest_state/pricing) for analytics over the coding agent\'s local session transcripts',
     up: (db) => {
       db.exec(`
         CREATE TABLE IF NOT EXISTS claude_projects (
@@ -412,7 +413,8 @@ const migrations: Migration[] = [
         db.exec(`ALTER TABLE claude_tool_calls ADD COLUMN displaced_files TEXT;`); // JSON [[path,size],…] | NULL
       if (!hasColumn(db, 'claude_tool_calls', 'resolution'))
         db.exec(`ALTER TABLE claude_tool_calls ADD COLUMN resolution TEXT;`);
-      db.exec(`UPDATE claude_tool_calls SET is_specship = 1 WHERE tool_name LIKE 'mcp__specship__%';`);
+      // tool_name holds the SHARED tool name (REQ-AGENTSWITCH-004), whose SpecShip prefix is canonical.
+      db.prepare(`UPDATE claude_tool_calls SET is_specship = 1 WHERE tool_name LIKE ?;`).run(`${specshipToolPrefix}%`);
       db.exec(`CREATE INDEX IF NOT EXISTS idx_claude_tool_calls_specship ON claude_tool_calls(is_specship);`);
     },
   },

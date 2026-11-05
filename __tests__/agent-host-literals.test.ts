@@ -75,10 +75,11 @@ describe('REQ-AGENTSWITCH-001 — host facts come from one per-agent profile', (
     expect(real.stale).toEqual([]);
     // Each entry pins its count: a new occurrence in a listed file fails.
     expect(real.miscounted.map(({ entry, actual }) => `${entry.file} ${entry.literal}: listed ${entry.count}, found ${actual}`)).toEqual([]);
-    const planted = scanHostLiterals(REPO);
-    const first = HOST_LITERAL_ALLOWLIST[0]!;
-    planted.push({ file: first.file, literal: first.literal, line: 0 });
-    expect(checkAllowlist(planted, HOST_LITERAL_ALLOWLIST).miscounted).toHaveLength(1);
+    const entry = { file: 'src/x.ts', literal: 'CLAUDE.md', count: 1, reason: 'synthetic entry for the count check' };
+    const twice = [{ file: entry.file, literal: entry.literal, line: 1 }, { file: entry.file, literal: entry.literal, line: 2 }];
+    expect(checkAllowlist(twice, [entry]).miscounted).toHaveLength(1);
+    // Shared code carries no host literal at all: the allowlist is empty.
+    expect(HOST_LITERAL_ALLOWLIST).toEqual([]);
   }
 
   it('REQ-AGENTSWITCH-001.A2 — the listed leaks are fixed and every remaining literal has a reason', reqAgentswitch001A2);

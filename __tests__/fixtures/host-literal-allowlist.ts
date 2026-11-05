@@ -8,20 +8,9 @@
  */
 import type { AllowlistEntry } from '../helpers/host-literal-scan';
 
-const WORKFLOW_TOOLS =
-  'allowed_tools vocabulary: Claude Code tool names are the canonical step-tool names; ' +
-  'src/workflows/agents/gemini.ts translateGeminiTools maps them per agent';
-
-export const HOST_LITERAL_ALLOWLIST: readonly AllowlistEntry[] = [
-  // ── Historical: shipped migrations never change ──
-  { file: 'src/db/migrations.ts', literal: '.claude/', count: 1, reason: 'historical migration description for the Claude transcript tables; migrations are immutable' },
-  { file: 'src/db/migrations.ts', literal: 'mcp__specship__', count: 1, reason: 'historical migration backfill over Claude transcript rows; migrations are immutable' },
-
-  // ── Bundled workflows: step tool lists ──
-  { file: 'src/workflows/defaults/claude-design-implement.yaml', literal: 'mcp__specship__', count: 8, reason: WORKFLOW_TOOLS },
-  { file: 'src/workflows/defaults/spec-author.yaml', literal: 'mcp__specship__', count: 9, reason: WORKFLOW_TOOLS },
-  { file: 'src/workflows/defaults/spec-fix.yaml', literal: 'mcp__specship__', count: 8, reason: WORKFLOW_TOOLS },
-  { file: 'src/workflows/defaults/spec-implement.yaml', literal: 'mcp__specship__', count: 19, reason: WORKFLOW_TOOLS },
-  { file: 'src/workflows/defaults/spec-relink.yaml', literal: 'mcp__specship__', count: 5, reason: WORKFLOW_TOOLS },
-  { file: 'src/workflows/defaults/spec-verify.yaml', literal: 'mcp__specship__', count: 3, reason: WORKFLOW_TOOLS },
-];
+// Empty: shared code carries no host literals. Workflow steps name SpecShip
+// tools by their bare server name and each headless adapter qualifies them
+// (qualifyClaudeTools / translateGeminiTools); the SpecShip prefix the
+// migrations backfill over is the canonical shared tool name. A new entry
+// needs a reason a reviewer accepts — the default answer is an adapter.
+export const HOST_LITERAL_ALLOWLIST: readonly AllowlistEntry[] = [];

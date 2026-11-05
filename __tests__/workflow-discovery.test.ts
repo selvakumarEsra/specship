@@ -425,8 +425,8 @@ describe('bundled implement workflows — pipeline quality gates (REQ-AUTHG-004/
   function linkStepUsesSpecBlocksNotLinkAssert(name: string): void {
     const wf = load(name);
     const link = nodeOf(wf, 'link');
-    expect(link.allowed_tools ?? []).not.toContain('mcp__specship__specship_link_assert');
-    expect(link.allowed_tools ?? []).not.toContain('mcp__specship__specship_link_verify');
+    expect(link.allowed_tools ?? []).not.toContain('specship_link_assert');
+    expect(link.allowed_tools ?? []).not.toContain('specship_link_verify');
     expect(link.prompt).toContain('implementations:');
     expect(link.prompt).toContain('specship verify --report');
     const verify = nodeOf(wf, 'verify');
@@ -561,7 +561,7 @@ describe('bundled implement workflows — pipeline quality gates (REQ-AUTHG-004/
     }
     expect(rev.allowed_tools).toContain('Read');
     expect(rev.allowed_tools).toContain('Grep');
-    expect(rev.allowed_tools).toContain('mcp__specship__specship_spec');
+    expect(rev.allowed_tools).toContain('specship_spec');
     // Input is the spec + the git diff artifact, not the implementer's summary.
     expect(rev.prompt).toContain('$diff.output');
     expect(rev.prompt).not.toContain('$implement.output');

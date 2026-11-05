@@ -7,6 +7,7 @@
  * system prompt leads the stdin prompt.
  */
 
+import { SPECSHIP_SERVER_TOOL } from './claude';
 import { EmitFn, HeadlessAgent, HeadlessInvocation, StreamParseState, parseJsonLine, summarizeToolInput } from './types';
 
 /** Claude-form built-in tool names → Gemini CLI 0.28 tool names. */
@@ -32,6 +33,8 @@ export function translateGeminiTools(tools: string[]): { tools: string[] } | { e
     const mcp = tool.match(/^mcp__([A-Za-z0-9_-]+?)__(.+)$/);
     const shell = tool.match(/^Bash\((.+?)(?::\*)?\)$/);
     if (mcp) mapped = `${mcp[1]}__${mcp[2]}`;
+    // A bare SpecShip server tool name (the bundled workflows' vocabulary).
+    else if (SPECSHIP_SERVER_TOOL.test(tool)) mapped = `specship__${tool}`;
     else if (shell) mapped = `run_shell_command(${shell[1]!.trim()})`;
     else mapped = BUILTIN_TOOLS[tool];
     if (!mapped) return { error: `allowed tool "${tool}" has no Gemini CLI equivalent` };

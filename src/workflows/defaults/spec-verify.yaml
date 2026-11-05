@@ -68,9 +68,9 @@ nodes:
     output_type: link_summary
     trigger_rule: all_done
     allowed_tools:
-      - mcp__specship__specship_drifted
-      - mcp__specship__specship_spec
-      - mcp__specship__specship_link_verify
+      - specship_drifted
+      - specship_spec
+      - specship_link_verify
     prompt: |
       Test run completed. Output (truncated):
 

@@ -24,9 +24,9 @@ nodes:
     kind: prompt
     output_type: diagnosis
     allowed_tools:
-      - mcp__specship__specship_spec
-      - mcp__specship__specship_node
-      - mcp__specship__specship_explore
+      - specship_spec
+      - specship_node
+      - specship_explore
       - Read
     prompt: |
       Spec ID: $INPUT.SPEC_ID
@@ -60,8 +60,8 @@ nodes:
       - Edit
       - Write
       - Bash
-      - mcp__specship__specship_node
-      - mcp__specship__specship_spec
+      - specship_node
+      - specship_spec
     prompt: |
       Apply the fix proposed in the diagnosis. Follow any guidance from
       the reviewer.
@@ -162,9 +162,9 @@ nodes:
     depends_on: [approve_links]
     output_type: link_summary
     allowed_tools:
-      - mcp__specship__specship_spec
-      - mcp__specship__specship_link_assert
-      - mcp__specship__specship_link_verify
+      - specship_spec
+      - specship_link_assert
+      - specship_link_verify
     prompt: |
       The reviewer has approved updating link state for $INPUT.SPEC_ID.
 

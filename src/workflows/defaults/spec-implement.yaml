@@ -45,8 +45,8 @@ nodes:
     kind: prompt
     output_type: spec_summary
     allowed_tools:
-      - mcp__specship__specship_spec
-      - mcp__specship__specship_explore
+      - specship_spec
+      - specship_explore
     prompt: |
       Spec ID: $INPUT.SPEC_ID
 
@@ -84,9 +84,9 @@ nodes:
     depends_on: [fetch_spec, readiness]
     output_type: plan
     allowed_tools:
-      - mcp__specship__specship_explore
-      - mcp__specship__specship_node
-      - mcp__specship__specship_spec
+      - specship_explore
+      - specship_node
+      - specship_spec
       - Read
     prompt: |
       Based on this spec summary, write a concrete implementation plan:
@@ -205,9 +205,9 @@ nodes:
       - Edit
       - Write
       - Bash
-      - mcp__specship__specship_explore
-      - mcp__specship__specship_node
-      - mcp__specship__specship_spec
+      - specship_explore
+      - specship_node
+      - specship_spec
     prompt: |
       Implement the approved plan. Follow it closely.
 
@@ -301,8 +301,8 @@ nodes:
       - Edit
       - Write
       - Bash
-      - mcp__specship__specship_explore
-      - mcp__specship__specship_node
+      - specship_explore
+      - specship_node
     prompt: |
       Lint / typecheck result for the code you just wrote:
 
@@ -393,7 +393,7 @@ nodes:
       - Edit
       - Write
       - Bash
-      - mcp__specship__specship_spec
+      - specship_spec
     prompt: |
       Mechanical post-implement check for $INPUT.SPEC_ID:
 
@@ -604,7 +604,7 @@ nodes:
     allowed_tools:
       - Read
       - Edit
-      - mcp__specship__specship_spec
+      - specship_spec
     prompt: |
       Record spec→code links for the changes made in the implement step —
       durably, in the spec file (REQ-PIPETRUST-006). Do NOT call
@@ -683,10 +683,10 @@ nodes:
     allowed_tools:
       - Read
       - Grep
-      - mcp__specship__specship_spec
-      - mcp__specship__specship_explore
-      - mcp__specship__specship_node
-      - mcp__specship__specship_search
+      - specship_spec
+      - specship_explore
+      - specship_node
+      - specship_search
     prompt: |
       Adversarial review (REQ-AUTHG-005.A3). You are NOT the implementer — your
       job is to find what the implementation missed. This node is read-only:
@@ -729,7 +729,7 @@ nodes:
       - Read
       - Write
       - Bash
-      - mcp__specship__specship_spec
+      - specship_spec
     prompt: |
       Try to BREAK the change for $INPUT.SPEC_ID (REQ-THRU-008). You are not
       the implementer. For EACH acceptance criterion write at least one small
@@ -773,8 +773,8 @@ nodes:
     allowed_tools:
       - Read
       - Write
-      - mcp__specship__specship_spec
-      - mcp__specship__specship_explore
+      - specship_spec
+      - specship_explore
     prompt: |
       Propose knowledge this change relied on, for a HUMAN to confirm
       (REQ-KNOW-004). Domain knowledge is human-confirmed, never

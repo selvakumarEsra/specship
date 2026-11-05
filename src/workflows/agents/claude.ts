@@ -7,6 +7,22 @@
 import type { PromptNode } from '../schemas/workflow';
 import { EmitFn, HeadlessAgent, HeadlessInvocation, StreamParseState, parseJsonLine, summarizeToolInput } from './types';
 
+/** A tool served by SpecShip's MCP server, named bare (`specship_explore`, `designer_snapshot`). */
+export const SPECSHIP_SERVER_TOOL = /^(specship|designer)_\w+$/;
+
+/** Claude Code's prefix for SpecShip's MCP tools (`mcp__<server>__<tool>`). */
+const CLAUDE_SPECSHIP_TOOL_PREFIX = 'mcp__specship__';
+
+/**
+ * Bundled workflows name SpecShip's tools by their bare server name
+ * (`specship_explore`); Claude Code addresses them as `mcp__specship__…`.
+ * Every other entry — built-ins, `Bash(...)`, an already-qualified name a
+ * user's own workflow carries — passes through unchanged.
+ */
+export function qualifyClaudeTools(tools: readonly string[]): string[] {
+  return tools.map((t) => (SPECSHIP_SERVER_TOOL.test(t) ? `${CLAUDE_SPECSHIP_TOOL_PREFIX}${t}` : t));
+}
+
 export function buildClaudeArgs(node: PromptNode): string[] {
   const args: string[] = [];
   args.push('--print');
@@ -16,10 +32,10 @@ export function buildClaudeArgs(node: PromptNode): string[] {
   args.push('--output-format', 'stream-json', '--verbose');
   if (node.model) args.push('--model', node.model);
   if (node.allowed_tools && node.allowed_tools.length > 0) {
-    args.push('--allowed-tools', node.allowed_tools.join(','));
+    args.push('--allowed-tools', qualifyClaudeTools(node.allowed_tools).join(','));
   }
   if (node.denied_tools && node.denied_tools.length > 0) {
-    args.push('--disallowed-tools', node.denied_tools.join(','));
+    args.push('--disallowed-tools', qualifyClaudeTools(node.denied_tools).join(','));
   }
   if (node.systemPromptAppend) {
     args.push('--append-system-prompt', node.systemPromptAppend);

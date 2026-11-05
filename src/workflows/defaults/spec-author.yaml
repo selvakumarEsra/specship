@@ -35,9 +35,9 @@ nodes:
     kind: prompt
     output_type: code_grounding
     allowed_tools:
-      - mcp__specship__specship_explore
-      - mcp__specship__specship_search
-      - mcp__specship__specship_files
+      - specship_explore
+      - specship_search
+      - specship_files
       - Read
     prompt: |
       Feature: $INPUT.DESCRIPTION
@@ -64,9 +64,9 @@ nodes:
     depends_on: [ground]
     output_type: spec_draft
     allowed_tools:
-      - mcp__specship__specship_spec
-      - mcp__specship__specship_explore
-      - mcp__specship__specship_node
+      - specship_spec
+      - specship_explore
+      - specship_node
       - Read
     prompt: |
       Feature: $INPUT.DESCRIPTION
@@ -146,9 +146,9 @@ nodes:
     depends_on: [incorporate]
     output_type: review_findings
     allowed_tools:
-      - mcp__specship__specship_explore
-      - mcp__specship__specship_node
-      - mcp__specship__specship_search
+      - specship_explore
+      - specship_node
+      - specship_search
       - Read
     prompt: |
       Run the spec-author skill's `references/review-checklist.md` against

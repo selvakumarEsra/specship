@@ -25,7 +25,7 @@ import {
   getHeadlessAgent,
   resolveWorkflowAgent,
 } from '../src/workflows/agents';
-import { buildClaudeArgs } from '../src/workflows/agents/claude';
+import { buildClaudeArgs, qualifyClaudeTools } from '../src/workflows/agents/claude';
 import { geminiHeadlessAgent, handleGeminiStreamLine, translateGeminiTools } from '../src/workflows/agents/gemini';
 import { newStreamState } from '../src/workflows/agents/types';
 import type { PromptNode, WorkflowDefinition } from '../src/workflows/schemas/workflow';
@@ -339,4 +339,18 @@ describe('Gemini CLI adapter (REQ-AGENTADAPT-007)', () => {
     'stream-json events become step events, text, stats and failures (REQ-AGENTADAPT-007.A5)',
     geminiStreamIsParsed,
   );
+});
+
+/** Workflows name SpecShip tools by their bare server name; each agent qualifies them its own way (REQ-AGENTSWITCH-001). */
+describe('bare SpecShip tool names in workflow steps (REQ-AGENTSWITCH-001)', () => {
+  it('Claude qualifies a bare SpecShip tool as mcp__specship__… and passes the rest through', bareToolsQualifyForClaude);
+  function bareToolsQualifyForClaude(): void {
+    expect(qualifyClaudeTools(['Read', 'specship_explore', 'Bash(git status:*)', 'mcp__other__x'])).toEqual([
+      'Read', 'mcp__specship__specship_explore', 'Bash(git status:*)', 'mcp__other__x',
+    ]);
+  }
+  it('Gemini maps a bare SpecShip tool to specship__… (its server__tool form)', bareToolsMapForGemini);
+  function bareToolsMapForGemini(): void {
+    expect(translateGeminiTools(['specship_explore', 'Read'])).toEqual({ tools: ['specship__specship_explore', 'read_file'] });
+  }
 });

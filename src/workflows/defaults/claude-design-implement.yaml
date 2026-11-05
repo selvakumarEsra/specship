@@ -77,10 +77,10 @@ nodes:
       - Write
       - Edit
       - Bash
-      - mcp__specship__specship_explore
-      - mcp__specship__specship_search
-      - mcp__specship__designer_snapshot
-      - mcp__specship__designer_handoff
+      - specship_explore
+      - specship_search
+      - designer_snapshot
+      - designer_handoff
     prompt: |
       File label:   $INPUT.FILE_LABEL
       Slug:         $INPUT.SLUG
@@ -210,10 +210,10 @@ nodes:
     output_type: spec_markdown
     allowed_tools:
       - Read
-      - mcp__specship__specship_explore
-      - mcp__specship__specship_search
-      - mcp__specship__specship_node
-      - mcp__specship__specship_spec
+      - specship_explore
+      - specship_search
+      - specship_node
+      - specship_spec
     prompt: |
       Use the spec-author skill ($AGENT_SKILLS_DIR/spec-author/SKILL.md
       and its references/) to draft a SpecShip-compatible spec for the

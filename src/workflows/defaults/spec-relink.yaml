@@ -21,7 +21,7 @@ nodes:
     kind: prompt
     output_type: orphan_summary
     allowed_tools:
-      - mcp__specship__specship_spec
+      - specship_spec
     prompt: |
       Spec ID: $INPUT.SPEC_ID
 
@@ -34,9 +34,9 @@ nodes:
     depends_on: [present_orphan]
     output_type: candidates
     allowed_tools:
-      - mcp__specship__specship_search
-      - mcp__specship__specship_explore
-      - mcp__specship__specship_node
+      - specship_search
+      - specship_explore
+      - specship_node
     prompt: |
       The orphan(s):
       $present_orphan.output
@@ -67,7 +67,7 @@ nodes:
     depends_on: [approve_relink]
     output_type: link_summary
     allowed_tools:
-      - mcp__specship__specship_link_assert
+      - specship_link_assert
     prompt: |
       The reviewer chose candidate #$approve_relink.output for spec
       $INPUT.SPEC_ID.
