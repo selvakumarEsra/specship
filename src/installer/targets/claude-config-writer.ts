@@ -16,9 +16,9 @@ import * as os from 'os';
 import {
   writeMcpEntry,
   writePermissionsEntry,
-} from './targets/claude';
-import { readJsonFile } from './targets/shared';
-import { CLAUDE_CODE_TRAITS } from '../activation/hook-output';
+} from './claude';
+import { readJsonFile } from './shared';
+import { CLAUDE_CODE_TRAITS } from '../../activation/hook-output';
 
 export type InstallLocation = 'global' | 'local';
 

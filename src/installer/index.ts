@@ -44,15 +44,15 @@ import { watchDisabledReason } from '../sync/watch-policy';
 import { isGitRepo, isSyncHookInstalled, installGitSyncHook } from '../sync/git-hooks';
 
 // Backwards-compat: keep these named exports — downstream code may
-// import them. The shim in `config-writer.ts` continues to re-export
+// import them. The shim in `targets/claude-config-writer.ts` continues to re-export
 // them too.
 export {
   writeMcpConfig,
   writePermissions,
   hasMcpConfig,
   hasPermissions,
-} from './config-writer';
-export type { InstallLocation } from './config-writer';
+} from './targets/claude-config-writer';
+export type { InstallLocation } from './targets/claude-config-writer';
 
 // Dynamic import helper — tsc compiles import() to require() in CJS mode,
 // which fails for ESM-only packages. This bypasses the transformation.

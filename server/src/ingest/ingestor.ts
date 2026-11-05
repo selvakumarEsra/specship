@@ -38,11 +38,9 @@ import {
   IngestStats,
 } from './types.js';
 import { computeCost, resolvePricing } from './pricing.js';
-import {
-  toEpochMs,
-  extractUserPrompt,
-  toolResultLength,
-} from './parser.js';
+import { toEpochMs } from './transcripts/shared.js';
+// The line-format branch below reads Claude's JSONL shape through its adapter.
+import { extractUserPrompt, toolResultLength } from './transcripts/claude-jsonl.js';
 import { classifyToolCall } from './specship-classify.js';
 import type { GraphLike } from './specship-classify.js';
 import { transcriptAdapters, decodeProjectSlug, listClaudeTranscriptFiles } from './transcripts/index.js';

@@ -644,7 +644,7 @@ class ClaudeCodeTarget implements AgentTarget {
 }
 
 /**
- * Per-file write helpers, exported so the legacy `config-writer.ts`
+ * Per-file write helpers, exported so the legacy `claude-config-writer.ts`
  * shim can call only the named operation (writeMcpConfig writes ONLY
  * the MCP entry, etc.) instead of `claudeTarget.install()` which
  * writes all three files. Without this split the shims silently

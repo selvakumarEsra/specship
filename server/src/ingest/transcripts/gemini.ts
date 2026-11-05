@@ -27,7 +27,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { GEMINI_PROFILE } from '../../host-profiles.js';
 import { CANONICAL_TOOLS, specshipServerName, canonicalMcpToolName } from '../../canonical-tools.js';
-import { summarizeToolInput, toEpochMs } from '../parser.js';
+import { summarizeToolInput, toEpochMs } from './shared.js';
 import {
   normalizeToolName,
   type DocumentTranscriptAdapter,

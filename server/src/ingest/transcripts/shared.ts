@@ -1,25 +1,8 @@
 /**
- * JSONL line parser — converts one line of a Claude Code transcript into a
- * structured ClaudeRawEntry, or null for unparseable / unrecognised lines.
- *
- * Tolerant: a malformed line never throws; the worker logs and skips it.
+ * Agent-neutral transcript helpers shared by every transcript adapter
+ * (REQ-AGENTSWITCH-017): timestamp normalisation and the one-line tool-input
+ * summary the heatmap, tips and reflect read.
  */
-
-import type { ClaudeRawEntry, ClaudeContentBlock } from './types.js';
-
-export function parseLine(line: string): ClaudeRawEntry | null {
-  const trimmed = line.trim();
-  if (!trimmed) return null;
-  try {
-    const obj = JSON.parse(trimmed) as ClaudeRawEntry;
-    if (!obj || typeof obj !== 'object' || typeof obj.type !== 'string') {
-      return null;
-    }
-    return obj;
-  } catch {
-    return null;
-  }
-}
 
 /** Convert a timestamp field (ISO string or epoch number) to epoch ms. */
 export function toEpochMs(ts: string | number | undefined): number {
@@ -30,23 +13,6 @@ export function toEpochMs(ts: string | number | undefined): number {
   }
   const parsed = Date.parse(ts);
   return Number.isFinite(parsed) ? parsed : Date.now();
-}
-
-/** Extract the user-visible prompt text from a user-entry message. */
-export function extractUserPrompt(entry: ClaudeRawEntry): string {
-  // Some user entries store text at the top level; most use message.content.
-  if (typeof entry.text === 'string' && entry.text.length > 0) return entry.text;
-  const content = entry.message?.content;
-  if (typeof content === 'string') return content;
-  if (Array.isArray(content)) {
-    return content
-      .filter((b): b is ClaudeContentBlock => b && typeof b === 'object')
-      .map((b) => (b.type === 'text' && typeof b.text === 'string' ? b.text : ''))
-      .filter((t) => t.length > 0)
-      .join('\n')
-      .trim();
-  }
-  return '';
 }
 
 /**
@@ -84,15 +50,4 @@ export function summarizeToolInput(name: string, input: Record<string, unknown> 
   } catch {
     return '';
   }
-}
-
-/** Sum the character length of a tool_result content block. */
-export function toolResultLength(block: ClaudeContentBlock | undefined): number {
-  if (!block) return 0;
-  const c = block.content;
-  if (typeof c === 'string') return c.length;
-  if (Array.isArray(c)) {
-    return c.reduce((sum, item) => sum + (typeof item?.text === 'string' ? item.text.length : 0), 0);
-  }
-  return 0;
 }

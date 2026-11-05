@@ -17,7 +17,7 @@ import * as os from 'os';
 // We test the exported functions from config-writer
 import {
   writeMcpConfig,
-} from '../src/installer/config-writer';
+} from '../src/installer/targets/claude-config-writer';
 
 function createTempDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'specship-installer-test-'));

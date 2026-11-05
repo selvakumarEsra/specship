@@ -19,5 +19,6 @@ export { startWatcher } from './watcher.js';
 export type { WatcherHandle, WatcherOptions } from './watcher.js';
 export type { IngestStats, ClaudeRawEntry, ClaudeUsage, PricingRow } from './types.js';
 export { resolvePricing, computeCost, normalizeModelId } from './pricing.js';
-export { parseLine, summarizeToolInput, extractUserPrompt, toolResultLength } from './parser.js';
+export { parseLine, extractUserPrompt, toolResultLength } from './transcripts/claude-jsonl.js';
+export { summarizeToolInput } from './transcripts/shared.js';
 export { backfillDisplaced } from './impact-backfill.js';
