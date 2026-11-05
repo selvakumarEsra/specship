@@ -140,6 +140,7 @@ implementations:
   - src/mcp/session.ts:MCPSession.handleInitialize
   - src/mcp/server-instructions.ts:renderServerInstructions
   - src/mcp/server-instructions.ts:resolveServerInstructions
+  - src/mcp/proxy.ts:runLocalHandshakeProxy
   - src/activation/cheatsheet.ts:cheatsheetText
   - src/activation/cheatsheet.ts:buildCheatsheetPayload
   - src/installer/index.ts:runUninstaller
