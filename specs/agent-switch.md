@@ -78,6 +78,10 @@ adapter, and makes SpecShip set itself up for a newly used agent on its own.
 - Gemini gets SpecShip's skills and explorer subagent wherever the installed
   Gemini CLI supports them.
 
+**Verification decisions (user, 2026-11-05).**
+- The model-driven Gemini check is the real Gemini CLI 0.28.0 running against a scripted stand-in model (`scripts/e2e/gemini-model-loop.sh`). A session against Google's live model was blocked by a billing error on the provided key's project.
+- The Windows installers are checked by parsing and behaviour runs in PowerShell 7.4.6 on Linux. A real-Windows run of the PATH write happens before release.
+
 **Non-goals.** Adding any agent other than Claude Code and Gemini CLI (the
 house rule still governs install targets); migrating the user's own commands,
 skills, other MCP servers or memory notes; converting past transcripts
