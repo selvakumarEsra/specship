@@ -18,10 +18,15 @@ export const HOST_LITERALS = [
   'UserPromptSubmit',
   'BeforeAgent',
   '~/.claude.json',
+  // REQ-AGENTSWITCH-012.A1: agent display names and the Claude path segment —
+  // user-visible text and path building belong to the adapter / profile.
+  'Claude Code',
+  'Gemini CLI',
+  "'.claude'",
 ] as const;
 
 /** Shared-code roots, relative to the repo root. */
-export const SHARED_ROOTS = ['src', 'server/src'];
+export const SHARED_ROOTS = ['src', 'server/src', 'ui/src'];
 
 /**
  * The adapter layer: host specifics are allowed here, and only here.
@@ -32,6 +37,11 @@ export const ADAPTER_PATHS = [
   'src/workflows/agents/',
   'src/activation/hook-output.ts',
   'server/src/host-profiles.ts',
+  'server/src/ingest/transcripts/',
+  // The status line is a Claude Code-only surface by design (REQ-AGENTSWITCH-010).
+  'src/statusline/',
+  // Runs only behind SPECSHIP_HOST=gemini, which the Gemini target sets.
+  'src/mcp/gemini-session.ts',
 ];
 
 export interface HostLiteralHit {
@@ -59,7 +69,7 @@ const SCANNED_SCRIPTS = new Set(['scripts/bundle-install.sh', 'scripts/bundle-in
 function isScanned(rel: string): boolean {
   if (SCANNED_SCRIPTS.has(rel)) return true;
   if (rel.endsWith('.d.ts')) return false;
-  if (rel.endsWith('.ts')) return true;
+  if (rel.endsWith('.ts') || rel.endsWith('.tsx')) return !rel.includes('/__tests__/');
   return rel.startsWith('src/workflows/defaults/') && rel.endsWith('.yaml');
 }
 

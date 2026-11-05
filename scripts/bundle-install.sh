@@ -116,8 +116,7 @@ if [ -z "$TARGET" ]; then
   if [ "${GEMINI_CLI:-}" = "1" ] && [ "${CLAUDECODE:-}" != "1" ]; then TARGET=gemini; else TARGET=claude; fi
 fi
 case "$TARGET" in
-  claude) AGENT_NAME="Claude Code" ;;
-  gemini) AGENT_NAME="Gemini CLI" ;;
+  claude|gemini) AGENT_NAME="agent '$TARGET'" ;;
   *) echo "specship: --target must be claude or gemini (got '$TARGET')" >&2; exit 1 ;;
 esac
 

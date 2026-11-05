@@ -72,8 +72,8 @@ function previewMarkedUpsert(content: string, startMarker: string, endMarker: st
   return content.replace(/\s*$/, '') + '\n\n' + block + '\n';
 }
 
-const MEMORY_INDEX = (homeDir: string): string =>
-  path.join(homeDir, '.claude', 'memory', 'MEMORY.md');
+/** The notes index sits beside the note it lists, in the agent's memory-notes dir. */
+const MEMORY_INDEX = (notePath: string): string => path.join(path.dirname(notePath), 'MEMORY.md');
 
 /**
  * Non-mutating preview of the change a proposal would make (REQ-REFLECT-003).
@@ -143,7 +143,7 @@ export function previewProposal(p: Proposal): PreviewResult {
 /**
  * Apply a proposal — write its change idempotently and reversibly (REQ-REFLECT-004).
  */
-export function applyProposal(p: Proposal, homeDir: string): ApplyOutcome {
+export function applyProposal(p: Proposal, _homeDir: string): ApplyOutcome {
   const { payload, targetPath } = p;
 
   if (payload.kind === 'claude_md' || payload.kind === 'conventions') {
@@ -165,7 +165,7 @@ export function applyProposal(p: Proposal, homeDir: string): ApplyOutcome {
     if (cur.exists && !cur.content.includes(memoryNoteMarker(payload.slug))) return 'conflict';
     const noteUnchanged = cur.exists && cur.content === payload.note;
     if (!noteUnchanged) atomicWriteFileSync(targetPath, payload.note);
-    const indexAdded = ensureIndexLine(MEMORY_INDEX(homeDir), payload.indexLine);
+    const indexAdded = ensureIndexLine(MEMORY_INDEX(targetPath), payload.indexLine);
     return noteUnchanged && !indexAdded ? 'unchanged' : 'applied';
   }
 
@@ -189,7 +189,7 @@ export function applyProposal(p: Proposal, homeDir: string): ApplyOutcome {
  * Undo a previously applied proposal — remove exactly what apply added
  * (REQ-REFLECT-004.A3). A never-applied proposal is a no-op.
  */
-export function undoProposal(p: Proposal, homeDir: string): UndoOutcome {
+export function undoProposal(p: Proposal, _homeDir: string): UndoOutcome {
   const { payload, targetPath } = p;
 
   if (payload.kind === 'claude_md' || payload.kind === 'conventions') {
@@ -211,7 +211,7 @@ export function undoProposal(p: Proposal, homeDir: string): UndoOutcome {
     if (cur.exists && cur.content.includes(memoryNoteMarker(payload.slug))) {
       try { fs.unlinkSync(targetPath); touched = true; } catch { /* ignore */ }
     }
-    if (removeIndexLine(MEMORY_INDEX(homeDir), payload.indexLine)) touched = true;
+    if (removeIndexLine(MEMORY_INDEX(targetPath), payload.indexLine)) touched = true;
     return touched ? 'undone' : 'noop';
   }
 

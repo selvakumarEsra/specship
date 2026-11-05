@@ -59,7 +59,7 @@ Options:
   --project-root, -p <path>   Project root (default: $SPECSHIP_PROJECT_ROOT or cwd)
   --port <n>                  HTTP port (default: 4242)
   --host <h>                  Bind host (default: 127.0.0.1)
-  --no-ingest                 Skip the in-process Claude JSONL transcript watcher
+  --no-ingest                 Skip the in-process agent transcript watcher
   --web-dir <path>            Explicit path to a built desktop SPA (index.html lives here; defaults to the bundled ui/dist)
   --no-web                    Run headless — serve the API only, no SPA
   --open                      Open the UI in the default browser once listening
@@ -100,7 +100,7 @@ async function main(): Promise<void> {
     console.error(`[specship-desktop] project: (none — pick one in the dashboard)`);
   }
   console.error(`[specship-desktop] UI:      ${serveUi ? handle.url + '/' : '(none — running headless)'}`);
-  if (args.ingest) console.error(`[specship-desktop] Claude Code transcript ingest active`);
+  if (args.ingest) console.error(`[specship-desktop] agent transcript ingest active`);
 
   if (args.open) tryOpenInBrowser(handle.url);
 

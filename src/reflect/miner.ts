@@ -282,7 +282,7 @@ function ruleRepeatedCommands(db: SqliteDatabase, ctx: ReflectContext, forms: Pa
       severity: 'info',
       nameSeed: r.cmd,
       title: `Automate \`${truncate(r.cmd, 40)}\` with a hook`,
-      body: `\`${truncate(r.cmd, 80)}\` was run ${r.n} times across ${r.s} sessions, mostly by hand. A PostToolUse hook can run it automatically after edits.`,
+      body: `\`${truncate(r.cmd, 80)}\` was run ${r.n} times across ${r.s} sessions, mostly by hand. A ${(ctx.host ?? DEFAULT_HOST_TRAITS).postEditEvent} hook can run it automatically after edits.`,
       content: r.cmd,
       hook: { event: 'PostToolUse', matcher: 'Edit|Write', command: r.cmd },
       evidence: {

@@ -114,108 +114,6 @@ async function loadServerPackage(): Promise<ServerPackage> {
  * itself — `createServer({ ingest: true })` starts it. No separate package.
  */
 
-/**
- * Claude Code's slug encoding (every non-alphanumeric char → '-') is lossy,
- * so decoding by mapping '-' back to '/' mangles any path containing
- * hyphens/dots/underscores. Recover real paths from `~/.claude.json` (its
- * `projects` object is keyed by real absolute paths), then from a `"cwd"`
- * value in the slug's newest transcript, before falling back to the lossy
- * decode. Mirrors `server/src/ingest/project-paths.ts`
- * (REQ-SLUGRES-004) — the server package depends on this one, so the CLI
- * can't import it.
- */
-function buildClaudeSlugIndex(): Map<string, string> {
-  const bySlug = new Map<string, string>();
-  try {
-    const raw = fs.readFileSync(path.join(os.homedir(), '.claude.json'), 'utf8');
-    const parsed = JSON.parse(raw) as { projects?: Record<string, unknown> };
-    for (const realPath of Object.keys(parsed.projects ?? {})) {
-      bySlug.set(realPath.replace(/[^A-Za-z0-9]/g, '-'), realPath);
-    }
-  } catch { /* missing or malformed — sniff/fallback below still work */ }
-  return bySlug;
-}
-
-function sniffClaudeSlugCwd(claudeRoot: string, slug: string): string | null {
-  const dir = path.join(claudeRoot, slug);
-  let newest: { file: string; mtimeMs: number } | null = null;
-  try {
-    for (const f of fs.readdirSync(dir, { withFileTypes: true })) {
-      if (!f.isFile() || !f.name.toLowerCase().endsWith('.jsonl')) continue;
-      const st = fs.statSync(path.join(dir, f.name));
-      if (!newest || st.mtimeMs > newest.mtimeMs) newest = { file: f.name, mtimeMs: st.mtimeMs };
-    }
-  } catch { return null; }
-  if (!newest) return null;
-  try {
-    const fd = fs.openSync(path.join(dir, newest.file), 'r');
-    let chunk: string;
-    try {
-      const buf = Buffer.alloc(64 * 1024);
-      const read = fs.readSync(fd, buf, 0, buf.length, 0);
-      chunk = buf.toString('utf8', 0, read);
-    } finally { fs.closeSync(fd); }
-    const m = /"cwd"\s*:\s*"((?:[^"\\]|\\.)*)"/.exec(chunk);
-    if (!m) return null;
-    let cwd = JSON.parse(`"${m[1]}"`) as string;
-    // Accept the cwd or an ancestor of it — sessions may record a subdir.
-    for (; ;) {
-      if (cwd.replace(/[^A-Za-z0-9]/g, '-') === slug) return cwd;
-      const parent = path.dirname(cwd);
-      if (parent === cwd) return null;
-      cwd = parent;
-    }
-  } catch { return null; }
-}
-
-/**
- * Auto-pick a default project for `specship desktop` when the user
- * didn't pass `-p` and the cwd isn't initialized either. Walks
- * `~/.claude/projects/*` (Claude Code's per-project transcript dirs),
- * resolves each slug back to a real path, and returns the most-recently-
- * touched one that's still on disk AND has been `specship init`'d.
- *
- * Returns null when nothing qualifies — the server boots projectless and
- * the desktop UI prompts the user to pick.
- */
-async function pickRecentInitializedProject(): Promise<string | null> {
-  const claudeRoot = path.join(os.homedir(), '.claude', 'projects');
-  let entries: fs.Dirent[];
-  try {
-    entries = fs.readdirSync(claudeRoot, { withFileTypes: true });
-  } catch { return null; }
-  const slugIndex = buildClaudeSlugIndex();
-  type Candidate = { decoded: string; lastTouched: number };
-  const candidates: Candidate[] = [];
-  for (const ent of entries) {
-    if (!ent.isDirectory()) continue;
-    const slug = ent.name;
-    const decoded =
-      slugIndex.get(slug) ??
-      sniffClaudeSlugCwd(claudeRoot, slug) ??
-      (slug.startsWith('-') ? '/' + slug.slice(1).replace(/-/g, '/') : slug);
-    try {
-      const st = fs.statSync(decoded);
-      if (!st.isDirectory()) continue;
-    } catch { continue; }
-    if (!isInitialized(decoded)) continue;
-    // Use the newest .jsonl mtime in the slug dir as the activity signal.
-    let lastTouched = 0;
-    try {
-      const files = fs.readdirSync(path.join(claudeRoot, slug), { withFileTypes: true });
-      for (const f of files) {
-        if (!f.isFile() || !f.name.toLowerCase().endsWith('.jsonl')) continue;
-        try {
-          const st = fs.statSync(path.join(claudeRoot, slug, f.name));
-          if (st.mtimeMs > lastTouched) lastTouched = st.mtimeMs;
-        } catch { /* ignore */ }
-      }
-    } catch { /* ignore */ }
-    candidates.push({ decoded, lastTouched });
-  }
-  candidates.sort((a, b) => b.lastTouched - a.lastTouched);
-  return candidates[0]?.decoded ?? null;
-}
 
 // Dynamic import helper — tsc compiles import() to require() in CJS mode,
 // which fails for ESM-only packages. This bypasses the transformation.
@@ -387,6 +285,13 @@ program.hook('preAction', (_root, actionCommand) => {
 // =============================================================================
 // Helper Functions
 // =============================================================================
+
+/** Every supported agent's display name, from the target registry (REQ-AGENTSWITCH-012). */
+function agentNames(): string {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { allTargets } = require('../installer/targets/registry') as typeof import('../installer/targets/registry');
+  return allTargets().map((t) => t.displayName).join(', ');
+}
 
 /**
  * Resolve project path from argument or current directory
@@ -562,7 +467,7 @@ async function printStarterPrompt(cg: import('../index').SpecShip): Promise<void
     const sp = generateStarterPrompt(cg);
     if (!sp) return;
     console.log();
-    console.log(chalk.bold('Try this first — ask Claude:'));
+    console.log(chalk.bold('Try this first — ask your coding agent:'));
     console.log('  ' + chalk.cyan(sp.prompt));
     console.log(chalk.dim("  (it'll explore the index instead of reading files)"));
   } catch {
@@ -1306,7 +1211,7 @@ program
  */
 program
   .command('statusline')
-  .description('Print a SpecShip status-line segment (reads Claude Code JSON on stdin)')
+  .description(`Print a SpecShip status-line segment (${hostTraitsFor('claude').displayName} only — reads its status-line JSON on stdin)`)
   .action(async () => {
     const { buildSegment } = await import('../statusline/index');
     let raw = '';
@@ -2637,7 +2542,7 @@ async function runDesktop(options: DesktopOptions): Promise<void> {
     } else if (isInitialized(process.cwd())) {
       root = process.cwd();
     } else {
-      root = await pickRecentInitializedProject();
+      root = await (await import('../agents/recent-project')).pickRecentInitializedProject();
     }
 
     const port = options.port ? parseInt(options.port, 10) : 4242;
@@ -2681,7 +2586,7 @@ async function runDesktop(options: DesktopOptions): Promise<void> {
       console.error(chalk.green(getGlyphs().ok) + ` Dashboard: ${handle.url}/`);
     }
     if (options.ingest !== false) {
-      console.error(chalk.dim('  Claude Code transcript ingest watcher active'));
+      console.error(chalk.dim(`  Transcript ingest watcher active (${agentNames()})`));
     }
     if (options.mcp) {
       if (!root) {
@@ -2784,7 +2689,7 @@ program
         // Use stderr so stdout stays clean for any piped/stdio usage.
         console.error(chalk.bold('\nSpecShip MCP Server\n'));
         console.error(chalk.blue(getGlyphs().info) + ' Use --mcp flag to start the MCP server');
-        console.error('\nTo use with Claude Code, add to your MCP configuration:');
+        console.error('\nTo use it from your coding agent, add to its MCP configuration (or run `specship install --print-config --target <agent>`):');
         console.error(chalk.dim(`
 {
   "mcpServers": {
@@ -2821,8 +2726,8 @@ program
   .option('-p, --path <path>', 'Project path (default: cwd, else your most recent initialized project)')
   .option('--port <n>', 'HTTP port (default 4242)')
   .option('--host <h>', 'HTTP bind host (default 127.0.0.1)')
-  .option('--ingest', 'Enable the Claude Code JSONL transcript watcher', true)
-  .option('--no-ingest', 'Disable the Claude Code JSONL transcript watcher')
+  .option('--ingest', 'Enable the agent transcript watcher (every supported agent)', true)
+  .option('--no-ingest', 'Disable the agent transcript watcher')
   .option('--web-dir <path>', 'Path to a built desktop SPA (index.html lives here); auto-detected by default from the bundled ui/dist')
   .option('--no-web', 'Run headless (API only, no dashboard SPA)')
   .option('--no-watch', 'Disable the file watcher (no auto-sync; useful on slow filesystems like WSL2 /mnt drives)')
@@ -3262,7 +3167,7 @@ program
  */
 program
   .command('install')
-  .description('Install specship MCP server into Claude Code')
+  .description(`Install the specship MCP server into your coding agent (${agentNames()})`)
   .option('-l, --location <where>', 'Install location: "global" or "local". Default: prompt (local)')
   .option('-y, --yes', 'Non-interactive: defaults to --location=local (the only question an interactive install asks)')
   .option('--no-permissions', 'Skip writing the auto-allow permissions list (written by default)')
@@ -3271,10 +3176,10 @@ program
   .option('--path <repo>', 'Target repo to wire and initialize (default: current directory). Project-local files and the .specship index land there')
   .option('--with-jira', 'Enable the optional JIRA integration (talks to your Atlassian instance; off by default — the core install is 100% local)')
   .option('--with-designer', 'Enable the optional Designer integration (EXPERIMENTAL — drives claude.ai/design via a debug Chrome session and may break without notice; off by default)')
-  .option('--statusline', '(default) Wire the SpecShip status-line segment into Claude; never overwrites an existing status line')
+  .option('--statusline', `(default; ${hostTraitsFor('claude').displayName} only) Wire the SpecShip status-line segment; never overwrites an existing status line`)
   .option('--skip-statusline', 'Do not add the status-line segment (it is added by default)')
   .option('--skip-index', 'Do not index the current project (it is indexed by default)')
-  .option('--print-config', 'Print the MCP config snippet and exit (no file writes). Claude Code by default; `--target gemini` prints the Gemini CLI settings snippet')
+  .option('--print-config', 'Print the target agent\'s MCP config snippet and exit (no file writes); pick the agent with --target')
   // -t/--target SELECTS the agents to wire (GEMINI-TARGET-DOC, REQ-GEMINI-002)
   // and also picks the snippet --print-config prints. The legacy spellings
   // ("claude" / "auto" / "all" / "none") keep their Claude-only meanings, so
@@ -3774,7 +3679,7 @@ program
   .description('Completely remove SpecShip (wiring, indexes, ~/.specship data, and the binary)')
   .option('-y, --yes', 'Skip the confirmation prompt (also: --force)')
   .option('-f, --force', 'Alias for --yes')
-  .option('--keep-data', 'Only unwire from Claude Code; keep the indexes, ~/.specship data, and the binary')
+  .option('--keep-data', 'Only unwire from the selected agent(s); keep the indexes, ~/.specship data, and the binary')
   .option('-l, --location <where>', 'With --keep-data: which wiring to remove ("global" or "local")')
   .option('--local', 'Only unwire this project (same as --keep-data --location local); keeps indexes, data and the binary')
   .option('--global', 'Only unwire the user-wide install (same as --keep-data --location global); keeps indexes, data and the binary')

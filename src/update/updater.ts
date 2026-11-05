@@ -221,7 +221,7 @@ export async function runUpdate(deps: UpdateDeps, opts: UpdateOptions = {}): Pro
     lines: [
       `Updated ${currentVersion} → ${latestVersion}.`,
       ...agentLines,
-      'Restart any running `specship serve` / Claude Code MCP session to pick up the new version.',
+      'Restart any running `specship serve` / coding-agent MCP session to pick up the new version.',
     ],
   };
 }

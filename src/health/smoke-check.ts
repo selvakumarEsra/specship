@@ -218,7 +218,7 @@ export async function runSmokeCheck(opts?: {
       ok: boot,
       blocking: true,
       detail: boot ? 'starts and answers an initialize request' : 'did not respond to an initialize request',
-      remediation: boot ? undefined : 'After installing, restart Claude Code (or run `/mcp`) so the server is loaded.',
+      remediation: boot ? undefined : 'After installing, restart your coding agent (or run `/mcp` in it) so the server is loaded.',
     },
     {
       id: 'index',

@@ -243,7 +243,7 @@ exit 0
     };
     // Explicit --target gemini.
     const explicit = run(['--target', 'gemini', '--global']);
-    expect(explicit).toMatch(/Wiring Gemini CLI globally/);
+    expect(explicit).toMatch(/Wiring agent 'gemini' globally/);
     expect(explicit).toMatch(/wired with: install --target gemini -y --location global/);
     // Run from a Gemini CLI shell, no flag: Gemini is the default.
     expect(run(['--global'], { GEMINI_CLI: '1' })).toMatch(/wired with: install --target gemini/);

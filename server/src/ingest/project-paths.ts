@@ -15,6 +15,8 @@
  *   3. The legacy lossy decode, preserving behavior for hyphen-free paths.
  */
 
+import { CLAUDE_PROFILE } from '../host-profiles.js';
+import { recordedProjects } from './recorded-projects.js';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -25,6 +27,8 @@ export interface SlugResolverOptions {
   claudeJsonPath?: string;
   /** Override for tests. Defaults to `~/.claude/projects`. */
   claudeRoot?: string;
+  /** Override for tests. Defaults to the installed-agents record. */
+  recordPath?: string;
 }
 
 /** Claude Code's encoding: every char outside [A-Za-z0-9] becomes '-'. */
@@ -141,13 +145,16 @@ function sniffCwd(claudeRoot: string, slug: string): string | null {
  * mtime change (REQ-SLUGRES-001).
  */
 export function createSlugResolver(opts: SlugResolverOptions = {}): (slug: string) => string {
-  const claudeJsonPath = opts.claudeJsonPath ?? path.join(os.homedir(), '.claude.json');
-  const claudeRoot = opts.claudeRoot ?? path.join(os.homedir(), '.claude', 'projects');
+  const claudeJsonPath = opts.claudeJsonPath ?? path.join(os.homedir(), CLAUDE_PROFILE.userConfigFile);
+  const claudeRoot = opts.claudeRoot ?? path.join(os.homedir(), CLAUDE_PROFILE.configDir, 'projects');
   const sniffed = new Map<string, string>();
 
   return (slug: string): string => {
     const fromIndex = claudeJsonIndex(claudeJsonPath).get(slug);
     if (fromIndex) return fromIndex;
+    // A project SpecShip is installed in, by any agent (REQ-AGENTSWITCH-011).
+    const recorded = recordedProjects(opts.recordPath).find((p) => encodeProjectSlug(p.path) === slug);
+    if (recorded) return recorded.path;
     const cached = sniffed.get(slug);
     if (cached) return cached;
     const fromCwd = sniffCwd(claudeRoot, slug);

@@ -390,7 +390,7 @@ const migrations: Migration[] = [
   {
     version: 8,
     description:
-      'Backfill claude_sessions.prompt_count from actual claude_prompts rows. The ingestor was bumping prompt_count once per user-type JSONL entry, but Claude Code emits one user entry per tool_result follow-up — all sharing the original promptId. A typical 50-prompt session landed with 800+ in prompt_count, making the Sessions list show inflated numbers vs. the actual rows visible in Session Detail. Re-run-safe.',
+      'Backfill claude_sessions.prompt_count from actual claude_prompts rows. The ingestor was bumping prompt_count once per user-type JSONL entry, but the Claude transcript format emits one user entry per tool_result follow-up — all sharing the original promptId. A typical 50-prompt session landed with 800+ in prompt_count, making the Sessions list show inflated numbers vs. the actual rows visible in Session Detail. Re-run-safe.',
     up: (db) => {
       // No schema change — purely a data correction. Idempotent because
       // the source-of-truth is COUNT(*) over claude_prompts, so running
@@ -465,7 +465,7 @@ const migrations: Migration[] = [
   {
     version: 12,
     description:
-      'Per-agent transcript adapters (REQ-AGENTSWITCH-004): host column on claude_sessions and claude_tool_calls, raw_tool_name on claude_tool_calls. Existing rows are Claude Code sessions whose tool names are already the shared names, so they keep host = claude and need no data change.',
+      'Per-agent transcript adapters (REQ-AGENTSWITCH-004): host column on claude_sessions and claude_tool_calls, raw_tool_name on claude_tool_calls. Existing rows are sessions ingested before this change, whose tool names are already the shared names, so they keep host = claude and need no data change.',
     up: (db) => {
       if (!hasColumn(db, 'claude_sessions', 'host'))
         db.exec(`ALTER TABLE claude_sessions ADD COLUMN host TEXT NOT NULL DEFAULT 'claude';`);

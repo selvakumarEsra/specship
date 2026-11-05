@@ -18,7 +18,9 @@ import { promises as fs, watch, type FSWatcher } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import { createSlugResolver, type SlugResolverOptions } from '../ingest/project-paths.js';
+import { createSlugResolver, encodeProjectSlug, type SlugResolverOptions } from '../ingest/project-paths.js';
+import { recordedProjects } from '../ingest/recorded-projects.js';
+import { CLAUDE_PROFILE } from '../host-profiles.js';
 
 export interface ProjectEntry {
   /** The encoded directory name under ~/.claude/projects/. Stable id. */
@@ -50,6 +52,41 @@ const projectsBus = new EventEmitter();
 projectsBus.setMaxListeners(0); // many SSE subscribers + internal
 
 export async function enumerate(claudeRoot: string, resolverOpts?: SlugResolverOptions): Promise<ProjectEntry[]> {
+  const fromTranscripts = await enumerateTranscriptProjects(claudeRoot, resolverOpts);
+  // Projects any agent has SpecShip installed in (REQ-AGENTSWITCH-011) — the
+  // only source for an agent whose session folders cannot be mapped back to a
+  // path. Listed once: a project already found above keeps that entry.
+  const seen = new Set(fromTranscripts.map((p) => p.path));
+  const fromRecord: ProjectEntry[] = [];
+  for (const rec of recordedProjects(resolverOpts?.recordPath)) {
+    if (seen.has(rec.path)) continue;
+    seen.add(rec.path);
+    let exists = false;
+    let initialized = false;
+    try { exists = (await fs.stat(rec.path)).isDirectory(); } catch { /* gone */ }
+    if (exists) {
+      try { initialized = (await fs.stat(path.join(rec.path, '.specship'))).isDirectory(); } catch { /* not initialized */ }
+    }
+    fromRecord.push({
+      slug: encodeProjectSlug(rec.path),
+      path: rec.path,
+      exists,
+      initialized,
+      sessionCount: 0,
+      lastModifiedMs: rec.recordedAtMs,
+      driftCount: null,
+    });
+  }
+  return [...fromTranscripts, ...fromRecord].sort(byRecency);
+}
+
+/** Recent activity first; ties broken by path. */
+function byRecency(a: ProjectEntry, b: ProjectEntry): number {
+  if (b.lastModifiedMs !== a.lastModifiedMs) return b.lastModifiedMs - a.lastModifiedMs;
+  return a.path.localeCompare(b.path);
+}
+
+async function enumerateTranscriptProjects(claudeRoot: string, resolverOpts?: SlugResolverOptions): Promise<ProjectEntry[]> {
   let entries: import('node:fs').Dirent[];
   try {
     entries = await fs.readdir(claudeRoot, { withFileTypes: true });
@@ -98,10 +135,7 @@ export async function enumerate(claudeRoot: string, resolverOpts?: SlugResolverO
   }
 
   // Recent activity first; ties broken by path.
-  out.sort((a, b) => {
-    if (b.lastModifiedMs !== a.lastModifiedMs) return b.lastModifiedMs - a.lastModifiedMs;
-    return a.path.localeCompare(b.path);
-  });
+  out.sort(byRecency);
   return out;
 }
 
@@ -201,7 +235,7 @@ function stopWatcher(): void {
 // --- Route registration -----------------------------------------------------
 
 export async function registerProjectsRoutes(app: FastifyInstance): Promise<void> {
-  const claudeRoot = path.join(os.homedir(), '.claude', 'projects');
+  const claudeRoot = path.join(os.homedir(), CLAUDE_PROFILE.configDir, 'projects');
   startWatcher(claudeRoot, false);
 
   app.addHook('onClose', async () => { stopWatcher(); });

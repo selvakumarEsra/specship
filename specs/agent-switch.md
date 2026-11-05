@@ -582,6 +582,17 @@ of the project path, so its projects come from the installed-agents record
 path. Each agent's own folder conventions MUST live in that agent's
 transcript adapter.
 
+implementations:
+  - server/src/ingest/recorded-projects.ts:recordedProjects
+  - server/src/routes/projects.ts:enumerate
+  - server/src/ingest/project-paths.ts:createSlugResolver
+  - src/agents/recent-project.ts:pickRecentInitializedProject
+
+verifies:
+  - __tests__/agent-discovery-wording.test.ts:reqAgentswitch011A1
+  - __tests__/agent-discovery-wording.test.ts:reqAgentswitch011A2
+  - __tests__/agent-discovery-wording.test.ts:reqAgentswitch011A3
+
 ## Acceptance
 <!-- id: REQ-AGENTSWITCH-011.A1 -->
 - With no `~/.claude/` at all and a recorded Gemini install in project P,
@@ -602,6 +613,16 @@ installed-agents record, the detected agent, and every agent whose
 transcripts are watched. The text MUST NOT always say "Claude Code". Text
 that is genuinely about one agent, such as the Claude-only status line,
 MUST say so explicitly.
+
+implementations:
+  - src/reflect/miner.ts:mineProposals
+  - src/reflect/apply.ts:applyProposal
+  - src/claudemd/audit.ts:auditClaudeMd
+
+verifies:
+  - __tests__/agent-host-literals.test.ts:reqAgentswitch001A1
+  - __tests__/agent-discovery-wording.test.ts:reqAgentswitch012A2
+  - __tests__/agent-discovery-wording.test.ts:reqAgentswitch012A3
 
 ## Acceptance
 <!-- id: REQ-AGENTSWITCH-012.A1 -->

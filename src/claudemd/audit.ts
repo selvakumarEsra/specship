@@ -52,7 +52,9 @@ const DUP_MIN_CHARS = 30;
 
 const SKIP_DIRS = new Set([
   'node_modules', '.git', 'dist', 'build', 'out', 'coverage',
-  '.specship', '.claude', 'vendor', 'target', '__pycache__',
+  '.specship', 'vendor', 'target', '__pycache__',
+  // Every agent's config dir is tool state, not project docs.
+  ...ALL_HOST_TRAITS.map((t) => t.configDir),
 ]);
 
 /** Directory depth cap for discovery — CLAUDE.md nests are shallow by design. */

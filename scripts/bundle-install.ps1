@@ -12,7 +12,7 @@
 
 .PARAMETER Target
   The coding agent a first install wires: claude or gemini. Default: the agent
-  whose shell runs this (GEMINI_CLI=1 means Gemini CLI), else Claude Code.
+  whose shell runs this (GEMINI_CLI=1 means gemini), else claude.
   Agents already recorded as installed are reinstalled whatever this says.
 
 .PARAMETER SkipClaude
@@ -115,7 +115,7 @@ if (($userPath -split ';') -notcontains $binDir) {
 if (-not $Target) {
   if ($env:GEMINI_CLI -eq '1' -and $env:CLAUDECODE -ne '1') { $Target = 'gemini' } else { $Target = 'claude' }
 }
-$agentName = if ($Target -eq 'gemini') { 'Gemini CLI' } else { 'Claude Code' }
+$agentName = "agent '$Target'"
 
 # 3. Wire the coding agent via the machine's resolved Node (no npm, no network).
 #    REQ-OFFINSTALL-005: the wiring target is asked, never assumed — a blind

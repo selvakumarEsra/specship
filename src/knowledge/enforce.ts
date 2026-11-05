@@ -13,6 +13,7 @@
  * Read-only over the project tree; never writes.
  */
 
+import { ALL_HOST_TRAITS } from '../activation/hook-output';
 import * as fs from 'fs';
 import * as path from 'path';
 import picomatch from 'picomatch';
@@ -67,7 +68,11 @@ export interface CheckEnforcedRulesOptions {
 }
 
 /** Directories never scanned: dependencies, VCS, build output, tool state. */
-export const ENFORCE_SKIP_DIRS = ['node_modules', '.git', 'dist', '.specship', '.claude'];
+export const ENFORCE_SKIP_DIRS = [
+  'node_modules', '.git', 'dist', '.specship',
+  // Every agent's config dir is tool state.
+  ...ALL_HOST_TRAITS.map((t) => t.configDir),
+];
 
 const ENFORCED_HEADING = /^\s*##\s+Enforced\s*$/i;
 const ANY_SECTION_HEADING = /^\s*#{1,2}\s+\S/;

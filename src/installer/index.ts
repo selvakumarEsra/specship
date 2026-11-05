@@ -245,7 +245,7 @@ export async function runInstallerWithOptions(
     execSync(probe, { stdio: 'pipe', windowsHide: true, shell: process.platform === 'win32' ? undefined : '/bin/sh' });
   } catch {
     clack.log.warn(
-      'The `specship` command is not on your PATH — Claude Code launches `specship serve --mcp` by name, ' +
+      `The \`specship\` command is not on your PATH — ${selectedTargets.map((t) => t.displayName).join(' / ')} launches \`specship serve --mcp\` by name, ` +
       'so the wiring below will not work until it is. Install the CLI first:\n' +
       '    npm i -g @specship/specship          (online)\n' +
       '    ./install.sh from the release bundle (offline — puts it on PATH)\n' +
