@@ -14,25 +14,25 @@ const WORKFLOW_TOOLS =
 
 export const HOST_LITERAL_ALLOWLIST: readonly AllowlistEntry[] = [
   // ── Owned by REQ-AGENTSWITCH-003 (memory-file audit + reflect proposals) ──
-  { file: 'src/claudemd/audit.ts', literal: 'CLAUDE.md', reason: 'owned by REQ-AGENTSWITCH-003 — memory-file audit covers only CLAUDE.md' },
-  { file: 'src/bin/specship.ts', literal: 'CLAUDE.md', reason: 'owned by REQ-AGENTSWITCH-003 — audit and reflect CLI messages name CLAUDE.md' },
-  { file: 'src/reflect/miner.ts', literal: 'CLAUDE.md', reason: 'owned by REQ-AGENTSWITCH-003 — reflect proposal text names CLAUDE.md' },
-  { file: 'src/reflect/targets.ts', literal: 'CLAUDE.md', reason: 'owned by REQ-AGENTSWITCH-003 — reflect proposals write the project CLAUDE.md' },
+  { file: 'src/claudemd/audit.ts', literal: 'CLAUDE.md', count: 7, reason: 'owned by REQ-AGENTSWITCH-003 — memory-file audit covers only CLAUDE.md' },
+  { file: 'src/bin/specship.ts', literal: 'CLAUDE.md', count: 4, reason: 'owned by REQ-AGENTSWITCH-003 — audit and reflect CLI messages name CLAUDE.md' },
+  { file: 'src/reflect/miner.ts', literal: 'CLAUDE.md', count: 2, reason: 'owned by REQ-AGENTSWITCH-003 — reflect proposal text names CLAUDE.md' },
+  { file: 'src/reflect/targets.ts', literal: 'CLAUDE.md', count: 1, reason: 'owned by REQ-AGENTSWITCH-003 — reflect proposals write the project CLAUDE.md' },
 
   // ── Owned by REQ-AGENTSWITCH-004 (per-agent transcript adapters) ──
-  { file: 'src/analytics/specship-impact.ts', literal: 'mcp__specship__', reason: 'owned by REQ-AGENTSWITCH-004 — transcript adapters (analytics matches Claude tool names)' },
-  { file: 'server/src/ingest/specship-classify.ts', literal: 'mcp__specship__', reason: 'owned by REQ-AGENTSWITCH-004 — transcript adapters (ingest classifies Claude tool names)' },
-  { file: 'server/src/routes/claude.ts', literal: '.claude/', reason: 'owned by REQ-AGENTSWITCH-004 — transcript adapters (Claude session analytics advice)' },
+  { file: 'src/analytics/specship-impact.ts', literal: 'mcp__specship__', count: 1, reason: 'owned by REQ-AGENTSWITCH-004 — transcript adapters (analytics matches Claude tool names)' },
+  { file: 'server/src/ingest/specship-classify.ts', literal: 'mcp__specship__', count: 1, reason: 'owned by REQ-AGENTSWITCH-004 — transcript adapters (ingest classifies Claude tool names)' },
+  { file: 'server/src/routes/claude.ts', literal: '.claude/', count: 1, reason: 'owned by REQ-AGENTSWITCH-004 — transcript adapters (Claude session analytics advice)' },
 
   // ── Historical: shipped migrations never change ──
-  { file: 'src/db/migrations.ts', literal: '.claude/', reason: 'historical migration description for the Claude transcript tables; migrations are immutable' },
-  { file: 'src/db/migrations.ts', literal: 'mcp__specship__', reason: 'historical migration backfill over Claude transcript rows; migrations are immutable' },
+  { file: 'src/db/migrations.ts', literal: '.claude/', count: 1, reason: 'historical migration description for the Claude transcript tables; migrations are immutable' },
+  { file: 'src/db/migrations.ts', literal: 'mcp__specship__', count: 1, reason: 'historical migration backfill over Claude transcript rows; migrations are immutable' },
 
   // ── Bundled workflows: step tool lists ──
-  { file: 'src/workflows/defaults/claude-design-implement.yaml', literal: 'mcp__specship__', reason: WORKFLOW_TOOLS },
-  { file: 'src/workflows/defaults/spec-author.yaml', literal: 'mcp__specship__', reason: WORKFLOW_TOOLS },
-  { file: 'src/workflows/defaults/spec-fix.yaml', literal: 'mcp__specship__', reason: WORKFLOW_TOOLS },
-  { file: 'src/workflows/defaults/spec-implement.yaml', literal: 'mcp__specship__', reason: WORKFLOW_TOOLS },
-  { file: 'src/workflows/defaults/spec-relink.yaml', literal: 'mcp__specship__', reason: WORKFLOW_TOOLS },
-  { file: 'src/workflows/defaults/spec-verify.yaml', literal: 'mcp__specship__', reason: WORKFLOW_TOOLS },
+  { file: 'src/workflows/defaults/claude-design-implement.yaml', literal: 'mcp__specship__', count: 8, reason: WORKFLOW_TOOLS },
+  { file: 'src/workflows/defaults/spec-author.yaml', literal: 'mcp__specship__', count: 9, reason: WORKFLOW_TOOLS },
+  { file: 'src/workflows/defaults/spec-fix.yaml', literal: 'mcp__specship__', count: 8, reason: WORKFLOW_TOOLS },
+  { file: 'src/workflows/defaults/spec-implement.yaml', literal: 'mcp__specship__', count: 19, reason: WORKFLOW_TOOLS },
+  { file: 'src/workflows/defaults/spec-relink.yaml', literal: 'mcp__specship__', count: 5, reason: WORKFLOW_TOOLS },
+  { file: 'src/workflows/defaults/spec-verify.yaml', literal: 'mcp__specship__', count: 3, reason: WORKFLOW_TOOLS },
 ];

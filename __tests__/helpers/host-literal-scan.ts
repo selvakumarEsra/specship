@@ -43,6 +43,13 @@ export interface HostLiteralHit {
 export interface AllowlistEntry {
   file: string;
   literal: string;
+  /**
+   * Exactly how many lines in the file carry the literal today. Pinned so a
+   * NEW occurrence in an already-listed file fails the guard instead of
+   * riding on the file's entry; removing one fails it too, so the count is
+   * lowered (or the entry deleted) as leaks are fixed.
+   */
+  count: number;
   reason: string;
 }
 
@@ -99,12 +106,20 @@ export function scanHostLiterals(repoRoot: string): HostLiteralHit[] {
 export function checkAllowlist(
   hits: HostLiteralHit[],
   allowlist: readonly AllowlistEntry[],
-): { unlisted: HostLiteralHit[]; stale: AllowlistEntry[] } {
+): {
+  unlisted: HostLiteralHit[];
+  stale: AllowlistEntry[];
+  miscounted: Array<{ entry: AllowlistEntry; actual: number }>;
+} {
   const key = (f: string, l: string) => `${f}\u0000${l}`;
   const allowed = new Set(allowlist.map((e) => key(e.file, e.literal)));
-  const hit = new Set(hits.map((h) => key(h.file, h.literal)));
+  const counts = new Map<string, number>();
+  for (const h of hits) counts.set(key(h.file, h.literal), (counts.get(key(h.file, h.literal)) ?? 0) + 1);
   return {
     unlisted: hits.filter((h) => !allowed.has(key(h.file, h.literal))),
-    stale: allowlist.filter((e) => !hit.has(key(e.file, e.literal))),
+    stale: allowlist.filter((e) => !counts.has(key(e.file, e.literal))),
+    miscounted: allowlist
+      .map((entry) => ({ entry, actual: counts.get(key(entry.file, entry.literal)) ?? 0 }))
+      .filter(({ entry, actual }) => actual > 0 && actual !== entry.count),
   };
 }
