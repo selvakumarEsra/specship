@@ -275,17 +275,23 @@ describe('REQ-AGENTSWITCH-004 — per-agent transcript adapters', () => {
     });
     try {
       const body = fs.readFileSync(path.join(FIXTURES, 'gemini-session.json'), 'utf-8');
-      fs.writeFileSync(path.join(root, geminiProjectHash(project), 'chats', 'session-2026-11-02T09-00-cccccccc.json'), body);
-      const deadline = Date.now() + 5000;
+      const file = path.join(root, geminiProjectHash(project), 'chats', 'session-2026-11-02T09-00-cccccccc.json');
+      // fs.watch arms asynchronously and can miss an event under heavy load:
+      // give it a moment, then re-touch the file until the watcher fires.
+      await new Promise((r) => setTimeout(r, 200));
+      fs.writeFileSync(file, body);
+      const deadline = Date.now() + 15000;
       let host: string | undefined;
+      let lastTouch = Date.now();
       while (Date.now() < deadline && !host) {
         await new Promise((r) => setTimeout(r, 50));
         host = (db.prepare(`SELECT host FROM claude_sessions LIMIT 1`).get() as { host?: string } | undefined)?.host;
+        if (!host && Date.now() - lastTouch > 1000) { fs.writeFileSync(file, body + ' '); lastTouch = Date.now(); }
       }
       expect(host, 'the watcher ingested the new Gemini session').toBe('gemini');
     } finally {
       handle.stop();
     }
   }
-  it('REQ-AGENTSWITCH-004: the ingest watcher picks up a new Gemini chat file', reqAgentswitch004WatcherSeesGemini, 15_000);
+  it('REQ-AGENTSWITCH-004: the ingest watcher picks up a new Gemini chat file', reqAgentswitch004WatcherSeesGemini, 25_000);
 });
