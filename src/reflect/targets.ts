@@ -18,6 +18,7 @@
  */
 
 import * as path from 'path';
+import { CLAUDE_CODE_TRAITS, DEFAULT_HOST_TRAITS, type HostTraits } from '../activation/hook-output';
 import { proposalHash } from './hash';
 import {
   Proposal,
@@ -74,15 +75,22 @@ export function buildProposal(
     nameSeed: string;
   },
 ): Proposal {
+  const host = ctx.host ?? DEFAULT_HOST_TRAITS;
   let targetKind: TargetKind;
   let targetPath: string;
   let payload: ProposalPayload;
 
   if (input.type === 'memory_rule') {
-    if (input.scope === 'portable') {
+    if (input.scope === 'portable' && !host.memoryNotesDir) {
+      // A host with no memory-notes directory keeps cross-project rules in
+      // its user-wide memory file, as a SpecShip-marked block.
+      targetKind = 'claude_md';
+      targetPath = path.join(ctx.homeDir, host.userMemoryFile);
+      payload = { kind: 'claude_md', markerId: '', block: '' };
+    } else if (input.scope === 'portable') {
       const slug = slugify(input.nameSeed);
       targetKind = 'memory_note';
-      targetPath = path.join(ctx.homeDir, '.claude', 'memory', `${slug}.md`);
+      targetPath = path.join(ctx.homeDir, host.memoryNotesDir!, `${slug}.md`);
       // Hash needs a deterministic id; derive a provisional one from the slug so
       // the marker is stable, then fold everything into the final hash below.
       const note = renderMemoryNote(slug, input.title, input.content);
@@ -90,7 +98,7 @@ export function buildProposal(
       payload = { kind: 'memory_note', slug, note, indexLine };
     } else {
       targetKind = 'claude_md';
-      targetPath = path.join(ctx.projectRoot, 'CLAUDE.md');
+      targetPath = path.join(ctx.projectRoot, host.memoryFile);
       // markerId is finalized after we know the hash; use a placeholder then
       // re-render once hashed (below) so the block carries its own id.
       payload = { kind: 'claude_md', markerId: '', block: '' };
@@ -119,8 +127,8 @@ export function buildProposal(
   } else {
     // hook
     targetKind = 'settings_hook';
-    targetPath = path.join(ctx.projectRoot, '.claude', 'settings.json');
-    const h = input.hook!;
+    targetPath = path.join(ctx.projectRoot, host.projectSettingsFile);
+    const h = translateHook(input.hook!, host);
     payload = {
       kind: 'settings_hook',
       event: h.event,
@@ -163,6 +171,21 @@ export function buildProposal(
     createdAt: 0,
     updatedAt: 0,
     appliedAt: null,
+  };
+}
+
+/**
+ * Map a hook written in the default host's vocabulary (its post-edit event
+ * and write-tool matcher) onto `host`'s names. Anything else passes through.
+ */
+function translateHook(
+  h: { event: string; matcher: string; command: string },
+  host: HostTraits,
+): { event: string; matcher: string; command: string } {
+  return {
+    event: h.event === CLAUDE_CODE_TRAITS.postEditEvent ? host.postEditEvent : h.event,
+    matcher: h.matcher === CLAUDE_CODE_TRAITS.writeToolMatcher ? host.writeToolMatcher : h.matcher,
+    command: h.command,
   };
 }
 

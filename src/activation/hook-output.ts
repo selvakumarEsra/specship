@@ -10,6 +10,8 @@
  * payload tells the command which host called it (REQ-GEMINI-010).
  */
 
+import * as fs from 'fs';
+import * as path from 'path';
 import { agentFromHookEvent, type DetectedAgent } from '../agents/detect';
 
 export interface HookPayload {
@@ -131,6 +133,19 @@ export interface HostTraits {
   denyEligibleTools: readonly string[];
   /** The host's shell tool, whose `command` the interceptor classifies. */
   shellTool: string | null;
+  /** Project settings file holding hook entries, relative to the project root (REQ-AGENTSWITCH-003). */
+  projectSettingsFile: string;
+  /** The host's after-tool hook event a post-edit hook registers under. */
+  postEditEvent: string;
+  /** Hook matcher naming the host's built-in file-write tools. */
+  writeToolMatcher: string;
+  /**
+   * User-wide memory-notes directory, relative to the home dir; `null` when
+   * the host has none (portable memory rules then go to {@link userMemoryFile}).
+   */
+  memoryNotesDir: string | null;
+  /** User-wide memory file, relative to the home dir. */
+  userMemoryFile: string;
 }
 
 /**
@@ -154,6 +169,11 @@ export const CLAUDE_CODE_TRAITS: HostTraits = {
   fallbackToolEvent: 'PreToolUse',
   denyEligibleTools: [],
   shellTool: null,
+  projectSettingsFile: '.claude/settings.json',
+  postEditEvent: 'PostToolUse',
+  writeToolMatcher: 'Edit|Write',
+  memoryNotesDir: '.claude/memory',
+  userMemoryFile: '.claude/CLAUDE.md',
 };
 
 /** Gemini CLI (verified against 0.28.0). */
@@ -174,6 +194,12 @@ export const GEMINI_CLI_TRAITS: HostTraits = {
   fallbackToolEvent: 'BeforeTool',
   denyEligibleTools: ['grep_search', 'glob'],
   shellTool: 'run_shell_command',
+  projectSettingsFile: '.gemini/settings.json',
+  postEditEvent: 'AfterTool',
+  // Same matcher the installer's post-edit sync hook uses (targets/gemini.ts).
+  writeToolMatcher: 'write_file|replace',
+  memoryNotesDir: null,
+  userMemoryFile: '.gemini/GEMINI.md',
 };
 
 /**
@@ -191,6 +217,21 @@ export const ALL_HOST_TRAITS: readonly HostTraits[] = [CLAUDE_CODE_TRAITS, GEMIN
  */
 export function hostTraitsFor(id: string | null | undefined): HostTraits {
   return ALL_HOST_TRAITS.find((t) => t.id === id) ?? DEFAULT_HOST_TRAITS;
+}
+
+/**
+ * The agents a project is set up for (REQ-AGENTSWITCH-003): every host whose
+ * root memory file or project config directory exists at `projectRoot`, in
+ * registry order. A project carrying neither is treated as Claude Code's, the
+ * default host, so pre-adapter projects keep their exact behaviour.
+ */
+export function agentsInProject(projectRoot: string): HostTraits[] {
+  const present = ALL_HOST_TRAITS.filter(
+    (t) =>
+      fs.existsSync(path.join(projectRoot, t.memoryFile)) ||
+      fs.existsSync(path.join(projectRoot, t.configDir)),
+  );
+  return present.length > 0 ? [...present] : [DEFAULT_HOST_TRAITS];
 }
 
 const GEMINI_EVENTS = new Set(['BeforeAgent', 'BeforeTool', 'AfterTool']);

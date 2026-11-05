@@ -178,6 +178,17 @@ implementations:
   - src/claudemd/audit.ts:auditClaudeMd
   - src/claudemd/audit.ts:runClaudeMdAudit
   - src/reflect/targets.ts:buildProposal
+  - src/activation/hook-output.ts:agentsInProject
+  - src/claudemd/audit.ts:auditMemoryFiles
+  - src/reflect/targets.ts:translateHook
+  - src/reflect/miner.ts:ruleReferenceDoc
+  - src/index.ts:SpecShip.reflectContext
+
+verifies:
+  - __tests__/claudemd-audit.test.ts:reqAgentswitch003A1
+  - __tests__/reflect-engine.test.ts:reqAgentswitch003A2
+  - __tests__/reflect-engine.test.ts:reqAgentswitch003A3
+  - __tests__/reflect-cli-verbs.test.ts:reqAgentswitch003HostFromEnv
 
 ## Acceptance
 <!-- id: REQ-AGENTSWITCH-003.A1 -->

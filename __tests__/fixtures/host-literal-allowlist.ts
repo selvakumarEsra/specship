@@ -13,12 +13,6 @@ const WORKFLOW_TOOLS =
   'src/workflows/agents/gemini.ts translateGeminiTools maps them per agent';
 
 export const HOST_LITERAL_ALLOWLIST: readonly AllowlistEntry[] = [
-  // ── Owned by REQ-AGENTSWITCH-003 (memory-file audit + reflect proposals) ──
-  { file: 'src/claudemd/audit.ts', literal: 'CLAUDE.md', count: 7, reason: 'owned by REQ-AGENTSWITCH-003 — memory-file audit covers only CLAUDE.md' },
-  { file: 'src/bin/specship.ts', literal: 'CLAUDE.md', count: 4, reason: 'owned by REQ-AGENTSWITCH-003 — audit and reflect CLI messages name CLAUDE.md' },
-  { file: 'src/reflect/miner.ts', literal: 'CLAUDE.md', count: 2, reason: 'owned by REQ-AGENTSWITCH-003 — reflect proposal text names CLAUDE.md' },
-  { file: 'src/reflect/targets.ts', literal: 'CLAUDE.md', count: 1, reason: 'owned by REQ-AGENTSWITCH-003 — reflect proposals write the project CLAUDE.md' },
-
   // ── Owned by REQ-AGENTSWITCH-004 (per-agent transcript adapters) ──
   { file: 'src/analytics/specship-impact.ts', literal: 'mcp__specship__', count: 1, reason: 'owned by REQ-AGENTSWITCH-004 — transcript adapters (analytics matches Claude tool names)' },
   { file: 'server/src/ingest/specship-classify.ts', literal: 'mcp__specship__', count: 1, reason: 'owned by REQ-AGENTSWITCH-004 — transcript adapters (ingest classifies Claude tool names)' },

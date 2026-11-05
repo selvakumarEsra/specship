@@ -967,10 +967,12 @@ program
       // CLAUDE.md governance findings ride the same SessionStart line
       // (CLAUDEMD-DOC, REQ-CLAUDEMD-003) — silent at zero.
       try {
-        const { readClaudeMdAudit } = require('../claudemd/audit') as typeof import('../claudemd/audit');
+        const { readClaudeMdAudit, auditMemoryFiles } = require('../claudemd/audit') as typeof import('../claudemd/audit');
         const audit = readClaudeMdAudit(projectPath);
         if (audit && audit.findings.length > 0) {
-          console.log(`⚠ ${audit.findings.length} CLAUDE.md finding(s) — review with /specship:check claudemd`);
+          // Name the memory file(s) the findings are about (REQ-AGENTSWITCH-003).
+          const files = auditMemoryFiles(audit).join(' and ');
+          console.log(`⚠ ${audit.findings.length} ${files} finding(s) — review with /specship:check claudemd`);
         }
       } catch {
         /* surfacing is best-effort */
@@ -1744,7 +1746,7 @@ memory
   .requiredOption('--title <title>', 'short title for the lesson')
   .option(
     '--target <target>',
-    'where apply would write it: "memory" (portable ~/.claude note, default) or "claude-md" (project CLAUDE.md)',
+    'where apply would write it: "memory" (portable user memory, default) or "claude-md" (the project memory file of the active agent)',
     'memory',
   )
   .option('--path <projectRoot>', 'project root (default: cwd)')
@@ -1777,7 +1779,7 @@ memory
       } else {
         info(`Captured lesson as proposal ${p.contentHash.slice(0, 12)} (${p.state}): ${p.title}`);
         info(
-          `Target: ${p.targetKind === 'claude_md' ? 'project CLAUDE.md' : 'portable ~/.claude memory note'} — nothing written yet.`,
+          `Target: ${memoryTargetLabel(p, projectPath)} — nothing written yet.`,
         );
         info('Review with `specship reflect`; manage applied memory rules with `specship memory list`.');
       }
@@ -1787,6 +1789,17 @@ memory
       process.exit(1);
     }
   });
+
+/**
+ * Where a memory_rule proposal writes, named from its own target path so each
+ * agent's memory file shows (REQ-AGENTSWITCH-003).
+ */
+function memoryTargetLabel(p: { targetKind: string; targetPath: string }, projectRoot: string): string {
+  if (p.targetKind !== 'claude_md') return 'portable ~/.claude memory note';
+  const file = path.basename(p.targetPath);
+  const inProject = !path.relative(path.resolve(projectRoot), p.targetPath).startsWith('..');
+  return inProject ? `project ${file}` : `portable user ${file}`;
+}
 
 // Body text of a memory_rule proposal's payload (the note or the CLAUDE.md block).
 function memoryRuleBody(p: { payload: { kind: string; note?: string; block?: string } }): string {
@@ -1822,7 +1835,7 @@ memory
         return;
       }
       for (const p of items) {
-        const target = p.targetKind === 'claude_md' ? 'CLAUDE.md' : 'memory note';
+        const target = p.targetKind === 'claude_md' ? path.basename(p.targetPath) : 'memory note';
         success(`${p.contentHash.slice(0, 12)}  [${target}]  ${p.title}`);
       }
       cg.destroy();
