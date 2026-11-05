@@ -189,7 +189,8 @@ export class MCPSession {
     } | undefined;
 
     this.clientSupportsRoots = !!params?.capabilities?.roots;
-    // Detection only — the reply below is identical whatever the client is.
+    // The detected client picks the instruction wording below (REQ-AGENTSWITCH-002):
+    // a known host gets its own tool and file names, an unknown one today's text.
     this.detectedAgent = agentFromMcpClient(params?.clientInfo);
 
     // Explicit project signal, strongest first: client-provided rootUri /
@@ -210,7 +211,7 @@ export class MCPSession {
       protocolVersion: PROTOCOL_VERSION,
       capabilities: { tools: {} },
       serverInfo: SERVER_INFO,
-      instructions: resolveServerInstructions(explicitPath ?? this.explicitProjectPath ?? null),
+      instructions: resolveServerInstructions(explicitPath ?? this.explicitProjectPath ?? null, this.detectedAgent),
     });
 
     // REQ-AGENTSWITCH-008: a supported agent the record doesn't list for this

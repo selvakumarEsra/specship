@@ -252,7 +252,8 @@ describe('REQ-LOWEND-003 — the proxy handshake resolves instructions the same 
   // detached process (see the SPECSHIP_NO_DAEMON note above).
   it('proxy.ts initialize reply calls resolveServerInstructions(deps.root)', () => {
     const src = fs.readFileSync(path.resolve(__dirname, '../src/mcp/proxy.ts'), 'utf-8');
-    expect(src).toContain('instructions: resolveServerInstructions(deps.root)');
+    // The detected client rides along as a second argument (REQ-AGENTSWITCH-002).
+    expect(src).toMatch(/instructions: resolveServerInstructions\(deps\.root[,)]/);
     expect(src).not.toContain('instructions: SERVER_INSTRUCTIONS');
   });
 });

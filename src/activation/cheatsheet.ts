@@ -14,13 +14,15 @@
  * and the `SPECSHIP_NO_CHEATSHEET` opt-out below, not by this module.
  */
 
+import { DEFAULT_HOST_TRAITS, type HostTraits } from './hook-output';
+
 /**
  * The cheat-sheet rendered to the user. Names only user-facing commands, tools,
  * and env vars — no internal file paths, symbol names, or benchmark figures
  * (REQ-CHEAT-002.A3), so it reads as a product map rather than engineering
  * notes.
  */
-export const CHEATSHEET_TEXT = [
+const cheatsheetLines = (explorePrefer: string): string => [
   '📦 SpecShip — code intelligence + spec-driven flow over the indexed graph',
   '',
   'The four doors (slash commands):',
@@ -29,7 +31,7 @@ export const CHEATSHEET_TEXT = [
   '• /specship:check    — gate & health door (drift queue, fix, relink, health).',
   '• /specship:learn    — lessons door. crystallize what worked into a skill proposal.',
   '',
-  'Explore before you Read/Grep:',
+  explorePrefer,
   '• specship_explore is PRIMARY — one call returns verbatim source grouped by file.',
   '• Flow: name both ends (e.g. "mutateElement renderScene") to trace the call path.',
   '• Locate → specship_search · impact → specship_impact · callers/callees too.',
@@ -43,19 +45,35 @@ export const CHEATSHEET_TEXT = [
   'Silence this with SPECSHIP_NO_CHEATSHEET=1. specship_status shows index freshness.',
 ].join('\n');
 
+/** The cheat-sheet as shown when no host is known — today's text. */
+export const CHEATSHEET_TEXT = cheatsheetLines('Explore before you Read/Grep:');
+
+/**
+ * The cheat-sheet for a host profile (REQ-AGENTSWITCH-002): the default host
+ * (or none) gets {@link CHEATSHEET_TEXT} unchanged; another host sees its own
+ * read and search tool names.
+ */
+export function cheatsheetText(traits?: HostTraits): string {
+  if (!traits || traits.id === DEFAULT_HOST_TRAITS.id) return CHEATSHEET_TEXT;
+  const tools = [traits.readTools[0], traits.searchTools[0]].filter(Boolean).join('/');
+  return cheatsheetLines(`Explore before you ${tools}:`);
+}
+
 /**
  * Build the `SessionStart`-hook payload the `specship cheatsheet` command
  * prints. Returns `{ systemMessage }` (user-visible only — never
  * `additionalContext`, REQ-CHEAT-001.A2), or `null` when the user has opted
  * out via `SPECSHIP_NO_CHEATSHEET` (REQ-CHEAT-004.A1). An unset or empty
- * variable prints normally (REQ-CHEAT-004.A2).
+ * variable prints normally (REQ-CHEAT-004.A2). `traits` is the running host's
+ * profile; omitted (no known host), the text is today's (REQ-AGENTSWITCH-002).
  */
 export function buildCheatsheetPayload(
   env: NodeJS.ProcessEnv = process.env,
   extras: CheatsheetExtras = {},
+  traits?: HostTraits,
 ): { systemMessage: string } | null {
   if (env.SPECSHIP_NO_CHEATSHEET) return null;
-  const parts = [CHEATSHEET_TEXT];
+  const parts = [cheatsheetText(traits)];
   // Learned project conventions (REQ-ALEARN-002): absent/empty file → output
   // is byte-identical to the base cheatsheet (A1).
   if (extras.conventions) {

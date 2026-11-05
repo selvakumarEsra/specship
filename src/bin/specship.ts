@@ -3571,7 +3571,12 @@ program
         }
       }
     } catch { /* store unavailable → omit the line */ }
-    const payload = buildCheatsheetPayload(process.env, { conventions, openProposals });
+    // SessionStart is sent by every host, so the launcher env identifies the
+    // agent; unknown → today's text (REQ-AGENTSWITCH-002).
+    const { agentFromEnv, UNKNOWN_AGENT } = await import('../agents/detect');
+    const agent = agentFromEnv(process.env);
+    const traits = agent === UNKNOWN_AGENT ? undefined : hostTraitsFor(agent);
+    const payload = buildCheatsheetPayload(process.env, { conventions, openProposals }, traits);
     if (payload) process.stdout.write(JSON.stringify(payload) + '\n');
     process.exit(0);
   });
@@ -3760,7 +3765,7 @@ program
   .option('-l, --location <where>', 'With --keep-data: which wiring to remove ("global" or "local")')
   .option('--local', 'Only unwire this project (same as --keep-data --location local); keeps indexes, data and the binary')
   .option('--global', 'Only unwire the user-wide install (same as --keep-data --location global); keeps indexes, data and the binary')
-  .option('-t, --target <ids>', 'Agents to unwire with --keep-data/--local/--global: "claude" (default) | "gemini" | "claude,gemini"')
+  .option('-t, --target <ids>', 'Agents to unwire: "claude" | "gemini" | "claude,gemini". With --keep-data/--local/--global the default is claude; a full purge with no --target unwires every agent')
   .action(async (opts: {
     target?: string;
     location?: string;

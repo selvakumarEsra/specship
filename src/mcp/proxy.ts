@@ -25,6 +25,7 @@ import { DaemonHello, MAX_HELLO_LINE_BYTES } from './daemon';
 import { SpecShipPackageVersion } from './version';
 import { SERVER_INFO, PROTOCOL_VERSION } from './session';
 import { resolveServerInstructions } from './server-instructions';
+import { agentFromMcpClient } from '../agents/detect';
 import { getStaticTools } from './tools';
 import type { MCPEngine } from './engine';
 
@@ -226,7 +227,7 @@ export async function runLocalHandshakeProxy(deps: LocalHandshakeDeps): Promise<
       let msg: JsonRpc; try { msg = JSON.parse(line) as JsonRpc; } catch { routeToDaemon(line); continue; }
       if (msg.method === 'initialize') {
         clientInitId = msg.id;
-        writeClient({ jsonrpc: '2.0', id: msg.id, result: { protocolVersion: PROTOCOL_VERSION, capabilities: { tools: {} }, serverInfo: SERVER_INFO, instructions: resolveServerInstructions(deps.root) } });
+        writeClient({ jsonrpc: '2.0', id: msg.id, result: { protocolVersion: PROTOCOL_VERSION, capabilities: { tools: {} }, serverInfo: SERVER_INFO, instructions: resolveServerInstructions(deps.root, agentFromMcpClient((msg.params as { clientInfo?: { name?: unknown } } | undefined)?.clientInfo)) } });
         routeToDaemon(line); // prime the daemon so it resolves the project (its reply is suppressed below)
       } else if (msg.method === 'tools/list') {
         // Pass the project root so the lite-tier menu trim applies to the

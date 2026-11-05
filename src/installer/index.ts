@@ -25,7 +25,7 @@ import {
 } from './install-defaults';
 import { allTargets, getTarget, listTargetIds } from './targets/registry';
 import type { AgentTarget, Location, TargetId } from './targets/types';
-import { CLAUDE_CODE_TRAITS } from '../activation/hook-output';
+import { CLAUDE_CODE_TRAITS, DEFAULT_HOST_TRAITS } from '../activation/hook-output';
 
 /** Claude Code scope hints for the location prompts, from its host profile. */
 const CLAUDE_LOCAL_HINT = `./.mcp.json + ./${CLAUDE_CODE_TRAITS.configDir}/settings.json`;
@@ -489,6 +489,10 @@ export interface RunUninstallerOptions {
    * installer module's own `__dirname` as the method-detection anchor.
    */
   purgeEnv?: PurgeEnv;
+  /** Test seam: the prompt UI (defaults to `@clack/prompts`). */
+  clack?: typeof import('@clack/prompts');
+  /** Test seam: the purge's filesystem/spawn deps (defaults to the production ones). */
+  purgeExecDeps?: PurgeExecDeps;
 }
 
 export type UninstallStatus = 'removed' | 'not-configured' | 'unsupported';
@@ -625,7 +629,7 @@ export function reinstallRecordedAgents(
  * `--keep-data` escape hatch runs the original wiring-only behavior instead.
  */
 export async function runUninstaller(opts: RunUninstallerOptions): Promise<void> {
-  const clack = await importESM('@clack/prompts');
+  const clack = opts.clack ?? (await importESM('@clack/prompts'));
   clack.intro(`SpecShip v${getVersion()} — uninstall`);
 
   if (opts.target === 'none') {
@@ -633,15 +637,17 @@ export async function runUninstaller(opts: RunUninstallerOptions): Promise<void>
     return;
   }
   // Same resolution as install, so `--target gemini` sweeps the Gemini wiring
-  // instead of being rejected. A full purge ignores this and removes every
-  // registered target's wiring — "complete removal" means complete.
+  // instead of being rejected. A purge with no `--target` removes every
+  // registered target's wiring — "complete removal" means complete; a named
+  // target narrows the wiring sweep (and its messages) to that agent
+  // (REQ-AGENTSWITCH-002.A2).
   const selectedTargets = resolveInstallTargets(opts.target);
 
   if (opts.keepData) {
     await wiringOnlyUninstall(clack, opts, selectedTargets);
     return;
   }
-  await purgeUninstall(clack, opts);
+  await purgeUninstall(clack, opts, opts.target === undefined ? null : selectedTargets);
 }
 
 /**
@@ -662,10 +668,17 @@ async function wiringOnlyUninstall(
   } else {
     const sel = await clack.select({
       message: 'Remove SpecShip from just this project, or all of them?',
-      options: [
-        { value: 'local'  as const, label: 'Just this project (local)', hint: CLAUDE_LOCAL_HINT },
-        { value: 'global' as const, label: 'All projects (global)', hint: CLAUDE_GLOBAL_HINT },
-      ],
+      // Hints name the selected targets' own files — never Claude's for a
+      // `--target gemini` uninstall (REQ-AGENTSWITCH-002.A2).
+      options: targets.length === 1 && targets[0] === claudeTarget
+        ? [
+          { value: 'local'  as const, label: 'Just this project (local)', hint: CLAUDE_LOCAL_HINT },
+          { value: 'global' as const, label: 'All projects (global)', hint: CLAUDE_GLOBAL_HINT },
+        ]
+        : [
+          { value: 'local'  as const, label: 'Just this project (local)', hint: describeFirstPaths(targets, 'local') },
+          { value: 'global' as const, label: 'All projects (global)', hint: describeFirstPaths(targets, 'global') },
+        ],
       initialValue: 'local' as const,
     });
     if (clack.isCancel(sel)) {
@@ -710,12 +723,18 @@ async function wiringOnlyUninstall(
 async function purgeUninstall(
   clack: typeof import('@clack/prompts'),
   opts: RunUninstallerOptions,
+  named: readonly AgentTarget[] | null,
 ): Promise<void> {
   const env = opts.purgeEnv ?? deriveDefaultPurgeEnv();
   const plan = planPurge(env);
+  // No `--target`: every registered agent's wiring, described as today.
+  const sweep = named ?? allTargets();
+  const wiringLabel = named
+    ? named.map((t) => t.displayName).join(' / ')
+    : DEFAULT_HOST_TRAITS.displayName;
 
   const targets: string[] = [
-    'Claude Code wiring (global + this project)',
+    `${wiringLabel} wiring (global + this project)`,
     `This project's index — ${tildify(plan.projectIndex)}`,
     ...plan.dataDirs.map((d) => `User data & config (incl. JIRA credentials) — ${tildify(d)}`),
   ];
@@ -739,22 +758,33 @@ async function purgeUninstall(
 
   // 1. Every registered target's wiring at BOTH locations — a purge that left
   //    a Gemini MCP entry behind wouldn't be a complete removal.
+  const restart = new Set<string>();
   for (const location of ['global', 'local'] as Location[]) {
-    for (const report of uninstallTargets(allTargets(), location)) {
+    for (const report of uninstallTargets(sweep, location)) {
       if (report.status === 'removed') {
+        restart.add(report.displayName);
         for (const p of report.removedPaths) {
           clack.log.success(`${report.displayName} (${location}): removed ${tildify(p)}`);
         }
       }
     }
   }
+  if (named && named.length < allTargets().length) {
+    clack.log.warn(
+      "Other agents' SpecShip wiring was left in place; it points at the removed program until " +
+      'you run `specship uninstall --target <agent>` for each.',
+    );
+  }
 
   // 2. Index + user data + binary. Self-affecting removals run LAST inside
   //    executePurge, so nothing loads a new module after the code is gone.
-  const result = executePurge(plan, productionPurgeDeps(clack, env.homedir));
+  const result = executePurge(plan, opts.purgeExecDeps ?? productionPurgeDeps(clack, env.homedir));
   for (const note of result.notes) clack.log.warn(note);
 
-  clack.outro('SpecShip completely removed. Restart Claude Code to apply.');
+  // Name only the agents whose wiring was removed; nothing removed → the
+  // named agents, or today's line when none was named.
+  const restartNames = restart.size > 0 ? [...restart].join(' / ') : wiringLabel;
+  clack.outro(`SpecShip completely removed. Restart ${restartNames} to apply.`);
 }
 
 /** Derive the purge env when the CLI didn't pass one (back-compat / tests). */
