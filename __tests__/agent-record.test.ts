@@ -233,7 +233,7 @@ async function reqAgentswitch006A4(): Promise<void> {
     for (const key of Object.keys(entry)) expect(allowed.has(key)).toBe(true);
     // Install choices are booleans only, never config values.
     for (const [k, v] of Object.entries(entry.choices ?? {})) {
-      expect(['sdd', 'autoAllow', 'statusLine']).toContain(k);
+      expect(['sdd', 'autoAllow', 'statusLine', 'withJira', 'withDesigner']).toContain(k);
       expect(typeof v).toBe('boolean');
     }
   }

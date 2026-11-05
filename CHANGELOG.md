@@ -27,6 +27,8 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixes
 
+- When SpecShip sets itself up for Gemini CLI on a project whose Claude Code install auto-allows SpecShip's read-only tools, the Gemini setup now auto-allows them too, instead of silently dropping that choice. An install made without auto-allow still writes no policy, and `specship install --target gemini` on its own still needs `--trust`.
+- A Gemini CLI install now names the status line as unavailable in Gemini CLI on a line of its own, instead of burying it in a longer note.
 - On Gemini CLI, the memory-file audit now checks `GEMINI.md` instead of reporting a missing `CLAUDE.md`, and covers both files when a project uses both agents, naming the file each finding is about. Reflection proposals applied from Gemini CLI now write to `GEMINI.md` (project rules), `~/.gemini/GEMINI.md` (rules for every project) and `.gemini/settings.json` with Gemini's own hook event and tool names, instead of Claude Code's files.
 - Gemini CLI sessions now get SpecShip's tool guidance and session cheat-sheet in Gemini's own terms — `read_file`, `grep_search`, `glob` and `GEMINI.md` — instead of Claude Code's tool names. Claude Code sees exactly the same text as before.
 - `specship uninstall --target gemini` now names only Gemini CLI's files and tells you to restart Gemini CLI; a full uninstall with `--target gemini` removes only Gemini's wiring and warns that other agents' wiring stays in place.

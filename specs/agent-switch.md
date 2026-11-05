@@ -153,6 +153,7 @@ verifies:
   - __tests__/mcp-agent-instructions.test.ts:reqAgentswitch002A1
   - __tests__/installer-targets.test.ts:reqAgentswitch002A2
   - __tests__/installer-targets.test.ts:purgeAllSweepsEveryAgent
+  - __tests__/agent-switch-parity.test.ts:reqAgentswitch002A3
 
 ## Acceptance
 <!-- id: REQ-AGENTSWITCH-002.A1 -->
@@ -520,6 +521,22 @@ options the user chose for Claude Code MUST carry over, including
 auto-allow. The confirmation note: "gemini also needs all the features we
 implemented for claude code, make specship experience seamless" (user,
 2026-11-05).
+
+implementations:
+  - src/installer/targets/feature-parity.ts:GEMINI_PARITY
+  - src/installer/targets/feature-parity.ts:noSurfaceNotes
+  - src/installer/targets/claude.ts:CLAUDE_ARTIFACT_KINDS
+  - src/installer/targets/gemini.ts:GeminiCliTarget.install
+  - src/installer/auto-migrate.ts:maybeAutoMigrate
+
+verifies:
+  - __tests__/agent-switch-parity.test.ts:reqAgentswitch010A1
+  - __tests__/agent-switch-parity.test.ts:reqAgentswitch010A2
+  - __tests__/agent-switch-parity.test.ts:reqAgentswitch010A3
+  - __tests__/agent-switch-parity.test.ts:reqAgentswitch010A4
+  - __tests__/agent-switch-parity.test.ts:reqAgentswitch010A1FromRealInstall
+  - __tests__/agent-switch-parity.test.ts:reqAgentswitch010A3UnrecordedChoice
+  - __tests__/agent-switch-parity.test.ts:reqAgentswitch010IntegrationsCarry
 
 ## Acceptance
 <!-- id: REQ-AGENTSWITCH-010.A1 -->

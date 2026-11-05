@@ -192,13 +192,17 @@ describe('recordRunResult — idempotency', () => {
   it('a second call with the same (caseKey, runId) edits the comment in place and does not duplicate the link', async () => {
     const { client, comments } = fakeClient();
     const { sq, links } = fakeSpecQueries(CRITERION);
+    // A clock that moves between calls: the second, identical record still
+    // skips (the "Recorded:" time alone is not a change).
+    let t = Date.parse('2026-11-05T00:00:00Z');
+    const now = () => (t += 1500);
     const first = await recordRunResult(
-      { client, specQueries: sq },
+      { client, specQueries: sq, now },
       { caseKey: 'PROJ-1', criterionId: CRITERION.id, status: 'passed', executor: 'human', runId: 'same' },
     );
     expect(first.comment).toBe('created');
     const secondSame = await recordRunResult(
-      { client, specQueries: sq },
+      { client, specQueries: sq, now },
       { caseKey: 'PROJ-1', criterionId: CRITERION.id, status: 'passed', executor: 'human', runId: 'same' },
     );
     expect(secondSame.comment).toBe('skipped');

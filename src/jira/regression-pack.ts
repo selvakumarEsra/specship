@@ -1254,6 +1254,11 @@ function triageHint(criterionId: string): string {
   return `Failed — triage with \`/specship:spec triage ${criterionId}\`.`;
 }
 
+/** A run comment body without its `- Recorded: <time>` line, for change detection. */
+function withoutRecordedAt(body: string): string {
+  return body.replace(/^- Recorded: .*$/m, '');
+}
+
 function renderRunCommentBody(
   result: RegressionRunResult,
   runId: string,
@@ -1300,7 +1305,9 @@ export async function recordRunResult(
   const prior = existing.find((c) => c.body.startsWith(marker));
   let commentAction: 'created' | 'updated' | 'skipped';
   if (prior) {
-    if (prior.body === body) {
+    // The "Recorded:" timestamp changes on every call; it is not evidence. An
+    // identical re-record is skipped however much time has passed.
+    if (withoutRecordedAt(prior.body) === withoutRecordedAt(body)) {
       commentAction = 'skipped';
     } else {
       await deps.client.updateComment(result.caseKey, prior.id, body);

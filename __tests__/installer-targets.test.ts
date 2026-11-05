@@ -1351,9 +1351,9 @@ describe('Gemini target — specifics', () => {
     // REQ-GEMINI-006.A1: the capability note no longer lists hooks (hooks
     // are installed now, REQ-GEMINI-010) nor slash commands (REQ-GEMINI-005);
     // the still-unsupported surfaces remain called out.
-    for (const surface of ['specship-explorer', 'status line']) {
-      expect(note).toContain(surface);
-    }
+    expect(note).toContain('specship-explorer');
+    // The status line gets its own line (REQ-AGENTSWITCH-010.A4).
+    expect(note).toMatch(/^Status line: unavailable in Gemini CLI/m);
     expect(note).not.toMatch(/no slash commands/i);
     expect(note).not.toMatch(/skipped \/specship/);
     // Local install also carries the trusted-folder note so a user whose

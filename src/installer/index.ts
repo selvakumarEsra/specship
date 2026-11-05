@@ -337,6 +337,8 @@ export async function runInstallerWithOptions(
         sdd: opts.sdd === true,
         autoAllow: autoAllow === true,
         statusLine: installStatusLine === true,
+        withJira: opts.withJira === true,
+        withDesigner: opts.withDesigner === true,
       });
     } catch { /* record is advisory */ }
   }
@@ -606,6 +608,9 @@ export function reinstallRecordedAgents(
         autoAllow: choices.autoAllow,
         sdd: choices.sdd,
         installStatusLine: choices.statusLine,
+        // Integrations a previous install enabled stay enabled.
+        ...(c?.withJira ? { withJira: true } : {}),
+        ...(c?.withDesigner ? { withDesigner: true } : {}),
       });
       recordInstall(target.id, entry.scope, entry.projectRoot, getVersion(), process.env, choices);
       reports.push({ entry, status: 'reinstalled', detail: `${target.displayName} (${tildify(where)}): reinstalled` });
