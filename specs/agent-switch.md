@@ -293,7 +293,6 @@ implementations:
   - src/installer/targets/gemini.ts:GeminiCliTarget.uninstall
   - src/installer/targets/shared.ts:pruneEmptySkillDirs
   - src/installer/targets/gemini.ts:renderGeminiSkillFile
-  - src/installer/targets/gemini.ts:toGeminiToolProse
   - src/installer/targets/gemini.ts:geminiSkillsDir
   - src/installer/targets/gemini.ts:geminiAgentsDir
 

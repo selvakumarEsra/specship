@@ -124,7 +124,7 @@ the dashboard from a non-project directory selects the most recently active
 initialized project rather than booting projectless.
 
 implementations:
-  - src/bin/specship.ts:pickRecentInitializedProject
+  - src/agents/recent-project.ts:pickRecentInitializedProject
 
 ## Acceptance
 <!-- id: REQ-SLUGRES-004.A1 -->

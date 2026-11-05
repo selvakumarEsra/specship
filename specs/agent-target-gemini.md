@@ -250,8 +250,8 @@ an install note. Note: the `implement` / `design` routes launch SpecShip
 workflows, whose prompt steps currently run on the Claude CLI.
 
 implementations:
-  - src/installer/gemini-commands.ts:renderGeminiCommand
-  - src/installer/gemini-commands.ts:geminiCommandSet
+  - src/installer/targets/gemini-commands.ts:renderGeminiCommand
+  - src/installer/targets/gemini-commands.ts:geminiCommandSet
   - src/installer/targets/gemini.ts:GeminiCliTarget.install
 
 verifies:

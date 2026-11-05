@@ -201,7 +201,7 @@ and the dashboard surfaces the stat (e.g. `312/312 events parsed` /
 skip count is a visible state, not a log line.
 
 implementations:
-  - server/src/ingest/parser.ts:parseLine
+  - server/src/ingest/transcripts/claude-jsonl.ts:parseLine
   - server/src/ingest/ingestor.ts:getLastIngestStats
 
 ## Acceptance

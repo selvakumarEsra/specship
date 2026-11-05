@@ -375,7 +375,7 @@ describe('apply / preview / undo (REQ-REFLECT-003 / 004)', () => {
     expect(fs.existsSync(p.targetPath)).toBe(false);
   });
 
-  it('applies a CLAUDE.md rule idempotently and undoes it cleanly (REQ-REFLECT-004.A2/A3)', () => {
+  it('applies a CLAUDE.md rule idempotently and undoes it cleanly (REQ-REFLECT-004.A2/A3)', function reqReflect004A2A3() {
     const p = claudeMdProposal();
     // surrounding user content must survive.
     fs.writeFileSync(p.targetPath, '# My project\n\nHand-written notes.\n');
@@ -402,7 +402,7 @@ describe('apply / preview / undo (REQ-REFLECT-003 / 004)', () => {
     expect(fs.readFileSync(index, 'utf-8')).not.toContain('Prefer specship_search');
   });
 
-  it('refuses to clobber a non-SpecShip file at the target path (REQ-REFLECT-004.A4)', () => {
+  it('refuses to clobber a non-SpecShip file at the target path (REQ-REFLECT-004.A4)', function reqReflect004A4() {
     const p = memoryNoteProposal();
     fs.writeFileSync(p.targetPath, 'a user-authored note, not ours\n');
     expect(previewProposal(p).conflict).toBe(true);

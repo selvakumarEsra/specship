@@ -143,6 +143,10 @@ implementations:
   - src/reflect/apply.ts:applyProposal
   - src/reflect/apply.ts:undoProposal
 
+verifies:
+  - __tests__/reflect-engine.test.ts:reqReflect004A2A3
+  - __tests__/reflect-engine.test.ts:reqReflect004A4
+
 ## Acceptance
 <!-- id: REQ-REFLECT-004.A1 -->
 - Confirming a proposal writes its change to the correct target file (CLAUDE.md
@@ -169,6 +173,9 @@ modifies no file on disk.
 
 implementations:
   - src/reflect/apply.ts:applyProposal
+
+verifies:
+  - __tests__/reflect-no-write.test.ts:reqReflect005A1
 
 ## Acceptance
 <!-- id: REQ-REFLECT-005.A1 -->
