@@ -60,7 +60,8 @@ import {
   getGeminiRetrievalBlock,
   getSddRuleBlock,
 } from '../instructions-template';
-import { GOVERNANCE_TIER_COMMANDS, RETRIEVAL_TIER_COMMANDS } from './claude';
+import { GOVERNANCE_TIER_COMMANDS, RETRIEVAL_TIER_COMMANDS, claudeMdPath } from './claude';
+import { readAddedContextFiles, setAddedContextFiles } from '../agent-record';
 import {
   GEMINI_COMMAND_HEADER_MARKER,
   geminiCommandSet,
@@ -196,6 +197,107 @@ export function writeGeminiMcpEntry(
 }
 
 /**
+ * Context file names as Gemini CLI reads them (REQ-AGENTSWITCH-009).
+ * Verified against gemini-cli 0.28.0 `settingsSchema` / `getCurrentGeminiMdFilename`:
+ * `context.fileName` is a string or a string array; when unset Gemini loads
+ * only its default (`GEMINI.md`). The legacy top-level `contextFileName` is
+ * the pre-v2 spelling of the same setting — read as the user's list, never
+ * written or removed by us.
+ */
+function contextFileNames(value: unknown): string[] | null {
+  if (typeof value === 'string' && value.length > 0) return [value];
+  if (Array.isArray(value)) {
+    const names = value.filter((v): v is string => typeof v === 'string' && v.length > 0);
+    return names.length > 0 ? names : null;
+  }
+  return null;
+}
+
+/** The scope's project root as the record keys it; absent for global. */
+function recordRoot(loc: Location): string | undefined {
+  return loc === 'local' ? process.cwd() : undefined;
+}
+
+/**
+ * Point Gemini CLI at the user's own CLAUDE.md instead of copying it
+ * (REQ-AGENTSWITCH-009): add its file name to `context.fileName`, keeping
+ * every name the user already listed in their order and keeping Gemini's
+ * default (`GEMINI.md`) when the setting was unset. The CLAUDE.md file itself
+ * is never opened for writing.
+ *
+ * Local scope writes nothing — and records nothing — when the project has
+ * no CLAUDE.md. Global scope always adds the name: Gemini CLI resolves a
+ * bare context file name in `~/.gemini/` and in each project's directories
+ * (gemini-cli-core `memoryDiscovery`, verified against 0.28.0), so the
+ * user-wide setting is what makes Gemini read every project's own CLAUDE.md.
+ * It never reaches `~/.claude/CLAUDE.md` — the capability note says so.
+ * Idempotent: a re-run that finds the name already listed reports
+ * `unchanged`.
+ *
+ * Returns the file result (null when there was nothing to point at) and the
+ * names this call put into `context.fileName` that were not in it before.
+ */
+export function writeGeminiContextFilesEntry(
+  loc: Location,
+): { file: WriteResult['files'][number] | null; added: string[] } {
+  const claudeMd = claudeMdPath(loc);
+  if (loc === 'local' && !fs.existsSync(claudeMd)) return { file: null, added: [] };
+  const wanted = path.basename(claudeMd);
+  const geminiDefault = path.basename(geminiMdPath(loc));
+
+  const file = settingsPath(loc);
+  const existed = fs.existsSync(file);
+  const settings = readJsonFile(file);
+  const context = settings.context && typeof settings.context === 'object' && !Array.isArray(settings.context)
+    ? settings.context
+    : undefined;
+  const explicit = contextFileNames(context?.fileName);
+  const base = explicit ?? contextFileNames(settings.contextFileName) ?? [geminiDefault];
+  const next = base.includes(wanted) ? [...base] : [...base, wanted];
+
+  if (explicit && jsonDeepEqual(explicit, next)) {
+    return { file: { path: file, action: 'unchanged' }, added: [] };
+  }
+  const nextContext = context ? { ...context } : {};
+  nextContext.fileName = next;
+  settings.context = nextContext;
+  writeJsonFile(file, settings);
+  const added = next.filter((n) => !(explicit ?? []).includes(n));
+  return { file: { path: file, action: existed ? 'updated' : 'created' }, added };
+}
+
+/**
+ * Inverse of `writeGeminiContextFilesEntry` (REQ-AGENTSWITCH-009.A4): drop
+ * only the names SpecShip recorded as added; every name the user listed
+ * stays. With no recorded list (record lost or rebuilt) the setting is left
+ * untouched — conservative by design. Removing the last name deletes
+ * `context.fileName`, and `context` when that leaves it empty.
+ */
+export function removeGeminiContextFilesEntry(
+  loc: Location,
+  added: readonly string[] | null,
+): WriteResult['files'][number] | null {
+  if (!added || added.length === 0) return null;
+  const file = settingsPath(loc);
+  if (!fs.existsSync(file)) return null;
+  const settings = readJsonFile(file);
+  const context = settings.context;
+  if (!context || typeof context !== 'object' || Array.isArray(context)) return null;
+  const current = contextFileNames(context.fileName);
+  if (!current) return null;
+  const remaining = current.filter((n) => !added.includes(n));
+  if (remaining.length === current.length) return null;
+  if (remaining.length === 0) {
+    delete context.fileName;
+    if (Object.keys(context).length === 0) delete settings.context;
+  } else {
+    context.fileName = remaining;
+  }
+  writeJsonFile(file, settings);
+  return { path: file, action: 'removed' };
+}
+
+/**
  * What a Claude install provides that this one does not (REQ-GEMINI-006.A1).
  * One note, naming every still-unsupported surface. As of REQ-GEMINI-010 the
  * prompt / session / tool hooks DO have Gemini equivalents and are installed,
@@ -207,8 +309,12 @@ export function writeGeminiMcpEntry(
  */
 const CAPABILITY_NOTE =
   'Gemini CLI install wires the MCP server, writes a GEMINI.md steering ' +
-  'block, installs prompt/session/tool hooks, and renders the /specship:* ' +
-  'slash commands as Gemini TOML. No specship-explorer subagent and no ' +
+  'block, installs prompt/session/tool hooks, renders the /specship:* ' +
+  'slash commands as Gemini TOML, and adds CLAUDE.md to Gemini\'s context ' +
+  'files so Gemini reads each project\'s CLAUDE.md in place (a project install ' +
+  'does this only when the project has one). Gemini never reads ' +
+  '~/.claude/CLAUDE.md — copy anything you need from it into ~/.gemini/GEMINI.md. ' +
+  'No specship-explorer subagent and no ' +
   'status line — Gemini CLI has no equivalent surface. The tool playbook ' +
   'itself still lives in the MCP server instructions.';
 
@@ -657,6 +763,15 @@ export class GeminiCliTarget implements AgentTarget {
       ...(opts.withDesigner ? ['designer'] : []),
     ];
     const files: WriteResult['files'] = [writeGeminiMcpEntry(loc, integrations)];
+    // REQ-AGENTSWITCH-009: Gemini reads the user's CLAUDE.md in place (never
+    // copied). Remember the names we added so uninstall removes only those;
+    // names an earlier install added stay remembered across a re-run.
+    const contextFiles = writeGeminiContextFilesEntry(loc);
+    if (contextFiles.file) files.push(contextFiles.file);
+    if (contextFiles.added.length > 0) {
+      const prior = readAddedContextFiles(this.id, loc, recordRoot(loc)) ?? [];
+      setAddedContextFiles(this.id, loc, recordRoot(loc), [...new Set([...prior, ...contextFiles.added])]);
+    }
     // GEMINI.md retrieval preference — always written (REQ-GEMINI-004).
     files.push(writeGeminiInstructionsEntry(loc));
     // SDD rule — default-on, matching the Claude target's governance tier.
@@ -703,6 +818,12 @@ export class GeminiCliTarget implements AgentTarget {
       writeJsonFile(file, config);
       files.push({ path: file, action: 'removed' });
     }
+    // REQ-AGENTSWITCH-009.A4: drop only the context file names we added.
+    const contextCleanup = removeGeminiContextFilesEntry(
+      loc,
+      readAddedContextFiles(this.id, loc, recordRoot(loc)),
+    );
+    if (contextCleanup) files.push(contextCleanup);
     // Hooks (REQ-GEMINI-010.A4) — strip both tiers so uninstall reverses
     // either install path. Each helper is surgical: user-written sibling
     // hooks survive byte-identical.

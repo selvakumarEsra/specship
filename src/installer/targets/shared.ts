@@ -127,7 +127,7 @@ export function endWriteJournal(): JournalEntry[] {
 }
 
 /** Save a file's current bytes once, before the journal's first change to it. */
-function journalFile(filePath: string): void {
+export function journalFile(filePath: string): void {
   if (!activeJournal || !journalledFiles) return;
   const abs = path.resolve(filePath);
   if (journalledFiles.has(abs)) return;
