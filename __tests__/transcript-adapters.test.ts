@@ -22,6 +22,7 @@ import { CANONICAL_TOOLS as SERVER_TOOLS, specshipToolPrefix as SERVER_SHARED_PR
 import { CANONICAL_TOOLS, specshipToolPrefix } from '../src/analytics/canonical-tools';
 import { sessionsTouchingFiles } from '../src/reflect/session-outcomes';
 import type { SqliteDatabase } from '../src/db/sqlite-adapter';
+import { runMigrations, getCurrentVersion } from '../src/db/migrations';
 
 const FIXTURES = path.join(__dirname, 'fixtures', 'transcripts');
 const SCHEMA = fs.readFileSync(path.join(__dirname, '..', 'src', 'db', 'schema.sql'), 'utf-8');
@@ -188,4 +189,33 @@ describe('REQ-AGENTSWITCH-004 — per-agent transcript adapters', () => {
     expect(resolveIngestRoots({ roots: { gemini: tmp } }).map((t) => t.adapter.id)).toEqual(['gemini']);
     expect(resolveIngestRoots({}).map((t) => t.adapter.id)).toEqual(['claude', 'gemini']);
   });
+  /** Migration v12 on a database from before the change keeps every existing row as a Claude Code row. */
+  function reqAgentswitch004MigratesExistingDb(): void {
+    const raw = openMemoryDb();
+    raw.exec(SCHEMA);
+    runMigrations(raw, 0);
+    // Shape the database as it was at v11: without the three v12 columns.
+    raw.exec('ALTER TABLE claude_tool_calls DROP COLUMN raw_tool_name;');
+    raw.exec('ALTER TABLE claude_tool_calls DROP COLUMN host;');
+    raw.exec('ALTER TABLE claude_sessions DROP COLUMN host;');
+    raw.exec('DELETE FROM schema_versions WHERE version >= 12;');
+    expect(getCurrentVersion(raw)).toBe(11);
+    // Fixture rows only: the migration is about columns, not the prompt/session relations.
+    raw.exec('PRAGMA foreign_keys = OFF;');
+    raw.prepare('INSERT INTO claude_sessions (id, project_path, source_file) VALUES (?, ?, ?)').run('s1', '/p', '/p/s1.jsonl');
+    raw.prepare(`INSERT INTO claude_tool_calls (prompt_id, session_id, assistant_uuid, tool_name, input_summary, result_length, ts)
+                 VALUES ('p1', 's1', 'a1', 'Read', 'x.ts', 10, 1)`).run();
+
+    runMigrations(raw, 11);
+    expect(getCurrentVersion(raw)).toBe(12);
+    expect(raw.prepare('SELECT host FROM claude_sessions WHERE id = ?').get('s1')).toEqual({ host: 'claude' });
+    expect(raw.prepare('SELECT host, raw_tool_name, tool_name FROM claude_tool_calls').get()).toEqual({
+      host: 'claude',
+      raw_tool_name: null,
+      tool_name: 'Read',
+    });
+    // Re-running is a no-op, never a duplicate-column error.
+    expect(() => runMigrations(raw, getCurrentVersion(raw))).not.toThrow();
+  }
+  it('REQ-AGENTSWITCH-004: migration v12 upgrades an existing database without touching its rows', reqAgentswitch004MigratesExistingDb);
 });

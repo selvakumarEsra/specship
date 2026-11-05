@@ -244,6 +244,7 @@ verifies:
   - __tests__/transcript-adapters.test.ts:reqAgentswitch004A1
   - __tests__/transcript-adapters.test.ts:reqAgentswitch004A2
   - __tests__/transcript-adapters.test.ts:reqAgentswitch004A3
+  - __tests__/transcript-adapters.test.ts:reqAgentswitch004MigratesExistingDb
 
 ## Acceptance
 <!-- id: REQ-AGENTSWITCH-004.A1 -->
