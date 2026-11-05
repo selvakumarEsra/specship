@@ -647,7 +647,10 @@ export async function runUninstaller(opts: RunUninstallerOptions): Promise<void>
     await wiringOnlyUninstall(clack, opts, selectedTargets);
     return;
   }
-  await purgeUninstall(clack, opts, opts.target === undefined ? null : selectedTargets);
+  // `all` / `auto` mean every agent here: they resolve to Claude for install,
+  // but a purge that kept another agent's wiring would not be complete.
+  const sweepsEveryAgent = opts.target === undefined || opts.target === 'all' || opts.target === 'auto';
+  await purgeUninstall(clack, opts, sweepsEveryAgent ? null : selectedTargets);
 }
 
 /**

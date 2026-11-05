@@ -150,6 +150,7 @@ implementations:
 verifies:
   - __tests__/mcp-agent-instructions.test.ts:reqAgentswitch002A1
   - __tests__/installer-targets.test.ts:reqAgentswitch002A2
+  - __tests__/installer-targets.test.ts:purgeAllSweepsEveryAgent
 
 ## Acceptance
 <!-- id: REQ-AGENTSWITCH-002.A1 -->

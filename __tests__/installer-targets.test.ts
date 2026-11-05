@@ -2413,4 +2413,43 @@ describe('uninstall --target gemini reports only Gemini paths (REQ-AGENTSWITCH-0
   }
 
   it('REQ-AGENTSWITCH-002.A2: uninstall --target gemini never reports a Claude path', reqAgentswitch002A2, 60_000);
+
+  /** A purge with --target all/auto is complete: it clears every agent's wiring (REQ-UNINSTALL). */
+  async function purgeAllSweepsEveryAgent(): Promise<void> {
+    for (const target of ['all', 'auto'] as const) {
+      const home = mkTmpDir('purge-all-home');
+      const cwd = mkTmpDir('purge-all-cwd');
+      const prevCwd = process.cwd();
+      process.chdir(cwd);
+      const home$ = setHome(home);
+      try {
+        geminiTarget.install('global', { autoAllow: true, sdd: true });
+        claudeTarget.install('global', { autoAllow: true, sdd: true });
+        expect(geminiTarget.detect('global').alreadyConfigured).toBe(true);
+        const { runUninstaller } = await import('../src/installer');
+        await runUninstaller({
+          target,
+          keepData: false,
+          yes: true,
+          clack: recordingClack([], 'global'),
+          purgeEnv: {
+            cwd: process.cwd(),
+            homedir: os.homedir(),
+            installDir: path.join(os.homedir(), '.specship'),
+            binDir: path.join(os.homedir(), '.local', 'bin'),
+            method: 'unknown',
+          },
+          purgeExecDeps: { rmDir: () => false, rmFile: () => false, runNpmRemove: () => ({ ok: true, detail: '' }), log: () => {} },
+        });
+        expect(geminiTarget.detect('global').alreadyConfigured, `--target ${target}`).toBe(false);
+        expect(claudeTarget.detect('global').alreadyConfigured, `--target ${target}`).toBe(false);
+      } finally {
+        home$.restore();
+        process.chdir(prevCwd);
+        fs.rmSync(home, { recursive: true, force: true });
+        fs.rmSync(cwd, { recursive: true, force: true });
+      }
+    }
+  }
+  it('REQ-AGENTSWITCH-002.A2: a purge with --target all or auto removes every agent\'s wiring', purgeAllSweepsEveryAgent);
 });
