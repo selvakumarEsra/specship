@@ -104,6 +104,8 @@ function reqAgentswitch005A1(): void {
 
 /** A2 (property) — the installed subagent names Gemini's tool names, never `mcp__specship__`. */
 function reqAgentswitch005A2(): void {
+  // The `specship__` form is Gemini CLI < 0.33.0's (REQ-AGENTSWITCH-018 covers the newer one).
+  process.env.SPECSHIP_GEMINI_VERSION = GEMINI_MIN_AGENTS;
   const rendered = renderGeminiExplorerAgent();
   expect(rendered).toContain('specship_explore');
   expect(rendered).not.toMatch(/mcp__specship__/);

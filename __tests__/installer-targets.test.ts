@@ -1356,9 +1356,8 @@ describe('Gemini target — specifics', () => {
     expect(note).toMatch(/^Status line: unavailable in Gemini CLI/m);
     expect(note).not.toMatch(/no slash commands/i);
     expect(note).not.toMatch(/skipped \/specship/);
-    // Local install also carries the trusted-folder note so a user whose
-    // hooks appear inert knows where to look.
-    expect(note).toContain('trusted');
+    // Every Gemini install carries the folder-trust note (REQ-AGENTSWITCH-018.A4).
+    expect(note).toContain('trust this folder');
     // Nothing under .claude/ — not even with sdd + statusline requested.
     expect(fs.existsSync(path.join(tmpCwd, '.claude'))).toBe(false);
     expect(fs.existsSync(path.join(tmpHome, '.claude'))).toBe(false);

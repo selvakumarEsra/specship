@@ -8,6 +8,7 @@
  */
 
 import { SPECSHIP_SERVER_TOOL } from './claude';
+import { geminiMcpToolName, probeGeminiVersion } from './gemini-version';
 import { EmitFn, HeadlessAgent, HeadlessInvocation, StreamParseState, parseJsonLine, summarizeToolInput } from './types';
 
 /** Claude-form built-in tool names → Gemini CLI 0.28 tool names. */
@@ -26,15 +27,18 @@ const BUILTIN_TOOLS: Record<string, string> = {
 const MODEL_TIERS = new Set(['haiku', 'sonnet', 'opus']);
 
 /** Translate a step's allowed tools, or name the first one with no Gemini equivalent. */
-export function translateGeminiTools(tools: string[]): { tools: string[] } | { error: string } {
+export function translateGeminiTools(
+  tools: string[],
+  version: string | null = probeGeminiVersion(),
+): { tools: string[] } | { error: string } {
   const out: string[] = [];
   for (const tool of tools) {
     let mapped: string | undefined;
     const mcp = tool.match(/^mcp__([A-Za-z0-9_-]+?)__(.+)$/);
     const shell = tool.match(/^Bash\((.+?)(?::\*)?\)$/);
-    if (mcp) mapped = `${mcp[1]}__${mcp[2]}`;
+    if (mcp) mapped = geminiMcpToolName(mcp[1]!, mcp[2]!, version);
     // A bare SpecShip server tool name (the bundled workflows' vocabulary).
-    else if (SPECSHIP_SERVER_TOOL.test(tool)) mapped = `specship__${tool}`;
+    else if (SPECSHIP_SERVER_TOOL.test(tool)) mapped = geminiMcpToolName('specship', tool, version);
     else if (shell) mapped = `run_shell_command(${shell[1]!.trim()})`;
     else mapped = BUILTIN_TOOLS[tool];
     if (!mapped) return { error: `allowed tool "${tool}" has no Gemini CLI equivalent` };

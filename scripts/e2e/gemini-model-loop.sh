@@ -34,11 +34,19 @@ LOG=$W/model.jsonl
 MP=$!
 for i in $(seq 1 50); do PORT=$(grep -o 'listening on [0-9]*' $W/model.out | grep -o '[0-9]*$'); [ -n "$PORT" ] && break; sleep 0.1; done
 GH=$W/gemini-home; mkdir -p $GH/.gemini
-printf '{"security":{"auth":{"selectedType":"gemini-api-key"},"folderTrust":{"enabled":false}}}\n' > $GH/.gemini/settings.json
+printf '{"security":{"auth":{"selectedType":"gemini-api-key"}}}\n' > $GH/.gemini/settings.json
+# Trust the project folder the way the user would (REQ-AGENTSWITCH-018) —
+# Gemini CLI 0.33.0+ loads nothing from an untrusted folder.
+RP=$(cd "$P" && pwd -P)  # macOS: /var → /private/var
+printf '{"%s":"TRUST_FOLDER","%s":"TRUST_FOLDER"}\n' "$P" "$RP" > $GH/.gemini/trustedFolders.json
+# The tool name the installed Gemini CLI uses (renamed in 0.33.0).
+GV=$("$N22/gemini" --version 2>/dev/null | grep -o '[0-9]*\.[0-9]*\.[0-9]*' | head -1)
+TOOL=$("$N24/node" -e 'const [a,b]=process.argv[1].split(".").map(Number); console.log(a>0||b>=33 ? "mcp_specship_specship_explore" : "specship__specship_explore")' "${GV:-9.9.9}")
+echo "== Gemini CLI ${GV:-unknown}: SpecShip's explore tool is $TOOL"
 echo "== headless Gemini session against the scripted model (port $PORT)"
 GEMINI_CLI_HOME=$GH GEMINI_API_KEY=stand-in-key GOOGLE_GEMINI_BASE_URL=http://127.0.0.1:$PORT \
   timeout 180 gemini -p "Where is renderScene defined and what does it call?" -m gemini-2.5-flash \
-  --output-format stream-json --allowed-tools specship__specship_explore > $W/stream.jsonl 2> $W/stderr.log
+  --output-format stream-json --allowed-tools $TOOL > $W/stream.jsonl 2> $W/stderr.log
 echo "gemini exit=$?"
 kill $MP 2>/dev/null
 echo "== what the model was offered and did"; cat $LOG
@@ -51,4 +59,12 @@ for (const l of fs.readFileSync(process.argv[1],"utf8").split("\n")) { let e; tr
   if (e.type==="message" && e.role==="assistant") console.log("assistant:", String(e.content).slice(0,160));
   if (e.type==="result") console.log("result:", e.status, JSON.stringify(e.stats||{}).slice(0,120)); }' $W/stream.jsonl
 grep -v -i deprecat $W/stderr.log | grep -i "error" | head -3
+echo "== checks"
+ok=0
+grep -q "\"tool\":\"$TOOL\"" $LOG && echo "PASS model was offered and called $TOOL" || { echo "FAIL model never called $TOOL"; ok=1; }
+grep -q '"type":"tool_result".*"status":"success"' $W/stream.jsonl && echo "PASS Gemini CLI ran the SpecShip tool" || { echo "FAIL no successful tool_result"; ok=1; }
+grep -qi "invalid tool name\|failed to load agent" $W/stderr.log && { echo "FAIL Gemini rejected the subagent"; ok=1; } || echo "PASS subagent file accepted"
+S=$(ls $GH/.gemini/tmp/*/chats/session-* 2>/dev/null | head -1)
+[ -n "$S" ] && echo "session file: ${S##*/}"
 echo "WORKDIR=$W"
+exit $ok

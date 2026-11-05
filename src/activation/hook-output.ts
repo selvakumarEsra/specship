@@ -91,10 +91,12 @@ export function buildHookDenyDecision(reason: string): string {
  *   - `specshipToolMarkers` — substrings naming a specship tool_use record.
  *     Claude exposes our server as `mcp__specship__<tool>`; Gemini shows
  *     the model the bare tool name (`specship_explore`), qualifying it as
- *     `specship__<tool>` only on a name collision.
+ *     `specship__<tool>` only on a name collision; from 0.33.0 the name is
+ *     `mcp_specship_<tool>`.
  *   - `transcriptFormat` — Claude writes JSONL (one record per line); Gemini's
  *     `ChatRecordingService` writes one pretty-printed JSON doc with
- *     `messages[].toolCalls[].name`.
+ *     `messages[].toolCalls[].name` (JSON Lines from 0.33.0, which the
+ *     single-json scan also reads).
  *   - `supportsBeforeToolDeny` — whether the host reads a top-level
  *     `{decision:'deny'}` on its BeforeTool-equivalent. Gemini 0.28.0+
  *     `BeforeToolHookOutput.isBlockingDecision` does; Claude's PreToolUse
@@ -186,7 +188,8 @@ export const GEMINI_CLI_TRAITS: HostTraits = {
   transcriptDir: '.gemini/tmp',
   readTools: ['read_file', 'read_many_files'],
   searchTools: ['grep_search', 'glob'],
-  specshipToolMarkers: ['"name":"specship_', '"name": "specship_'],
+  // Bare names before 0.33.0, `mcp_specship_<tool>` from 0.33.0 (REQ-AGENTSWITCH-018).
+  specshipToolMarkers: ['"name":"specship_', '"name": "specship_', '"name":"mcp_specship_', '"name": "mcp_specship_'],
   transcriptFormat: 'single-json',
   supportsBeforeToolDeny: true,
   toolPrefix: '',

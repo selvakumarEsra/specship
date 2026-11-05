@@ -90,12 +90,16 @@ function scanTranscript(
   format: 'jsonl' | 'single-json',
 ): TranscriptScan {
   const MAX_SCAN_BYTES = 4 * 1024 * 1024;
+  // A host that moved from one JSON document to JSON Lines (Gemini CLI
+  // 0.33.0, REQ-AGENTSWITCH-018) is scanned line by line; the file's own
+  // extension says which it wrote.
+  const lineRecords = format === 'jsonl' || transcriptPath.toLowerCase().endsWith('.jsonl');
   let text: string;
   try {
     const stat = fs.statSync(transcriptPath);
     if (stat.size <= MAX_SCAN_BYTES) {
       text = fs.readFileSync(transcriptPath, 'utf-8');
-    } else if (format === 'jsonl') {
+    } else if (lineRecords) {
       const fd = fs.openSync(transcriptPath, 'r');
       try {
         const buf = Buffer.alloc(MAX_SCAN_BYTES);
@@ -111,6 +115,13 @@ function scanTranscript(
     }
   } catch {
     return format === 'single-json' ? 'parse-failure' : 'not-used';
+  }
+
+  if (format === 'single-json' && lineRecords) {
+    for (const line of text.split('\n')) {
+      if (line.includes('"toolCalls"') && markers.some((m) => line.includes(m))) return 'used';
+    }
+    return 'not-used';
   }
 
   if (format === 'jsonl') {
@@ -132,6 +143,8 @@ function scanTranscript(
   }
   const messages = (doc as { messages?: unknown })?.messages;
   if (!Array.isArray(messages)) return 'not-used';
+  // The host's tool-name prefixes, read off its `"name":"<prefix>` markers.
+  const namePrefixes = [...new Set(markers.map((m) => m.replace(/^"name":\s*"/, '')))];
   for (const m of messages) {
     const calls = (m as { toolCalls?: unknown })?.toolCalls;
     if (!Array.isArray(calls)) continue;
@@ -141,9 +154,10 @@ function scanTranscript(
         // Gemini records the function name the model called, which for an
         // MCP tool is its bare name (`specship_explore`); the composite
         // `specship__<tool>` form appears only when a name collision forces
-        // qualification (verified in 0.28.0 DiscoveredMCPTool). `specship_`
-        // covers both; tolerate the Claude form if a transcript carries it.
-        if (name.startsWith('specship_') || name.startsWith(CLAUDE_CODE_TRAITS.toolPrefix)) {
+        // qualification (verified in 0.28.0 DiscoveredMCPTool); from 0.33.0 it
+        // is `mcp_specship_<tool>`. The host markers cover every form;
+        // tolerate the Claude form if a transcript carries it.
+        if (namePrefixes.some((p) => name.startsWith(p)) || name.startsWith(CLAUDE_CODE_TRAITS.toolPrefix)) {
           return 'used';
         }
       }

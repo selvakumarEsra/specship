@@ -47,6 +47,9 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The `spec-implement` workflow's review and final approval now see the whole change the run made. Before, once the implement step had committed its work, the diff they were shown was empty.
 - Removing an `@implements` or `@verifies` comment, a test title that names a requirement, or the whole file now removes the link it created on the next sync, instead of leaving it in the drift queue. A link the spec still declares is kept.
 - Publishing a spec to JIRA from the agent now puts the new Story under the spec's epic, or the repository's default epic, the same way publishing on sync does.
+- SpecShip now works with Gemini CLI 0.33.0 and later (checked up to 0.67.0). The explorer subagent and workflow steps use the tool names the installed Gemini CLI expects, so Gemini no longer rejects the subagent, and the dashboard reads Gemini's newer session files and counts their SpecShip calls. Older Gemini CLI versions keep working as before.
+- A Gemini CLI install or automatic switch now tells you to trust the project folder. From 0.33.0, Gemini CLI loads a project's `GEMINI.md`, hooks, skills and MCP server only in a trusted folder. SpecShip never trusts a folder for you.
+- With Gemini CLI 0.36.0 or later, the install no longer says subagents are off by default, because they are now on.
 - Plan screen titles show inline code as code instead of raw backticks.
 - The dashboard's Memory screen now lists Gemini CLI's `GEMINI.md` files (user, project and one folder deep) next to Claude Code's `CLAUDE.md` files, each tagged with its agent. The MCP servers screen now also lists the servers in Gemini CLI's user and project `settings.json`; these are shown read-only.
 - The bundled Claude Design import workflow now points the agent at that agent's own skills folder, so it no longer names a Claude Code path when it runs on Gemini CLI.

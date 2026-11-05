@@ -229,7 +229,7 @@ async function agentIsRecordedOnTheRun(): Promise<void> {
 
 function geminiToolsAreTranslated(): void {
   expect(
-    translateGeminiTools(['Read', 'Write', 'Edit', 'Bash', 'Glob', 'Grep', 'mcp__specship__specship_spec', 'Bash(git status:*)']),
+    translateGeminiTools(['Read', 'Write', 'Edit', 'Bash', 'Glob', 'Grep', 'mcp__specship__specship_spec', 'Bash(git status:*)'], '0.28.0'),
   ).toEqual({
     tools: ['read_file', 'write_file', 'replace', 'run_shell_command', 'glob', 'grep_search', 'specship__specship_spec', 'run_shell_command(git status)'],
   });
@@ -351,6 +351,6 @@ describe('bare SpecShip tool names in workflow steps (REQ-AGENTSWITCH-001)', () 
   }
   it('Gemini maps a bare SpecShip tool to specship__… (its server__tool form)', bareToolsMapForGemini);
   function bareToolsMapForGemini(): void {
-    expect(translateGeminiTools(['specship_explore', 'Read'])).toEqual({ tools: ['specship__specship_explore', 'read_file'] });
+    expect(translateGeminiTools(['specship_explore', 'Read'], '0.28.0')).toEqual({ tools: ['specship__specship_explore', 'read_file'] });
   }
 });

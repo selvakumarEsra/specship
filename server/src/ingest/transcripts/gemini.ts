@@ -18,6 +18,23 @@
  *   - an MCP tool is recorded under its bare name (`specship_explore`); the
  *     qualified `<server>__<tool>` form appears only on a name collision.
  *
+ * Gemini CLI 0.33.0 changed both (REQ-AGENTSWITCH-018; verified against
+ * 0.67.0 services/chatRecordingService and config/storage):
+ *
+ *   - a session is JSON Lines (`session-*.jsonl`): a metadata record
+ *     (`sessionId`, `projectHash`, `startTime`, …, optionally `messages`),
+ *     then message records (keyed by `id`, the last one for an id wins),
+ *     `{ $set }` metadata updates (a `$set.messages` replaces the list),
+ *     `{ $patch }` records (`content` and tool-call `result`s for an id,
+ *     `updates[]`, `removeIds[]`, `orderIds[]`) and `{ $rewindTo }`;
+ *   - the folder is a short project name from Gemini's project registry, so
+ *     the project is resolved from the header's `projectHash` (still
+ *     sha256 of the root);
+ *   - MCP tools are named `mcp_<server>_<tool>`;
+ *   - tool responses and Gemini's `<session_context>` / `<hook_context>`
+ *     turns are also `user` messages (they open no prompt), and a prompt's
+ *     own text is in `displayContent` when Gemini added context to it.
+ *
  * Tool names are mapped onto the shared set; a document that does not parse,
  * or has no `messages` array, is unreadable — `parseFile` returns null and
  * the ingestor counts it.
@@ -51,13 +68,17 @@ export const GEMINI_TOOL_NAMES: Readonly<Record<string, string>> = Object.freeze
 
 /** Bare SpecShip tools all start with this (tools/mcp-tool.js records the server's own tool name). */
 const bareSpecshipPrefix = `${specshipServerName}_`;
-/** The collision-qualified form Gemini uses: `<server>__<tool>`. */
+/** The collision-qualified form Gemini used before 0.33.0: `<server>__<tool>`. */
 const QUALIFIED_RE = /^([A-Za-z0-9_-]+?)__(.+)$/;
+/** The form Gemini uses from 0.33.0: `mcp_<server>_<tool>` (server names carry no `_`). */
+const MCP_PREFIXED_RE = /^mcp_([^_]+)_(.+)$/;
 
 /** Map one Gemini tool name onto the shared set. */
 export function normalizeGeminiToolName(raw: string): string {
   const builtin = normalizeToolName(GEMINI_TOOL_NAMES, raw);
   if (builtin !== raw) return builtin;
+  const p = raw.match(MCP_PREFIXED_RE);
+  if (p) return canonicalMcpToolName(p[1]!, p[2]!);
   const q = raw.match(QUALIFIED_RE);
   if (q) return canonicalMcpToolName(q[1]!, q[2]!);
   if (raw.startsWith(bareSpecshipPrefix)) return canonicalMcpToolName(specshipServerName, raw);
@@ -106,14 +127,86 @@ function contentText(v: unknown): string {
 
 const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
 
-/** Parse one Gemini session document. Null when it cannot be read. */
+type Rec = Record<string, unknown>;
+const isRec = (v: unknown): v is Rec => !!v && typeof v === 'object' && !Array.isArray(v);
+const strProp = (o: Rec, k: string): string | undefined => (typeof o[k] === 'string' ? (o[k] as string) : undefined);
+
+/**
+ * Fold a JSON Lines session (Gemini CLI >= 0.33.0) into the single-document
+ * shape, applying records in order the way Gemini's own loader does.
+ * Malformed lines are skipped; null when no metadata record is found.
+ */
+export function foldGeminiJsonl(text: string): Rec | null {
+  let meta: Rec | null = null;
+  const messages = new Map<string, Rec>();
+  const setMessages = (list: unknown): void => {
+    if (!Array.isArray(list)) return;
+    for (const m of list) if (isRec(m) && strProp(m, 'id')) messages.set(m['id'] as string, m);
+  };
+  const patchOne = (patch: Rec): void => {
+    const existing = messages.get(patch['id'] as string);
+    if (!existing) return;
+    if (patch['content'] !== undefined) existing['content'] = patch['content'];
+    const calls = existing['toolCalls'];
+    if (Array.isArray(patch['toolCalls']) && Array.isArray(calls)) {
+      for (const tp of patch['toolCalls'] as unknown[]) {
+        if (!isRec(tp) || !('result' in tp)) continue;
+        const tc = calls.find((c) => isRec(c) && c['id'] === tp['id']);
+        if (isRec(tc)) tc['result'] = tp['result'];
+      }
+    }
+  };
+  for (const line of text.split('\n')) {
+    if (!line.trim()) continue;
+    let r: unknown;
+    try { r = JSON.parse(line); } catch { continue; }
+    if (!isRec(r)) continue;
+    const rewind = strProp(r, '$rewindTo');
+    if (rewind !== undefined) {
+      let found = false;
+      for (const id of [...messages.keys()]) {
+        if (id === rewind) found = true;
+        if (found) messages.delete(id);
+      }
+      if (!found) messages.clear();
+    } else if (isRec(r['$patch'])) {
+      const p = r['$patch'] as Rec;
+      if (strProp(p, 'id')) patchOne(p);
+      if (Array.isArray(p['updates'])) for (const u of p['updates']) if (isRec(u) && strProp(u, 'id')) patchOne(u);
+      if (Array.isArray(p['removeIds'])) for (const id of p['removeIds']) if (typeof id === 'string') messages.delete(id);
+      if (Array.isArray(p['orderIds'])) {
+        const ordered = (p['orderIds'] as unknown[]).filter((id): id is string => typeof id === 'string' && messages.has(id));
+        const keep = new Set(ordered);
+        const entries = [...messages.entries()];
+        messages.clear();
+        for (const [id, m] of entries) if (!keep.has(id)) messages.set(id, m);
+        for (const id of ordered) messages.set(id, entries.find(([k]) => k === id)![1]);
+      }
+    } else if (strProp(r, 'id')) {
+      messages.set(r['id'] as string, r);
+    } else if (isRec(r['$set'])) {
+      const set = r['$set'] as Rec;
+      if (Array.isArray(set['messages'])) { messages.clear(); setMessages(set['messages']); }
+      meta = { ...(meta ?? {}), ...set };
+    } else if (strProp(r, 'sessionId') && strProp(r, 'projectHash')) {
+      meta = { ...(meta ?? {}), ...r };
+      setMessages(r['messages']);
+    }
+  }
+  if (!meta) return null;
+  return { ...meta, messages: [...messages.values()] };
+}
+
+/** Parse one Gemini session (a JSON document, or JSON Lines). Null when it cannot be read. */
 export function parseGeminiSession(text: string): ParsedSession | null {
   let doc: unknown;
   try {
     doc = JSON.parse(text);
   } catch {
-    return null;
+    doc = null;
   }
+  // A JSON Lines session — or one holding only its header line, which parses whole.
+  if (!isRec(doc) || !Array.isArray(doc['messages'])) doc = foldGeminiJsonl(text);
   if (!doc || typeof doc !== 'object') return null;
   const d = doc as { sessionId?: unknown; startTime?: unknown; lastUpdated?: unknown; messages?: unknown };
   if (typeof d.sessionId !== 'string' || !d.sessionId || !Array.isArray(d.messages)) return null;
@@ -143,7 +236,12 @@ export function parseGeminiSession(text: string): ParsedSession | null {
     const id = typeof msg['id'] === 'string' && msg['id'] ? (msg['id'] as string) : `${sessionId}:${i}`;
 
     if (msg['type'] === 'user') {
-      current = openPrompt(id, contentText(msg['content']) || null, ts);
+      // From 0.33.0 Gemini also records tool responses (no text parts) and
+      // its own `<session_context>` / `<hook_context>` turns as user
+      // messages; like Gemini's own resume logic, those start no prompt.
+      const said = contentText(msg['content']);
+      if (!said || /^<(session|hook)_context>/.test(said)) return;
+      current = openPrompt(id, contentText(msg['displayContent']) || said, ts);
       return;
     }
     if (msg['type'] !== 'gemini') return;
@@ -207,7 +305,30 @@ export function geminiProjectHash(projectRoot: string): string {
   return crypto.createHash('sha256').update(projectRoot).digest('hex');
 }
 
-/** Every `<root>/<project_hash>/chats/*.json`, with the project resolved when a known root hashes to it. */
+const isSessionFile = (name: string): boolean => /\.jsonl?$/i.test(name);
+
+/** The `projectHash` in a JSON Lines session's header, read from its first line. */
+function headerProjectHash(file: string): string | null {
+  let fd: number | undefined;
+  try {
+    fd = fs.openSync(file, 'r');
+    const buf = Buffer.alloc(64 * 1024);
+    const n = fs.readSync(fd, buf, 0, buf.length, 0);
+    const first = buf.toString('utf-8', 0, n).split('\n', 1)[0] ?? '';
+    const rec = JSON.parse(first) as unknown;
+    return isRec(rec) && typeof rec['projectHash'] === 'string' ? (rec['projectHash'] as string) : null;
+  } catch {
+    return null;
+  } finally {
+    if (fd !== undefined) fs.closeSync(fd);
+  }
+}
+
+/**
+ * Every `<root>/<project>/chats/*.json[l]`. The project is resolved when a
+ * known root hashes to the folder name (before 0.33.0) or to the session
+ * header's `projectHash` (0.33.0 on); otherwise it is kept as `gemini:<id>`.
+ */
 export function listGeminiTranscriptFiles(root: string, ctx: ListContext = {}): TranscriptFile[] {
   const byHash = new Map<string, string>();
   for (const p of ctx.projectPaths ?? []) byHash.set(geminiProjectHash(p), p);
@@ -227,11 +348,16 @@ export function listGeminiTranscriptFiles(root: string, ctx: ListContext = {}): 
     } catch {
       continue;
     }
-    const projectPath = byHash.get(h.name) ?? `${GEMINI_PROFILE.id}:${h.name}`;
+    const byDir = byHash.get(h.name);
     for (const f of files) {
-      if (f.isFile() && f.name.toLowerCase().endsWith('.json')) {
-        out.push({ filePath: path.join(chats, f.name), projectPath });
+      if (!f.isFile() || !isSessionFile(f.name)) continue;
+      const filePath = path.join(chats, f.name);
+      let projectPath = byDir;
+      if (!projectPath && f.name.toLowerCase().endsWith('.jsonl')) {
+        const hash = headerProjectHash(filePath);
+        if (hash) projectPath = byHash.get(hash);
       }
+      out.push({ filePath, projectPath: projectPath ?? `${GEMINI_PROFILE.id}:${h.name}` });
     }
   }
   return out;
@@ -244,7 +370,7 @@ export const geminiTranscriptAdapter: DocumentTranscriptAdapter = {
   listFiles: listGeminiTranscriptFiles,
   watches: (fileName) => {
     const parts = fileName.split(/[\\/]/);
-    return parts.length >= 2 && parts[parts.length - 2] === 'chats' && fileName.toLowerCase().endsWith('.json');
+    return parts.length >= 2 && parts[parts.length - 2] === 'chats' && isSessionFile(fileName);
   },
   normalizeToolName: normalizeGeminiToolName,
   parseFile: parseGeminiSession,

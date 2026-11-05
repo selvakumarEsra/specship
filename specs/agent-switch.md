@@ -40,6 +40,8 @@ jira_issue_REQ-AGENTSWITCH-016: SSHIP-761
 jira_fingerprint_REQ-AGENTSWITCH-016: 61cce9961daa8eec
 jira_issue_REQ-AGENTSWITCH-017: SSHIP-765
 jira_fingerprint_REQ-AGENTSWITCH-017: 78e6bd95942448ff
+jira_issue_REQ-AGENTSWITCH-018: SSHIP-768
+jira_fingerprint_REQ-AGENTSWITCH-018: 188d7a0c10b2afa4
 ---
 
 <!-- id: AGENTSWITCH-DOC -->
@@ -291,8 +293,8 @@ implementations:
   - src/installer/targets/gemini.ts:renderGeminiExplorerAgent
   - src/installer/targets/gemini.ts:writeGeminiAgentsEntry
   - src/installer/targets/gemini.ts:removeGeminiAgentsEntry
-  - src/installer/targets/gemini.ts:probeGeminiVersion
-  - src/installer/targets/gemini.ts:geminiVersionSupports
+  - src/workflows/agents/gemini-version.ts:probeGeminiVersion
+  - src/workflows/agents/gemini-version.ts:geminiVersionSupports
   - src/installer/targets/gemini.ts:GeminiCliTarget.install
   - src/installer/targets/gemini.ts:GeminiCliTarget.uninstall
   - src/installer/targets/shared.ts:pruneEmptySkillDirs
@@ -790,3 +792,76 @@ verifies:
 <!-- id: REQ-AGENTSWITCH-017.A2 -->
 - Moving them changes no behaviour: the full test suite passes unchanged
   apart from import paths.
+
+<!-- id: REQ-AGENTSWITCH-018 -->
+## SpecShip MUST work with every Gemini CLI from 0.28.0 to the current release
+
+Gemini CLI changed two formats SpecShip depends on in 0.33.0. MCP tools are
+named `mcp_<server>_<tool>` (before: `<server>__<tool>`), and a session is a
+JSON Lines file (a metadata record, then message, `$set` and `$patch`
+records) whose folder is named after the project rather than its hash. It
+also turned folder trust on by default. Project MCP servers, hooks,
+subagents and skills then stay off until the user trusts the folder. Found
+on 2026-11-05, when Gemini CLI updated itself from 0.28.0 to 0.67.0;
+verified against gemini-cli-core 0.28.0, 0.32.1, 0.33.0, 0.35.0, 0.36.0 and 0.67.0.
+
+Gemini CLI 0.36.0 also turned subagents on by default, so the install note
+that says they are off MUST be printed only for older versions.
+
+SpecShip MUST write and read the form the installed Gemini CLI uses: the
+subagent's tool list, the workflow steps' allowed tools, and session
+transcripts in both formats. When the version is unknown it MUST use the
+current form. It MUST NOT trust a folder on the user's behalf. A Gemini
+install or switch MUST print one line saying that the folder has to be
+trusted before Gemini loads SpecShip's project files.
+
+implementations:
+  - src/workflows/agents/gemini-version.ts:geminiMcpToolName
+  - src/workflows/agents/gemini-version.ts:probeGeminiVersion
+  - src/installer/targets/gemini.ts:renderGeminiExplorerAgent
+  - src/installer/targets/gemini.ts:GeminiCliTarget.install
+  - src/workflows/agents/gemini.ts:translateGeminiTools
+  - server/src/ingest/transcripts/gemini.ts:foldGeminiJsonl
+  - server/src/ingest/transcripts/gemini.ts:parseGeminiSession
+  - server/src/ingest/transcripts/gemini.ts:listGeminiTranscriptFiles
+  - server/src/ingest/transcripts/gemini.ts:normalizeGeminiToolName
+  - src/activation/search-intercept.ts:scanTranscript
+  - src/installer/auto-migrate.ts:maybeAutoMigrate
+
+verifies:
+  - __tests__/gemini-033-compat.test.ts:reqAgentswitch018A1
+  - __tests__/gemini-033-compat.test.ts:reqAgentswitch018A2
+  - __tests__/gemini-033-compat.test.ts:reqAgentswitch018A2RealSession
+  - __tests__/gemini-033-compat.test.ts:reqAgentswitch018A3
+  - __tests__/gemini-033-compat.test.ts:reqAgentswitch018A4
+  - __tests__/gemini-033-compat.test.ts:reqAgentswitch018A6
+
+The real-binary check (A5) is `scripts/e2e/gemini-switch.sh` and
+`scripts/e2e/gemini-model-loop.sh`, run against Gemini CLI 0.67.0 on
+2026-11-06. Both passed.
+
+## Acceptance
+<!-- id: REQ-AGENTSWITCH-018.A1 -->
+- With Gemini CLI 0.33.0 or later the installed subagent lists
+  `mcp_specship_specship_explore`; with 0.32.x or earlier it lists
+  `specship__specship_explore`. Each is accepted by that version's own
+  agent validator.
+<!-- id: REQ-AGENTSWITCH-018.A2 -->
+- A JSON Lines session written by Gemini CLI 0.67.0 is ingested. Its project
+  is resolved from the header's `projectHash`, a message written again
+  under the same id is counted once, a tool result set by a `$patch` record
+  is counted, and `mcp_specship_specship_explore` counts as a SpecShip call.
+  A 0.28.0 single-document session still ingests unchanged.
+<!-- id: REQ-AGENTSWITCH-018.A3 -->
+- Workflow steps run on Gemini CLI 0.33.0 or later pass
+  `mcp_specship_<tool>` in `--allowed-tools`.
+<!-- id: REQ-AGENTSWITCH-018.A4 -->
+- A Gemini install or switch prints one line naming folder trust, and
+  writes nothing to Gemini's `trustedFolders.json`.
+<!-- id: REQ-AGENTSWITCH-018.A6 -->
+- A Gemini install on 0.36.0 or later prints no note saying subagents are
+  off by default; on 0.35.x or earlier it still names
+  `experimental.enableAgents`.
+<!-- id: REQ-AGENTSWITCH-018.A5 -->
+- Against the real Gemini CLI 0.67.0 with the project folder trusted, the
+  end-to-end switch check and the model-loop check both pass.

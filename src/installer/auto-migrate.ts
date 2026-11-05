@@ -271,7 +271,9 @@ export function maybeAutoMigrate(
     const scopeText = where.scope === 'local' ? 'this project' : 'all projects';
     return {
       kind: 'installed',
-      line: `SpecShip: set up ${target.displayName} for ${scopeText} — ${what}. Undo: \`${undoCommand(target.id, where.scope)}\``,
+      line:
+        `SpecShip: set up ${target.displayName} for ${scopeText} — ${what}. Undo: \`${undoCommand(target.id, where.scope)}\`` +
+        (target.switchNote ? `\n${target.switchNote}` : ''),
     };
   } catch (err) {
     rollbackJournal(endWriteJournal());

@@ -111,6 +111,12 @@ export interface AgentTarget {
    * I/O layer answers with, so the installer and the hooks read one profile.
    */
   readonly traits: HostTraits;
+  /**
+   * One line an automatic switch to this agent appends to its notice — a step
+   * only the user can take before the agent loads what was written
+   * (REQ-AGENTSWITCH-018.A4). Absent when there is none.
+   */
+  readonly switchNote?: string;
   /** Whether this target supports the given install location. */
   supportsLocation(loc: Location): boolean;
   detect(loc: Location): DetectionResult;

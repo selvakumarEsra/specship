@@ -3,7 +3,9 @@
 #   SPECSHIP_E2E_NODE_BIN   dir of the Node (22.5+, FTS5) that runs SpecShip  (default: node on PATH)
 #   SPECSHIP_E2E_GEMINI_BIN dir holding the gemini binary                       (default: gemini on PATH)
 # Needs no Gemini credentials: listing commands get a placeholder key and make no model call.
-# REQ-AGENTSWITCH-005/007/008/010 — end-to-end: Claude-only SpecShip install → switch detected from a Gemini shell → the REAL gemini 0.28.0 binary loads what SpecShip wrote.
+# REQ-AGENTSWITCH-005/007/008/010/018 — end-to-end: Claude-only SpecShip install → switch detected from a Gemini shell → the REAL gemini binary loads what SpecShip wrote.
+# Checked against Gemini CLI 0.28.0 and 0.67.0. From 0.33.0 Gemini loads a project's files only in a trusted
+# folder, so the test home trusts the project the way the user would; SpecShip itself never does.
 set -u
 REPO=$(cd "$(dirname "$0")/../.." && pwd)
 N24=${SPECSHIP_E2E_NODE_BIN:-$(dirname "$(command -v node)")}
@@ -28,6 +30,9 @@ GEMINI_CLI=1 specship status 2>&1 | grep -ai "set up\|SpecShip:" | head -3
 ls -a $P | tr '\n' ' '; echo; ls $P/.gemini 2>/dev/null | tr '\n' ' '; echo
 echo "== CLAUDE.md unchanged?"; cat $P/CLAUDE.md
 echo "== 3. REAL gemini binary: mcp list (spawns specship serve --mcp)"
+[ -e $HOME/.gemini/trustedFolders.json ] && echo "FAIL SpecShip wrote trustedFolders.json" || echo "PASS SpecShip trusted nothing itself"
+RP=$(cd "$P" && pwd -P)
+mkdir -p $HOME/.gemini; printf '{"%s":"TRUST_FOLDER","%s":"TRUST_FOLDER"}\n' "$P" "$RP" > $HOME/.gemini/trustedFolders.json
 export PATH=$HOME/bin:$N22:/usr/bin:/bin
 export GEMINI_API_KEY=placeholder-not-used-for-listing
 (cd $P && timeout 60 gemini mcp list 2>&1 | grep -v -i deprecat | tail -6)
@@ -39,8 +44,10 @@ before=$(find $P/.gemini -type f -exec shasum {} \; | sort | shasum)
 GEMINI_CLI=1 specship status 2>&1 | grep -ai "set up" | head -2
 after=$(find $P/.gemini -type f -exec shasum {} \; | sort | shasum)
 [ "$before" = "$after" ] && echo "unchanged: yes" || echo "unchanged: NO"
-echo "== 6. REAL gemini-cli-core loaders validate the subagent + skill files"
-CORE=$N22/../lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src
-ls $P/.gemini/agents $P/.gemini/skills 2>&1 | tr "\n" " "; echo
-$N22/node --input-type=module -e "const a=await import('$CORE/agents/agentLoader.js'); const s=await import('$CORE/skills/skillLoader.js'); const fns=Object.keys(a).filter(k=>/load|parse/i.test(k)); console.log('agentLoader exports:',fns.join(',')); const sf=Object.keys(s).filter(k=>/load/i.test(k)); console.log('skillLoader exports:',sf.join(','));" 2>&1 | tail -3
+echo "== 6. the subagent lists the installed version's tool names"
+export PATH=$HOME/bin:$N22:/usr/bin:/bin
+GV=$(gemini --version 2>/dev/null | grep -o '[0-9]*\.[0-9]*\.[0-9]*' | head -1)
+grep '^  - ' $P/.gemini/agents/specship-explorer.md | head -3
+"$N24/node" -e 'const [a,b]=process.argv[1].split(".").map(Number); process.exit(a>0||b>=33?0:1)' "${GV:-9.9.9}" && WANT=mcp_specship_specship_explore || WANT=specship__specship_explore
+grep -q "^  - $WANT\$" $P/.gemini/agents/specship-explorer.md && echo "PASS Gemini ${GV:-?}: $WANT" || echo "FAIL Gemini ${GV:-?}: expected $WANT"
 echo "WORKDIR=$W"

@@ -92,7 +92,7 @@ A plain `specship install` wires the agent it runs under: Gemini CLI from a Gemi
 - the `specship` MCP server entry in your Gemini settings file (`~/.gemini/settings.json` globally, `<your-project>/.gemini/settings.json` with `--location local`);
 - a short block in `GEMINI.md` telling Gemini to reach for SpecShip before searching files (plus the spec-first rule, unless you pass `--no-sdd`);
 - hooks: a per-prompt reminder, the session cheat-sheet, index sync after file writes, and a one-line pointer to SpecShip the first time a session searches with Gemini's own tools or `grep`/`rg` in the shell. Set `SPECSHIP_GEMINI_STRICT=1` to redirect Gemini's built-in file-search tools to SpecShip instead; shell commands are never blocked. Gemini runs project-level hooks only in folders you've marked trusted.
-- the `/specship:*` commands as Gemini TOML commands, and — with Gemini CLI 0.28.0 or newer — the `spec-author` and `design-md` skills under `.gemini/skills/` and the `specship-explorer` subagent under `.gemini/agents/` (the subagent needs Gemini's `experimental.enableAgents` setting, which SpecShip leaves to you);
+- the `/specship:*` commands as Gemini TOML commands, and — with Gemini CLI 0.28.0 or newer — the `spec-author` and `design-md` skills under `.gemini/skills/` and the `specship-explorer` subagent under `.gemini/agents/` (before Gemini CLI 0.36.0 the subagent needs Gemini's `experimental.enableAgents` setting, which SpecShip leaves to you). From Gemini CLI 0.33.0, Gemini loads these project files only once you trust the folder;
 - `CLAUDE.md` added to Gemini's `context.fileName`, so Gemini reads your existing `CLAUDE.md` in place — it is never copied.
 
 Add `--trust` to also write `~/.gemini/policies/specship.toml`, which auto-approves SpecShip's read-only tools (explore, search, callers, impact, …) so they stop asking for confirmation. Tools that write — JIRA, link changes, Designer — still ask. **An administrator policy always overrides this file**, and it does not affect Gemini's confirmation prompt for shell commands.
@@ -149,7 +149,7 @@ You still need `specship init -i` in each project (step 3) so there's an index t
 | Workflow prompt steps (`specship workflow run`, `/specship:spec implement`) | ✓ | ✓ with `--agent gemini`, or automatically when launched from Gemini CLI — single steps checked live; a full implement run has not been measured |
 | Auto-approved SpecShip tools | ✓ | ✓ read-only tools only, opt-in with `--trust`; an administrator policy still wins |
 | Skills (`spec-author`, `design-md`) | ✓ | ✓ with Gemini CLI 0.28.0 or newer; skipped with a note otherwise |
-| `specship-explorer` subagent | ✓ | ✓ with Gemini CLI 0.28.0 or newer — Gemini subagents are experimental and off until you set `experimental.enableAgents` |
+| `specship-explorer` subagent | ✓ | ✓ with Gemini CLI 0.28.0 or newer — before 0.36.0, Gemini subagents are off until you set `experimental.enableAgents` |
 | Status-line segment | ✓ | — |
 <!-- capability-matrix:end -->
 

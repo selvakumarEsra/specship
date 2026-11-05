@@ -33,7 +33,7 @@
  */
 
 import * as fs from 'fs';
-import { spawnSync } from 'child_process';
+import { geminiMcpToolName, geminiVersionSupports, probeGeminiVersion } from '../../workflows/agents/gemini-version';
 import { GEMINI_CLI_TRAITS } from '../../activation/hook-output';
 import * as os from 'os';
 import * as path from 'path';
@@ -447,14 +447,14 @@ const TRUST_POLICY_NOTE =
   'run_shell_command confirmations are unaffected.';
 
 /**
- * Gemini's project-level hooks only run when the user has marked the folder
- * as trusted — a local install points the user at that gate so hooks silently
- * failing to run isn't the first evidence something's off.
+ * Gemini CLI loads a project's GEMINI.md, hooks, skills, subagents and MCP
+ * servers only in a folder the user has trusted — on by default from 0.33.0.
+ * Every Gemini install and switch names that gate in one line, and SpecShip
+ * never writes Gemini's trustedFolders.json itself (REQ-AGENTSWITCH-018.A4).
  */
-const LOCAL_TRUST_NOTE =
-  'Gemini CLI runs project-level hooks only in folders you have marked as ' +
-  'trusted. If the SpecShip hooks seem inert in this project, open it once in ' +
-  'Gemini CLI and accept the trust prompt.';
+export const GEMINI_FOLDER_TRUST_NOTE =
+  'Gemini CLI: trust this folder (accept the prompt when you open it, or run /permissions) ' +
+  'before Gemini loads SpecShip\'s project files — GEMINI.md, hooks, skills and the MCP server.';
 
 /**
  * SpecShip's prompt / session hooks for Gemini CLI (REQ-GEMINI-010). The
@@ -749,68 +749,22 @@ export function removeGeminiPolicyEntry(): WriteResult['files'][number] {
 //     only kind, name, description, display_name, tools (an ARRAY of
 //     strings), model, temperature, max_turns, timeout_mins — any other key
 //     rejects the file. `tools` entries must pass `isValidToolName`: a
-//     built-in, or an MCP `server__tool` name — so `specship__specship_explore`,
-//     never the bare `specship_explore` (rejected) nor Claude's
-//     `mcp__specship__…` form.
-//   - Subagents are OFF by default (`experimental.enableAgents` = false,
-//     labelled experimental). We install the file but never flip the setting;
-//     the install names the setting in a note instead.
+//     built-in, or an MCP tool name in the installed version's form —
+//     `specship__specship_explore` before 0.33.0, `mcp_specship_specship_explore`
+//     from 0.33.0 (REQ-AGENTSWITCH-018) — never the bare `specship_explore`
+//     (rejected) nor Claude's `mcp__specship__…` form.
+//   - Subagents are OFF by default before 0.36.0 (`experimental.enableAgents`
+//     = false) and on from 0.36.0. We install the file but never flip the
+//     setting; on an older version the install names the setting in a note.
 // ---------------------------------------------------------------------------
+
+export { geminiMcpToolName, geminiVersionSupports, probeGeminiVersion };
 
 /** The Gemini CLI version these surfaces were verified against. */
 export const GEMINI_MIN_SKILLS = '0.28.0';
 export const GEMINI_MIN_AGENTS = '0.28.0';
-
-/**
- * Probe the installed Gemini CLI's version (`gemini --version`). Returns
- * `null` when Gemini is not on PATH or prints no version. `SPECSHIP_GEMINI_VERSION`
- * overrides the probe (tests, and users whose `gemini` is not on PATH);
- * `none` or an empty value means "not found". The real probe is memoised per
- * process — it costs about a second.
- */
-let probedGeminiVersion: string | null | undefined;
-export function probeGeminiVersion(): string | null {
-  const override = process.env.SPECSHIP_GEMINI_VERSION;
-  if (override !== undefined) {
-    const v = override.trim();
-    return v === '' || v.toLowerCase() === 'none' ? null : v;
-  }
-  if (probedGeminiVersion !== undefined) return probedGeminiVersion;
-  let found: string | null = null;
-  try {
-    const res = spawnSync('gemini', ['--version'], {
-      encoding: 'utf-8',
-      windowsHide: true,
-      // Short: this also runs inside automatic agent set-up (MCP sessions, git hooks).
-      timeout: 3000,
-      shell: process.platform === 'win32',
-    });
-    if (res.status === 0) {
-      const m = /(\d+)\.(\d+)\.(\d+)/.exec(String(res.stdout ?? ''));
-      if (m) found = m[0];
-    }
-  } catch {
-    found = null;
-  }
-  probedGeminiVersion = found;
-  return found;
-}
-
-/** True when `version` (x.y.z, any suffix ignored) is at least `min`. */
-export function geminiVersionSupports(version: string | null, min: string): boolean {
-  if (!version) return false;
-  const parse = (v: string): number[] | null => {
-    const m = /(\d+)\.(\d+)\.(\d+)/.exec(v);
-    return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null;
-  };
-  const a = parse(version);
-  const b = parse(min);
-  if (!a || !b) return false;
-  for (let i = 0; i < 3; i++) {
-    if (a[i]! !== b[i]!) return a[i]! > b[i]!;
-  }
-  return true;
-}
+/** First Gemini CLI release with subagents on by default (`experimental.enableAgents`, REQ-AGENTSWITCH-018.A6). */
+export const GEMINI_AGENTS_ON_BY_DEFAULT = '0.36.0';
 
 /** Gemini CLI's skills dir for this location (same scope as `settingsPath`). */
 export function geminiSkillsDir(loc: Location): string {
@@ -924,7 +878,8 @@ const GEMINI_AGENT_FILE = 'specship-explorer.md';
  * Render the shipped `agents/specship-explorer.md` as a Gemini subagent
  * (REQ-AGENTSWITCH-005.A2). Frontmatter is rebuilt with only keys Gemini's
  * strict schema accepts — `model: inherit` is dropped (Gemini would read it as
- * a model id) — and `tools` becomes a YAML array of `specship__<tool>` names.
+ * a model id) — and `tools` becomes a YAML array of the installed Gemini CLI's
+ * MCP tool names (REQ-AGENTSWITCH-018).
  * The body names tools by their bare Gemini name. No `mcp__specship__` survives.
  */
 export function renderGeminiExplorerAgent(source?: string): string {
@@ -943,7 +898,7 @@ export function renderGeminiExplorerAgent(source?: string): string {
     .split(',')
     .map((t) => t.trim())
     .filter(Boolean)
-    .map((t) => `specship__${t.replace(/^mcp__specship__/, '')}`);
+    .map((t) => geminiMcpToolName('specship', t.replace(/^mcp__specship__/, ''), probeGeminiVersion()));
   return [
     '---',
     `name: ${name}`,
@@ -996,6 +951,7 @@ export class GeminiCliTarget implements AgentTarget {
   readonly id = 'gemini' as const;
   readonly traits = GEMINI_CLI_TRAITS;
   readonly displayName = GEMINI_CLI_TRAITS.displayName;
+  readonly switchNote = GEMINI_FOLDER_TRUST_NOTE;
   readonly docsUrl = 'https://google-gemini.github.io/gemini-cli/docs/cli/configuration.html';
 
   supportsLocation(_loc: Location): boolean {
@@ -1080,7 +1036,7 @@ export class GeminiCliTarget implements AgentTarget {
     }
     if (geminiVersionSupports(version, GEMINI_MIN_AGENTS)) {
       files.push(writeGeminiAgentsEntry(loc));
-      notes.push(AGENTS_EXPERIMENTAL_NOTE);
+      if (!geminiVersionSupports(version, GEMINI_AGENTS_ON_BY_DEFAULT)) notes.push(AGENTS_EXPERIMENTAL_NOTE);
     } else {
       notes.push(
         `Gemini CLI: skipped subagent specship-explorer — needs Gemini CLI >= ${GEMINI_MIN_AGENTS} (${foundLabel(version)}).`,
@@ -1090,7 +1046,7 @@ export class GeminiCliTarget implements AgentTarget {
       files.push(writeGeminiPolicyEntry());
       notes.push(TRUST_POLICY_NOTE);
     }
-    if (loc === 'local') notes.push(LOCAL_TRUST_NOTE);
+    notes.push(GEMINI_FOLDER_TRUST_NOTE);
     return { files, notes };
   }
 
