@@ -386,7 +386,10 @@ implementations:
   - src/installer/targets/gemini.ts:removeGeminiContextFilesEntry
   - src/installer/targets/gemini.ts:GeminiCliTarget.install
   - src/installer/targets/gemini.ts:GeminiCliTarget.uninstall
+  - src/installer/targets/gemini.ts:contextFileNames
+  - src/installer/targets/gemini.ts:recordRoot
   - src/installer/agent-record.ts:AgentRecordEntry
+  - src/installer/agent-record.ts:cleanFileNames
   - src/installer/agent-record.ts:readAddedContextFiles
   - src/installer/agent-record.ts:setAddedContextFiles
   - src/installer/agent-record.ts:recordInstall
