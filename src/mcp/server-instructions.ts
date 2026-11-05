@@ -21,13 +21,67 @@
  */
 import { findNearestSpecShipRoot } from '../directory';
 import { detectModelTier, type ModelTier } from './model-context';
+import { DEFAULT_HOST_TRAITS, hostTraitsFor, type HostTraits } from '../activation/hook-output';
+import { UNKNOWN_AGENT, type DetectedAgent } from '../agents/detect';
 
-export const SERVER_INSTRUCTIONS = `# Specship — code intelligence over an indexed knowledge graph
+/**
+ * The host-dependent phrases of the instruction text (REQ-AGENTSWITCH-002).
+ * Each slot is a phrase, not a host fact: the facts (read/search tool names,
+ * memory file, display name) come from the host profile via {@link vocabFor}.
+ */
+interface InstructionVocab {
+  /** Optional sentence pointing at the host's memory-file steering block. */
+  hostNote: string;
+  rawTools: string;
+  neverReadAFile: string;
+  readingTheSpecFile: string;
+  readThoseFiles: string;
+  alreadyRead: string;
+  sweepTools: string;
+  dontSweep: string;
+  readOnlyListed: string;
+}
+
+/** Today's wording — what the default host (and an unknown client) receives byte for byte. */
+const LEGACY_VOCAB: InstructionVocab = {
+  hostNote: '',
+  rawTools: 'Read/Grep',
+  neverReadAFile: 'never Read a file',
+  readingTheSpecFile: 'Read-ing the spec file',
+  readThoseFiles: 'Read those specific files',
+  alreadyRead: 'Read',
+  sweepTools: 'Grep/Glob/Read',
+  dontSweep: "Don't Grep/Glob/Read",
+  readOnlyListed: 'Read only the files',
+};
+
+/** The phrasing for a non-default host, built from its profile's tool and file names. */
+function vocabFor(traits: HostTraits): InstructionVocab {
+  const tick = (n: string): string => `\`${n}\``;
+  const read = tick(traits.readTools[0] ?? 'read');
+  const search = traits.searchTools.map(tick);
+  const sweep = [...search, read].join('/');
+  return {
+    hostNote:
+      `\n\nSpecShip's project rules for ${traits.displayName} live in the SpecShip block of ` +
+      `${tick(traits.memoryFile)} — follow them alongside these instructions.`,
+    rawTools: [read, ...search].join('/'),
+    neverReadAFile: `never call ${read} on a file`,
+    readingTheSpecFile: `reading the spec file with ${read}`,
+    readThoseFiles: `read those specific files with ${read}`,
+    alreadyRead: 'read',
+    sweepTools: sweep,
+    dontSweep: `Don't call ${sweep}`,
+    readOnlyListed: `use ${read} on only the files`,
+  };
+}
+
+const fullInstructions = (v: InstructionVocab): string => `# Specship — code intelligence over an indexed knowledge graph
 
 Specship is a SQLite knowledge graph of every symbol, edge, and file
 in the workspace. Reads are sub-millisecond; the index lags writes by
 about a second through the file watcher. Consult it BEFORE writing or
-editing code, not during.
+editing code, not during.${v.hostNote}
 
 ## Answer directly — don't delegate exploration
 
@@ -39,7 +93,7 @@ grouped by file, so it is Read-equivalent and most often the ONLY
 specship call you need. Specship IS the pre-built search index — so
 delegating the lookup to a separate file-reading sub-task/agent, or
 running your own grep + read loop, repeats work specship already did and
-costs more for the same answer. Reach for raw Read/Grep only to confirm a
+costs more for the same answer. Reach for raw ${v.rawTools} only to confirm a
 specific detail specship didn't cover. A direct specship answer is
 typically one to a few calls; a grep/read exploration is dozens.
 
@@ -49,11 +103,11 @@ typically one to a few calls; a grep/read exploration is dozens.
 - **"How does X reach/become Y? / the flow / the path from X to Y"** → \`specship_explore\`, naming the symbols that span the flow (e.g. \`mutateElement renderScene\`) — it surfaces the call path among them, including dynamic-dispatch hops (callbacks, React re-render, JSX children) grep can't follow
 - **"What is the symbol named X?" (just its location)** → \`specship_search\`
 - **"What calls this?" / "What does this call?" / "What would changing this break?"** → \`specship_callers\` / \`specship_callees\` / \`specship_impact\`
-- **One specific symbol's full source (esp. a body \`specship_explore\` trimmed), or an OVERLOADED name** → \`specship_node\` (with \`includeCode\`): for an ambiguous name it returns EVERY matching definition's body in one call, so you never Read a file to find the right overload
+- **One specific symbol's full source (esp. a body \`specship_explore\` trimmed), or an OVERLOADED name** → \`specship_node\` (with \`includeCode\`): for an ambiguous name it returns EVERY matching definition's body in one call, so you ${v.neverReadAFile} to find the right overload
 - **"What's in directory X?"** → \`specship_files\`
 - **"Is the index ready / what's its size?" or "which SpecShip is running / what version am I on?"** → \`specship_status\` (one tool for both: index stats plus the serving process's version, install method, install dir, node and project root; works with no project open)
 - **"Is this code healthy / does it violate our architecture rules?"** → \`specship_health\` (coupling + oversized symbols + god-files + cycles + dead-code candidates, and architecture-fitness violations; narrow with \`checks: ["maintainability"]\` or \`["fitness"]\`)
-- **User mentions a spec ID or requirement (e.g. "REQ-AUTH-005", "the rate-limit requirement")** → \`specship_spec\` FIRST. Returns spec body + parent/siblings + linked code with state (verified / drifted / orphaned) — more than Read-ing the spec file alone. If domain facts (ubiquitous-language terms, business rules) are linked to the spec, they come back inline under "Domain facts" — no separate tool. Then jump into linked code via \`specship_node\`.
+- **User mentions a spec ID or requirement (e.g. "REQ-AUTH-005", "the rate-limit requirement")** → \`specship_spec\` FIRST. Returns spec body + parent/siblings + linked code with state (verified / drifted / orphaned) — more than ${v.readingTheSpecFile} alone. If domain facts (ubiquitous-language terms, business rules) are linked to the spec, they come back inline under "Domain facts" — no separate tool. Then jump into linked code via \`specship_node\`.
 - **User describes a change without naming a spec (a bug, an error, a one-line enhancement) and you need to find which existing spec it belongs to** → \`specship_spec\` with a free-text \`query\`. Returns scored, ranked candidate specs (id, title, kind, snippet) over the spec index — use it to route the change to the right requirement before authoring a new doc. (No \`query\`/\`spec_id\` → the lifecycle funnel; add \`list: true\` for a flat inventory of every requirement's single rolled-up status + per-status totals, or \`ideas: true\` for the ideas review view — the idea-state briefs with age since capture + labels, closing with the promotion hand-off.)
 - **Authoring end-to-end tests for a requirement** → \`specship_spec\` with \`spec_id\` + \`behaviour_surface: true\`. Returns the requirement's linked code plus the surrounding routes / components / handlers grouped into a UI tier (Playwright targets) and a backend/batch tier (API/job targets) — the flow map to write tests from.
 - **After editing code in response to a spec** → call \`specship_link_assert\` before reporting done. Idempotent. Supersedes the \`// @implements REQ-X\` comment backstop (which the extractor catches on its own). The target is validated against the graph — an unresolvable \`file:symbol\` is refused with near-miss suggestions, so re-call it with a real target rather than assuming it recorded.
@@ -74,7 +128,7 @@ typically one to a few calls; a grep/read exploration is dozens.
 - **Don't grep first** when looking up a symbol by name — \`specship_search\` is faster and returns kind + location + signature.
 - **Don't chain \`specship_search\` + \`specship_node\`** to understand an area — ONE \`specship_explore\` returns the relevant symbols' source together in a single round-trip.
 - **Don't loop \`specship_node\` over many symbols** — one \`specship_explore\` call returns them all grouped by file, while each separate call re-reads the whole context and costs far more. Use \`specship_node\` for a single symbol.
-- **After editing, check the staleness banner.** When a tool response starts with "⚠️ Some files referenced below were edited since the last index sync…", the listed files are pending re-index — Read those specific files for accurate content. Every file NOT in that banner is fresh, so still trust specship. \`specship_status\` also lists pending files under "Pending sync".
+- **After editing, check the staleness banner.** When a tool response starts with "⚠️ Some files referenced below were edited since the last index sync…", the listed files are pending re-index — ${v.readThoseFiles} for accurate content. Every file NOT in that banner is fresh, so still trust specship. \`specship_status\` also lists pending files under "Pending sync".
 
 ## JIRA integration
 
@@ -105,10 +159,10 @@ Any request about the user's JIRA issues/tasks/tickets goes to these tools by de
  * tools that survive `applyLiteTierTrim`, and the anti-patterns that stop a
  * grep fallback. No JIRA section, and no tool the lite menu trimmed away.
  */
-export const LITE_SERVER_INSTRUCTIONS = `# Specship — the code index for this workspace
+const liteInstructions = (v: InstructionVocab): string => `# Specship — the code index for this workspace
 
 Specship is a pre-built index of every symbol, file, and call edge here.
-Reads are instant; the index lags file writes by about a second.
+Reads are instant; the index lags file writes by about a second.${v.hostNote}
 
 ## Rule 1 — explore first, answer yourself
 
@@ -116,9 +170,9 @@ Any question about how the code works, where something lives, how X reaches
 Y, or what an area does: make ONE \`specship_explore\` call, then answer from
 it. \`specship_explore\` takes a plain question or a list of symbol/file
 names and returns the verbatim source of the matching symbols grouped by
-file — it is Read-equivalent, so treat what it returns as already Read.
+file — it is Read-equivalent, so treat what it returns as already ${v.alreadyRead}.
 Do NOT hand the lookup to a sub-agent or sub-task. Do NOT start a
-Grep/Glob/Read sweep. One call is usually the whole answer.
+${v.sweepTools} sweep. One call is usually the whole answer.
 
 ## Rule 2 — tools
 
@@ -131,13 +185,19 @@ Grep/Glob/Read sweep. One call is usually the whole answer.
 
 ## Rule 3 — anti-patterns
 
-- Don't Grep/Glob/Read to find code. Ask \`specship_explore\` instead.
+- ${v.dontSweep} to find code. Ask \`specship_explore\` instead.
 - Don't re-run \`specship_explore\` for something a previous call already returned — re-read your earlier result.
 - Don't verify a specship answer with grep. It comes from a full parse.
 - Don't chain \`specship_search\` + \`specship_node\` to understand an area — one \`specship_explore\` covers it.
-- If a response opens with a ⚠️ staleness banner, Read only the files it lists; everything else is fresh.
+- If a response opens with a ⚠️ staleness banner, ${v.readOnlyListed} it lists; everything else is fresh.
 - If a tool says the project isn't initialized, offer to run \`specship init -i\`.
 `;
+
+/** The full instruction text the default host receives. */
+export const SERVER_INSTRUCTIONS = fullInstructions(LEGACY_VOCAB);
+
+/** The compact (lite-tier) instruction text the default host receives. */
+export const LITE_SERVER_INSTRUCTIONS = liteInstructions(LEGACY_VOCAB);
 
 /** Instruction text for a resolved tier (REQ-LOWEND-003.A3: non-lite is unchanged). */
 export function serverInstructionsFor(tier: ModelTier): string {
@@ -145,14 +205,30 @@ export function serverInstructionsFor(tier: ModelTier): string {
 }
 
 /**
+ * Instruction text for a tier and host profile (REQ-AGENTSWITCH-002). No
+ * profile, or the default host's, returns the shipped constants unchanged;
+ * any other host gets the same text naming its own read/search tools and
+ * memory file.
+ */
+export function renderServerInstructions(tier: ModelTier, traits?: HostTraits): string {
+  if (!traits || traits.id === DEFAULT_HOST_TRAITS.id) return serverInstructionsFor(tier);
+  const vocab = vocabFor(traits);
+  return tier === 'lite' ? liteInstructions(vocab) : fullInstructions(vocab);
+}
+
+/**
  * Resolve the instructions for a project-root hint, mirroring
  * `applyLiteTierTrim`'s resolution exactly so the menu trim and the
  * instruction trim always agree. Marker-file only — no DB open. A null or
- * unresolvable hint gets the full text (never compact blind).
+ * unresolvable hint gets the full text (never compact blind). `agent` is the
+ * client detected at `initialize`; an unknown client gets today's text.
  */
-export function resolveServerInstructions(hint: string | null): string {
-  if (!hint) return SERVER_INSTRUCTIONS;
-  const root = findNearestSpecShipRoot(hint);
-  if (!root) return SERVER_INSTRUCTIONS;
-  return serverInstructionsFor(detectModelTier(root));
+export function resolveServerInstructions(
+  hint: string | null,
+  agent: DetectedAgent = UNKNOWN_AGENT,
+): string {
+  const traits = agent === UNKNOWN_AGENT ? undefined : hostTraitsFor(agent);
+  const root = hint ? findNearestSpecShipRoot(hint) : null;
+  const tier: ModelTier = root ? detectModelTier(root) : 'full';
+  return renderServerInstructions(tier, traits);
 }

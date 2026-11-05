@@ -26,6 +26,8 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixes
 
+- Gemini CLI sessions now get SpecShip's tool guidance and session cheat-sheet in Gemini's own terms — `read_file`, `grep_search`, `glob` and `GEMINI.md` — instead of Claude Code's tool names. Claude Code sees exactly the same text as before.
+- `specship uninstall --target gemini` now names only Gemini CLI's files and tells you to restart Gemini CLI; a full uninstall with `--target gemini` removes only Gemini's wiring and warns that other agents' wiring stays in place.
 - JavaScript and TypeScript functions, classes and variables that contain HTML-comment text (`<!--` or `-->`) inside a regex are no longer missing from the index. Before, those characters were mistaken for an old-style HTML comment and the whole declaration was dropped from search, callers and impact results. Existing indexes are repaired automatically on the next sync, with no reindex needed.
 - Deleting a spec file, or switching to a branch without it, now removes its requirements and links on the next sync instead of reporting them as drift.
 - `specship lint` now reports a requirement ID that is declared in more than one spec file — for example after merging two branches that picked the same ID — naming every file and line, even when you lint only some of the files.

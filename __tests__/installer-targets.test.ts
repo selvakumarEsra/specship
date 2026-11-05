@@ -19,6 +19,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import fc from 'fast-check';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -2320,4 +2321,135 @@ describe('REQ-SLIM-003 — interactive install asks at most one question', () =>
   // change `specship check`'s exit code — pending a product decision on which
   // requirement gives way.
   it.todo('REQ-SLIM-003.A1: the gate question is defaulted too (blocked on REQ-ENFORCE-004.A3)');
+});
+
+// ---------------------------------------------------------------------------
+// REQ-AGENTSWITCH-002.A2 — `specship uninstall --target gemini` speaks Gemini.
+// ---------------------------------------------------------------------------
+
+describe('uninstall --target gemini reports only Gemini paths (REQ-AGENTSWITCH-002)', () => {
+  type Mode = 'keep-data' | 'keep-data-prompt' | 'purge';
+  type Prior = { geminiGlobal: boolean; geminiLocal: boolean; claudeGlobal: boolean; claudeLocal: boolean };
+
+  /** A clack stand-in that records every string the uninstaller shows. */
+  function recordingClack(shown: string[], pick: 'global' | 'local'): typeof import('@clack/prompts') {
+    const say = (m: unknown): void => { shown.push(String(m ?? '')); };
+    return {
+      intro: say,
+      outro: say,
+      cancel: say,
+      isCancel: () => false,
+      log: { success: say, info: say, warn: say, error: say, message: say, step: say },
+      select: async (o: { message: string; options: Array<{ label: string; hint?: string }> }) => {
+        say(o.message);
+        for (const opt of o.options) { say(opt.label); say(opt.hint); }
+        return pick;
+      },
+      confirm: async (o: { message: string }) => { say(o.message); return true; },
+    } as unknown as typeof import('@clack/prompts');
+  }
+
+  const CLAUDE_TEXT = [/\.claude\b/, /\.mcp\.json/, /CLAUDE\.md/, /Claude Code/];
+
+  async function uninstallGeminiOnce(location: 'global' | 'local', prior: Prior, mode: Mode): Promise<void> {
+    const home = mkTmpDir('a2-home');
+    const cwd = mkTmpDir('a2-cwd');
+    const prevCwd = process.cwd();
+    process.chdir(cwd);
+    const home$ = setHome(home);
+    try {
+      if (prior.geminiGlobal) geminiTarget.install('global', { autoAllow: true, sdd: true });
+      if (prior.geminiLocal) geminiTarget.install('local', { autoAllow: true, sdd: true });
+      if (prior.claudeGlobal) claudeTarget.install('global', { autoAllow: true, sdd: true });
+      if (prior.claudeLocal) claudeTarget.install('local', { autoAllow: true, sdd: true });
+
+      const shown: string[] = [];
+      const { runUninstaller } = await import('../src/installer');
+      await runUninstaller({
+        target: 'gemini',
+        keepData: mode !== 'purge',
+        location: mode === 'keep-data' ? location : undefined,
+        yes: mode !== 'keep-data-prompt',
+        clack: recordingClack(shown, location),
+        purgeEnv: {
+          cwd: process.cwd(),
+          homedir: os.homedir(),
+          installDir: path.join(os.homedir(), '.specship'),
+          binDir: path.join(os.homedir(), '.local', 'bin'),
+          method: 'unknown',
+        },
+        purgeExecDeps: { rmDir: () => false, rmFile: () => false, runNpmRemove: () => ({ ok: true, detail: '' }), log: () => {} },
+      });
+
+      const text = shown.join('\n');
+      for (const re of CLAUDE_TEXT) expect(text, `uninstall output matched ${re}`).not.toMatch(re);
+      // Every reported removal is a Gemini path.
+      const removed = shown.flatMap((l) => {
+        const m = /^[^:\n]+: removed (.+)$/.exec(l);
+        return m ? [m[1]!] : [];
+      });
+      for (const p of removed) expect(p).toMatch(/(^|\/)(\.gemini\/|GEMINI\.md$)/);
+      if (prior.geminiGlobal || prior.geminiLocal) {
+        if (mode === 'purge') expect(removed.length).toBeGreaterThan(0);
+      }
+    } finally {
+      home$.restore();
+      process.chdir(prevCwd);
+      fs.rmSync(home, { recursive: true, force: true });
+      fs.rmSync(cwd, { recursive: true, force: true });
+    }
+  }
+
+  async function reqAgentswitch002A2(): Promise<void> {
+    await fc.assert(
+      fc.asyncProperty(
+        fc.constantFrom<'global' | 'local'>('global', 'local'),
+        fc.record({ geminiGlobal: fc.boolean(), geminiLocal: fc.boolean(), claudeGlobal: fc.boolean(), claudeLocal: fc.boolean() }),
+        fc.constantFrom<Mode>('keep-data', 'keep-data-prompt', 'purge'),
+        (location, prior, mode) => uninstallGeminiOnce(location, prior, mode),
+      ),
+      { numRuns: 30 },
+    );
+  }
+
+  it('REQ-AGENTSWITCH-002.A2: uninstall --target gemini never reports a Claude path', reqAgentswitch002A2, 60_000);
+
+  /** A purge with --target all/auto is complete: it clears every agent's wiring (REQ-UNINSTALL). */
+  async function purgeAllSweepsEveryAgent(): Promise<void> {
+    for (const target of ['all', 'auto'] as const) {
+      const home = mkTmpDir('purge-all-home');
+      const cwd = mkTmpDir('purge-all-cwd');
+      const prevCwd = process.cwd();
+      process.chdir(cwd);
+      const home$ = setHome(home);
+      try {
+        geminiTarget.install('global', { autoAllow: true, sdd: true });
+        claudeTarget.install('global', { autoAllow: true, sdd: true });
+        expect(geminiTarget.detect('global').alreadyConfigured).toBe(true);
+        const { runUninstaller } = await import('../src/installer');
+        await runUninstaller({
+          target,
+          keepData: false,
+          yes: true,
+          clack: recordingClack([], 'global'),
+          purgeEnv: {
+            cwd: process.cwd(),
+            homedir: os.homedir(),
+            installDir: path.join(os.homedir(), '.specship'),
+            binDir: path.join(os.homedir(), '.local', 'bin'),
+            method: 'unknown',
+          },
+          purgeExecDeps: { rmDir: () => false, rmFile: () => false, runNpmRemove: () => ({ ok: true, detail: '' }), log: () => {} },
+        });
+        expect(geminiTarget.detect('global').alreadyConfigured, `--target ${target}`).toBe(false);
+        expect(claudeTarget.detect('global').alreadyConfigured, `--target ${target}`).toBe(false);
+      } finally {
+        home$.restore();
+        process.chdir(prevCwd);
+        fs.rmSync(home, { recursive: true, force: true });
+        fs.rmSync(cwd, { recursive: true, force: true });
+      }
+    }
+  }
+  it('REQ-AGENTSWITCH-002.A2: a purge with --target all or auto removes every agent\'s wiring', purgeAllSweepsEveryAgent);
 });

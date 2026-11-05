@@ -139,9 +139,20 @@ choose its instructions from the client that connected to it. Text shown
 with no known host MUST stay as it is today.
 
 implementations:
-  - src/mcp/session.ts:MCPSession
-  - src/activation/cheatsheet.ts
+  - src/mcp/session.ts:MCPSession.handleInitialize
+  - src/mcp/server-instructions.ts:renderServerInstructions
+  - src/mcp/server-instructions.ts:resolveServerInstructions
+  - src/mcp/proxy.ts:runLocalHandshakeProxy
+  - src/activation/cheatsheet.ts:cheatsheetText
+  - src/activation/cheatsheet.ts:buildCheatsheetPayload
+  - src/installer/index.ts:runUninstaller
+  - src/installer/index.ts:purgeUninstall
   - src/installer/instructions-template.ts:getSddRuleBlock
+
+verifies:
+  - __tests__/mcp-agent-instructions.test.ts:reqAgentswitch002A1
+  - __tests__/installer-targets.test.ts:reqAgentswitch002A2
+  - __tests__/installer-targets.test.ts:purgeAllSweepsEveryAgent
 
 ## Acceptance
 <!-- id: REQ-AGENTSWITCH-002.A1 -->
