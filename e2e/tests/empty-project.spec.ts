@@ -37,16 +37,16 @@ test.describe('An empty/unindexed project renders empty states (REQ-TVIZ-004.A1)
     expect(guard.errors(), `dashboard console errors:\n${guard.errors().join('\n')}`).toEqual([]);
   });
 
-  test('the Specs page says there are no specs yet', async ({ page }) => {
+  test('the Review page says there are no requirements yet', async ({ page }) => {
     const guard = captureConsoleErrors(page);
-    await page.goto(`${URL_EMPTY}/specs`);
+    await page.goto(`${URL_EMPTY}/review`);
 
-    const region = page.locator('[data-screen="specs"]');
+    const region = page.locator('[data-screen="review"]');
     await expect(region).toBeVisible();
-    await expect(region.getByText(/No specs yet/i).first()).toBeVisible();
+    await expect(region.getByText(/No requirements yet/i).first()).toBeVisible();
 
     await page.waitForTimeout(400);
-    expect(guard.errors(), `specs console errors:\n${guard.errors().join('\n')}`).toEqual([]);
+    expect(guard.errors(), `review console errors:\n${guard.errors().join('\n')}`).toEqual([]);
   });
 
   test('the Graph page says nothing is indexed yet', async ({ page }) => {

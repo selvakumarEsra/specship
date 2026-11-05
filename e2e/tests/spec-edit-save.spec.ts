@@ -24,13 +24,14 @@ test('spec edit → save persists to disk and re-queues (REQ-DESKTOP-032.A2)', a
   const guard = captureConsoleErrors(page);
 
   try {
-    // ---- select the fixture spec from the tree → its detail (read view) ----
-    // Reached by selecting the row (the flow REQ-DESKTOP-032 describes). A
-    // fresh full-page load of the deeper `/specs/:id` URL is covered
-    // separately by deep-link-reload.spec.ts (REQ-DESKTOP-018.A2).
-    await page.goto('/specs');
-    await expect(page.locator('[data-screen="specs"]')).toBeVisible();
-    await page.getByRole('treeitem').filter({ hasText: FIXTURE_SPEC_ID }).click();
+    // ---- select the fixture spec in the Review queue → its detail (read view) ----
+    // Reached by selecting the row (the flow REQ-DESKTOP-032 describes); Review
+    // replaced the Specs tree (REQ-DASHSIMPLE-004). A fresh full-page load of a
+    // deeper spec URL is covered separately by deep-link-reload.spec.ts
+    // (REQ-DESKTOP-018.A2).
+    await page.goto('/review');
+    await expect(page.locator('[data-screen="review"]')).toBeVisible();
+    await page.getByRole('option').filter({ hasText: FIXTURE_SPEC_ID }).first().click();
     const editBtn = page.getByRole('button', { name: /edit spec/i });
     await expect(editBtn).toBeVisible();
     await expect(editBtn, 'the fixture requirement must be editable in place').toBeEnabled();

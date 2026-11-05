@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { SCREENS } from '../lib/screens.mjs';
+import { RETIRED, SCREENS } from '../lib/screens.mjs';
 import { captureConsoleErrors } from '../lib/console';
 
 /**
@@ -38,6 +38,19 @@ test.describe('Every routed screen renders clean (REQ-DESKTOP-032.A1)', () => {
         guard.errors(),
         `${screen.id} console errors:\n${guard.errors().join('\n')}`,
       ).toEqual([]);
+    });
+  }
+});
+
+test.describe('Retired screens redirect to the screen that replaced them (REQ-DASHSIMPLE-001)', () => {
+  for (const r of RETIRED) {
+    test(`${r.from} lands on ${r.to}`, async ({ page }) => {
+      const guard = captureConsoleErrors(page);
+      await page.goto(r.from);
+      await expect(page).toHaveURL(new RegExp(`/${r.to}$`));
+      await expect(page.locator(`[data-screen="${r.to}"]`)).toBeVisible();
+      await page.waitForTimeout(200);
+      expect(guard.errors(), `${r.from} console errors:\n${guard.errors().join('\n')}`).toEqual([]);
     });
   }
 });

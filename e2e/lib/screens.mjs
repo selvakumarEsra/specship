@@ -1,6 +1,6 @@
 /**
  * Canonical list of the desktop SPA's routed screens, mirrored from
- * `ui/src/App.tsx` (the `SCREENS` map plus the separately-wired `tips` route).
+ * `ui/src/App.tsx` (the `SCREENS` map).
  * The e2e suite iterates this to prove every screen renders (REQ-DESKTOP-032.A1).
  *
  * `content` is a stable substring that appears INSIDE the screen's own content
@@ -15,21 +15,31 @@
  */
 export const SCREENS = [
   { id: 'dashboard', path: '/dashboard', content: 'Overview' },
+  { id: 'plan', path: '/plan', content: 'Plan' },
+  { id: 'review', path: '/review', content: 'Review' },
   { id: 'graph', path: '/graph', content: 'Recenter' },
-  { id: 'specs', path: '/specs', content: 'Specs' },
-  { id: 'drift', path: '/drift', content: 'Drift queue' },
+  { id: 'traceability', path: '/traceability', content: 'Traceability' },
   { id: 'runs', path: '/runs', content: 'Runs' },
   { id: 'workflows', path: '/workflows', content: 'Workflows' },
-  // chat removed entirely (CHAT-REMOVE-DOC) — the reviewer loop lives on Runs.
-  { id: 'sessions', path: '/sessions', content: 'Sessions' },
-  { id: 'heatmap', path: '/heatmap', content: 'Heatmap' },
-  { id: 'costs', path: '/costs', content: 'Costs' },
-  { id: 'compare', path: '/compare', content: 'Compare projects' },
-  { id: 'memory', path: '/memory', content: 'Memory' },
-  { id: 'mcp', path: '/mcp', content: 'MCP servers' },
-  { id: 'tips', path: '/tips', content: 'Tips' },
   { id: 'designsystem', path: '/designsystem', content: 'Design system' },
   { id: 'settings', path: '/settings', content: 'Settings' },
+];
+
+/**
+ * Screens the dashboard simplification retired (REQ-DASHSIMPLE-001), and the
+ * live screen each old URL now lands on (`ui/src/router.ts` REDIRECTS) — so a
+ * bookmarked link never shows a blank page.
+ */
+export const RETIRED = [
+  { from: '/specs', to: 'review' },
+  { from: '/drift', to: 'review' },
+  { from: '/sessions', to: 'dashboard' },
+  { from: '/heatmap', to: 'dashboard' },
+  { from: '/costs', to: 'dashboard' },
+  { from: '/compare', to: 'dashboard' },
+  { from: '/memory', to: 'dashboard' },
+  { from: '/mcp', to: 'dashboard' },
+  { from: '/tips', to: 'dashboard' },
 ];
 
 /** The fixture spec the edit/detail specs drive (seeded by lib/fixture.mjs). */
