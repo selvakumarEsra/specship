@@ -41,7 +41,8 @@ function buildSchema(db: ReturnType<typeof Database>): void {
       total_output_tokens INTEGER DEFAULT 0,
       total_cache_creation_tokens INTEGER DEFAULT 0,
       total_cache_read_tokens INTEGER DEFAULT 0,
-      total_cost_usd REAL DEFAULT 0
+      total_cost_usd REAL DEFAULT 0,
+      host TEXT NOT NULL DEFAULT 'claude'
     );
     CREATE TABLE IF NOT EXISTS claude_prompts (
       id TEXT PRIMARY KEY,
@@ -72,7 +73,9 @@ function buildSchema(db: ReturnType<typeof Database>): void {
       ts INTEGER,
       is_specship INTEGER NOT NULL DEFAULT 0,
       displaced_files TEXT,
-      resolution TEXT
+      resolution TEXT,
+      host TEXT NOT NULL DEFAULT 'claude',
+      raw_tool_name TEXT
     );
     CREATE TABLE IF NOT EXISTS claude_ingest_state (
       file_path TEXT PRIMARY KEY,

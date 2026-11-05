@@ -1,13 +1,18 @@
 /**
- * JSONL → SQLite ingestor for Claude Code transcripts.
+ * Transcript → SQLite ingestor, one adapter per agent (REQ-AGENTSWITCH-004).
  *
- * Each Claude Code session lives in `~/.claude/projects/<slug>/<sessionId>.jsonl`,
- * where `<slug>` is the slash-escaped absolute path of the user's project.
- * Files are append-only (Claude Code writes one JSON line per assistant/user
- * turn), so we resume from the last byte offset on every pass — no re-parse
- * of the whole file.
+ * `ingestAll` walks every adapter in `./transcripts/` and ingests each of its
+ * files. Adapters normalise tool names to the shared set, so every row's
+ * `tool_name` is comparable across agents; `raw_tool_name` keeps the agent's
+ * own name and `host` names the agent. A document the adapter cannot parse
+ * is skipped and counted (`filesUnreadable`), never guessed at.
  *
- * Pipeline per file:
+ * JSON-lines adapters (Claude Code) are append-only, so we resume from the
+ * last byte offset on every pass — no re-parse of the whole file. Document
+ * adapters (Gemini CLI) rewrite the whole file, so a changed file replaces
+ * that session's rows.
+ *
+ * JSON-lines pipeline per file:
  *   1. Read state from `claude_ingest_state` (offset, last_size). If file
  *      grew, open it and seek to offset; otherwise skip.
  *   2. Parse each line with parseLine(). Group entries by promptId.
@@ -34,14 +39,22 @@ import {
 } from './types.js';
 import { computeCost, resolvePricing } from './pricing.js';
 import {
-  parseLine,
   toEpochMs,
   extractUserPrompt,
-  summarizeToolInput,
   toolResultLength,
 } from './parser.js';
 import { classifyToolCall } from './specship-classify.js';
 import type { GraphLike } from './specship-classify.js';
+import { transcriptAdapters, decodeProjectSlug, listClaudeTranscriptFiles } from './transcripts/index.js';
+import type {
+  DocumentTranscriptAdapter,
+  JsonlTranscriptAdapter,
+  TranscriptAdapter,
+  TranscriptFile,
+} from './transcripts/index.js';
+import type { HostId } from '../host-profiles.js';
+
+export { decodeProjectSlug };
 
 /** SQLite handle shape we depend on. Matches specship's SqliteDatabase. */
 export interface IngestDb {
@@ -55,8 +68,22 @@ export interface IngestDb {
 }
 
 export interface IngestOptions {
-  /** Override Claude projects root. Defaults to `~/.claude/projects`. */
+  /** Override the Claude Code transcript root (same as `roots.claude`). */
   claudeRoot?: string;
+  /**
+   * Per-agent transcript roots. When the caller names ANY root (here or via
+   * `claudeRoot`), only the adapters with a named root run — so a test that
+   * points at one fixture dir never reads the user's real transcripts.
+   * Otherwise every adapter runs against its default root under the home dir.
+   */
+  roots?: Partial<Record<HostId, string>>;
+  /** Adapters to use. Defaults to every registered adapter. */
+  adapters?: readonly TranscriptAdapter[];
+  /**
+   * Real project roots the caller knows. Adapters whose transcripts name a
+   * project only by hash (Gemini CLI) use these to resolve the path.
+   */
+  projectPaths?: readonly string[];
   /** Only re-ingest files whose mtime is newer than this many ms ago. */
   sinceMs?: number;
   /** Verbose logging. */
@@ -67,14 +94,6 @@ export interface IngestOptions {
    * When omitted (or returns null), specship calls classify as 'unresolved'.
    */
   resolveGraph?: (projectPath: string) => GraphLike | null;
-}
-
-/**
- * Convert Claude's slash-escaped project dir name back into a real path.
- * `~/.claude/projects/-Users-alice-projects-foo` → `/Users/alice/projects/foo`
- */
-export function decodeProjectSlug(slug: string): string {
-  return slug.startsWith('-') ? '/' + slug.slice(1).replace(/-/g, '/') : slug;
 }
 
 /**
@@ -97,35 +116,26 @@ export function primaryProjectMatcher(primaryRealPath: string): (storedPath: str
 }
 
 /**
- * List every JSONL file inside `<claudeRoot>/<slug>/<sessionId>.jsonl`.
- * Returns the absolute file path + the decoded project path.
+ * List every Claude Code JSONL file inside `<claudeRoot>/<slug>/<sessionId>.jsonl`.
+ * Kept for existing callers; the Claude transcript adapter owns the walk.
  */
 export function listTranscriptFiles(claudeRoot: string): Array<{ filePath: string; projectPath: string; projectSlug: string }> {
-  const out: Array<{ filePath: string; projectPath: string; projectSlug: string }> = [];
-  let projects: fs.Dirent[];
-  try {
-    projects = fs.readdirSync(claudeRoot, { withFileTypes: true });
-  } catch {
-    return out;
-  }
-  for (const p of projects) {
-    if (!p.isDirectory()) continue;
-    const dir = path.join(claudeRoot, p.name);
-    let files: fs.Dirent[];
-    try {
-      files = fs.readdirSync(dir, { withFileTypes: true });
-    } catch {
-      continue;
-    }
-    for (const f of files) {
-      if (f.isFile() && f.name.toLowerCase().endsWith('.jsonl')) {
-        out.push({
-          filePath: path.join(dir, f.name),
-          projectPath: decodeProjectSlug(p.name),
-          projectSlug: p.name,
-        });
-      }
-    }
+  return listClaudeTranscriptFiles(claudeRoot);
+}
+
+/**
+ * The adapters an ingest pass runs, each with its root. Named roots win and
+ * restrict the pass to those adapters (see `IngestOptions.roots`).
+ */
+export function resolveIngestRoots(options: IngestOptions = {}): Array<{ adapter: TranscriptAdapter; root: string }> {
+  const named: Partial<Record<string, string>> = { ...(options.roots ?? {}) };
+  if (options.claudeRoot) named['claude'] = options.claudeRoot;
+  const anyNamed = Object.values(named).some((r) => typeof r === 'string' && r.length > 0);
+  const out: Array<{ adapter: TranscriptAdapter; root: string }> = [];
+  for (const adapter of options.adapters ?? transcriptAdapters()) {
+    const root = named[adapter.id];
+    if (root) out.push({ adapter, root });
+    else if (!anyNamed) out.push({ adapter, root: adapter.defaultRoot(os.homedir()) });
   }
   return out;
 }
@@ -187,16 +197,16 @@ function readTail(filePath: string, fromOffset: number): { text: string; size: n
 }
 
 /**
- * Walk every transcript file under claudeRoot, ingest any new bytes, and
- * return aggregate stats. Synchronous: the caller controls cadence.
+ * Walk every adapter's transcript files, ingest anything new, and return
+ * aggregate stats. Synchronous: the caller controls cadence.
  */
 export function ingestAll(db: IngestDb, options: IngestOptions = {}): IngestStats {
   const start = Date.now();
-  const claudeRoot = options.claudeRoot ?? path.join(os.homedir(), '.claude', 'projects');
   const verbose = options.verbose ?? false;
   const stats: IngestStats = {
     filesScanned: 0,
     filesSkipped: 0,
+    filesUnreadable: 0,
     bytesIngested: 0,
     linesParsed: 0,
     linesSkipped: 0,
@@ -207,12 +217,22 @@ export function ingestAll(db: IngestDb, options: IngestOptions = {}): IngestStat
   };
 
   const pricing = loadPricing(db);
-  const files = listTranscriptFiles(claudeRoot);
-  for (const f of files) {
+  const files: Array<{ adapter: TranscriptAdapter; file: TranscriptFile }> = [];
+  for (const { adapter, root } of resolveIngestRoots(options)) {
+    for (const file of adapter.listFiles(root, { projectPaths: options.projectPaths })) files.push({ adapter, file });
+  }
+  for (const { adapter, file: f } of files) {
     stats.filesScanned++;
     try {
-      const wasIngested = ingestFile(db, f.filePath, f.projectPath, pricing, options);
-      if (!wasIngested.modified) {
+      const wasIngested = ingestFile(db, adapter, f, pricing, options);
+      if (wasIngested === 'unreadable') {
+        // Skipped and counted, never guessed at (REQ-AGENTSWITCH-004.A3).
+        stats.filesUnreadable++;
+        if (verbose) {
+          // eslint-disable-next-line no-console
+          console.error('[ingest] unreadable transcript skipped:', f.filePath);
+        }
+      } else if (!wasIngested.modified) {
         stats.filesSkipped++;
       } else {
         stats.bytesIngested += wasIngested.bytes;
@@ -255,13 +275,40 @@ interface FileResult {
   toolCalls: number;
 }
 
-function ingestFile(
+/**
+ * Ingest one transcript through its adapter. Returns `'unreadable'` when a
+ * document adapter cannot parse the file — nothing is written for it.
+ */
+export function ingestFile(
   db: IngestDb,
-  filePath: string,
-  projectPath: string,
+  adapter: TranscriptAdapter,
+  file: TranscriptFile,
+  pricing: PricingRow[],
+  options: IngestOptions
+): FileResult | 'unreadable' {
+  return adapter.format === 'document'
+    ? ingestDocumentFile(db, adapter, file, pricing, options)
+    : ingestJsonlFile(db, adapter, file, pricing, options);
+}
+
+/** Resolve the graph once per file; best-effort, never aborts ingest. */
+function resolveGraphFor(options: IngestOptions, projectPath: string): GraphLike | null {
+  if (!options.resolveGraph) return null;
+  try {
+    return options.resolveGraph(projectPath);
+  } catch {
+    return null;
+  }
+}
+
+function ingestJsonlFile(
+  db: IngestDb,
+  adapter: JsonlTranscriptAdapter,
+  file: TranscriptFile,
   pricing: PricingRow[],
   options: IngestOptions
 ): FileResult {
+  const { filePath, projectPath } = file;
   // Load state.
   const stateRow = db
     .prepare('SELECT last_offset, file_size, session_id FROM claude_ingest_state WHERE file_path = ?')
@@ -318,18 +365,11 @@ function ingestFile(
   // on every tool call. Returns null when no resolver is configured. The
   // resolver can throw on a locked/corrupt index; that estimate is best-effort
   // decoration and must NEVER abort transcript ingest, so degrade to null.
-  let graph: GraphLike | null = null;
-  if (options.resolveGraph) {
-    try {
-      graph = options.resolveGraph(projectPath);
-    } catch {
-      graph = null;
-    }
-  }
+  const graph = resolveGraphFor(options, projectPath);
 
   // Per-file ingest in a transaction.
   const txn = db.transaction(() => {
-    return processLines(db, filePath, projectPath, completeLines, pricing, graph);
+    return processLines(db, adapter, filePath, projectPath, completeLines, pricing, graph);
   }) as () => ProcessResult;
   const result = txn();
 
@@ -361,6 +401,131 @@ function ingestFile(
   };
 }
 
+const INSERT_TOOL_CALL_SQL = `
+  INSERT INTO claude_tool_calls (prompt_id, session_id, assistant_uuid, tool_use_id, tool_name, input_summary, input_json, result_length, ts, is_specship, displaced_files, resolution, host, raw_tool_name)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`;
+
+/**
+ * Ingest one whole-document transcript (Gemini CLI). The file is rewritten
+ * whole on every update, so a changed file replaces that session's prompt
+ * and tool-call rows in one transaction; an unchanged one (same size, not
+ * modified since the last pass) is skipped. An unparseable document writes
+ * nothing and records no state, so it is retried — and counted — every pass.
+ */
+function ingestDocumentFile(
+  db: IngestDb,
+  adapter: DocumentTranscriptAdapter,
+  file: TranscriptFile,
+  pricing: PricingRow[],
+  options: IngestOptions
+): FileResult | 'unreadable' {
+  const { filePath, projectPath } = file;
+  const stat = fs.statSync(filePath);
+  const stateRow = db
+    .prepare('SELECT last_ingested_at, file_size FROM claude_ingest_state WHERE file_path = ?')
+    .get(filePath) as { last_ingested_at: number; file_size: number } | undefined;
+  // mtimeMs carries sub-millisecond precision; last_ingested_at is whole ms.
+  if (stateRow && stateRow.file_size === stat.size && stateRow.last_ingested_at >= Math.floor(stat.mtimeMs)) {
+    return { modified: false, bytes: 0, lines: 0, linesSkipped: 0, prompts: 0, toolCalls: 0 };
+  }
+
+  const text = fs.readFileSync(filePath, 'utf-8');
+  const session = adapter.parseFile(text);
+  if (!session) return 'unreadable';
+
+  const now = Date.now();
+  db.prepare(`
+    INSERT INTO claude_projects (path, name, first_seen, last_seen)
+    VALUES (?, ?, ?, ?)
+    ON CONFLICT(path) DO UPDATE SET last_seen = excluded.last_seen
+  `).run(projectPath, projectPath, now, now);
+
+  const graph = resolveGraphFor(options, projectPath);
+
+  const txn = db.transaction(() => {
+    const sid = session.sessionId;
+    const before = {
+      prompts: (db.prepare('SELECT COUNT(*) AS n FROM claude_prompts WHERE session_id = ?').get(sid) as { n: number }).n,
+      toolCalls: (db.prepare('SELECT COUNT(*) AS n FROM claude_tool_calls WHERE session_id = ?').get(sid) as { n: number }).n,
+    };
+    db.prepare('DELETE FROM claude_tool_calls WHERE session_id = ?').run(sid);
+    db.prepare('DELETE FROM claude_prompts WHERE session_id = ?').run(sid);
+
+    let ti = 0, to = 0, tcw = 0, tcr = 0, cost = 0, toolCalls = 0;
+    const promptCosts = session.prompts.map((p) =>
+      computeCost(
+        {
+          input_tokens: p.inputTokens,
+          output_tokens: p.outputTokens,
+          cache_creation_input_tokens: p.cacheCreationTokens,
+          cache_read_input_tokens: p.cacheReadTokens,
+        },
+        resolvePricing(p.model ?? session.model ?? undefined, pricing),
+      ));
+    session.prompts.forEach((p, i) => {
+      ti += p.inputTokens; to += p.outputTokens; tcw += p.cacheCreationTokens; tcr += p.cacheReadTokens;
+      cost += promptCosts[i]!;
+    });
+
+    db.prepare(`
+      INSERT INTO claude_sessions (id, project_path, source_file, started_at, ended_at, prompt_count,
+        total_input_tokens, total_output_tokens, total_cache_creation_tokens, total_cache_read_tokens,
+        total_cost_usd, last_model, host)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        ended_at = excluded.ended_at,
+        prompt_count = excluded.prompt_count,
+        total_input_tokens = excluded.total_input_tokens,
+        total_output_tokens = excluded.total_output_tokens,
+        total_cache_creation_tokens = excluded.total_cache_creation_tokens,
+        total_cache_read_tokens = excluded.total_cache_read_tokens,
+        total_cost_usd = excluded.total_cost_usd,
+        last_model = COALESCE(excluded.last_model, claude_sessions.last_model),
+        host = excluded.host
+    `).run(sid, projectPath, filePath, session.startedAt, session.endedAt, session.prompts.length,
+      ti, to, tcw, tcr, cost, session.model, adapter.id);
+
+    const insPrompt = db.prepare(`
+      INSERT INTO claude_prompts (id, session_id, text, ts, leaf_uuid, model, input_tokens, output_tokens,
+        cache_creation_tokens, cache_read_tokens, cost_usd, is_sidechain, assistant_text, thinking_text)
+      VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+    `);
+    const insToolCall = db.prepare(INSERT_TOOL_CALL_SQL);
+    session.prompts.forEach((p, i) => {
+      insPrompt.run(p.id, sid, p.text, p.ts, p.model, p.inputTokens, p.outputTokens,
+        p.cacheCreationTokens, p.cacheReadTokens, promptCosts[i]!, p.assistantText, p.thinkingText);
+      for (const tc of p.toolCalls) {
+        const cls = classifyToolCall({ toolName: tc.name, inputJson: tc.inputJson, resultLength: tc.resultLength }, graph);
+        insToolCall.run(p.id, sid, p.id, tc.id, tc.name, tc.summary, tc.inputJson, tc.resultLength, tc.ts,
+          cls.isSpecship, cls.displacedFiles, cls.resolution, adapter.id, tc.rawName);
+        toolCalls++;
+      }
+    });
+    return {
+      prompts: Math.max(0, session.prompts.length - before.prompts),
+      toolCalls: Math.max(0, toolCalls - before.toolCalls),
+    };
+  }) as () => { prompts: number; toolCalls: number };
+  const result = txn();
+
+  db.prepare(`
+    INSERT INTO claude_ingest_state (file_path, last_offset, last_ingested_at, file_size, session_id)
+    VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT(file_path) DO UPDATE SET
+      last_offset = excluded.last_offset,
+      last_ingested_at = excluded.last_ingested_at,
+      file_size = excluded.file_size,
+      session_id = excluded.session_id
+  `).run(filePath, stat.size, now, stat.size, session.sessionId);
+
+  if (options.verbose) {
+    // eslint-disable-next-line no-console
+    console.error(`[ingest] ${path.basename(filePath)} (${adapter.id}): ${session.prompts.length} prompts`);
+  }
+  return { modified: true, bytes: stat.size, lines: 0, linesSkipped: 0, prompts: result.prompts, toolCalls: result.toolCalls };
+}
+
 interface ProcessResult extends FileResult {
   lastSessionId: string | null;
 }
@@ -373,6 +538,7 @@ interface ProcessResult extends FileResult {
  */
 function processLines(
   db: IngestDb,
+  adapter: JsonlTranscriptAdapter,
   filePath: string,
   projectPath: string,
   completeLines: string[],
@@ -380,8 +546,8 @@ function processLines(
   graph: GraphLike | null
 ): ProcessResult {
   const insSession = db.prepare(`
-    INSERT INTO claude_sessions (id, project_path, source_file, started_at, ended_at, prompt_count, last_model)
-    VALUES (?, ?, ?, ?, ?, 0, ?)
+    INSERT INTO claude_sessions (id, project_path, source_file, started_at, ended_at, prompt_count, last_model, host)
+    VALUES (?, ?, ?, ?, ?, 0, ?, '${adapter.id}')
     ON CONFLICT(id) DO UPDATE SET
       ended_at = excluded.ended_at,
       last_model = COALESCE(excluded.last_model, claude_sessions.last_model)
@@ -408,10 +574,7 @@ function processLines(
       cache_read_tokens = excluded.cache_read_tokens,
       cost_usd = excluded.cost_usd
   `);
-  const insToolCall = db.prepare(`
-    INSERT INTO claude_tool_calls (prompt_id, session_id, assistant_uuid, tool_use_id, tool_name, input_summary, input_json, result_length, ts, is_specship, displaced_files, resolution)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
+  const insToolCall = db.prepare(INSERT_TOOL_CALL_SQL);
   /**
    * Append the assistant's text + thinking blocks from one assistant turn
    * onto the prompt row. A single user prompt can span multiple assistant
@@ -479,7 +642,10 @@ function processLines(
     promptId: string;
     sessionId: string;
     assistantUuid: string;
+    /** Shared tool name (the adapter's normalisation). */
     toolName: string;
+    /** The agent's own tool name. */
+    rawToolName: string;
     summary: string;
     inputJson: string | null;
     ts: number;
@@ -487,7 +653,7 @@ function processLines(
   const pendingTools = new Map<string, PendingTool>();
 
   for (const raw of completeLines) {
-    const entry = parseLine(raw);
+    const entry = adapter.parseLine(raw);
     if (!entry) {
       // Blank lines aren't events; a non-empty line the parser couldn't
       // classify is a coverage gap and must be counted (REQ-DASHINT-008).
@@ -567,6 +733,8 @@ function processLines(
                 cls.isSpecship,
                 cls.displacedFiles,
                 cls.resolution,
+                adapter.id,
+                pending.rawToolName,
               );
               toolCallsInserted++;
               pendingTools.delete(block.tool_use_id);
@@ -634,12 +802,14 @@ function processLines(
             try {
               inputJson = JSON.stringify(block.input ?? null);
             } catch { inputJson = null; }
+            const toolName = adapter.normalizeToolName(block.name);
             pendingTools.set(block.id, {
               promptId,
               sessionId,
               assistantUuid,
-              toolName: block.name,
-              summary: summarizeToolInput(block.name, block.input),
+              toolName,
+              rawToolName: block.name,
+              summary: adapter.summarizeToolInput(toolName, block.input),
               inputJson,
               ts,
             });
@@ -689,6 +859,8 @@ function processLines(
       cls.isSpecship,
       cls.displacedFiles,
       cls.resolution,
+      adapter.id,
+      pending.rawToolName,
     );
     toolCallsInserted++;
   }

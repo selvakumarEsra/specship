@@ -10,6 +10,12 @@
  */
 
 import type { SqliteDatabase } from '../db/sqlite-adapter';
+import { CANONICAL_TOOLS, FILE_WRITE_TOOLS, sqlToolList } from '../analytics/canonical-tools';
+
+// Shared tool names (REQ-AGENTSWITCH-004): transcript adapters normalise
+// every agent's names to these, so prior work reads Gemini sessions too.
+const T_WRITES = sqlToolList(FILE_WRITE_TOOLS);
+const T_BASH = `'${CANONICAL_TOOLS.bash}'`;
 
 export interface SessionOutcome {
   sessionId: string;
@@ -71,7 +77,7 @@ export function sessionsTouchingFiles(
         `SELECT s.id, MAX(s.started_at) AS started
          FROM claude_tool_calls t
          JOIN claude_sessions s ON s.id = t.session_id
-         WHERE t.tool_name IN ('Edit','Write')
+         WHERE t.tool_name IN (${T_WRITES})
            AND s.project_path IN (?, ?)
            AND (${suffixClauses})
            AND COALESCE(s.ended_at, s.started_at, 0) < ?
@@ -106,7 +112,7 @@ export function sessionOutcome(db: SqliteDatabase, sessionId: string): SessionOu
   const filesEdited = (db
     .prepare(
       `SELECT DISTINCT input_summary AS f FROM claude_tool_calls
-       WHERE session_id = ? AND tool_name IN ('Edit','Write') AND input_summary != ''
+       WHERE session_id = ? AND tool_name IN (${T_WRITES}) AND input_summary != ''
        ORDER BY f LIMIT 40`
     )
     .all(sessionId) as Array<{ f: string }>).map((r) => r.f);
@@ -114,7 +120,7 @@ export function sessionOutcome(db: SqliteDatabase, sessionId: string): SessionOu
   const count = (sql: string): number =>
     ((db.prepare(sql).get(sessionId) as { n: number } | undefined)?.n ?? 0);
   const commandsRun = count(
-    `SELECT COUNT(*) AS n FROM claude_tool_calls WHERE session_id = ? AND tool_name = 'Bash'`
+    `SELECT COUNT(*) AS n FROM claude_tool_calls WHERE session_id = ? AND tool_name = ${T_BASH}`
   );
   const specshipCalls = count(
     `SELECT COUNT(*) AS n FROM claude_tool_calls WHERE session_id = ? AND is_specship = 1`

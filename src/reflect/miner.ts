@@ -17,8 +17,16 @@
 
 import { SqliteDatabase } from '../db/sqlite-adapter';
 import { DEFAULT_HOST_TRAITS } from '../activation/hook-output';
+import { CANONICAL_TOOLS, sqlToolList } from '../analytics/canonical-tools';
 import { buildProposal } from './targets';
 import { Proposal, ReflectContext } from './types';
+
+// Shared tool names (REQ-AGENTSWITCH-004): every transcript adapter
+// normalises its agent's names to these before rows reach the miner.
+const T_READ = `'${CANONICAL_TOOLS.read}'`;
+const T_BASH = `'${CANONICAL_TOOLS.bash}'`;
+const T_EDITS = sqlToolList([CANONICAL_TOOLS.edit, CANONICAL_TOOLS.write, CANONICAL_TOOLS.multiEdit]);
+const T_READ_GREP = sqlToolList([CANONICAL_TOOLS.read, CANONICAL_TOOLS.grep]);
 
 /** Tuning knobs — thresholds above which a pattern is worth proposing. */
 const THRESHOLDS = {
@@ -117,7 +125,7 @@ function ruleRepeatedReads(db: SqliteDatabase, ctx: ReflectContext, forms: PathF
     .prepare(
       `SELECT session_id, input_summary AS file, COUNT(*) AS n
        FROM claude_tool_calls
-       WHERE tool_name = 'Read' AND input_summary != '' AND ${IN_PROJECT}
+       WHERE tool_name = ${T_READ} AND input_summary != '' AND ${IN_PROJECT}
        GROUP BY session_id, input_summary
        HAVING n >= ?
        ORDER BY n DESC
@@ -156,7 +164,7 @@ function ruleGrepHabit(db: SqliteDatabase, ctx: ReflectContext, forms: PathForms
     .prepare(
       `SELECT COUNT(*) AS n, COUNT(DISTINCT session_id) AS s
        FROM claude_tool_calls
-       WHERE tool_name = 'Bash'
+       WHERE tool_name = ${T_BASH}
          AND (input_summary LIKE 'grep%' OR input_summary LIKE '%grep %'
               OR input_summary LIKE 'find %' OR input_summary LIKE 'rg %')
          AND ${IN_PROJECT}`,
@@ -166,7 +174,7 @@ function ruleGrepHabit(db: SqliteDatabase, ctx: ReflectContext, forms: PathForms
   const sessRows = db
     .prepare(
       `SELECT DISTINCT session_id FROM claude_tool_calls
-       WHERE tool_name = 'Bash' AND (input_summary LIKE '%grep %' OR input_summary LIKE 'grep%'
+       WHERE tool_name = ${T_BASH} AND (input_summary LIKE '%grep %' OR input_summary LIKE 'grep%'
              OR input_summary LIKE 'find %' OR input_summary LIKE 'rg %')
          AND ${IN_PROJECT}
        LIMIT 8`,
@@ -252,7 +260,7 @@ function ruleRepeatedCommands(db: SqliteDatabase, ctx: ReflectContext, forms: Pa
       `SELECT input_summary AS cmd, COUNT(*) AS n, COUNT(DISTINCT session_id) AS s,
               GROUP_CONCAT(DISTINCT session_id) AS sessions
        FROM claude_tool_calls
-       WHERE tool_name = 'Bash' AND input_summary != ''
+       WHERE tool_name = ${T_BASH} AND input_summary != ''
          AND input_summary NOT LIKE 'grep%' AND input_summary NOT LIKE '%grep %'
          AND input_summary NOT LIKE 'find %' AND input_summary NOT LIKE 'cd %'
          AND input_summary NOT LIKE 'ls%' AND input_summary NOT LIKE 'cat %'
@@ -349,7 +357,7 @@ function ruleErrorWorkaround(db: SqliteDatabase, ctx: ReflectContext, forms: Pat
   const rows = db
     .prepare(
       `SELECT session_id, input_summary AS cmd, ts FROM claude_tool_calls
-       WHERE tool_name = 'Bash' AND input_summary != '' AND ${IN_PROJECT}
+       WHERE tool_name = ${T_BASH} AND input_summary != '' AND ${IN_PROJECT}
        ORDER BY session_id, ts ASC
        LIMIT 8000`,
     )
@@ -410,7 +418,7 @@ const DESTRUCTIVE: Array<{ key: string; label: string; re: RegExp }> = [
  */
 function ruleDestructiveCommands(db: SqliteDatabase, ctx: ReflectContext, forms: PathForms): Proposal[] {
   const rows = db
-    .prepare(`SELECT session_id, input_summary AS cmd FROM claude_tool_calls WHERE tool_name = 'Bash' AND input_summary != '' AND ${IN_PROJECT}`)
+    .prepare(`SELECT session_id, input_summary AS cmd FROM claude_tool_calls WHERE tool_name = ${T_BASH} AND input_summary != '' AND ${IN_PROJECT}`)
     .all(...forms) as Array<{ session_id: string; cmd: string }>;
   const buckets = new Map<string, { count: number; sessions: Set<string>; sample: string }>();
   for (const r of rows) {
@@ -458,7 +466,7 @@ function ruleEditHotspot(db: SqliteDatabase, ctx: ReflectContext, forms: PathFor
       `SELECT input_summary AS file, COUNT(*) AS n, COUNT(DISTINCT session_id) AS s,
               GROUP_CONCAT(DISTINCT session_id) AS sessions
        FROM claude_tool_calls
-       WHERE tool_name IN ('Edit', 'Write', 'MultiEdit') AND input_summary != '' AND ${IN_PROJECT}
+       WHERE tool_name IN (${T_EDITS}) AND input_summary != '' AND ${IN_PROJECT}
        GROUP BY input_summary
        HAVING n >= ? AND s >= ?
        ORDER BY n DESC
@@ -566,8 +574,8 @@ function ruleSpecshipCold(db: SqliteDatabase, ctx: ReflectContext, forms: PathFo
   const rows = db
     .prepare(
       `SELECT session_id,
-              SUM(CASE WHEN tool_name IN ('Read','Grep')
-                        OR (tool_name='Bash' AND (input_summary LIKE 'grep%' OR input_summary LIKE '%grep %'
+              SUM(CASE WHEN tool_name IN (${T_READ_GREP})
+                        OR (tool_name=${T_BASH} AND (input_summary LIKE 'grep%' OR input_summary LIKE '%grep %'
                               OR input_summary LIKE 'find %' OR input_summary LIKE 'rg %'))
                        THEN 1 ELSE 0 END) AS reads,
               SUM(is_specship) AS ss
@@ -609,7 +617,7 @@ function ruleHeavyOutput(db: SqliteDatabase, ctx: ReflectContext, forms: PathFor
       `SELECT input_summary AS cmd, COUNT(*) AS n, MAX(result_length) AS maxlen,
               GROUP_CONCAT(DISTINCT session_id) AS sessions
        FROM claude_tool_calls
-       WHERE tool_name = 'Bash' AND input_summary != '' AND result_length > ? AND ${IN_PROJECT}
+       WHERE tool_name = ${T_BASH} AND input_summary != '' AND result_length > ? AND ${IN_PROJECT}
        GROUP BY input_summary
        HAVING n >= ?
        ORDER BY maxlen DESC
@@ -651,7 +659,7 @@ function ruleReferenceDoc(db: SqliteDatabase, ctx: ReflectContext, forms: PathFo
       `SELECT input_summary AS file, COUNT(DISTINCT session_id) AS s,
               GROUP_CONCAT(DISTINCT session_id) AS sessions
        FROM claude_tool_calls
-       WHERE tool_name = 'Read' AND input_summary != ''
+       WHERE tool_name = ${T_READ} AND input_summary != ''
          AND (input_summary LIKE '%.md' OR input_summary LIKE '%.mdx'
               OR input_summary LIKE '%.txt' OR input_summary LIKE '%.rst'
               OR input_summary LIKE '%.adoc')

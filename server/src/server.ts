@@ -252,9 +252,15 @@ export async function createServer(options: ServerOptions): Promise<ServerHandle
     const resolveGraph = (projectPath: string) =>
       primaryPath && isPrimary(projectPath) ? primaryCg : null;
 
-    watcher = startWatcher(dbHandle as Parameters<typeof startWatcher>[0], { verbose, resolveGraph });
+    // projectPaths lets hash-keyed transcripts (Gemini CLI) resolve to the
+    // primary project's real path (REQ-AGENTSWITCH-004).
+    watcher = startWatcher(dbHandle as Parameters<typeof startWatcher>[0], {
+      verbose,
+      resolveGraph,
+      projectPaths: primaryPath ? [primaryPath] : [],
+    });
     ownedWatcher = true;
-    if (verbose) console.error('[specship-server] JSONL ingest watcher started');
+    if (verbose) console.error('[specship-server] transcript ingest watcher started');
 
     // The specship-impact boot backfill is gone with the engine it fed
     // (REQ-SURF-005) — nothing reads displaced_files/resolution any more.

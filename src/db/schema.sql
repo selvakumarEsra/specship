@@ -347,6 +347,9 @@ CREATE TABLE IF NOT EXISTS claude_sessions (
     total_cache_read_tokens     INTEGER DEFAULT 0,
     total_cost_usd  REAL DEFAULT 0,
     last_model      TEXT,
+    -- Added in schema v12 (REQ-AGENTSWITCH-004): the agent whose transcript
+    -- the session came from ('claude' | 'gemini'). Tables keep their names.
+    host            TEXT NOT NULL DEFAULT 'claude',
     FOREIGN KEY (project_path) REFERENCES claude_projects(path) ON DELETE CASCADE
 );
 
@@ -399,6 +402,11 @@ CREATE TABLE IF NOT EXISTS claude_tool_calls (
     is_specship         INTEGER NOT NULL DEFAULT 0,
     displaced_files     TEXT,
     resolution          TEXT,
+    -- Added in schema v12 (REQ-AGENTSWITCH-004): tool_name holds the SHARED
+    -- tool name every transcript adapter normalises to; raw_tool_name keeps
+    -- the agent's own name, and host names the agent.
+    host                TEXT NOT NULL DEFAULT 'claude',
+    raw_tool_name       TEXT,
     FOREIGN KEY (prompt_id) REFERENCES claude_prompts(id) ON DELETE CASCADE,
     FOREIGN KEY (session_id) REFERENCES claude_sessions(id) ON DELETE CASCADE
 );

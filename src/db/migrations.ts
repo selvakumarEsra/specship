@@ -9,7 +9,7 @@ import { SqliteDatabase } from './sqlite-adapter';
 /**
  * Current schema version
  */
-export const CURRENT_SCHEMA_VERSION = 11;
+export const CURRENT_SCHEMA_VERSION = 12;
 
 /**
  * Migration definition
@@ -458,6 +458,19 @@ const migrations: Migration[] = [
           ts              INTEGER NOT NULL
         );
       `);
+    },
+  },
+  {
+    version: 12,
+    description:
+      'Per-agent transcript adapters (REQ-AGENTSWITCH-004): host column on claude_sessions and claude_tool_calls, raw_tool_name on claude_tool_calls. Existing rows are Claude Code sessions whose tool names are already the shared names, so they keep host = claude and need no data change.',
+    up: (db) => {
+      if (!hasColumn(db, 'claude_sessions', 'host'))
+        db.exec(`ALTER TABLE claude_sessions ADD COLUMN host TEXT NOT NULL DEFAULT 'claude';`);
+      if (!hasColumn(db, 'claude_tool_calls', 'host'))
+        db.exec(`ALTER TABLE claude_tool_calls ADD COLUMN host TEXT NOT NULL DEFAULT 'claude';`);
+      if (!hasColumn(db, 'claude_tool_calls', 'raw_tool_name'))
+        db.exec(`ALTER TABLE claude_tool_calls ADD COLUMN raw_tool_name TEXT;`);
     },
   },
 ];

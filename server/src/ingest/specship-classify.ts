@@ -11,12 +11,18 @@
  * asserts the two copies stay behaviourally identical.
  */
 
+import { specshipToolPrefix } from '../canonical-tools.js';
+
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
-/** Prefix shared by every MCP tool routed through the specship server. */
-const MCP_SPECSHIP_PREFIX = 'mcp__specship__';
+/**
+ * Prefix shared by every (normalised) MCP tool routed through the specship
+ * server. Tool names reaching this module are already in the shared set —
+ * each transcript adapter normalises its agent's names first (REQ-AGENTSWITCH-004).
+ */
+const MCP_SPECSHIP_PREFIX = specshipToolPrefix;
 
 /**
  * Strip-prefix base names of SpecShip tools that return code-graph source.

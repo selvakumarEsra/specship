@@ -41,6 +41,7 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Plan screen titles show inline code as code instead of raw backticks.
 - The dashboard's Memory screen now lists Gemini CLI's `GEMINI.md` files (user, project and one folder deep) next to Claude Code's `CLAUDE.md` files, each tagged with its agent. The MCP servers screen now also lists the servers in Gemini CLI's user and project `settings.json`; these are shown read-only.
 - The bundled Claude Design import workflow now points the agent at that agent's own skills folder, so it no longer names a Claude Code path when it runs on Gemini CLI.
+- The dashboard's session analytics, reflection proposals and the "prior work" notes in explore answers now include Gemini CLI sessions, not only Claude Code ones. Gemini's tool names (`read_file`, `run_shell_command`, `specship_explore` …) are counted the same way as their Claude Code equivalents, and the MCP servers screen credits Gemini CLI calls to the Gemini CLI entry. Claude Code session numbers are unchanged. A session file that can't be read is skipped and counted in the ingest statistics, never guessed at.
 
 ## [0.29.0] - 2026-10-27
 
