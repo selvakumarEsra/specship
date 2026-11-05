@@ -1,0 +1,152 @@
+{
+  "stats": {
+    "filesScanned": 1,
+    "linesParsed": 8,
+    "linesSkipped": 1,
+    "promptsInserted": 2,
+    "toolCallsInserted": 7,
+    "errors": 0
+  },
+  "sessions": [
+    {
+      "id": "sess-claude-a2",
+      "project_path": "/tmp/a2/project",
+      "prompt_count": 2,
+      "total_input_tokens": 1550,
+      "total_output_tokens": 450,
+      "total_cache_creation_tokens": 800,
+      "total_cache_read_tokens": 9000,
+      "total_cost_usd": 0.0171,
+      "last_model": "claude-sonnet-4-6"
+    }
+  ],
+  "prompts": [
+    {
+      "id": "p1",
+      "text": "How does the renderer reach the scene?",
+      "input_tokens": 1400,
+      "output_tokens": 390,
+      "cache_creation_tokens": 800,
+      "cache_read_tokens": 9000,
+      "cost_usd": 0.01575,
+      "assistant_text": "Looking it up.\n\n",
+      "thinking_text": "Look up the flow.\n\n"
+    },
+    {
+      "id": "p2",
+      "text": "Now rename it.",
+      "input_tokens": 150,
+      "output_tokens": 60,
+      "cache_creation_tokens": 0,
+      "cache_read_tokens": 0,
+      "cost_usd": 0.00135,
+      "assistant_text": "Editing.\n\n",
+      "thinking_text": null
+    }
+  ],
+  "toolCalls": [
+    {
+      "prompt_id": "p1",
+      "tool_use_id": "t1",
+      "tool_name": "mcp__specship__specship_explore",
+      "input_summary": "{\"query\":\"Renderer renderScene\"}",
+      "input_json": "{\"query\":\"Renderer renderScene\"}",
+      "result_length": 42,
+      "is_specship": 1,
+      "displaced_files": null,
+      "resolution": "unresolved"
+    },
+    {
+      "prompt_id": "p1",
+      "tool_use_id": "t2",
+      "tool_name": "mcp__specship__specship_explore",
+      "input_summary": "{\"query\":\"Scene.update\"}",
+      "input_json": "{\"query\":\"Scene.update\"}",
+      "result_length": 27,
+      "is_specship": 1,
+      "displaced_files": null,
+      "resolution": "unresolved"
+    },
+    {
+      "prompt_id": "p1",
+      "tool_use_id": "t3",
+      "tool_name": "Read",
+      "input_summary": "/tmp/a2-project/src/scene.ts",
+      "input_json": "{\"file_path\":\"/tmp/a2-project/src/scene.ts\"}",
+      "result_length": 14,
+      "is_specship": 0,
+      "displaced_files": null,
+      "resolution": null
+    },
+    {
+      "prompt_id": "p1",
+      "tool_use_id": "t4",
+      "tool_name": "Bash",
+      "input_summary": "grep -rn renderScene src",
+      "input_json": "{\"command\":\"grep -rn renderScene src\"}",
+      "result_length": 22,
+      "is_specship": 0,
+      "displaced_files": null,
+      "resolution": null
+    },
+    {
+      "prompt_id": "p2",
+      "tool_use_id": "t5",
+      "tool_name": "Edit",
+      "input_summary": "/tmp/a2-project/src/scene.ts",
+      "input_json": "{\"file_path\":\"/tmp/a2-project/src/scene.ts\",\"old_string\":\"a\",\"new_string\":\"b\"}",
+      "result_length": 2,
+      "is_specship": 0,
+      "displaced_files": null,
+      "resolution": null
+    },
+    {
+      "prompt_id": "p2",
+      "tool_use_id": "t6",
+      "tool_name": "Grep",
+      "input_summary": "renderScene",
+      "input_json": "{\"pattern\":\"renderScene\"}",
+      "result_length": 12,
+      "is_specship": 0,
+      "displaced_files": null,
+      "resolution": null
+    },
+    {
+      "prompt_id": "p2",
+      "tool_use_id": "t7",
+      "tool_name": "Write",
+      "input_summary": "/tmp/a2-project/src/new.ts",
+      "input_json": "{\"file_path\":\"/tmp/a2-project/src/new.ts\",\"content\":\"x\"}",
+      "result_length": 0,
+      "is_specship": 0,
+      "displaced_files": null,
+      "resolution": null
+    }
+  ],
+  "counts": [
+    {
+      "tool_name": "Bash",
+      "n": 1
+    },
+    {
+      "tool_name": "Edit",
+      "n": 1
+    },
+    {
+      "tool_name": "Grep",
+      "n": 1
+    },
+    {
+      "tool_name": "Read",
+      "n": 1
+    },
+    {
+      "tool_name": "Write",
+      "n": 1
+    },
+    {
+      "tool_name": "mcp__specship__specship_explore",
+      "n": 2
+    }
+  ]
+}
