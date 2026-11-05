@@ -13,11 +13,6 @@ const WORKFLOW_TOOLS =
   'src/workflows/agents/gemini.ts translateGeminiTools maps them per agent';
 
 export const HOST_LITERAL_ALLOWLIST: readonly AllowlistEntry[] = [
-  // ── Owned by REQ-AGENTSWITCH-004 (per-agent transcript adapters) ──
-  { file: 'src/analytics/specship-impact.ts', literal: 'mcp__specship__', count: 1, reason: 'owned by REQ-AGENTSWITCH-004 — transcript adapters (analytics matches Claude tool names)' },
-  { file: 'server/src/ingest/specship-classify.ts', literal: 'mcp__specship__', count: 1, reason: 'owned by REQ-AGENTSWITCH-004 — transcript adapters (ingest classifies Claude tool names)' },
-  { file: 'server/src/routes/claude.ts', literal: '.claude/', count: 1, reason: 'owned by REQ-AGENTSWITCH-004 — transcript adapters (Claude session analytics advice)' },
-
   // ── Historical: shipped migrations never change ──
   { file: 'src/db/migrations.ts', literal: '.claude/', count: 1, reason: 'historical migration description for the Claude transcript tables; migrations are immutable' },
   { file: 'src/db/migrations.ts', literal: 'mcp__specship__', count: 1, reason: 'historical migration backfill over Claude transcript rows; migrations are immutable' },

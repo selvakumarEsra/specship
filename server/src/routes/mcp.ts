@@ -408,21 +408,21 @@ interface ServerUsage {
 /** Aggregate claude_tool_calls into per-server usage + the latest example call. */
 function collectUsage(cg: SpecShipInstance): Map<string, ServerUsage> {
   const byServer = new Map<string, ServerUsage>();
-  let usage: Array<{ tool_name: string; calls: number; bytes: number; last: number | string | null }> = [];
-  let examples: Array<{ tool_name: string; input_json: string }> = [];
+  let usage: Array<{ host: string | null; tool_name: string; calls: number; bytes: number; last: number | string | null }> = [];
+  let examples: Array<{ host: string | null; tool_name: string; input_json: string }> = [];
   try {
     const db = getDb(cg);
     usage = db.prepare(`
-      SELECT tool_name, COUNT(*) as calls,
+      SELECT host, tool_name, COUNT(*) as calls,
              COALESCE(SUM(result_length), 0) as bytes,
              MAX(ts) as last
       FROM claude_tool_calls
       WHERE tool_name LIKE 'mcp__%'
-      GROUP BY tool_name
+      GROUP BY host, tool_name
     `).all() as typeof usage;
     // Latest verbatim inputs (schema v7) — first row per server wins below.
     examples = db.prepare(`
-      SELECT tool_name, input_json
+      SELECT host, tool_name, input_json
       FROM claude_tool_calls
       WHERE tool_name LIKE 'mcp__%' AND input_json IS NOT NULL
       ORDER BY ts DESC
@@ -431,10 +431,17 @@ function collectUsage(cg: SpecShipInstance): Map<string, ServerUsage> {
   } catch { /* analytics tables absent — config-only response */ }
 
   const parse = (t: string) => t.match(/^mcp__(.+?)__(.+)$/);
+  // Transcript adapters store every agent's MCP calls under the shared
+  // `mcp__<server>__<tool>` name (REQ-AGENTSWITCH-004), so the bare server
+  // name is the match key; a Gemini CLI call is credited to the Gemini entry
+  // (`gemini:<server>`) that inventory lists for it.
+  const keyFor = (host: string | null, server: string) =>
+    host === GEMINI_PROFILE.id ? GEMINI_KEY_PREFIX + server : server;
   for (const u of usage) {
     const m = parse(u.tool_name);
     if (!m) continue;
-    const [, server, tool] = m as unknown as [string, string, string];
+    const [, bare, tool] = m as unknown as [string, string, string];
+    const server = keyFor(u.host, bare);
     if (!byServer.has(server)) byServer.set(server, { calls: 0, bytes: 0, last: 0, tools: new Map(), example: null });
     const s = byServer.get(server)!;
     s.calls += u.calls; s.bytes += u.bytes;
@@ -448,7 +455,8 @@ function collectUsage(cg: SpecShipInstance): Map<string, ServerUsage> {
   for (const row of examples) {
     const m = parse(row.tool_name);
     if (!m) continue;
-    const [, server, tool] = m as unknown as [string, string, string];
+    const [, bare, tool] = m as unknown as [string, string, string];
+    const server = keyFor(row.host, bare);
     const s = byServer.get(server);
     if (!s || s.example) continue;
     try { s.example = { tool, args: JSON.parse(row.input_json) as Record<string, unknown>, synthesized: false }; } catch { /* skip bad row */ }
@@ -560,10 +568,15 @@ export async function registerMcpRoutes(app: FastifyInstance): Promise<void> {
   });
 }
 
-/** True when transcripts contain any mcp__<name>__* call. */
+/** True when transcripts contain any mcp__<name>__* call (a `gemini:` key matches Gemini CLI calls by bare server name). */
 function hasUsage(cg: SpecShipInstance, name: string): boolean {
   try {
     const db = getDb(cg);
+    if (name.startsWith(GEMINI_KEY_PREFIX)) {
+      return db.prepare(
+        `SELECT 1 FROM claude_tool_calls WHERE host = ? AND tool_name LIKE 'mcp__' || ? || '__%' LIMIT 1`,
+      ).all(GEMINI_PROFILE.id, name.slice(GEMINI_KEY_PREFIX.length)).length > 0;
+    }
     const rows = db.prepare(
       `SELECT 1 FROM claude_tool_calls WHERE tool_name LIKE 'mcp__' || ? || '__%' LIMIT 1`,
     ).all(name);

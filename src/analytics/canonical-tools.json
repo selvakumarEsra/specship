@@ -1,0 +1,16 @@
+{
+  "$comment": "The shared tool-name set every transcript adapter normalises to (REQ-AGENTSWITCH-004). One file, read by src/analytics/canonical-tools.ts and by server/src/canonical-tools.ts — never copy these values. The strings equal what claude_tool_calls.tool_name already stores, so existing rows need no migration.",
+  "mcpPrefix": "mcp__",
+  "mcpSeparator": "__",
+  "specshipServer": "specship",
+  "tools": {
+    "read": "Read",
+    "write": "Write",
+    "edit": "Edit",
+    "multiEdit": "MultiEdit",
+    "notebookEdit": "NotebookEdit",
+    "bash": "Bash",
+    "grep": "Grep",
+    "glob": "Glob"
+  }
+}

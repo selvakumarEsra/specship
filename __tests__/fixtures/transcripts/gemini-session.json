@@ -1,0 +1,123 @@
+{
+  "sessionId": "9f3c2a1b-gemini-a1",
+  "projectHash": "(set per test)",
+  "startTime": "2026-11-02T09:00:00.000Z",
+  "lastUpdated": "2026-11-02T09:00:20.000Z",
+  "messages": [
+    {
+      "id": "m-user-1",
+      "timestamp": "2026-11-02T09:00:00.000Z",
+      "type": "user",
+      "content": [
+        {
+          "text": "How does the renderer reach the scene?"
+        }
+      ]
+    },
+    {
+      "id": "m-gem-1",
+      "timestamp": "2026-11-02T09:00:03.000Z",
+      "type": "gemini",
+      "content": "Looking up the flow.",
+      "model": "gemini-3.5-flash",
+      "thoughts": [
+        {
+          "subject": "Plan",
+          "description": "Use the code graph first.",
+          "timestamp": "2026-11-02T09:00:02.000Z"
+        }
+      ],
+      "tokens": {
+        "input": 5200,
+        "output": 310,
+        "cached": 4000,
+        "thoughts": 40,
+        "tool": 0,
+        "total": 5550
+      },
+      "toolCalls": [
+        {
+          "id": "tc-1",
+          "name": "specship_explore",
+          "args": {
+            "query": "Renderer renderScene"
+          },
+          "result": [
+            {
+              "functionResponse": {
+                "id": "tc-1",
+                "name": "specship_explore",
+                "response": {
+                  "output": "export function renderScene() { return 1 }"
+                }
+              }
+            }
+          ],
+          "status": "success",
+          "timestamp": "2026-11-02T09:00:04.000Z"
+        },
+        {
+          "id": "tc-2",
+          "name": "specship_explore",
+          "args": {
+            "query": "Scene.update"
+          },
+          "result": [
+            {
+              "functionResponse": {
+                "id": "tc-2",
+                "name": "specship_explore",
+                "response": {
+                  "output": "class Scene { update() {} }"
+                }
+              }
+            }
+          ],
+          "status": "success",
+          "timestamp": "2026-11-02T09:00:06.000Z"
+        },
+        {
+          "id": "tc-3",
+          "name": "read_file",
+          "args": {
+            "file_path": "/tmp/a1-project/src/scene.ts"
+          },
+          "result": [
+            {
+              "functionResponse": {
+                "id": "tc-3",
+                "name": "read_file",
+                "response": {
+                  "output": "file body here"
+                }
+              }
+            }
+          ],
+          "status": "success",
+          "timestamp": "2026-11-02T09:00:08.000Z"
+        }
+      ]
+    },
+    {
+      "id": "m-info-1",
+      "timestamp": "2026-11-02T09:00:09.000Z",
+      "type": "info",
+      "content": "Tool output truncated."
+    },
+    {
+      "id": "m-gem-2",
+      "timestamp": "2026-11-02T09:00:20.000Z",
+      "type": "gemini",
+      "content": "The renderer calls renderScene, which reads the scene.",
+      "model": "gemini-3.5-flash",
+      "tokens": {
+        "input": 5600,
+        "output": 120,
+        "cached": 5000,
+        "thoughts": 0,
+        "tool": 0,
+        "total": 5720
+      }
+    }
+  ]
+}

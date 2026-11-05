@@ -22,6 +22,13 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { writeSseHead } from './sse.js';
 import type { SpecShipInstance } from '../project-registry.js';
 import { decodeProjectSlug, getLastIngestStats } from '../ingest/index.js';
+import { CLAUDE_PROFILE, HOST_PROFILES } from '../host-profiles.js';
+
+/** `<configDir>/settings.json` of the agent a session came from (Claude Code when unknown). */
+function settingsFileFor(host: string | null | undefined): string {
+  const profile = HOST_PROFILES.find((p) => p.id === host) ?? CLAUDE_PROFILE;
+  return `${profile.configDir}/settings.json`;
+}
 
 /**
  * Normalize a `?project=` filter value to the form stored in
@@ -1008,14 +1015,14 @@ export async function registerClaudeRoutes(app: FastifyInstance): Promise<void> 
 
     // Rule 3: "cache miss rate" — sessions with > 10 prompts and cache_read_rate < 0.3.
     const lowCache = db.prepare(`
-      SELECT s.id, s.total_cache_read_tokens as cr, s.total_input_tokens as ti, s.total_cache_creation_tokens as cw, s.prompt_count, s.last_model
+      SELECT s.id, s.total_cache_read_tokens as cr, s.total_input_tokens as ti, s.total_cache_creation_tokens as cw, s.prompt_count, s.last_model, s.host
       FROM claude_sessions s
       WHERE s.prompt_count >= 10
         AND (s.total_input_tokens + s.total_cache_creation_tokens + s.total_cache_read_tokens) > 0
         AND s.project_path IN (?, ?)
       ORDER BY (CAST(s.total_cache_read_tokens AS REAL) / (s.total_input_tokens + s.total_cache_creation_tokens + s.total_cache_read_tokens)) ASC
       LIMIT 3
-    `).all(realRoot, mangledRoot) as Array<{ id: string; cr: number; ti: number; cw: number; prompt_count: number; last_model: string }>;
+    `).all(realRoot, mangledRoot) as Array<{ id: string; cr: number; ti: number; cw: number; prompt_count: number; last_model: string; host: string | null }>;
     for (const r of lowCache) {
       const total = r.ti + r.cw + r.cr;
       const rate = total > 0 ? r.cr / total : 0;
@@ -1027,7 +1034,8 @@ export async function registerClaudeRoutes(app: FastifyInstance): Promise<void> 
         title: `Cache read rate is ${Math.round(rate * 100)}% on a ${r.prompt_count}-prompt session`,
         why: 'When the prompt prefix changes every turn, the 1h cache gets invalidated. Pinning a stable system-prompt prefix lets the cache absorb most of your input.',
         evidence: { session: r.id, detail: `cache_read=${(r.cr / 1_000_000).toFixed(2)}M / total=${(total / 1_000_000).toFixed(2)}M` },
-        fix: 'Pin a stable system-prompt prefix in .claude/settings.json',
+        // The session's own agent's settings file (REQ-AGENTSWITCH-004).
+        fix: `Pin a stable system-prompt prefix in ${settingsFileFor(r.host)}`,
         // Not measurable per session without a model price table — state it
         // qualitatively rather than render a placeholder (REQ-AUDFIX-006.A1).
         saving: 'cached input bills at a fraction of fresh input',

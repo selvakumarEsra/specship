@@ -77,7 +77,14 @@ export interface PricingRow {
 
 export interface IngestStats {
   filesScanned: number;
+  /** Files unchanged since the last pass (nothing new to read). */
   filesSkipped: number;
+  /**
+   * Transcript files the agent's adapter could not parse at all (e.g. a
+   * truncated Gemini session document). Skipped and counted, never guessed
+   * at (REQ-AGENTSWITCH-004.A3); surfaced alongside `linesSkipped`.
+   */
+  filesUnreadable: number;
   bytesIngested: number;
   linesParsed: number;
   /**

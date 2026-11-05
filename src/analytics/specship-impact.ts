@@ -1,16 +1,19 @@
 /**
  * Pure classifiers and symbol-extraction helpers for SpecShip Token Impact.
  *
- * No I/O, no DB, no imports beyond types. Intended to be imported by the
- * ingestor (Task 4) and the aggregation endpoint (later tasks).
+ * No I/O, no DB. Tool names reaching these functions are already in the
+ * shared set (REQ-AGENTSWITCH-004): each transcript adapter normalises its
+ * agent's names before anything is classified or counted.
  */
+
+import { specshipToolPrefix } from './canonical-tools';
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
-/** Prefix shared by every MCP tool routed through the specship server. */
-const MCP_SPECSHIP_PREFIX = 'mcp__specship__';
+/** Prefix shared by every (normalised) MCP tool routed through the specship server. */
+const MCP_SPECSHIP_PREFIX = specshipToolPrefix;
 
 /**
  * Strip-prefix base names of SpecShip tools that return code-graph source.

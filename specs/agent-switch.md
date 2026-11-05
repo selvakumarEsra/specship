@@ -210,13 +210,36 @@ sessions through one adapter per agent. Each adapter normalises that agent's
 tool names to one shared set before anything counts them. Gemini sessions
 are one JSON document per session with bare MCP tool names
 (DOM-SPECSHIP-007). A transcript the adapter cannot parse MUST be skipped and
-counted, never guessed at. [needs review] Whether existing `claude_*` tables
-are renamed, or a host column is added, is an implementation choice to be
-settled at plan time.
+counted, never guessed at. Settled at plan time (2026-11-05): the `claude_*`
+tables keep their names and gain a `host` column (plus `raw_tool_name` on
+tool calls); `tool_name` stores the shared name, whose values are the ones
+already stored, so existing rows need no data migration.
 
 implementations:
-  - src/analytics/specship-impact.ts
-  - src/reflect/miner.ts
+  - src/analytics/canonical-tools.ts:CANONICAL_TOOLS
+  - src/analytics/canonical-tools.ts:canonicalMcpToolName
+  - src/analytics/canonical-tools.ts:sqlToolList
+  - server/src/canonical-tools.ts:canonicalMcpToolName
+  - server/src/ingest/transcripts/types.ts:normalizeToolName
+  - server/src/ingest/transcripts/claude.ts:claudeTranscriptAdapter
+  - server/src/ingest/transcripts/gemini.ts:geminiTranscriptAdapter
+  - server/src/ingest/transcripts/gemini.ts:normalizeGeminiToolName
+  - server/src/ingest/transcripts/gemini.ts:parseGeminiSession
+  - server/src/ingest/transcripts/gemini.ts:listGeminiTranscriptFiles
+  - server/src/ingest/transcripts/index.ts:transcriptAdapters
+  - server/src/ingest/ingestor.ts:ingestAll
+  - server/src/ingest/ingestor.ts:ingestFile
+  - server/src/ingest/ingestor.ts:resolveIngestRoots
+  - server/src/ingest/specship-classify.ts:isSpecshipTool
+  - src/analytics/specship-impact.ts:isSpecshipTool
+  - src/reflect/miner.ts:mineProposals
+  - src/reflect/session-outcomes.ts:sessionsTouchingFiles
+  - src/reflect/session-outcomes.ts:sessionOutcome
+
+verifies:
+  - __tests__/transcript-adapters.test.ts:reqAgentswitch004A1
+  - __tests__/transcript-adapters.test.ts:reqAgentswitch004A2
+  - __tests__/transcript-adapters.test.ts:reqAgentswitch004A3
 
 ## Acceptance
 <!-- id: REQ-AGENTSWITCH-004.A1 -->
