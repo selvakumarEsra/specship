@@ -86,8 +86,10 @@ function reqAgentswitch015A3(): void {
       `#!/bin/sh\nfor a in "$@"; do printf '%s\\n' "$a"; done > "${argsFile}"\n`,
       { mode: 0o755 },
     );
+    // The wrapper is a bash script (`#!/usr/bin/env bash`, `set -o pipefail`);
+    // `sh` is dash on Linux, so run it with bash as its shebang does.
     const res = spawnSync(
-      'sh',
+      'bash',
       [path.join(ROOT, 'scripts/offline-install.sh'), bundle, '--target', 'gemini', '--global'],
       {
         encoding: 'utf8',
