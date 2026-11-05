@@ -735,6 +735,15 @@ Gemini CLI extension. That extension MUST provide the MCP server, the
 `/specship:*` commands and the steering context, in the format Gemini CLI
 0.28.0 loads. Decision: "ship one" (user, 2026-11-05).
 
+implementations:
+  - scripts/sync-claude-plugin.mjs
+  - scripts/build-gemini-extension.mjs
+
+verifies:
+  - __tests__/plugin-extension-parity.test.ts:reqAgentswitch016A1
+  - __tests__/plugin-extension-parity.test.ts:reqAgentswitch016A2
+  - __tests__/plugin-extension-parity.test.ts:reqAgentswitch016A3
+
 ## Acceptance
 <!-- id: REQ-AGENTSWITCH-016.A1 -->
 - A test fails when the plugin's hook commands differ from the hook

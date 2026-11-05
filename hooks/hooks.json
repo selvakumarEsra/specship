@@ -18,7 +18,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "specship sync --quiet"
+            "command": "specship sync --quiet --drift-summary"
           }
         ]
       },
@@ -39,6 +39,21 @@
           {
             "type": "command",
             "command": "specship spec-nudge"
+          },
+          {
+            "type": "command",
+            "command": "specship steer-nudge"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Grep|Glob",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "specship search-intercept"
           }
         ]
       }

@@ -27,7 +27,12 @@ import * as path from 'path';
 // 2,440,452 B / 583 files before REQ-AGENTSWITCH-006 and 2,450,373 B / 587
 // files after 006 + 007 (installed-agents record, agent detection). Measured
 // with `npm pack --dry-run` on a fresh dist; headroom covers 008/009/001–005.
-export const MAX_PACKED_BYTES = 2_500_000;
+// Raised 2.50 MB → 2.60 MB (2026-11-05, REQ-AGENTSWITCH-011..016): a clean
+// build packs 2,500,367 B / 622 files; the Gemini CLI extension
+// (gemini-extension/, 17 files / 109,610 B unpacked — a second copy of the
+// commands, skills and agent in Gemini's format) plus the discovery and
+// rendering modules are the growth. Measured with `npm pack --dry-run`.
+export const MAX_PACKED_BYTES = 2_600_000;
 // Raised 6.20 MB → 6.25 MB and 560 → 580 files (2026-10-27): the headless-agent
 // adapters (dist/workflows/agents/, REQ-AGENTADAPT-005–007) and the shared
 // criterion-id parser add 10 files / ~23 KB; no stale dist assets.
@@ -51,14 +56,18 @@ export const MAX_PACKED_BYTES = 2_500_000;
 // unpack to 6,479,178 B / 590 files before and 6,510,610 B / 598 files after
 // the per-agent transcript adapters (+31,432 B / 8 files). Measured with
 // `npm pack --dry-run` on a fresh dist; headroom covers REQ-AGENTSWITCH-005/010.
-export const MAX_UNPACKED_BYTES = 6_600_000;
+// Raised 6.60 MB → 6.80 MB (2026-11-05, REQ-AGENTSWITCH-016): clean build
+// unpacks to 6,679,578 B, of which the Gemini extension is 109,610 B.
+export const MAX_UNPACKED_BYTES = 6_800_000;
 // Raised 530 → 560 (2026-10-26) after investigating a 531-file build: no stale
 // dist assets; the growth is new feature modules (dist/spec-quality/,
 // dist/pulse/, and the 0.30/0.31 knowledge + throughput modules that follow).
 // Raised 580 → 600 (2026-10-27): the design.md modules (dist/design-md/:
 // extractor, checker, upkeep gate, build verifier — DESIGNMD-DOC) and the
 // design-md skill add 17 files; checked for stale dist files first — none.
-export const MAX_FILE_COUNT = 600;
+// Raised 600 → 640 (2026-11-05, REQ-AGENTSWITCH-016): 622 files on a clean
+// build — the Gemini extension adds 17.
+export const MAX_FILE_COUNT = 640;
 
 /** REQ-SLIM-002.A4's own ceiling, independent of the ratchet above. */
 export const SLIM_A4_UNPACKED_CEILING = 7_000_000;

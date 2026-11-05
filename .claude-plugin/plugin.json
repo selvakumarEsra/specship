@@ -1,6 +1,18 @@
 {
   "name": "specship",
-  "version": "0.1.0",
-  "description": "Local code intelligence for Claude Code — semantic search, flow tracing, and impact analysis backed by a SQLite knowledge graph. Auto-syncs after every Edit/Write.",
-  "author": { "name": "selvakumarEsra" }
+  "version": "0.29.0",
+  "description": "SpecShip for Claude Code — local code intelligence (search, flow tracing, impact) over a SQLite knowledge graph, spec-driven development, and the same hooks `specship install` wires. Requires the specship CLI on PATH.",
+  "author": {
+    "name": "selvakumarEsra"
+  },
+  "mcpServers": {
+    "specship": {
+      "type": "stdio",
+      "command": "specship",
+      "args": [
+        "serve",
+        "--mcp"
+      ]
+    }
+  }
 }

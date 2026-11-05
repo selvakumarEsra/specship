@@ -82,3 +82,6 @@ assets/generate-waitlist.py
 .agents/
 .codex/
 AGENTS.md
+
+# Built by scripts/build-gemini-extension.mjs (REQ-AGENTSWITCH-016)
+gemini-extension/
