@@ -48,7 +48,7 @@ import {
   GeminiCommandUnsupported,
   geminiCommandSet,
   renderGeminiCommand,
-} from '../src/installer/gemini-commands';
+} from '../src/installer/targets/gemini-commands';
 import {
   getGeminiRetrievalBlock,
   getSddRuleBlock,

@@ -132,7 +132,7 @@ Next steps:
 
 ## When to use the workflow instead of the skill directly
 
-This skill is the **lightweight path** — runs conversationally in Claude Code, no formal approval gates. For team contexts that want the same discipline `spec-implement` enforces, point the user at:
+This skill is the **lightweight path** — runs conversationally in your coding agent, no formal approval gates. For team contexts that want the same discipline `spec-implement` enforces, point the user at:
 
 ```
 specship workflow run spec-author --input DESCRIPTION="..."

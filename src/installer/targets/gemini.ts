@@ -71,7 +71,8 @@ import {
   GEMINI_COMMAND_HEADER_MARKER,
   geminiCommandSet,
   geminiCommandTarget,
-} from '../gemini-commands';
+  rewriteForGemini,
+} from './gemini-commands';
 
 /** Gemini CLI's settings file for this location. */
 export function settingsPath(loc: Location): string {
@@ -369,12 +370,13 @@ export function writeGeminiCommandsEntries(
   loc: Location,
   includeGovernance = true,
   commandsSourceDir: string = packageAssetPath('commands'),
+  skills: readonly string[] = [],
 ): { files: WriteResult['files']; notes: string[] } {
   const names = includeGovernance ? ALL_COMMAND_SOURCES : [...RETRIEVAL_TIER_COMMANDS];
   const dir = geminiCommandsDir(loc);
   const files: WriteResult['files'] = [];
   const notes: string[] = [];
-  for (const cmd of geminiCommandSet(commandsSourceDir, names)) {
+  for (const cmd of geminiCommandSet(commandsSourceDir, names, { skills })) {
     const dest = path.join(dir, cmd.target);
     if (cmd.toml === undefined) {
       notes.push(`Gemini CLI: skipped /${cmd.target.replace(/\.toml$/, '').replace(/\//g, ':')} — ${cmd.excluded}.`);
@@ -825,13 +827,13 @@ export function geminiAgentsDir(loc: Location): string {
  * name the Gemini model is shown (DOM-SPECSHIP-007), so the skill and agent
  * bodies name tools the way Gemini does.
  */
-function toGeminiToolProse(text: string): string {
-  return text.replace(/mcp__specship__/g, '');
-}
-
-/** Render one shipped skill file for Gemini (SKILL.md format is shared). */
+/**
+ * Render one shipped skill file for Gemini (SKILL.md format is shared),
+ * through the same rewrites as the commands (REQ-AGENTSWITCH-014): Gemini's
+ * tool names, `gemini mcp add`, and Gemini's memory file.
+ */
 function renderGeminiSkillFile(name: string): string {
-  return toGeminiToolProse(fs.readFileSync(packageAssetPath('skills', name), 'utf-8'));
+  return rewriteForGemini(fs.readFileSync(packageAssetPath('skills', name), 'utf-8'), { skills: shippedSkillRoots() });
 }
 
 /** Write `content` to `dest` with the installer's idempotency contract. */
@@ -953,7 +955,7 @@ export function renderGeminiExplorerAgent(source?: string): string {
     '---',
     GEMINI_AGENT_MARKER,
     '',
-    toGeminiToolProse(body).replace(/^\s+/, ''),
+    rewriteForGemini(body, { skills: shippedSkillRoots() }).replace(/^\s+/, ''),
   ].join('\n');
 }
 
@@ -1054,7 +1056,11 @@ export class GeminiCliTarget implements AgentTarget {
     files.push(includeGovernance ? writeGeminiSddHooksEntry(loc) : removeGeminiSddHooksEntry(loc));
     // Slash commands (REQ-GEMINI-005), rendered from the Claude sources.
     // Same tiering as the Claude target: governance doors ride `--sdd`.
-    const commands = writeGeminiCommandsEntries(loc, includeGovernance);
+    // The version gate comes first: commands keep references to the skills
+    // this install provides (REQ-AGENTSWITCH-014.A2).
+    const version = probeGeminiVersion();
+    const skillsSupported = geminiVersionSupports(version, GEMINI_MIN_SKILLS);
+    const commands = writeGeminiCommandsEntries(loc, includeGovernance, undefined, skillsSupported ? shippedSkillRoots() : []);
     files.push(...commands.files);
     // REQ-GEMINI-009: strictly opt-in. Omitting `--trust` NEVER touches the
     // policy file — a prior `--trust` install is preserved byte-identical
@@ -1065,8 +1071,7 @@ export class GeminiCliTarget implements AgentTarget {
     // Skills + explorer subagent (REQ-AGENTSWITCH-005), gated on the installed
     // Gemini CLI version. An unknown or older version is skipped WITH a note —
     // never guessed, never fatal (the install still exits 0).
-    const version = probeGeminiVersion();
-    if (geminiVersionSupports(version, GEMINI_MIN_SKILLS)) {
+    if (skillsSupported) {
       files.push(...writeGeminiSkillsEntries(loc));
     } else {
       notes.push(

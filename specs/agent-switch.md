@@ -675,6 +675,17 @@ are not using. Skills MUST go through the same rewrites as commands. A
 reference to a skill Gemini has installed MUST be kept. The memory-file
 governance route MUST act on the running agent's memory file.
 
+implementations:
+  - src/installer/targets/gemini-commands.ts:rewriteForGemini
+  - src/installer/targets/gemini-commands.ts:renderGeminiCommand
+  - src/installer/targets/gemini.ts:writeGeminiCommandsEntries
+  - src/installer/targets/gemini.ts:GeminiCliTarget.install
+
+verifies:
+  - __tests__/gemini-rendered-content.test.ts:reqAgentswitch014A1
+  - __tests__/gemini-rendered-content.test.ts:reqAgentswitch014A2
+  - __tests__/gemini-rendered-content.test.ts:reqAgentswitch014A3
+
 ## Acceptance
 <!-- id: REQ-AGENTSWITCH-014.A1 -->
 - No file written by `specship install --target gemini --sdd --with-jira
