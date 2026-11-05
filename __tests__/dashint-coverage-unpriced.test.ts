@@ -121,14 +121,14 @@ describe('ingest parse coverage + unpriced detection (REQ-DASHINT-007/008)', () 
     expect(last!.at).toBeGreaterThan(0);
   });
 
-  it('007.A1: a session on an unpriced model derives non-zero unpriced_tokens', () => {
+  it('007.A1: a session on an unpriced model derives non-zero unpriced_tokens', function reqDashint007A1() {
     writeTranscript(tmp, 's-unpriced', 'claude-quasar-9'); // no pricing row, no family
     ingestAll(db, { claudeRoot: tmp });
     const row = db.prepare(UNPRICED_SQL).get('s-unpriced') as { unpriced_tokens: number };
     expect(row.unpriced_tokens).toBe(1500); // 1000 in + 500 out, cost stayed 0
   });
 
-  it('007: a priced session derives unpriced_tokens = 0 (marker never shows on real costs)', () => {
+  it('007: a priced session derives unpriced_tokens = 0 (marker never shows on real costs)', function reqDashint007PricedIsZero() {
     writeTranscript(tmp, 's-priced', 'claude-sonnet-4-6'); // seeded default pricing resolves
     ingestAll(db, { claudeRoot: tmp });
     const row = db.prepare(UNPRICED_SQL).get('s-priced') as { unpriced_tokens: number };

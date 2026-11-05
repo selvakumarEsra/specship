@@ -178,6 +178,10 @@ implementations:
   - server/src/ingest/pricing.ts:computeCost
   - server/src/ingest/ingestor.ts:ingestFile
 
+verifies:
+  - __tests__/dashint-coverage-unpriced.test.ts:reqDashint007A1
+  - __tests__/dashint-coverage-unpriced.test.ts:reqDashint007PricedIsZero
+
 ## Acceptance
 <!-- id: REQ-DASHINT-007.A1 -->
 - A session with non-zero tokens on a model with no pricing row renders an
