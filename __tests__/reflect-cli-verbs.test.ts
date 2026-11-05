@@ -182,4 +182,26 @@ describe('REQ-AUDFIX-002 — prefix resolution + pointers (no DB)', () => {
     expect(bin).toContain('learnedNotice(p.title)');
     expect(bin).not.toMatch(/learned:[^\n]*dashboard/);
   });
+  /** REQ-AGENTSWITCH-003 — the real flow picks the reflect host from the agent's launcher env. */
+  function reqAgentswitch003HostFromEnv(): void {
+    const keys = ['GEMINI_CLI', 'CLAUDECODE'] as const;
+    const saved = Object.fromEntries(keys.map((k) => [k, process.env[k]]));
+    const hostWith = (env: Partial<Record<(typeof keys)[number], string>>): string => {
+      for (const k of keys) delete process.env[k];
+      Object.assign(process.env, env);
+      return (cg as unknown as { reflectContext(): { host?: { id: string } } }).reflectContext().host!.id;
+    };
+    try {
+      expect(hostWith({ GEMINI_CLI: '1' })).toBe('gemini');
+      expect(hostWith({ CLAUDECODE: '1' })).toBe('claude');
+      // No agent, or both claimed: the default host, never a guess.
+      expect(hostWith({})).toBe('claude');
+      expect(hostWith({ GEMINI_CLI: '1', CLAUDECODE: '1' })).toBe('claude');
+    } finally {
+      for (const k of keys) {
+        if (saved[k] === undefined) delete process.env[k]; else process.env[k] = saved[k];
+      }
+    }
+  }
+  it('REQ-AGENTSWITCH-003: reflect targets the agent named by the launcher env; ambiguous env uses the default', reqAgentswitch003HostFromEnv);
 });
