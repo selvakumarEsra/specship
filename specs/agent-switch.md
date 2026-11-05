@@ -625,6 +625,14 @@ detected, or the detection is ambiguous, it MUST wire Claude Code, the
 default. `--target` always wins. Decision: "the detected agent" (user,
 2026-11-05).
 
+implementations:
+  - src/installer/index.ts:resolveInstallTargets
+
+verifies:
+  - __tests__/agent-install-default.test.ts:reqAgentswitch013A1
+  - __tests__/agent-install-default.test.ts:reqAgentswitch013A2
+  - __tests__/agent-install-default.test.ts:reqAgentswitch013A3
+
 ## Acceptance
 <!-- id: REQ-AGENTSWITCH-013.A1 -->
 - `specship install --yes --location local` run with `GEMINI_CLI=1`, and

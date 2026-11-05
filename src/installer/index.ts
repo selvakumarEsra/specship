@@ -31,6 +31,7 @@ import { CLAUDE_CODE_TRAITS, DEFAULT_HOST_TRAITS } from '../activation/hook-outp
 const CLAUDE_LOCAL_HINT = `./.mcp.json + ./${CLAUDE_CODE_TRAITS.configDir}/settings.json`;
 const CLAUDE_GLOBAL_HINT = `~/${CLAUDE_CODE_TRAITS.userConfigFile} + ~/${CLAUDE_CODE_TRAITS.configDir}/settings.json`;
 import { detectInstallMethod } from '../update/updater';
+import { agentFromEnv } from '../agents/detect';
 import { recordInstall, recordUninstall, ensureAgentRecord, type AgentRecordEntry } from './agent-record';
 import { planPurge, executePurge, assertSafeToRemove, type PurgeEnv, type PurgeExecDeps } from './purge';
 import { getGlyphs } from '../ui/glyphs';
@@ -138,14 +139,22 @@ export interface RunInstallerOptions {
  * Resolve the `--target` value into the targets to install
  * (REQ-GEMINI-002.A4). An empty result means "install nothing" (`none`).
  *
- * The legacy spellings are pinned to Claude on purpose: `all` reads like
- * "every registered target" but has always meant the single Claude install,
- * and quietly widening it would start writing a Gemini config for people who
- * never asked. Gemini is reachable only by naming it.
+ * No `--target` (or `auto`) wires the agent this command runs under, detected
+ * from its launcher environment (REQ-AGENTSWITCH-013): Gemini CLI from a
+ * Gemini shell, Claude Code from a Claude Code shell, Claude Code when it
+ * cannot tell. `all` stays pinned to Claude: it reads like "every registered
+ * target" but has always meant the single Claude install, and quietly
+ * widening it would write configs for agents nobody asked for.
  */
-export function resolveInstallTargets(target?: string): AgentTarget[] {
+export function resolveInstallTargets(target?: string, env: NodeJS.ProcessEnv = process.env): AgentTarget[] {
   if (target === 'none') return [];
-  if (target === undefined || ['claude', 'auto', 'all'].includes(target)) {
+  // No target, or `auto`: the agent this command runs under
+  // (REQ-AGENTSWITCH-013); an undetectable or ambiguous one gets the default.
+  if (target === undefined || target === 'auto') {
+    const detected = getTarget(agentFromEnv(env));
+    return [detected ?? claudeTarget];
+  }
+  if (['claude', 'all'].includes(target)) {
     return [claudeTarget];
   }
   const ids = target.split(',').map((s) => s.trim()).filter(Boolean);
@@ -155,7 +164,7 @@ export function resolveInstallTargets(target?: string): AgentTarget[] {
       throw new Error(
         `Unknown --target value "${id}". Accepted values are ` +
         `${listTargetIds().map((t) => `'${t}'`).join(', ')}, ` +
-        `'auto'/'all' (= claude), or 'none'.`,
+        `'auto' (the agent this runs under), 'all' (= claude), or 'none'.`,
       );
     }
     return found;
