@@ -225,9 +225,14 @@ function recordRoot(loc: Location): string | undefined {
  * default (`GEMINI.md`) when the setting was unset. The CLAUDE.md file itself
  * is never opened for writing.
  *
- * Writes nothing — and records nothing — when no CLAUDE.md exists at this
- * scope (the Claude target's own memory path). Idempotent: a re-run that
- * finds the name already listed reports `unchanged`.
+ * Local scope writes nothing — and records nothing — when the project has
+ * no CLAUDE.md. Global scope always adds the name: Gemini CLI resolves a
+ * bare context file name in `~/.gemini/` and in each project's directories
+ * (gemini-cli-core `memoryDiscovery`, verified against 0.28.0), so the
+ * user-wide setting is what makes Gemini read every project's own CLAUDE.md.
+ * It never reaches `~/.claude/CLAUDE.md` — the capability note says so.
+ * Idempotent: a re-run that finds the name already listed reports
+ * `unchanged`.
  *
  * Returns the file result (null when there was nothing to point at) and the
  * names this call put into `context.fileName` that were not in it before.
@@ -236,7 +241,7 @@ export function writeGeminiContextFilesEntry(
   loc: Location,
 ): { file: WriteResult['files'][number] | null; added: string[] } {
   const claudeMd = claudeMdPath(loc);
-  if (!fs.existsSync(claudeMd)) return { file: null, added: [] };
+  if (loc === 'local' && !fs.existsSync(claudeMd)) return { file: null, added: [] };
   const wanted = path.basename(claudeMd);
   const geminiDefault = path.basename(geminiMdPath(loc));
 
@@ -305,8 +310,11 @@ export function removeGeminiContextFilesEntry(
 const CAPABILITY_NOTE =
   'Gemini CLI install wires the MCP server, writes a GEMINI.md steering ' +
   'block, installs prompt/session/tool hooks, renders the /specship:* ' +
-  'slash commands as Gemini TOML, and — when a CLAUDE.md exists — adds it to ' +
-  'Gemini\'s context files so Gemini reads it in place. No specship-explorer subagent and no ' +
+  'slash commands as Gemini TOML, and adds CLAUDE.md to Gemini\'s context ' +
+  'files so Gemini reads each project\'s CLAUDE.md in place (a project install ' +
+  'does this only when the project has one). Gemini never reads ' +
+  '~/.claude/CLAUDE.md — copy anything you need from it into ~/.gemini/GEMINI.md. ' +
+  'No specship-explorer subagent and no ' +
   'status line — Gemini CLI has no equivalent surface. The tool playbook ' +
   'itself still lives in the MCP server instructions.';
 

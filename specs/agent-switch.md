@@ -399,6 +399,7 @@ verifies:
   - __tests__/agent-switch-user-content.test.ts:reqAgentswitch009A3
   - __tests__/agent-switch-user-content.test.ts:reqAgentswitch009A4
   - __tests__/agent-switch-user-content.test.ts:reqAgentswitch009NoClaudeMd
+  - __tests__/agent-switch-user-content.test.ts:reqAgentswitch009GlobalScope
 
 ## Acceptance
 <!-- id: REQ-AGENTSWITCH-009.A1 -->

@@ -213,10 +213,23 @@ function reqAgentswitch009NoClaudeMd(): void {
   expect(readAddedContextFiles('gemini', 'local', projectP)).toBeNull();
   expect(fs.existsSync(path.join(projectP, 'CLAUDE.md'))).toBe(false);
 
-  // Global scope: no ~/.claude/CLAUDE.md → nothing written there either.
+}
+
+/**
+ * Global scope: Gemini resolves a bare context name in ~/.gemini/ and in each
+ * project's directories, never in ~/.claude/ — so the user-wide setting always
+ * lists CLAUDE.md (every project's own file), whether or not
+ * ~/.claude/CLAUDE.md exists, and uninstall takes it back out.
+ */
+function reqAgentswitch009GlobalScope(): void {
+  expect(fs.existsSync(path.join(tmpHome, '.claude', 'CLAUDE.md'))).toBe(false);
   geminiTarget.install('global', { autoAllow: false, installStatusLine: false, sdd: false });
-  const global = JSON.parse(fs.readFileSync(path.join(tmpHome, '.gemini', 'settings.json'), 'utf-8'));
-  expect(global.context).toBeUndefined();
+  const file = path.join(tmpHome, '.gemini', 'settings.json');
+  expect(JSON.parse(fs.readFileSync(file, 'utf-8')).context.fileName).toEqual(['GEMINI.md', 'CLAUDE.md']);
+  expect(fs.existsSync(path.join(tmpHome, '.claude', 'CLAUDE.md'))).toBe(false);
+  geminiTarget.uninstall('global');
+  const after = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf-8')) : {};
+  expect(after.context).toBeUndefined();
 }
 
 describe('REQ-AGENTSWITCH-009 — migration does not rewrite user-owned content', () => {
@@ -224,5 +237,6 @@ describe('REQ-AGENTSWITCH-009 — migration does not rewrite user-owned content'
   it('REQ-AGENTSWITCH-009.A2 user-configured context file names are kept', reqAgentswitch009A2);
   it('REQ-AGENTSWITCH-009.A3 other MCP servers are not copied into Gemini', reqAgentswitch009A3);
   it('REQ-AGENTSWITCH-009.A4 uninstall removes only the added context entries', reqAgentswitch009A4);
-  it('REQ-AGENTSWITCH-009 no CLAUDE.md at the scope: nothing written or recorded', reqAgentswitch009NoClaudeMd);
+  it('REQ-AGENTSWITCH-009 no CLAUDE.md in the project: nothing written or recorded', reqAgentswitch009NoClaudeMd);
+  it('REQ-AGENTSWITCH-009 user-wide install lists CLAUDE.md for every project; uninstall removes it', reqAgentswitch009GlobalScope);
 });
