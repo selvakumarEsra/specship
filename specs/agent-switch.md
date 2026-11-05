@@ -24,6 +24,8 @@ jira_issue_REQ-AGENTSWITCH-008: SSHIP-725
 jira_fingerprint_REQ-AGENTSWITCH-008: e07b6a00ec2cc3cd
 jira_issue_REQ-AGENTSWITCH-009: SSHIP-731
 jira_fingerprint_REQ-AGENTSWITCH-009: 1ee568c4194c3ac9
+jira_issue_REQ-AGENTSWITCH-010: SSHIP-736
+jira_fingerprint_REQ-AGENTSWITCH-010: 54001aa7b7059f9b
 ---
 
 <!-- id: AGENTSWITCH-DOC -->
@@ -433,3 +435,36 @@ verifies:
 <!-- id: REQ-AGENTSWITCH-009.A4 -->
 - `specship uninstall --target gemini` removes the added `CLAUDE.md`
   context entry and leaves the user's own entries.
+
+<!-- id: REQ-AGENTSWITCH-010 -->
+## A Gemini CLI install MUST give the same SpecShip experience as Claude Code
+
+Every SpecShip feature a Claude Code install provides MUST be provided by a
+Gemini CLI install made with the same options, through Gemini's own
+equivalent surface. This covers the MCP server, the steering and
+spec-driven memory blocks, the prompt, session, file-write and
+search-interception hooks, every `/specship:*` command, the skills, the
+explorer subagent and read-only tool auto-allow. A feature for which Gemini
+CLI has no surface at all MUST be named in the install output with the
+reason, never dropped silently. On a switch (REQ-AGENTSWITCH-008), the
+options the user chose for Claude Code MUST carry over, including
+auto-allow. The confirmation note: "gemini also needs all the features we
+implemented for claude code, make specship experience seamless" (user,
+2026-11-05).
+
+## Acceptance
+<!-- id: REQ-AGENTSWITCH-010.A1 -->
+- A test lists every kind of artifact the Claude Code target installs and
+  fails when one has no Gemini mapping and no recorded no-surface reason.
+<!-- id: REQ-AGENTSWITCH-010.A2 -->
+- For each combination of `--sdd`, `--with-jira` and `--with-designer`, the
+  set of `/specship:*` commands written for Gemini equals the set written
+  for Claude Code.
+<!-- id: REQ-AGENTSWITCH-010.A3 -->
+- A Claude Code → Gemini migration of an install made with auto-allow on
+  writes Gemini's read-only auto-allow policy. One made with auto-allow off
+  writes none.
+<!-- id: REQ-AGENTSWITCH-010.A4 -->
+- A Gemini install prints one line naming the status line as unavailable
+  in Gemini CLI, and exits 0.
+
