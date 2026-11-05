@@ -8,6 +8,8 @@
  * + one registry entry. See `targets/registry.ts`.
  */
 
+import type { HostTraits } from '../../activation/hook-output';
+
 export type Location = 'global' | 'local';
 
 /**
@@ -104,6 +106,11 @@ export interface AgentTarget {
   readonly displayName: string;
   /** Optional URL for "where do I learn more about this agent." */
   readonly docsUrl?: string;
+  /**
+   * The agent's host profile (REQ-AGENTSWITCH-001) — the same object the hook
+   * I/O layer answers with, so the installer and the hooks read one profile.
+   */
+  readonly traits: HostTraits;
   /** Whether this target supports the given install location. */
   supportsLocation(loc: Location): boolean;
   detect(loc: Location): DetectionResult;

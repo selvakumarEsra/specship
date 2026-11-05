@@ -100,8 +100,7 @@ function geminiTranscriptIsSingleJson(): void {
   );
   const base = {
     cwd: dir,
-    specshipToolMarkers: GEMINI_CLI_TRAITS.specshipToolMarkers,
-    transcriptFormat: GEMINI_CLI_TRAITS.transcriptFormat,
+    traits: GEMINI_CLI_TRAITS,
   };
   // A session that already used SpecShip is not nudged.
   expect(buildSearchIntercept({ ...base, sessionId: 'used', transcriptPath: used })).toBeNull();

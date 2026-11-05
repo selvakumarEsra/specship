@@ -25,6 +25,11 @@ import {
 } from './install-defaults';
 import { ALL_TARGETS, getTarget, listTargetIds } from './targets/registry';
 import type { AgentTarget, Location, TargetId } from './targets/types';
+import { CLAUDE_CODE_TRAITS } from '../activation/hook-output';
+
+/** Claude Code scope hints for the location prompts, from its host profile. */
+const CLAUDE_LOCAL_HINT = `./.mcp.json + ./${CLAUDE_CODE_TRAITS.configDir}/settings.json`;
+const CLAUDE_GLOBAL_HINT = `~/${CLAUDE_CODE_TRAITS.userConfigFile} + ~/${CLAUDE_CODE_TRAITS.configDir}/settings.json`;
 import { detectInstallMethod } from '../update/updater';
 import { recordInstall, recordUninstall, ensureAgentRecord, type AgentRecordEntry } from './agent-record';
 import { planPurge, executePurge, assertSafeToRemove, type PurgeEnv, type PurgeExecDeps } from './purge';
@@ -255,8 +260,8 @@ export async function runInstallerWithOptions(
       message: `Apply ${agents} config to just this project, or all of them?`,
       options: installClaude
         ? [
-          { value: 'local'  as const, label: 'Just this project (recommended)', hint: './.mcp.json + ./.claude/settings.json' },
-          { value: 'global' as const, label: 'All projects', hint: '~/.claude.json + ~/.claude/settings.json' },
+          { value: 'local'  as const, label: 'Just this project (recommended)', hint: CLAUDE_LOCAL_HINT },
+          { value: 'global' as const, label: 'All projects', hint: CLAUDE_GLOBAL_HINT },
         ]
         : [
           { value: 'local'  as const, label: 'Just this project (recommended)', hint: describeFirstPaths(selectedTargets, 'local') },
@@ -658,8 +663,8 @@ async function wiringOnlyUninstall(
     const sel = await clack.select({
       message: 'Remove SpecShip from just this project, or all of them?',
       options: [
-        { value: 'local'  as const, label: 'Just this project (local)', hint: './.mcp.json + ./.claude/settings.json' },
-        { value: 'global' as const, label: 'All projects (global)', hint: '~/.claude.json + ~/.claude/settings.json' },
+        { value: 'local'  as const, label: 'Just this project (local)', hint: CLAUDE_LOCAL_HINT },
+        { value: 'global' as const, label: 'All projects (global)', hint: CLAUDE_GLOBAL_HINT },
       ],
       initialValue: 'local' as const,
     });

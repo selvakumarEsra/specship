@@ -99,6 +99,22 @@ export function buildHookDenyDecision(reason: string): string {
  *     uses a different shape so we never emit deny for Claude.
  */
 export interface HostTraits {
+  /** Adapter id — the same ids as the install record and `--target` (REQ-AGENTSWITCH-001). */
+  id: 'claude' | 'gemini';
+  /** Human-readable product name for agent- and user-facing text. */
+  displayName: string;
+  /** The project/user memory file the host reads (`<root>/<memoryFile>`). */
+  memoryFile: string;
+  /** The host's per-project and per-user config directory name. */
+  configDir: string;
+  /** User-wide config file holding MCP server entries, relative to the home dir. */
+  userConfigFile: string;
+  /** Session transcript root, relative to the home dir. */
+  transcriptDir: string;
+  /** The host's built-in file-read tools. */
+  readTools: readonly string[];
+  /** The host's built-in code-search tools. */
+  searchTools: readonly string[];
   specshipToolMarkers: string[];
   transcriptFormat: 'jsonl' | 'single-json';
   supportsBeforeToolDeny: boolean;
@@ -122,6 +138,14 @@ export interface HostTraits {
  * every pre-adapter install keeps its exact behaviour (REQ-AGENTADAPT-002.A2).
  */
 export const CLAUDE_CODE_TRAITS: HostTraits = {
+  id: 'claude',
+  displayName: 'Claude Code',
+  memoryFile: 'CLAUDE.md',
+  configDir: '.claude',
+  userConfigFile: '.claude.json',
+  transcriptDir: '.claude/projects',
+  readTools: ['Read'],
+  searchTools: ['Grep', 'Glob'],
   specshipToolMarkers: ['"name":"mcp__specship__'],
   transcriptFormat: 'jsonl',
   supportsBeforeToolDeny: false,
@@ -134,6 +158,14 @@ export const CLAUDE_CODE_TRAITS: HostTraits = {
 
 /** Gemini CLI (verified against 0.28.0). */
 export const GEMINI_CLI_TRAITS: HostTraits = {
+  id: 'gemini',
+  displayName: 'Gemini CLI',
+  memoryFile: 'GEMINI.md',
+  configDir: '.gemini',
+  userConfigFile: '.gemini/settings.json',
+  transcriptDir: '.gemini/tmp',
+  readTools: ['read_file', 'read_many_files'],
+  searchTools: ['grep_search', 'glob'],
   specshipToolMarkers: ['"name":"specship_', '"name": "specship_'],
   transcriptFormat: 'single-json',
   supportsBeforeToolDeny: true,
@@ -143,6 +175,23 @@ export const GEMINI_CLI_TRAITS: HostTraits = {
   denyEligibleTools: ['grep_search', 'glob'],
   shellTool: 'run_shell_command',
 };
+
+/**
+ * The profile code uses when no host is known (REQ-AGENTSWITCH-001): Claude
+ * Code, so every pre-adapter caller keeps its exact output.
+ */
+export const DEFAULT_HOST_TRAITS: HostTraits = CLAUDE_CODE_TRAITS;
+
+/** Every host profile, in registry order. */
+export const ALL_HOST_TRAITS: readonly HostTraits[] = [CLAUDE_CODE_TRAITS, GEMINI_CLI_TRAITS];
+
+/**
+ * The profile for an agent id (`claude`, `gemini`); {@link DEFAULT_HOST_TRAITS}
+ * for an unknown or missing id, e.g. the detection result `unknown`.
+ */
+export function hostTraitsFor(id: string | null | undefined): HostTraits {
+  return ALL_HOST_TRAITS.find((t) => t.id === id) ?? DEFAULT_HOST_TRAITS;
+}
 
 const GEMINI_EVENTS = new Set(['BeforeAgent', 'BeforeTool', 'AfterTool']);
 
@@ -156,7 +205,7 @@ export function deriveHostTraits(payload: HookPayload): HostTraits {
   if (payload.hookEventName && GEMINI_EVENTS.has(payload.hookEventName)) {
     return GEMINI_CLI_TRAITS;
   }
-  return CLAUDE_CODE_TRAITS;
+  return DEFAULT_HOST_TRAITS;
 }
 
 /**

@@ -15,7 +15,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { detectModelTier } from '../mcp/model-context';
 import { resolveSetting } from '../config/runtime-settings';
-import { CLAUDE_CODE_TRAITS } from './hook-output';
+import { DEFAULT_HOST_TRAITS, type HostTraits } from './hook-output';
 
 /**
  * The one steering line injected per prompt. Kept short (~40 tokens) — it is
@@ -33,14 +33,15 @@ const STEERING_TEMPLATE =
  * Render a steering template with the calling host's tool-name form
  * (AGENTADAPT-DOC, REQ-AGENTADAPT-001): Claude Code calls the tool
  * `mcp__specship__specship_explore`, Gemini CLI calls it `specship_explore`.
- * The prefix comes from the hook adapter — this module never names a host.
+ * The profile comes from the hook adapter — this module never names a host,
+ * and the profile is a required argument (REQ-AGENTSWITCH-001.A3).
  */
-export function renderSteering(template: string, toolPrefix: string): string {
-  return template.replace('{explore}', `${toolPrefix}specship_explore`);
+export function renderSteering(template: string, traits: HostTraits): string {
+  return template.replace('{explore}', `${traits.toolPrefix}specship_explore`);
 }
 
 /** The standard line as Claude Code (the legacy default host) receives it. */
-export const STEERING_TEXT = renderSteering(STEERING_TEMPLATE, CLAUDE_CODE_TRAITS.toolPrefix);
+export const STEERING_TEXT = renderSteering(STEERING_TEMPLATE, DEFAULT_HOST_TRAITS);
 
 /**
  * The lite-tier template (LOWMODEL-DOC, REQ-LOWMODEL-002): small models
@@ -55,7 +56,7 @@ const STEERING_TEMPLATE_LITE =
   'Do not spawn subagents. Do not Read/Grep files the tool returned.';
 
 /** The lite line as Claude Code (the legacy default host) receives it. */
-export const STEERING_TEXT_LITE = renderSteering(STEERING_TEMPLATE_LITE, CLAUDE_CODE_TRAITS.toolPrefix);
+export const STEERING_TEXT_LITE = renderSteering(STEERING_TEMPLATE_LITE, DEFAULT_HOST_TRAITS);
 
 /**
  * Decide whether to emit the steering line (REQ-STEER-002): silent unless the
@@ -63,13 +64,14 @@ export const STEERING_TEXT_LITE = renderSteering(STEERING_TEMPLATE_LITE, CLAUDE_
  * user opted out via `SPECSHIP_NO_STEERING=1`. Uninitialized projects and
  * opted-out users get zero prompt noise. Tier-aware (REQ-LOWMODEL-002):
  * lite-tier sessions get the prescriptive template; standard and frontier keep
- * the standard line.
+ * the standard line. `traits` is the calling host's profile and is required
+ * (REQ-AGENTSWITCH-001.A3) — callers with no host pass `DEFAULT_HOST_TRAITS`.
  */
 export function buildSteeringNudge(
   cwd: string,
+  traits: HostTraits,
   env: NodeJS.ProcessEnv = process.env,
   homedir?: string,
-  toolPrefix: string = CLAUDE_CODE_TRAITS.toolPrefix,
 ): string | null {
   // RUNSET-DOC: the opt-out resolves env > project .specship/settings.json >
   // ~/.specship/settings.json, so a repo can silence steering durably.
@@ -81,6 +83,6 @@ export function buildSteeringNudge(
   }
   return renderSteering(
     detectModelTier(cwd, env, homedir) === 'lite' ? STEERING_TEMPLATE_LITE : STEERING_TEMPLATE,
-    toolPrefix,
+    traits,
   );
 }

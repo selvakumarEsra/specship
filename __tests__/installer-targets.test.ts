@@ -1580,12 +1580,12 @@ describe('Gemini target — specifics', () => {
     // Indexed project (the silence gate).
     fs.mkdirSync(path.join(tmpCwd, '.specship'), { recursive: true });
     const { buildSteeringNudge } = await import('../src/activation/steering');
-    const { buildHookAdditionalContext, parseHookPayload } = await import('../src/activation/hook-output');
+    const { buildHookAdditionalContext, parseHookPayload, deriveHostTraits } = await import('../src/activation/hook-output');
 
     const payload = parseHookPayload(
       JSON.stringify({ hook_event_name: 'BeforeAgent', cwd: tmpCwd, prompt: 'how does X reach Y' }),
     );
-    const nudge = buildSteeringNudge(payload.cwd ?? tmpCwd, { ...process.env });
+    const nudge = buildSteeringNudge(payload.cwd ?? tmpCwd, deriveHostTraits(payload), { ...process.env });
     expect(nudge).toBeTruthy();
     const line = buildHookAdditionalContext(nudge as string, payload.hookEventName, 'UserPromptSubmit');
     const out = JSON.parse(line);
@@ -1593,9 +1593,9 @@ describe('Gemini target — specifics', () => {
     expect(out.hookSpecificOutput.additionalContext).toContain('specship_explore');
 
     // Opt-out: SPECSHIP_NO_STEERING=1 silences the nudge.
-    expect(buildSteeringNudge(tmpCwd, { SPECSHIP_NO_STEERING: '1' })).toBeNull();
+    expect(buildSteeringNudge(tmpCwd, deriveHostTraits(payload), { SPECSHIP_NO_STEERING: '1' })).toBeNull();
     // Unindexed cwd: silent.
-    expect(buildSteeringNudge(tmpHome, {})).toBeNull();
+    expect(buildSteeringNudge(tmpHome, deriveHostTraits(payload), {})).toBeNull();
   }
 
   /** REQ-GEMINI-010.A3 — SessionStart cheat-sheet emits `systemMessage` only. */

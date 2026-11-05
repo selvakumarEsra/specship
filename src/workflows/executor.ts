@@ -52,7 +52,8 @@ import { BashRunner } from './runners/bash';
 import { ScriptRunner } from './runners/script';
 import { ApprovalRunner } from './runners/approval';
 import { CancelRunner } from './runners/cancel';
-import { RUN_AGENT_KEY, resolveWorkflowAgent } from './agents';
+import { RUN_AGENT_KEY, resolveWorkflowAgent, DEFAULT_WORKFLOW_AGENT } from './agents';
+import { hostTraitsFor } from '../activation/hook-output';
 
 export interface ExecuteOptions {
   /** Project root (used to derive default cwd + spawn the worktree). */
@@ -288,6 +289,7 @@ export class WorkflowExecutor {
     const wasRejected = existing.status === 'rejected';
     if (wasRejected) {
       const meta = (refreshed.metadata as Record<string, unknown>) ?? {};
+      const revOpts = { ...opts, variables: withAgentVariables(opts.variables, runAgent(meta)) };
       const rejection = meta.rejection as
         | { nodeId: string; reason: string | null; attempts: number }
         | undefined;
@@ -339,7 +341,7 @@ export class WorkflowExecutor {
             rawRevise,
             outputs,
             opts.inputs,
-            opts.variables,
+            revOpts.variables,
             workflow
           ) as PromptNode;
 
@@ -352,7 +354,7 @@ export class WorkflowExecutor {
                 logsDir,
                 runId,
                 inputs: opts.inputs,
-                variables: opts.variables,
+                variables: revOpts.variables,
                 outputs,
                 verbose: opts.verbose,
                 agent: runAgent(meta),
@@ -552,6 +554,7 @@ export class WorkflowExecutor {
     const order = topoSort(workflow.nodes);
     const nodeById = new Map(workflow.nodes.map((n) => [n.id, n]));
     const meta = (run.metadata as Record<string, unknown>) ?? {};
+    opts = { ...opts, variables: withAgentVariables(opts.variables, runAgent(meta)) };
     const nodeStates: Map<string, WorkflowNodeState> = new Map(
       Object.entries((meta.nodeStates as Record<string, WorkflowNodeState>) ?? {})
     );
@@ -1071,6 +1074,20 @@ function sanitizeFilename(s: string): string {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Host-profile variables every step can reference (REQ-AGENTSWITCH-001), so a
+ * bundled workflow names the run's agent's paths instead of one host's:
+ * `$AGENT_SKILLS_DIR` is the agent's user skills directory. Caller-supplied
+ * variables win.
+ */
+export function withAgentVariables(
+  variables: Record<string, string> | undefined,
+  agentId: string | undefined,
+): Record<string, string> {
+  const traits = hostTraitsFor(agentId ?? DEFAULT_WORKFLOW_AGENT);
+  return { AGENT_SKILLS_DIR: `~/${traits.configDir}/skills`, ...(variables ?? {}) };
 }
 
 /** The agent stored with a run; undefined for runs created before agents were recorded (→ default). */

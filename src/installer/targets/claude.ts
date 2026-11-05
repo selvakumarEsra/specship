@@ -18,6 +18,7 @@
  */
 
 import * as fs from 'fs';
+import { CLAUDE_CODE_TRAITS } from '../../activation/hook-output';
 import * as path from 'path';
 import * as os from 'os';
 import {
@@ -322,7 +323,8 @@ function isOurStatusLine(sl: unknown): boolean {
 
 class ClaudeCodeTarget implements AgentTarget {
   readonly id = 'claude' as const;
-  readonly displayName = 'Claude Code';
+  readonly traits = CLAUDE_CODE_TRAITS;
+  readonly displayName = CLAUDE_CODE_TRAITS.displayName;
   readonly docsUrl = 'https://docs.claude.com/en/docs/claude-code';
 
   supportsLocation(_loc: Location): boolean {

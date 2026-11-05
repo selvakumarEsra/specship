@@ -1,7 +1,9 @@
 /**
- * GET /api/memory — CLAUDE.md hierarchy + ~/.claude/memory notes.
+ * GET /api/memory — every installed agent's memory-file hierarchy + notes.
  *
- * Walks the standard Claude Code memory locations and returns a flattened
+ * Walks each agent's standard memory locations (from `host-profiles.ts`,
+ * REQ-AGENTSWITCH-001 — Claude Code's CLAUDE.md tree, Gemini CLI's GEMINI.md
+ * tree; each file is tagged with its `host`) and returns a flattened
  * list of MemoryFile records the desktop UI can render directly. Resolves
  * `@path` imports from each instruction file.
  *
@@ -19,6 +21,7 @@ import path from 'node:path';
 import os from 'node:os';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { decodeProjectSlug } from '../ingest/ingestor.js';
+import { HOST_PROFILES, type HostId, type ServerHostProfile } from '../host-profiles.js';
 
 export type MemoryLevel = 'enterprise' | 'user' | 'project' | 'subdir' | 'import' | 'note';
 export type MemoryType = 'instruction' | 'note' | 'import';
@@ -38,6 +41,8 @@ export interface MemoryFile {
   imports?: string[];
   session?: string;
   tags?: string[];
+  /** The agent that reads this file (REQ-AGENTSWITCH-001). */
+  host: HostId;
 }
 
 export interface MemoryResponse {
@@ -47,12 +52,6 @@ export interface MemoryResponse {
   importCount: number;
   files: MemoryFile[];
 }
-
-const ENTERPRISE_PATHS = [
-  '/Library/Application Support/ClaudeCode/CLAUDE.md',
-  '/etc/ClaudeCode/CLAUDE.md',
-  process.env['ProgramData'] ? path.join(process.env['ProgramData']!, 'ClaudeCode', 'CLAUDE.md') : '',
-].filter(Boolean);
 
 function estimateTokens(body: string): number {
   // Rough heuristic: ~4 chars per token. Cheap; the UI tolerates approximation.
@@ -113,6 +112,7 @@ function makeFile(opts: {
   modifiedMs: number;
   readOnly?: boolean;
   imports?: string[];
+  host: HostId;
 }): MemoryFile {
   return {
     id: opts.id,
@@ -127,24 +127,31 @@ function makeFile(opts: {
     body: opts.body,
     readOnly: opts.readOnly,
     imports: opts.imports?.length ? opts.imports : undefined,
+    host: opts.host,
   };
 }
 
-async function collectEnterprise(): Promise<MemoryFile[]> {
+/** Id suffix for a non-default host, so both agents' files stay distinct. */
+function idSuffix(profile: ServerHostProfile): string {
+  return profile === HOST_PROFILES[0] ? '' : '-' + profile.id;
+}
+
+async function collectEnterprise(profile: ServerHostProfile): Promise<MemoryFile[]> {
   const out: MemoryFile[] = [];
-  for (const p of ENTERPRISE_PATHS) {
+  for (const p of profile.enterpriseMemoryPaths()) {
     const file = await tryRead(p);
     if (file) {
       out.push(makeFile({
-        id: 'm-ent',
+        id: 'm-ent' + idSuffix(profile),
         level: 'enterprise',
         type: 'instruction',
-        name: 'CLAUDE.md',
+        name: profile.memoryFile,
         scope: 'managed',
         absolutePath: p,
         body: file.body,
         modifiedMs: file.modified,
         readOnly: true,
+        host: profile.id,
       }));
       break;
     }
@@ -152,25 +159,27 @@ async function collectEnterprise(): Promise<MemoryFile[]> {
   return out;
 }
 
-async function collectUser(): Promise<MemoryFile[]> {
-  const p = path.join(os.homedir(), '.claude', 'CLAUDE.md');
+async function collectUser(profile: ServerHostProfile): Promise<MemoryFile[]> {
+  const p = path.join(os.homedir(), profile.configDir, profile.memoryFile);
   const file = await tryRead(p);
   if (!file) return [];
   return [makeFile({
-    id: 'm-user',
+    id: 'm-user' + idSuffix(profile),
     level: 'user',
     type: 'instruction',
-    name: 'CLAUDE.md',
-    scope: '~/.claude',
+    name: profile.memoryFile,
+    scope: '~/' + profile.configDir,
     absolutePath: p,
     body: file.body,
     modifiedMs: file.modified,
+    host: profile.id,
   })];
 }
 
-async function collectProject(projectRoot: string): Promise<MemoryFile[]> {
+async function collectProject(projectRoot: string, profile: ServerHostProfile): Promise<MemoryFile[]> {
   const out: MemoryFile[] = [];
-  const proj = path.join(projectRoot, 'CLAUDE.md');
+  const suffix = idSuffix(profile);
+  const proj = path.join(projectRoot, profile.memoryFile);
   const projFile = await tryRead(proj);
   const importMap = new Map<string, MemoryFile>();
   if (projFile) {
@@ -180,7 +189,7 @@ async function collectProject(projectRoot: string): Promise<MemoryFile[]> {
       const abs = path.isAbsolute(imp) ? imp : path.join(projectRoot, imp);
       const sub = await tryRead(abs);
       if (sub) {
-        const id = 'm-imp-' + Buffer.from(imp).toString('base64').replace(/=/g, '').slice(0, 10);
+        const id = 'm-imp-' + Buffer.from(imp).toString('base64').replace(/=/g, '').slice(0, 10) + suffix;
         importMap.set(imp, makeFile({
           id,
           level: 'import',
@@ -190,43 +199,46 @@ async function collectProject(projectRoot: string): Promise<MemoryFile[]> {
           absolutePath: abs,
           body: sub.body,
           modifiedMs: sub.modified,
+          host: profile.id,
         }));
         resolvedIds.push(id);
       }
     }
     out.push(makeFile({
-      id: 'm-proj',
+      id: 'm-proj' + suffix,
       level: 'project',
       type: 'instruction',
-      name: 'CLAUDE.md',
+      name: profile.memoryFile,
       scope: 'project root',
       absolutePath: proj,
       body: projFile.body,
       modifiedMs: projFile.modified,
       imports: resolvedIds,
+      host: profile.id,
     }));
     for (const im of importMap.values()) out.push(im);
   }
 
-  // Scan one level of subdirectories for nested CLAUDE.md files. Keeps the
+  // Scan one level of subdirectories for nested memory files. Keeps the
   // walk cheap — going deeper would need ignoring node_modules etc.
   try {
     const entries = await fs.readdir(projectRoot, { withFileTypes: true });
     for (const ent of entries) {
       if (!ent.isDirectory()) continue;
       if (ent.name.startsWith('.') || ent.name === 'node_modules' || ent.name === 'dist') continue;
-      const subPath = path.join(projectRoot, ent.name, 'CLAUDE.md');
+      const subPath = path.join(projectRoot, ent.name, profile.memoryFile);
       const sub = await tryRead(subPath);
       if (sub) {
         out.push(makeFile({
-          id: 'm-sub-' + ent.name,
+          id: 'm-sub-' + ent.name + suffix,
           level: 'subdir',
           type: 'instruction',
-          name: 'CLAUDE.md',
+          name: profile.memoryFile,
           scope: ent.name,
           absolutePath: subPath,
           body: sub.body,
           modifiedMs: sub.modified,
+          host: profile.id,
         }));
       }
     }
@@ -236,9 +248,10 @@ async function collectProject(projectRoot: string): Promise<MemoryFile[]> {
   return out;
 }
 
-async function collectNotes(): Promise<MemoryFile[]> {
-  const dir = path.join(os.homedir(), '.claude', 'memory');
+async function collectNotes(profile: ServerHostProfile): Promise<MemoryFile[]> {
   const out: MemoryFile[] = [];
+  if (!profile.notesDir) return out;
+  const dir = path.join(os.homedir(), profile.notesDir);
   let entries: import('node:fs').Dirent[];
   try {
     entries = await fs.readdir(dir, { withFileTypes: true });
@@ -255,7 +268,7 @@ async function collectNotes(): Promise<MemoryFile[]> {
       .filter((t): t is string => typeof t === 'string')
       .slice(0, 6);
     out.push(makeFile({
-      id: 'n-' + ent.name.replace(/\.md$/, ''),
+      id: 'n-' + ent.name.replace(/\.md$/, '') + idSuffix(profile),
       level: 'note',
       type: 'note',
       name: ent.name,
@@ -263,6 +276,7 @@ async function collectNotes(): Promise<MemoryFile[]> {
       absolutePath: abs,
       body: file.body,
       modifiedMs: file.modified,
+      host: profile.id,
     }));
     if (tags.length) {
       const last = out[out.length - 1];
@@ -270,6 +284,20 @@ async function collectNotes(): Promise<MemoryFile[]> {
     }
   }
   return out;
+}
+
+/**
+ * Every agent's memory files, grouped tier by tier: enterprise, user, project,
+ * notes — each tier lists Claude Code's files, then Gemini CLI's.
+ */
+export async function collectMemoryFiles(projectRoot: string | null): Promise<MemoryFile[]> {
+  const tiers = await Promise.all([
+    Promise.all(HOST_PROFILES.map((p) => collectEnterprise(p))),
+    Promise.all(HOST_PROFILES.map((p) => collectUser(p))),
+    projectRoot ? Promise.all(HOST_PROFILES.map((p) => collectProject(projectRoot, p))) : Promise.resolve<MemoryFile[][]>([]),
+    Promise.all(HOST_PROFILES.map((p) => collectNotes(p))),
+  ]);
+  return tiers.flat(2);
 }
 
 export async function registerMemoryRoutes(app: FastifyInstance): Promise<void> {
@@ -287,14 +315,7 @@ export async function registerMemoryRoutes(app: FastifyInstance): Promise<void> 
     else if (req.query.projectPath) projectRoot = req.query.projectPath;
     else if (app.primaryCg?.getProjectRoot) projectRoot = app.primaryCg.getProjectRoot();
 
-    const [enterprise, user, project, notes] = await Promise.all([
-      collectEnterprise(),
-      collectUser(),
-      projectRoot ? collectProject(projectRoot) : Promise.resolve<MemoryFile[]>([]),
-      collectNotes(),
-    ]);
-
-    const files: MemoryFile[] = [...enterprise, ...user, ...project, ...notes];
+    const files = await collectMemoryFiles(projectRoot);
 
     const resp: MemoryResponse = {
       totalTokens: files.reduce((a, b) => a + b.tokens, 0),

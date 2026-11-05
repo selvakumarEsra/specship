@@ -27,6 +27,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
 import { getSpecShipDir, isInitialized } from '../directory';
+import { DEFAULT_HOST_TRAITS, hostTraitsFor } from '../activation/hook-output';
 import {
   detectWorktreeIndexMismatch,
   worktreeMismatchWarning,
@@ -3267,7 +3268,7 @@ program
   // existing invocations — including our own offline-install scripts — behave
   // exactly as before.
   .option('-t, --target <ids>', 'Agents to wire, comma-separated: "claude" (default) | "gemini" | "claude,gemini". Also selects the snippet `--print-config` prints. Legacy: "auto"/"all" = claude, "none" = skip')
-  .option('--trust', 'Gemini only (REQ-GEMINI-009): write ~/.gemini/policies/specship.toml auto-allowing SpecShip\'s read-only tools. Opt-in — an admin policy still wins and run_shell_command is unaffected')
+  .option('--trust', `Gemini only (REQ-GEMINI-009): write ~/${hostTraitsFor('gemini').configDir}/policies/specship.toml auto-allowing SpecShip's read-only tools. Opt-in — an admin policy still wins and run_shell_command is unaffected`)
   // REQ-AGENTSWITCH-006.A3: reinstall for every recorded agent. Run by
   // `specship update` (through the new binary) and the bundle installer; exits
   // 3 when nothing is recorded so the bundle installer can fall back.
@@ -3586,7 +3587,7 @@ program
  */
 program
   .command('spec-nudge')
-  .description('Internal hook: nudge toward spec-author on feature/bug intent (UserPromptSubmit)')
+  .description(`Internal hook: nudge toward spec-author on feature/bug intent (${DEFAULT_HOST_TRAITS.fallbackPromptEvent})`)
   .action(async () => {
     const shouldNudge = (prompt: string): boolean => {
       const text = (prompt || '').trim();
@@ -3630,7 +3631,7 @@ program
  */
 program
   .command('steer-nudge')
-  .description('Internal hook: steer flow/structure questions to specship_explore (UserPromptSubmit)')
+  .description(`Internal hook: steer flow/structure questions to specship_explore (${DEFAULT_HOST_TRAITS.fallbackPromptEvent})`)
   .action(async () => {
     // Prefer the hook payload's cwd (Claude Code / Gemini CLI both send it
     // on stdin) so the check targets the project the prompt belongs to, not
@@ -3659,7 +3660,7 @@ program
     }
 
     const { buildSteeringNudge } = await import('../activation/steering');
-    const additionalContext = buildSteeringNudge(cwd, process.env, undefined, traits.toolPrefix);
+    const additionalContext = buildSteeringNudge(cwd, traits, process.env);
     if (additionalContext) {
       process.stdout.write(
         buildHookAdditionalContext(additionalContext, payload.hookEventName, traits.fallbackPromptEvent),
@@ -3705,12 +3706,6 @@ program
         }
       } catch { /* not JSON — strict path stays off, advisory still works via payload */ }
 
-      const DENY_TOOLS = new Set(traits.denyEligibleTools);
-      const shellCommand =
-        traits.shellTool !== null && toolName === traits.shellTool && typeof toolInput.command === 'string'
-          ? (toolInput.command as string)
-          : null;
-
       const { resolveSetting } = await import('../config/runtime-settings');
       const strict =
         traits.supportsBeforeToolDeny &&
@@ -3726,11 +3721,10 @@ program
         cwd,
         sessionId: payload.sessionId,
         transcriptPath: payload.transcriptPath,
-        specshipToolMarkers: traits.specshipToolMarkers,
-        transcriptFormat: traits.transcriptFormat,
+        traits,
+        toolName,
+        toolInput,
         strict,
-        denyEligible: DENY_TOOLS.has(toolName),
-        shellCommand,
         searchPattern,
       });
 
