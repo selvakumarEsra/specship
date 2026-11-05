@@ -55,6 +55,9 @@ export interface InstallChoices {
   sdd?: boolean;
   autoAllow?: boolean;
   statusLine?: boolean;
+  /** Optional integrations, so a switch or reinstall keeps their commands (REQ-AGENTSWITCH-010). */
+  withJira?: boolean;
+  withDesigner?: boolean;
 }
 
 export interface AgentRecord {
@@ -120,7 +123,7 @@ function sanitizeEntry(raw: unknown): AgentRecordEntry | null {
   if (r.choices && typeof r.choices === 'object') {
     const c = r.choices as Record<string, unknown>;
     const choices: InstallChoices = {};
-    for (const k of ['sdd', 'autoAllow', 'statusLine'] as const) {
+    for (const k of ['sdd', 'autoAllow', 'statusLine', 'withJira', 'withDesigner'] as const) {
       if (typeof c[k] === 'boolean') choices[k] = c[k] as boolean;
     }
     if (Object.keys(choices).length > 0) entry.choices = choices;
@@ -216,7 +219,7 @@ function makeEntry(
   if (scope === 'local') entry.projectRoot = path.resolve(projectRoot ?? process.cwd());
   if (choices) {
     const clean: InstallChoices = {};
-    for (const k of ['sdd', 'autoAllow', 'statusLine'] as const) {
+    for (const k of ['sdd', 'autoAllow', 'statusLine', 'withJira', 'withDesigner'] as const) {
       if (typeof choices[k] === 'boolean') clean[k] = choices[k];
     }
     if (Object.keys(clean).length > 0) entry.choices = clean;

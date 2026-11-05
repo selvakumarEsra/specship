@@ -238,17 +238,23 @@ export function maybeAutoMigrate(
     autoAllow: c?.autoAllow ?? true,
     sdd: c?.sdd ?? true,
     statusLine: c?.statusLine ?? true,
+    ...(c?.withJira ? { withJira: true } : {}),
+    ...(c?.withDesigner ? { withDesigner: true } : {}),
   };
   const prevCwd = process.cwd();
   beginWriteJournal();
   try {
     if (where.projectRoot && where.projectRoot !== prevCwd) process.chdir(where.projectRoot);
-    // Auto-allow carries over as `trust` too (REQ-AGENTSWITCH-010.A3): a
-    // target with a separate opt-in auto-allow surface reads that field, the
-    // rest ignore it. A direct install still needs its own explicit opt-in.
+    // Auto-allow carries over as `trust` too (REQ-AGENTSWITCH-010.A3) — but
+    // only when the user's recorded choice was explicitly on. A record that
+    // never stored the choice never opts anyone into a trust policy
+    // (REQ-GEMINI-009 stays strictly opt-in). A direct install still needs
+    // its own explicit opt-in.
     const result = target.install(where.scope, {
       autoAllow: choices.autoAllow ?? false,
-      trust: choices.autoAllow === true,
+      trust: c?.autoAllow === true,
+      ...(choices.withJira ? { withJira: true } : {}),
+      ...(choices.withDesigner ? { withDesigner: true } : {}),
       installStatusLine: choices.statusLine ?? false,
       sdd: choices.sdd,
     });

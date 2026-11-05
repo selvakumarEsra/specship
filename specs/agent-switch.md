@@ -534,6 +534,9 @@ verifies:
   - __tests__/agent-switch-parity.test.ts:reqAgentswitch010A2
   - __tests__/agent-switch-parity.test.ts:reqAgentswitch010A3
   - __tests__/agent-switch-parity.test.ts:reqAgentswitch010A4
+  - __tests__/agent-switch-parity.test.ts:reqAgentswitch010A1FromRealInstall
+  - __tests__/agent-switch-parity.test.ts:reqAgentswitch010A3UnrecordedChoice
+  - __tests__/agent-switch-parity.test.ts:reqAgentswitch010IntegrationsCarry
 
 ## Acceptance
 <!-- id: REQ-AGENTSWITCH-010.A1 -->

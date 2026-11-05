@@ -205,10 +205,79 @@ function reqAgentswitch002A3(): void {
   }
 }
 
+/**
+ * A1 — the kind list matches what a REAL Claude install writes: install with
+ * every option, classify each written artifact, and fail on anything the
+ * classifier cannot place or that CLAUDE_ARTIFACT_KINDS does not list.
+ */
+function reqAgentswitch010A1FromRealInstall(): void {
+  const result = claudeTarget.install('local', {
+    autoAllow: true, sdd: true, installStatusLine: true, withJira: true, withDesigner: true,
+  });
+  const found = new Set<string>();
+  const unknown: string[] = [];
+  const hookKind = (cmd: string): string | null => {
+    if (/specship (sync|cheatsheet)\b/.test(cmd)) return 'sync-hooks';
+    if (/specship spec-nudge\b/.test(cmd)) return 'sdd-hook';
+    if (/specship steer-nudge\b/.test(cmd)) return 'steer-hook';
+    if (/specship search-intercept\b/.test(cmd)) return 'search-intercept-hook';
+    return null;
+  };
+  for (const f of result.files) {
+    const rel = path.relative(tmpCwd, f.path).split(path.sep).join('/');
+    if (rel === '.mcp.json') found.add('mcp');
+    else if (rel.startsWith('.claude/commands/')) found.add('commands');
+    else if (rel.startsWith('.claude/agents/')) found.add('agents');
+    else if (rel.startsWith('.claude/skills/')) found.add('skills');
+    else if (/(^|\/)CLAUDE\.md$/.test(rel)) found.add('sdd-instructions');
+    else if (rel === '.claude/settings.json') {
+      const settings = JSON.parse(fs.readFileSync(f.path, 'utf-8'));
+      if (Array.isArray(settings.permissions?.allow) && settings.permissions.allow.length) found.add('permissions');
+      if (settings.statusLine) found.add('statusline');
+      for (const groups of Object.values(settings.hooks ?? {}) as Array<Array<{ hooks?: Array<{ command?: string }> }>>) {
+        for (const g of groups) for (const h of g.hooks ?? []) {
+          const k = hookKind(h.command ?? '');
+          if (k) found.add(k); else unknown.push(`hook: ${h.command}`);
+        }
+      }
+    } else unknown.push(rel);
+  }
+  expect(unknown, 'artifacts the parity classifier cannot place').toEqual([]);
+  // Every kind a real install produced is listed and mapped…
+  for (const k of found) {
+    expect(CLAUDE_ARTIFACT_KINDS as readonly string[], `kind ${k} missing from CLAUDE_ARTIFACT_KINDS`).toContain(k);
+    expect(GEMINI_PARITY[k as keyof typeof GEMINI_PARITY], `kind ${k} has no Gemini mapping`).toBeDefined();
+  }
+  // …and the list has no kind a full install never produces.
+  expect([...CLAUDE_ARTIFACT_KINDS].sort()).toEqual([...found].sort());
+}
+
+/** A3 — a record that never stored an auto-allow choice never opts anyone into the trust policy. */
+function reqAgentswitch010A3UnrecordedChoice(): void {
+  claudeTarget.install('local', { autoAllow: true, sdd: true });
+  recordInstall('claude', 'local', tmpCwd, '0.0.0-test', process.env);
+  const out = maybeAutoMigrate('gemini', { projectRoot: tmpCwd });
+  expect(out.kind, out.line).toBe('installed');
+  expect(fs.existsSync(geminiPolicyFile())).toBe(false);
+}
+
+/** A switch keeps the integrations the Claude install enabled. */
+function reqAgentswitch010IntegrationsCarry(): void {
+  claudeTarget.install('local', { autoAllow: false, sdd: true, withJira: true });
+  recordInstall('claude', 'local', tmpCwd, '0.0.0-test', process.env, { sdd: true, autoAllow: false, statusLine: false, withJira: true });
+  expect(maybeAutoMigrate('gemini', { projectRoot: tmpCwd }).kind).toBe('installed');
+  // The JIRA integration is switched on through the MCP server entry's env.
+  const settings = JSON.parse(fs.readFileSync(path.join(tmpCwd, '.gemini', 'settings.json'), 'utf-8'));
+  expect(String(settings.mcpServers?.specship?.env?.SPECSHIP_INTEGRATIONS ?? '')).toContain('jira');
+}
+
 describe('REQ-AGENTSWITCH-010 — Gemini install parity with Claude Code', () => {
   it('REQ-AGENTSWITCH-010.A1: every Claude artifact kind maps to a Gemini surface or a named no-surface reason', reqAgentswitch010A1);
   it('REQ-AGENTSWITCH-010.A2: the /specship:* command set matches Claude for every --sdd/--with-jira/--with-designer combination', reqAgentswitch010A2);
   it('REQ-AGENTSWITCH-010.A3: a Claude → Gemini switch carries auto-allow over as the read-only policy', reqAgentswitch010A3);
   it('REQ-AGENTSWITCH-010.A4: a Gemini install prints one status-line-unavailable line and exits 0', reqAgentswitch010A4, 90_000);
+  it('REQ-AGENTSWITCH-010.A1: the kind list matches what a real full Claude install writes', reqAgentswitch010A1FromRealInstall);
+  it('REQ-AGENTSWITCH-010.A3: an unrecorded auto-allow choice never writes the trust policy', reqAgentswitch010A3UnrecordedChoice);
+  it('REQ-AGENTSWITCH-010: a switch keeps the Claude install\'s integrations (--with-jira)', reqAgentswitch010IntegrationsCarry);
   it('REQ-AGENTSWITCH-002.A3: the GEMINI.md SDD block names only skills and commands the Gemini install provides', reqAgentswitch002A3);
 });
