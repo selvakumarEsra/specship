@@ -1,6 +1,6 @@
 {
   "name": "specship",
-  "version": "0.29.0",
+  "version": "0.30.0",
   "description": "SpecShip for Claude Code — local code intelligence (search, flow tracing, impact) over a SQLite knowledge graph, spec-driven development, and the same hooks `specship install` wires. Requires the specship CLI on PATH.",
   "author": {
     "name": "selvakumarEsra"
