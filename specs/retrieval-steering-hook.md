@@ -67,6 +67,11 @@ beyond the hook invocation itself.
 implementations:
   - src/activation/steering.ts:buildSteeringNudge
 
+verifies:
+  - __tests__/steering-nudge.test.ts:reqSteer002A1
+  - __tests__/steering-nudge.test.ts:reqSteer002EmitsWhenInitialized
+  - __tests__/steering-nudge.test.ts:reqSteer002A2
+
 ## Acceptance
 <!-- id: REQ-STEER-002.A1 -->
 - In a directory without `.specship/`, the hook command exits 0 with empty

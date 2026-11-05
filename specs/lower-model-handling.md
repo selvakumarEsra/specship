@@ -82,6 +82,10 @@ opt-out, wording validated in the A/B.
 implementations:
   - src/activation/steering.ts:buildSteeringNudge
 
+verifies:
+  - __tests__/lowmodel.test.ts:reqLowmodel002A1
+  - __tests__/lowmodel.test.ts:reqLowmodel002A2
+
 ## Acceptance
 <!-- id: REQ-LOWMODEL-002.A1 -->
 - In an initialized project whose session marker says haiku, the hook emits

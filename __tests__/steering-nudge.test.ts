@@ -21,11 +21,11 @@ describe('buildSteeringNudge (REQ-STEER-002)', () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
-  it('A1: emits nothing in a directory without .specship/', () => {
+  it('A1: emits nothing in a directory without .specship/', function reqSteer002A1() {
     expect(buildSteeringNudge(dir, DEFAULT_HOST_TRAITS, {})).toBeNull();
   });
 
-  it('emits the steering line in an initialized project', () => {
+  it('emits the steering line in an initialized project', function reqSteer002EmitsWhenInitialized() {
     fs.mkdirSync(path.join(dir, '.specship'));
     expect(buildSteeringNudge(dir, DEFAULT_HOST_TRAITS, {})).toBe(STEERING_TEXT);
     expect(STEERING_TEXT).toContain('specship_explore');
@@ -35,7 +35,7 @@ describe('buildSteeringNudge (REQ-STEER-002)', () => {
     expect(STEERING_TEXT).toMatch(/implementing, fixing/);
   });
 
-  it('A2: emits nothing with SPECSHIP_NO_STEERING=1 even when initialized', () => {
+  it('A2: emits nothing with SPECSHIP_NO_STEERING=1 even when initialized', function reqSteer002A2() {
     fs.mkdirSync(path.join(dir, '.specship'));
     expect(buildSteeringNudge(dir, DEFAULT_HOST_TRAITS, { SPECSHIP_NO_STEERING: '1' })).toBeNull();
   });

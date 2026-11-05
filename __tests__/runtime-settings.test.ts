@@ -59,13 +59,13 @@ describe('runtime settings resolution', () => {
     expect(resolveSetting('OTHER_KEY', repo, {}, home)).toBeUndefined();
   });
 
-  it('002.A1: a repo settings file silences the steering nudge durably', () => {
+  it('002.A1: a repo settings file silences the steering nudge durably', function reqRunset002A1() {
     expect(buildSteeringNudge(repo, DEFAULT_HOST_TRAITS, {}, home)).toBe(STEERING_TEXT);
     writeProject({ SPECSHIP_NO_STEERING: '1' });
     expect(buildSteeringNudge(repo, DEFAULT_HOST_TRAITS, {}, home)).toBeNull();
   });
 
-  it('002.A2+A3: compaction and model tier resolve through the chain', () => {
+  it('002.A2+A3: compaction and model tier resolve through the chain', function reqRunset002A2A3() {
     writeProject({ SPECSHIP_MODEL: 'claude-haiku-4-5' });
     expect(detectModelTier(repo, {}, home)).toBe('lite'); // A3: repo forces tier
     writeInstall({ SPECSHIP_COMPACT: '0' });

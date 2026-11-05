@@ -39,7 +39,7 @@ const fts5Available = (() => {
 })();
 
 describe('REQ-LOWMODEL-002 — tier-aware steering', () => {
-  it('haiku marker → prescriptive template; frontier → standard line', () => {
+  it('haiku marker → prescriptive template; frontier → standard line', function reqLowmodel002A1() {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lowmodel-steer-'));
     fs.mkdirSync(path.join(dir, '.specship'));
     try {
@@ -52,7 +52,7 @@ describe('REQ-LOWMODEL-002 — tier-aware steering', () => {
     }
   });
 
-  it('A2: the haiku template stays under ~80 tokens and steers against subagents', () => {
+  it('A2: the haiku template stays under ~80 tokens and steers against subagents', function reqLowmodel002A2() {
     expect(STEERING_TEXT_LITE.length / 4).toBeLessThan(85); // ~4 chars/token
     expect(STEERING_TEXT_LITE).toContain('Do not spawn subagents');
     expect(STEERING_TEXT_LITE).toContain('specship_explore');

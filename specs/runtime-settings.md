@@ -66,6 +66,10 @@ implementations:
   - src/activation/steering.ts:buildSteeringNudge
   - src/mcp/model-context.ts:detectModelTier
 
+verifies:
+  - __tests__/runtime-settings.test.ts:reqRunset002A1
+  - __tests__/runtime-settings.test.ts:reqRunset002A2A3
+
 ## Acceptance
 <!-- id: REQ-RUNSET-002.A1 -->
 - `{"SPECSHIP_NO_STEERING":"1"}` in `<repo>/.specship/settings.json`
