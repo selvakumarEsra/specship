@@ -23,6 +23,17 @@ import { writeSseHead } from './sse.js';
 import type { SpecShipInstance } from '../project-registry.js';
 import { decodeProjectSlug, getLastIngestStats } from '../ingest/index.js';
 import { CLAUDE_PROFILE, HOST_PROFILES } from '../host-profiles.js';
+import { CANONICAL_TOOLS } from '../canonical-tools.js';
+
+// Tool names in claude_tool_calls are the SHARED names every transcript
+// adapter normalises to (REQ-AGENTSWITCH-004), so these queries cover every
+// agent's sessions. Values come from our own canonical-tools.json, never from
+// input, so quoting them into the SQL is safe.
+const sqlString = (v: string): string => `'${v.replace(/'/g, "''")}'`;
+const FILE_TOUCH_TOOLS = [CANONICAL_TOOLS.read, CANONICAL_TOOLS.edit, CANONICAL_TOOLS.write, CANONICAL_TOOLS.notebookEdit];
+const FILE_TOUCH_TOOLS_SQL = FILE_TOUCH_TOOLS.map(sqlString).join(',');
+const FILE_TOUCH_TOOLS_SQL_WITH_MULTI = [...FILE_TOUCH_TOOLS, CANONICAL_TOOLS.multiEdit].map(sqlString).join(',');
+const READ_TOOL_SQL = sqlString(CANONICAL_TOOLS.read);
 
 /** `<configDir>/settings.json` of the agent a session came from (Claude Code when unknown). */
 function settingsFileFor(host: string | null | undefined): string {
@@ -379,7 +390,7 @@ export async function registerClaudeRoutes(app: FastifyInstance): Promise<void> 
                 ORDER BY inner_tc.ts DESC LIMIT 1) as lastOp
       FROM claude_tool_calls AS tc
       WHERE tc.session_id = ?
-        AND tc.tool_name IN ('Read','Edit','Write','NotebookEdit','MultiEdit')
+        AND tc.tool_name IN (${FILE_TOUCH_TOOLS_SQL_WITH_MULTI})
         AND tc.input_summary != ''
       GROUP BY tc.input_summary
       ORDER BY ops DESC
@@ -459,7 +470,7 @@ export async function registerClaudeRoutes(app: FastifyInstance): Promise<void> 
     const files = db.prepare(`
       SELECT input_summary as path, COUNT(*) as calls, SUM(result_length) as resultBytes
       FROM claude_tool_calls
-      WHERE ts >= ? AND tool_name IN ('Read','Edit','Write','NotebookEdit') AND input_summary != ''${inProject()}
+      WHERE ts >= ? AND tool_name IN (${FILE_TOUCH_TOOLS_SQL}) AND input_summary != ''${inProject()}
       GROUP BY input_summary
       ORDER BY calls DESC
       LIMIT 100
@@ -473,7 +484,7 @@ export async function registerClaudeRoutes(app: FastifyInstance): Promise<void> 
     const trendRows = db.prepare(`
       SELECT input_summary as path, CAST((ts - ?) / ? AS INTEGER) as bucket, COUNT(*) as calls
       FROM claude_tool_calls
-      WHERE ts >= ? AND tool_name IN ('Read','Edit','Write','NotebookEdit') AND input_summary != ''${inProject()}
+      WHERE ts >= ? AND tool_name IN (${FILE_TOUCH_TOOLS_SQL}) AND input_summary != ''${inProject()}
       GROUP BY input_summary, bucket
     `).all(...withProject(trend7Start, dayMs, trend7Start)) as Array<{ path: string; bucket: number; calls: number }>;
     const trendByPath = new Map<string, number[]>();
@@ -542,7 +553,7 @@ export async function registerClaudeRoutes(app: FastifyInstance): Promise<void> 
              MAX(t.ts) as lastTs, MIN(t.ts) as firstTs
       FROM claude_tool_calls t
       LEFT JOIN claude_sessions s ON s.id = t.session_id
-      WHERE t.input_summary = ? AND t.ts >= ? AND t.tool_name IN ('Read','Edit','Write','NotebookEdit')
+      WHERE t.input_summary = ? AND t.ts >= ? AND t.tool_name IN (${FILE_TOUCH_TOOLS_SQL})
       GROUP BY t.session_id
       ORDER BY calls DESC
       LIMIT 50
@@ -550,7 +561,7 @@ export async function registerClaudeRoutes(app: FastifyInstance): Promise<void> 
     const byTool = db.prepare(`
       SELECT tool_name as name, COUNT(*) as calls, COALESCE(SUM(result_length), 0) as bytes
       FROM claude_tool_calls
-      WHERE input_summary = ? AND ts >= ? AND tool_name IN ('Read','Edit','Write','NotebookEdit')
+      WHERE input_summary = ? AND ts >= ? AND tool_name IN (${FILE_TOUCH_TOOLS_SQL})
       GROUP BY tool_name
       ORDER BY calls DESC
     `).all(path, since);
@@ -967,7 +978,7 @@ export async function registerClaudeRoutes(app: FastifyInstance): Promise<void> 
     const wastefulReads = db.prepare(`
       SELECT session_id, input_summary as file, COUNT(*) as n
       FROM claude_tool_calls
-      WHERE tool_name = 'Read' AND input_summary != '' AND ${inProject}
+      WHERE tool_name = ${READ_TOOL_SQL} AND input_summary != '' AND ${inProject}
       GROUP BY session_id, input_summary
       HAVING n >= 10
       ORDER BY n DESC
@@ -1008,7 +1019,7 @@ export async function registerClaudeRoutes(app: FastifyInstance): Promise<void> 
         title: `${r.tool_name} returned ${Math.round(r.result_length / 1000)}k chars (~${Math.round(estTokens / 1000)}k tokens est.) — try a structural query`,
         why: 'Tools that dump raw content into context are the dominant cost driver. A structural query returns just what the agent needs.',
         evidence: { session: r.session_id, detail: `${r.tool_name}(${r.input_summary.slice(0, 100)}) → ${r.result_length} chars (~${estTokens} tokens est.)` },
-        fix: r.tool_name === 'Bash' ? 'specship_search "<symbol>" instead of Bash(grep)' : 'specship_explore "<symbol or question>"',
+        fix: r.tool_name === CANONICAL_TOOLS.bash ? 'specship_search "<symbol>" instead of Bash(grep)' : 'specship_explore "<symbol or question>"',
         saving: `~$${((estTokens / 1_000_000) * 15).toFixed(2)} est. on this call`,
       });
     }
@@ -1048,7 +1059,7 @@ export async function registerClaudeRoutes(app: FastifyInstance): Promise<void> 
     // mixed-model workflow (fresh context per step + external verification).
     const flounder = db.prepare(`
       SELECT s.id, s.last_model,
-             (SELECT COUNT(*) FROM claude_tool_calls t WHERE t.session_id = s.id AND t.tool_name = 'Read') AS reads
+             (SELECT COUNT(*) FROM claude_tool_calls t WHERE t.session_id = s.id AND t.tool_name = ${READ_TOOL_SQL}) AS reads
       FROM claude_sessions s
       WHERE s.project_path IN (?, ?)
         AND (LOWER(COALESCE(s.last_model,'')) LIKE '%haiku%' OR LOWER(COALESCE(s.last_model,'')) LIKE '%sonnet%')
