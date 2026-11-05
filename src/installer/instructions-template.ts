@@ -90,3 +90,28 @@ export function getSddRuleBlock(): string {
     SPECSHIP_SDD_SECTION_END,
   ].join('\n');
 }
+
+/**
+ * The SDD steering block the Gemini target writes into GEMINI.md
+ * (REQ-AGENTSWITCH-002.A3). Same rule and markers as `getSddRuleBlock`, but it
+ * names only what the Gemini install provides: there are no SpecShip skills on
+ * Gemini, so authoring routes through the rendered `/specship:spec new`
+ * command instead of the `spec-author` skill.
+ */
+export function getGeminiSddRuleBlock(): string {
+  return [
+    SPECSHIP_SDD_SECTION_START,
+    '## Spec-driven development (SpecShip)',
+    '',
+    'For feature or bug work in this repo, FIRST run **`/specship:spec new`**',
+    'to author the spec under `specs/` — before any brainstorming or planning.',
+    'Spec-driven development is canonical here: the spec is the contract, and the',
+    'implementation follows from it (`/specship:spec implement`).',
+    '',
+    'When the user shares a **claude.ai/design** link (or references a Claude Design',
+    'project), recommend **`/specship:spec design`** first and get explicit confirmation',
+    'before proceeding — even mid authoring. That is the design→code path: taste',
+    'the design with the user → snapshot → spec → review → `/specship:spec implement`.',
+    SPECSHIP_SDD_SECTION_END,
+  ].join('\n');
+}

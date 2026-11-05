@@ -51,6 +51,7 @@ import {
 } from '../src/installer/gemini-commands';
 import {
   getGeminiRetrievalBlock,
+  getGeminiSddRuleBlock,
   getSddRuleBlock,
 } from '../src/installer/instructions-template';
 import { SERVER_INSTRUCTIONS } from '../src/mcp/server-instructions';
@@ -1463,13 +1464,16 @@ describe('Gemini target — specifics', () => {
     }
   }
 
-  /** REQ-GEMINI-004.A4 — SDD portion is byte-identical to Claude's; absent on --no-sdd. */
+  /** REQ-GEMINI-004.A4 — SDD portion is the Gemini rendering of Claude's rule; absent on --no-sdd. */
   function geminiSddBlockIsByteIdenticalToClaudeAndOptOutStrips(): void {
     geminiTarget.install('local', { autoAllow: true });
     const file = path.join(tmpCwd, 'GEMINI.md');
     const body = fs.readFileSync(file, 'utf-8');
-    // The byte-exact Claude SDD block appears inside GEMINI.md.
-    expect(body.includes(getSddRuleBlock())).toBe(true);
+    // The Gemini rendering of the shared SDD rule (REQ-AGENTSWITCH-002.A3
+    // supersedes the byte-identical clause: GEMINI.md must not name the
+    // spec-author skill Gemini doesn't get) — same markers and heading.
+    expect(body.includes(getGeminiSddRuleBlock())).toBe(true);
+    expect(getGeminiSddRuleBlock().split('\n')[1]).toBe(getSddRuleBlock().split('\n')[1]);
 
     // --no-sdd on a subsequent install strips the SDD block, leaves retrieval.
     geminiTarget.install('local', { autoAllow: true, sdd: false });
@@ -2413,4 +2417,60 @@ describe('uninstall --target gemini reports only Gemini paths (REQ-AGENTSWITCH-0
   }
 
   it('REQ-AGENTSWITCH-002.A2: uninstall --target gemini never reports a Claude path', reqAgentswitch002A2, 60_000);
+});
+
+// ---------------------------------------------------------------------------
+// REQ-AGENTSWITCH-002.A3 — the GEMINI.md steering names only what Gemini gets.
+// ---------------------------------------------------------------------------
+
+describe('GEMINI.md steering names only Gemini-installed commands and skills (REQ-AGENTSWITCH-002)', () => {
+  function steeringNamesOnlyInstalledArtifacts(loc: 'global' | 'local'): void {
+    const home = mkTmpDir('a3-home');
+    const cwd = mkTmpDir('a3-cwd');
+    const prevCwd = process.cwd();
+    process.chdir(cwd);
+    const home$ = setHome(home);
+    try {
+      const result = geminiTarget.install(loc, { autoAllow: true, sdd: true });
+      const geminiMd = loc === 'global' ? path.join(home, '.gemini', 'GEMINI.md') : path.join(cwd, 'GEMINI.md');
+      const body = fs.readFileSync(geminiMd, 'utf-8');
+      const blocks = body.match(/<!-- SPECSHIP_[A-Z_]*START -->[\s\S]*?<!-- SPECSHIP_[A-Z_]*END -->/g) ?? [];
+      expect(blocks.length).toBeGreaterThan(0);
+      const steering = blocks.join('\n');
+
+      // Every slash command named resolves to a TOML the install wrote.
+      const written = new Set(result.files.map((f) => f.path));
+      const commands = [...steering.matchAll(/\/specship:([a-z-]+)/g)].map((m) => m[1]!);
+      expect(commands.length).toBeGreaterThan(0);
+      const commandsDir = loc === 'global' ? path.join(home, '.gemini', 'commands') : path.join(cwd, '.gemini', 'commands');
+      for (const name of new Set(commands)) {
+        const toml = path.join(commandsDir, 'specship', `${name}.toml`);
+        expect(fs.existsSync(toml), `/specship:${name} has no installed TOML`).toBe(true);
+        expect(fs.readFileSync(toml, 'utf-8').startsWith(GEMINI_COMMAND_HEADER_MARKER)).toBe(true);
+      }
+
+      // No SpecShip skill is named unless the install put it on disk.
+      const shippedSkills = fs.readdirSync(path.join(__dirname, '..', 'skills'));
+      for (const skill of shippedSkills) {
+        if (!steering.includes(skill)) continue;
+        const installed = [...written].some((p) => p.includes(`${path.sep}skills${path.sep}${skill}`))
+          || fs.existsSync(path.join(path.dirname(commandsDir), 'skills', skill));
+        expect(installed, `GEMINI.md names skill ${skill} the Gemini install did not write`).toBe(true);
+      }
+      // And no Claude-only surface leaks into the Gemini steering.
+      expect(steering).not.toMatch(/CLAUDE\.md|\.claude\/|mcp__specship__/);
+    } finally {
+      home$.restore();
+      process.chdir(prevCwd);
+      fs.rmSync(home, { recursive: true, force: true });
+      fs.rmSync(cwd, { recursive: true, force: true });
+    }
+  }
+
+  function reqAgentswitch002A3(): void {
+    steeringNamesOnlyInstalledArtifacts('local');
+    steeringNamesOnlyInstalledArtifacts('global');
+  }
+
+  it('REQ-AGENTSWITCH-002.A3: the GEMINI.md steering block names only commands and skills the Gemini install provides', reqAgentswitch002A3);
 });
