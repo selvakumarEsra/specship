@@ -554,3 +554,159 @@ verifies:
 - A Gemini install prints one line naming the status line as unavailable
   in Gemini CLI, and exits 0.
 
+
+<!-- id: REQ-AGENTSWITCH-011 -->
+## Project discovery MUST include every agent's projects
+
+The dashboard project picker, `specship desktop`'s automatic project pick,
+and the server's project lookup MUST find projects used with any supported
+agent, not only projects that have Claude Code transcript folders. On a
+machine that has only ever used Gemini CLI, they MUST find the projects
+SpecShip is installed in. Gemini names its session folders by a one-way hash
+of the project path, so its projects come from the installed-agents record
+(REQ-AGENTSWITCH-006) and from sessions already ingested with a resolved
+path. Each agent's own folder conventions MUST live in that agent's
+transcript adapter.
+
+## Acceptance
+<!-- id: REQ-AGENTSWITCH-011.A1 -->
+- With no `~/.claude/` at all and a recorded Gemini install in project P,
+  the dashboard's project list includes P.
+<!-- id: REQ-AGENTSWITCH-011.A2 -->
+- With the same setup, `specship desktop`'s automatic pick resolves to P.
+<!-- id: REQ-AGENTSWITCH-011.A3 -->
+- A machine with only Claude Code projects lists exactly the projects it
+  listed before.
+
+<!-- id: REQ-AGENTSWITCH-012 -->
+## User-visible text MUST name the agents actually involved
+
+CLI output, server log lines, installer and health-check messages, update
+notices and reflect proposal text MUST name the agent or agents the
+message is about. Examples are the agent just installed, the agents in the
+installed-agents record, the detected agent, and every agent whose
+transcripts are watched. The text MUST NOT always say "Claude Code". Text
+that is genuinely about one agent, such as the Claude-only status line,
+MUST say so explicitly.
+
+## Acceptance
+<!-- id: REQ-AGENTSWITCH-012.A1 -->
+- A source-scan test fails when the display name of an agent ("Claude Code",
+  "Gemini CLI") or the Claude path segment `'.claude'` appears in a
+  non-comment line of shared code outside the adapter layer. The scan covers
+  `src/`, `server/src/`, `ui/src/` and the bundle installers.
+<!-- id: REQ-AGENTSWITCH-012.A2 -->
+- After `specship install --target gemini`, no line of the output names
+  Claude Code.
+<!-- id: REQ-AGENTSWITCH-012.A3 -->
+- A reflect hook proposal made for Gemini names Gemini's post-edit event,
+  not `PostToolUse`.
+
+<!-- id: REQ-AGENTSWITCH-013 -->
+## `specship install` with no target MUST wire the agent it runs under
+
+When `specship install` is given no `--target`, it MUST wire the agent it
+detects from its launcher environment (REQ-AGENTSWITCH-007). When none is
+detected, or the detection is ambiguous, it MUST wire Claude Code, the
+default. `--target` always wins. Decision: "the detected agent" (user,
+2026-11-05).
+
+## Acceptance
+<!-- id: REQ-AGENTSWITCH-013.A1 -->
+- `specship install --yes --location local` run with `GEMINI_CLI=1`, and
+  without `CLAUDECODE`, wires Gemini CLI and writes nothing under `.claude/`.
+<!-- id: REQ-AGENTSWITCH-013.A2 -->
+- The same command with neither variable set, or with both set, wires
+  Claude Code.
+<!-- id: REQ-AGENTSWITCH-013.A3 -->
+- `--target claude` from a Gemini shell wires Claude Code.
+
+<!-- id: REQ-AGENTSWITCH-014 -->
+## Skills and commands written for Gemini MUST read correctly in Gemini
+
+Every skill, command and steering text SpecShip writes for Gemini CLI MUST
+be correct for a Gemini user. It MUST NOT tell them to run Claude Code
+commands (`claude mcp add`), call tools Gemini does not have (`Write`,
+`AskUserQuestion`, `mcp__…` names), or edit the memory file of an agent they
+are not using. Skills MUST go through the same rewrites as commands. A
+reference to a skill Gemini has installed MUST be kept. The memory-file
+governance route MUST act on the running agent's memory file.
+
+## Acceptance
+<!-- id: REQ-AGENTSWITCH-014.A1 -->
+- No file written by `specship install --target gemini --sdd --with-jira
+  --with-designer` contains `claude mcp`, `AskUserQuestion`, `mcp__`,
+  `$ARGUMENTS`, or the `Write`, `Edit`, `Read`, `Grep` or `Glob` tool named
+  as a tool to call.
+<!-- id: REQ-AGENTSWITCH-014.A2 -->
+- With skills installed, the Gemini `/specship:spec` command still names the
+  `design-md` skill, and no sentence is left with a dangling reference.
+<!-- id: REQ-AGENTSWITCH-014.A3 -->
+- The Gemini `/specship:check` memory-file route names `GEMINI.md`, not
+  `CLAUDE.md`.
+
+<!-- id: REQ-AGENTSWITCH-015 -->
+## Documentation MUST describe what each agent gets today
+
+The README, the documentation site, `CLAUDE.md` and the offline installer
+wrappers MUST match the current behaviour for both agents. No page may call
+Gemini "MCP-only" or say SpecShip is "Claude Code only". Automatic setup on
+an agent switch MUST be documented: how a switch is detected, what is
+written, which choices carry over, the opt-out, and the limitation that an
+agent which never runs SpecShip cannot be detected. Both the README and the
+configuration reference MUST cover it. The offline installer wrappers MUST
+accept and pass on the bundle installer's agent choice.
+
+## Acceptance
+<!-- id: REQ-AGENTSWITCH-015.A1 -->
+- A docs test fails on the phrases "MCP-only", "MCP tools only" or
+  "Claude Code only" in `README.md`, `site/src/content/docs/` or `CLAUDE.md`.
+- That test also fails when a page describes Gemini as getting no hooks,
+  commands, skills or subagent.
+<!-- id: REQ-AGENTSWITCH-015.A2 -->
+- `README.md` and the configuration reference both document
+  `SPECSHIP_AUTO_MIGRATE` and `"autoMigrate"`.
+<!-- id: REQ-AGENTSWITCH-015.A3 -->
+- `scripts/offline-install.sh --target gemini` reaches the bundle installer
+  with `--target gemini`. The `.ps1` wrapper does the same with
+  `-Target gemini`.
+
+<!-- id: REQ-AGENTSWITCH-016 -->
+## The Claude plugin and a Gemini extension MUST match the CLI install
+
+The Claude Code plugin MUST wire the same hooks as `specship install
+--target claude`. It MUST turn on optional integrations only when the user
+opts in, and MUST carry the package version. SpecShip MUST also ship a
+Gemini CLI extension. That extension MUST provide the MCP server, the
+`/specship:*` commands and the steering context, in the format Gemini CLI
+0.28.0 loads. Decision: "ship one" (user, 2026-11-05).
+
+## Acceptance
+<!-- id: REQ-AGENTSWITCH-016.A1 -->
+- A test fails when the plugin's hook commands differ from the hook
+  commands `specship install --target claude` writes.
+<!-- id: REQ-AGENTSWITCH-016.A2 -->
+- The plugin enables no integration by default, and its manifest version
+  equals `package.json`'s.
+<!-- id: REQ-AGENTSWITCH-016.A3 -->
+- Gemini CLI 0.28.0's own extension loader loads the shipped extension
+  without errors and reports the `specship` MCP server and the
+  `/specship:*` commands.
+
+<!-- id: REQ-AGENTSWITCH-017 -->
+## Agent-specific code MUST live in the adapter layer
+
+Code that knows one agent's file formats or conventions MUST live in that
+agent's adapter. This covers the Claude transcript line parser and its
+pricing input, the Gemini command renderer, and the Claude-only installer
+helpers. Shared modules MUST reach that code only through the adapter
+registries.
+
+## Acceptance
+<!-- id: REQ-AGENTSWITCH-017.A1 -->
+- The Claude transcript parser lives under the Claude transcript adapter.
+  The Gemini command renderer lives under the installer targets. The
+  host-literal guard stays green with an empty allowlist.
+<!-- id: REQ-AGENTSWITCH-017.A2 -->
+- Moving them changes no behaviour: the full test suite passes unchanged
+  apart from import paths.
