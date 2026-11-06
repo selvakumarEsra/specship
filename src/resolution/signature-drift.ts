@@ -21,6 +21,8 @@
  * The kind is an explanation only. It never changes a link's state.
  */
 
+import type { SpecLink } from '../types';
+import { linkSourceLabel } from './link-repoint';
 import type { SpecLinkDriftKind } from '../types';
 
 /** One parsed parameter. `type` is null for an untyped parameter. */
@@ -306,9 +308,12 @@ export function formatDriftedLine(
     targetFilePath: string;
     targetQualifiedName: string;
     provenance: string;
+    metadata?: Record<string, unknown>;
   }
 ): string {
   const label = formatDriftLabel(link);
   const drift = label ? ` [${label}]` : '';
-  return `#${link.id} [${link.state}${drift}] ${link.specId} → ${link.targetFilePath}:${link.targetQualifiedName} <${link.provenance}>`;
+  // The same source label specship_spec prints (REQ-LINKACC-012).
+  const source = linkSourceLabel(link as Pick<SpecLink, 'provenance' | 'metadata'>);
+  return `#${link.id} [${link.state}${drift}] ${link.specId} → ${link.targetFilePath}:${link.targetQualifiedName} <${source}>`;
 }

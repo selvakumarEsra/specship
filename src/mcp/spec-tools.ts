@@ -1319,7 +1319,7 @@ export function renderLinkedSpecsForNode(cg: SpecShip, nodeId: string): string {
     const spec = sq.getSpecById(link.specId);
     const title = spec ? ` — ${spec.title}` : '';
     lines.push(
-      `- **${link.specId}**${title} · ${link.state}${link.driftAxis ? ` (${formatDriftLabel(link)})` : ''} · ${link.kind} <${link.provenance}>`
+      `- **${link.specId}**${title} · ${link.state}${link.driftAxis ? ` (${formatDriftLabel(link)})` : ''} · ${link.kind} <${linkSourceLabel(link)}>`
     );
   }
   return lines.join('\n');

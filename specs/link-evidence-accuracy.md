@@ -593,6 +593,7 @@ adds the followed-across-a-move provenance from REQ-LINKACC-005, and keeps
 the rest from regressing.
 
 implementations:
+  - src/resolution/signature-drift.ts:formatDriftedLine
   - src/mcp/spec-tools.ts:formatLink
   - src/resolution/link-repoint.ts:linkSourceLabel
   - src/db/spec-queries.ts:confidenceRank
@@ -600,6 +601,7 @@ implementations:
   - src/db/spec-queries.ts:SpecQueries.upsertSpecLink
 
 verifies:
+  - __tests__/spec-link-provenance-display.test.ts:reqLinkacc012DriftedLineSameLabel
   - __tests__/spec-link-provenance-display.test.ts:reqLinkacc012A1
   - __tests__/spec-link-provenance-display.test.ts:reqLinkacc012A2
   - __tests__/spec-link-provenance-display.test.ts:reqLinkacc012A3

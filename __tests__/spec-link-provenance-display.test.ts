@@ -22,6 +22,7 @@ import type { SpecQueries } from '../src/db/spec-queries';
 import { confidenceRank } from '../src/db/spec-queries';
 import { formatLink } from '../src/mcp/spec-tools';
 import { linkSourceLabel } from '../src/resolution/link-repoint';
+import { formatDriftedLine } from '../src/resolution/signature-drift';
 import type { SpecLink, SpecLinkProvenance } from '../src/types';
 
 const fts5Available = (() => {
@@ -83,6 +84,18 @@ function tagOf(line: string): string {
 }
 
 describe('specship_spec link provenance and confidence (REQ-LINKACC-012)', () => {
+  // One label everywhere: the `specship drifted` line uses linkSourceLabel too.
+  function reqLinkacc012DriftedLineSameLabel(): void {
+    const drifted = (over: Partial<SpecLink>) =>
+      formatDriftedLine({ ...link({ state: 'drifted', driftAxis: 'code', ...over }) });
+    const testTitle = { provenance: 'code-comment' as SpecLinkProvenance, kind: 'tests' as const, metadata: { evidenceSource: 'test-title' } };
+    expect(drifted(testTitle)).toContain('<test-title>');
+    const moved = { metadata: { repointed: { from: { file: 'src/old.ts', name: 'foo' }, to: { file: 'src/a.ts', name: 'foo' }, at: 1 } } };
+    expect(drifted(moved)).toContain(`<${linkSourceLabel(link(moved))}>`);
+    expect(drifted(moved)).toContain('followed-move');
+    expect(drifted({})).toContain('<spec-declaration>');
+  }
+
   function reqLinkacc012A1(): void {
     const cases: Array<[Partial<SpecLink>, string]> = [
       [{ provenance: 'agent-asserted', confidence: 1.0 }, 'agent-asserted (1.00)'],
@@ -103,6 +116,7 @@ describe('specship_spec link provenance and confidence (REQ-LINKACC-012)', () =>
     }
   }
   it('REQ-LINKACC-012.A1: each link line names its provenance and confidence', reqLinkacc012A1);
+  it('REQ-LINKACC-012.A1: specship drifted labels a link the same way specship_spec does', reqLinkacc012DriftedLineSameLabel);
 
   function reqLinkacc012A2(): void {
     const moved = link({
