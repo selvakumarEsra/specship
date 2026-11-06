@@ -456,6 +456,15 @@ export class SpecShip {
    * Evidence gates (REQ-VEVID-002) stay with the caller. On the instance so the
    * MCP tool and the desktop server's verify route share one rule.
    */
+  /**
+   * The file-derived test evidence a promotion needs (REQ-VEVID-002,
+   * REQ-LINKACC-001): the link's spec and its criteria. On the instance so the
+   * desktop server's verify route applies the same gate as the MCP tool.
+   */
+  verificationEvidence(link: SpecLink): SpecLink[] {
+    return evidenceLinksFor(this.specQueries, link);
+  }
+
   recordLinkVerification(
     link: SpecLink,
     input: { result: 'pass' | 'fail'; reason?: string; evidence?: string[] }
@@ -477,12 +486,14 @@ export class SpecShip {
     const verification: Record<string, unknown> = {
       result: input.result,
       verifiedAt: new Date().toISOString(),
-      basis: run ? 'run' : 'hand',
+      // Run-backed only when a run covers ALL of the link's evidence; a run
+      // covering some of it still refuses a pass on a failure (A3).
+      basis: run?.complete ? 'run' : 'hand',
     };
     if (input.reason) verification.reason = input.reason;
     const evidence = (input.evidence ?? []).filter((e) => typeof e === 'string' && e.length > 0);
     if (evidence.length > 0) verification.evidence = evidence;
-    if (run) {
+    if (run?.complete) {
       verification.run = {
         id: run.id,
         ...(run.commit ? { commit: run.commit } : {}),

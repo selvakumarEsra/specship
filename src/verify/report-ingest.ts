@@ -32,8 +32,10 @@ export interface CoveringRun {
   ranAt: string;
   commit?: string;
   results: RunTestResult[];
-  /** The tests that failed in this run. */
+  /** Tests whose most recent recorded result is a failure, in any run. */
   failed: string[];
+  /** True when every evidence link has a recorded run (otherwise only some are covered). */
+  complete: boolean;
 }
 
 /**
@@ -76,12 +78,14 @@ export function coveringRun(evidenceLinks: SpecLink[]): CoveringRun | null {
     recs.push({ run, v: v! });
   }
   if (recs.length === 0) return null;
+  // The newest run names the record; the results are every evidence link's
+  // OWN latest result (an ingest rewrites only the links its report ran), so a
+  // test that failed in an older run and was not re-run still counts as failed.
   const newest = recs.reduce((a, b) => ((b.run.ranAt as string) > (a.run.ranAt as string) ? b : a));
   const id = newest.run.id as string;
 
   const seen = new Map<string, RunTestResult['status']>();
-  for (const { run, v } of recs) {
-    if (run.id !== id) continue;
+  for (const { v } of recs) {
     let results: RunTestResult[] = [];
     if (Array.isArray(v.results)) {
       results = v.results.filter(
@@ -95,7 +99,7 @@ export function coveringRun(evidenceLinks: SpecLink[]): CoveringRun | null {
       results = v.evidence.filter((e): e is string => typeof e === 'string').map((test) => ({ test, status }));
     }
     for (const r of results) {
-      // A test failing anywhere in the run stays failed.
+      // A test failing in its latest recorded result stays failed.
       if (seen.get(r.test) !== 'failed') seen.set(r.test, r.status);
     }
   }
@@ -106,6 +110,7 @@ export function coveringRun(evidenceLinks: SpecLink[]): CoveringRun | null {
     ranAt: newest.run.ranAt as string,
     commit: typeof newest.run.commit === 'string' ? newest.run.commit : undefined,
     results,
+    complete: recs.length === evidenceLinks.length,
     failed: results.filter((r) => r.status === 'failed').map((r) => r.test),
   };
 }

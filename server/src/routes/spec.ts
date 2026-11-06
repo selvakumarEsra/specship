@@ -477,13 +477,13 @@ export async function registerSpecRoutes(app: FastifyInstance): Promise<void> {
     // File-derived evidence only (REQ-REVINT-005.A2): an agent-asserted `tests`
     // link is a DB-only row, so it can't underwrite a promotion.
     if (body.result === 'pass' && link.kind === 'implements') {
-      const hasEvidence = sq
-        .getLinksBySpec(link.specId)
-        .some(
-          (l) =>
-            l.kind === 'tests' &&
-            (l.provenance === 'spec-declaration' || l.provenance === 'code-comment'),
-        );
+      // The MCP tool's gate, shared on the instance: criterion evidence counts
+      // and only file-derived test evidence does (REQ-LINKACC-001/006).
+      const hasEvidence = typeof cg.verificationEvidence === 'function'
+        ? cg.verificationEvidence(link).length > 0
+        : sq.getLinksBySpec(link.specId).some(
+            (l) => l.kind === 'tests' && (l.provenance === 'spec-declaration' || l.provenance === 'code-comment'),
+          );
       if (!hasEvidence) {
         return reply.code(409).send({
           error: `no test evidence linked to ${link.specId} — declare its proving test via a "verifies:" block in the spec (or an @verifies comment on the test) before promoting to verified`,

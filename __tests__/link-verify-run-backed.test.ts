@@ -17,6 +17,7 @@ import SpecShip from '../src';
 import type { SpecLink } from '../src/types';
 import { handleSpecshipLinkVerify, handleSpecshipSpec, formatLink } from '../src/mcp/spec-tools';
 import { registerSpecRoutes } from '../server/src/routes/spec';
+import { coveringRun } from '../src/verify/report-ingest';
 
 const fts5Available = (() => {
   for (const probe of [
@@ -231,6 +232,50 @@ describe.skipIf(!fts5Available)('a verification records the test run it rests on
     expect(out).toMatch(/↳ verified \S+ · run run-1 · commit abc123 · 1 passed/);
   }
 
+  // Two evidence links, each holding its own latest result: X failed in run-1
+  // and run-2 re-ran only Y. X's failure must still count.
+  async function reqLinkacc006A3OlderFailureCounts(): Promise<void> {
+    const ev = (test: string, status: 'passed' | 'failed', id: string, ranAt: string): SpecLink => ({
+      ...link('REQ-RB-001', 'tests'),
+      metadata: { verification: { result: status === 'passed' ? 'pass' : 'fail', run: { id, ranAt, commit: 'c' }, results: [{ test, status }] } },
+    });
+    const cr = coveringRun([ev('X', 'failed', 'run-1', '2026-11-06T01:00:00Z'), ev('Y', 'passed', 'run-2', '2026-11-06T02:00:00Z')])!;
+    expect(cr.id).toBe('run-2');
+    expect(cr.failed).toEqual(['X']);
+    expect(cr.complete).toBe(true);
+  }
+
+  async function reqLinkacc006PartialCoverageIsHand(): Promise<void> {
+    ingest('passed'); // covers checksTotal only
+    const now = Date.now();
+    const spec = cg.getSpecQueries().getSpecById('REQ-RB-001')!;
+    cg.getSpecQueries().upsertSpecLink({
+      specId: 'REQ-RB-001', targetFilePath: '__tests__/other.test.ts', targetQualifiedName: 'reviewedByHand',
+      targetNodeKind: 'function', kind: 'tests', state: 'implemented', driftAxis: null,
+      specHashAtLink: spec.contentHash, provenance: 'spec-declaration', confidence: 1, createdAt: now, updatedAt: now,
+    });
+    const res = await handleSpecshipLinkVerify(cg, { link_id: link('REQ-RB-001').id, result: 'pass', reason: 'partly covered' });
+    expect(JSON.stringify(res)).not.toMatch(/Cannot verify/);
+    expect(verification(link('REQ-RB-001')).basis).toBe('hand');
+    expect(verification(link('REQ-RB-001')).run).toBeUndefined();
+  }
+
+  async function reqLinkacc006DashboardGateCountsCriteria(): Promise<void> {
+    const sq = cg.getSpecQueries();
+    const now = Date.now();
+    for (const [id, kind, parentId] of [['REQ-RB-009', 'requirement', 'RB-DOC'], ['REQ-RB-009.A1', 'acceptance', 'REQ-RB-009']] as const) {
+      sq.insertSpec({ id, kind, title: id, body: 'b', format: 'markdown', sourcePath: 'specs/run-backed.md', parentId, contentHash: 'h9', createdAt: now, updatedAt: now });
+    }
+    const base = { targetNodeKind: 'function' as const, state: 'implemented' as const, driftAxis: null, specHashAtLink: 'h9', confidence: 1, createdAt: now, updatedAt: now };
+    sq.upsertSpecLink({ ...base, specId: 'REQ-RB-009', targetFilePath: 'src/total.ts', targetQualifiedName: 'total', kind: 'implements', provenance: 'spec-declaration' });
+    sq.upsertSpecLink({ ...base, specId: 'REQ-RB-009.A1', targetFilePath: '__tests__/total.test.ts', targetQualifiedName: 'checksTotal', kind: 'tests', provenance: 'spec-declaration' });
+    const impl = link('REQ-RB-009');
+    expect(cg.verificationEvidence(impl).length).toBe(1);
+    const reply = await app.inject({ method: 'POST', url: '/api/spec/link-verify', payload: { link_id: impl.id, result: 'pass', reason: 'criterion evidence' } });
+    expect(reply.statusCode).toBe(200);
+    expect(link('REQ-RB-009').state).toBe('verified');
+  }
+
   // The dashboard route records the same basis and run as the MCP tool.
   async function reqLinkacc006DashboardRouteSameRecord(): Promise<void> {
     ingest('passed');
@@ -256,4 +301,7 @@ describe.skipIf(!fts5Available)('a verification records the test run it rests on
   it('REQ-LINKACC-006.A3 a failed test in the covering run refuses a pass verify, naming the test', reqLinkacc006A3);
   it('REQ-LINKACC-006.A4 specship_spec names the commit of the run behind a verified link', reqLinkacc006A4);
   it('REQ-LINKACC-006 the dashboard route records the same verification as the tool', reqLinkacc006DashboardRouteSameRecord);
+  it('REQ-LINKACC-006.A3 a test that failed in an older run and was not re-run still refuses a pass', reqLinkacc006A3OlderFailureCounts);
+  it('REQ-LINKACC-006.A1 a run covering only some of the evidence is not run-backed', reqLinkacc006PartialCoverageIsHand);
+  it('REQ-LINKACC-006 the dashboard accepts criterion-level evidence, as the tool does', reqLinkacc006DashboardGateCountsCriteria);
 });

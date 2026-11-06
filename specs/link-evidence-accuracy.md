@@ -342,6 +342,9 @@ implementations:
   - server/src/routes/spec.ts:registerSpecRoutes
 
 verifies:
+  - __tests__/link-verify-run-backed.test.ts:reqLinkacc006A3OlderFailureCounts
+  - __tests__/link-verify-run-backed.test.ts:reqLinkacc006PartialCoverageIsHand
+  - __tests__/link-verify-run-backed.test.ts:reqLinkacc006DashboardGateCountsCriteria
   - __tests__/link-verify-run-backed.test.ts:reqLinkacc006A1
   - __tests__/link-verify-run-backed.test.ts:reqLinkacc006A2
   - __tests__/link-verify-run-backed.test.ts:reqLinkacc006A3
