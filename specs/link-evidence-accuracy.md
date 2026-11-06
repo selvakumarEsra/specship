@@ -223,6 +223,7 @@ implementations:
   - src/verify/report-ingest.ts:clearRenameOnlyDrift
   - src/verify/report-ingest.ts:ingestTestReport
   - src/graph/spec-coverage.ts:rollup
+  - server/src/routes/spec.ts:registerSpecRoutes
   - ui/src/review-groups.ts:bodyChangedNotes
   - ui/src/review-groups.ts:classifyRequirement
   - ui/src/pages/review.tsx:ReviewRowItem
