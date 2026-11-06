@@ -274,10 +274,14 @@ implementations:
   - src/resolution/spec-link-resolver.ts:SpecLinkResolver.findRepointTarget
   - src/resolution/spec-link-resolver.ts:SpecLinkResolver.addedSymbols
   - src/resolution/spec-link-resolver.ts:SpecLinkResolver.repointLink
+  - src/resolution/spec-link-resolver.ts:SpecLinkResolver.resolveAll
+  - src/resolution/spec-link-resolver.ts:SpecLinkResolver.resolveLinksForFiles
   - src/resolution/spec-link-resolver.ts:nodeLogicalKey
   - src/db/spec-queries.ts:SpecQueries.updateSpecLinkTarget
   - src/db/spec-queries.ts:SpecQueries.hasRepointableLinks
   - src/db/queries.ts:QueryBuilder.getNodeLogicalKeys
+  - src/index.ts:SpecShip.indexAll
+  - src/index.ts:SpecShip.sync
   - src/index.ts:SpecShip.snapshotNodeKeysForRepoint
   - src/index.ts:SpecShip.persistRepoints
   - src/index.ts:SpecShip.reindexRepointedSpecFile
