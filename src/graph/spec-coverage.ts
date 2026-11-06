@@ -49,6 +49,12 @@ export interface CriterionCoverage {
   kind: Spec['kind'];
   implementsLinks: LinkRollup;
   testsLinks: LinkRollup;
+  /**
+   * Every other link kind (`validates`, …). Not evidence, but part of whether
+   * the requirement counts as verified, the same as `specship_spec`'s status
+   * (REQ-LINKACC-007.A3).
+   */
+  otherLinks: LinkRollup;
   verdict: CoverageVerdict;
   /**
    * The evidence kind this criterion requires (REQ-PIPETRUST-001) — declared
@@ -193,6 +199,7 @@ function coverageOf(
   const links = sq.getLinksBySpec(spec.id);
   const testsLinks = links.filter((l) => l.kind === 'tests');
   const implementsLinks = links.filter((l) => l.kind === 'implements');
+  const otherLinks = links.filter((l) => l.kind !== 'tests' && l.kind !== 'implements');
   const kinds = evidenceKindCoverage(spec.body ?? spec.title, testsLinks, {
     ...kindOpts,
     implementsLinks: [...(kindOpts.extraImplements ?? []), ...implementsLinks],
@@ -203,6 +210,7 @@ function coverageOf(
     kind: spec.kind,
     implementsLinks: rollup(implementsLinks),
     testsLinks: rollup(testsLinks),
+    otherLinks: rollup(otherLinks),
     verdict: verdictFor(testsLinks),
     ...kinds,
   };
@@ -334,6 +342,49 @@ export function criteriaMissingKind(report: SpecCoverageReport): CriterionCovera
 export function requireKindsExitCode(report: SpecCoverageReport, requireKinds: boolean): number {
   if (!requireKinds) return 0;
   return criteriaMissingKind(report).length > 0 ? 1 : 0;
+}
+
+/** A verified requirement's untested criteria (REQ-LINKACC-007). */
+export interface UntestedCriteriaGap {
+  untested: CriterionCoverage[];
+  total: number;
+}
+
+/**
+ * True when the requirement reads `verified` in the lifecycle sense: it has at
+ * least one link (on itself or a criterion) and every implements/tests link is
+ * `verified` — the same rule `specship_spec`'s rolled-up status applies, judged
+ * from the coverage rollup so every surface reads one source.
+ */
+function rollupIsVerified(req: RequirementCoverage): boolean {
+  let count = 0;
+  for (const node of [req, ...req.criteria]) {
+    // Every link kind, as `specship_spec`'s status counts them (A3).
+    for (const r of [node.implementsLinks, node.testsLinks, node.otherLinks]) {
+      count += r.count;
+      if ((r.states.verified ?? 0) !== r.count) return false;
+    }
+  }
+  return count > 0;
+}
+
+/**
+ * The criteria of a VERIFIED requirement that have no test (REQ-LINKACC-007).
+ * `null` when the requirement is not verified (A4), has no criteria, or every
+ * criterion is tested (A2) — callers then show plain status with no count.
+ * "Untested" is the rollup's own `untested` verdict, so `specship_spec`,
+ * `specship spec list` and Review count the same criteria (A3).
+ */
+export function untestedCriteria(req: RequirementCoverage): UntestedCriteriaGap | null {
+  if (req.criteria.length === 0 || !rollupIsVerified(req)) return null;
+  const untested = req.criteria.filter((c) => c.verdict === 'untested');
+  if (untested.length === 0) return null;
+  return { untested, total: req.criteria.length };
+}
+
+/** `"verified · 2 of 4 criteria untested"`, or plain `"verified"` with no gap. */
+export function formatVerifiedSuffix(gap: UntestedCriteriaGap | null): string {
+  return gap ? `verified · ${gap.untested.length} of ${gap.total} criteria untested` : 'verified';
 }
 
 /**

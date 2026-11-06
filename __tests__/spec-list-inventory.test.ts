@@ -199,6 +199,18 @@ describe.skipIf(!fts5Available)('specship_spec — list mode (REQ-FUNNEL-007)', 
     expect(statusOf(out, 'REQ-S-ACCEPTAGG.A1')).toBeNull();
   });
 
+  it('a verified row carries its untested-criteria count (REQ-LINKACC-007)', async () => {
+    insertSpec({ id: 'REQ-GAP', kind: 'requirement', title: 'Verified with a gap' });
+    linkSpec('REQ-GAP', 'verified', 'a');
+    insertSpec({ id: 'REQ-GAP.A1', kind: 'acceptance', title: 'c1', parentId: 'REQ-GAP' });
+    insertSpec({ id: 'REQ-GAP.A2', kind: 'acceptance', title: 'c2', parentId: 'REQ-GAP' });
+    const out = textOf(await handleSpecshipSpec(cg, { list: true }));
+    const line = out.split('\n').find((l) => l.trimStart().startsWith('- REQ-GAP '));
+    expect(line).toMatch(/\[verified · 2 of 2 criteria untested\]$/);
+    // The totals still count it as plain `verified`.
+    expect(out).toContain('- verified 1');
+  });
+
   // ---- per-status totals + header
 
   it('renders a correct per-status totals line and header counts', async () => {

@@ -215,6 +215,8 @@ export interface CriterionCoverage {
   kind: string;
   implementsLinks: LinkRollup;
   testsLinks: LinkRollup;
+  /** Every other link kind; absent from servers older than REQ-LINKACC-007's fix. */
+  otherLinks?: LinkRollup;
   verdict: CoverageVerdict;
 }
 

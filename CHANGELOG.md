@@ -9,6 +9,10 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### New Features
+
+- A verified requirement that still has acceptance criteria with no test now says so: `specship_spec` shows "verified · 2 of 4 criteria untested" and lists the untested criteria, the new `specship spec list` and the Review screen show the same count, and a requirement whose criteria are all tested still reads plain "verified".
+
 ### Fixes
 
 - Verifying a requirement now counts tests that name its acceptance criteria, not only tests that name the requirement itself.

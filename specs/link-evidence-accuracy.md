@@ -247,6 +247,22 @@ tests MUST show no count.
 
 implementations:
   - src/graph/spec-coverage.ts:computeSpecCoverage
+  - src/graph/spec-coverage.ts:untestedCriteria
+  - src/graph/spec-coverage.ts:formatVerifiedSuffix
+  - src/mcp/spec-tools.ts:buildInventory
+  - src/mcp/spec-tools.ts:inventoryRows
+  - src/mcp/spec-tools.ts:handleSpecshipSpec
+  - ui/src/review-groups.ts:classifyRequirement
+  - ui/src/review-groups.ts:untestedCriteriaCount
+  - ui/src/pages/review.tsx:ReviewRowItem
+
+verifies:
+  - __tests__/spec-coverage-untested.test.ts:reqLinkacc007A1
+  - __tests__/spec-coverage-untested.test.ts:reqLinkacc007A2
+  - __tests__/spec-coverage-untested.test.ts:reqLinkacc007A3
+  - __tests__/spec-coverage-untested.test.ts:reqLinkacc007A4
+  - __tests__/spec-coverage-untested.test.ts:reqLinkacc007A3OtherLinkKinds
+  - __tests__/spec-coverage-untested.test.ts:reqLinkacc007A1SpecListCli
 
 ## Acceptance
 <!-- id: REQ-LINKACC-007.A1 -->

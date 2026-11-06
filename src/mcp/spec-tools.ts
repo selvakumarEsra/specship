@@ -20,8 +20,8 @@ import { persistLinkToSpecFile } from '../spec-quality/link-persist';
 import type { ToolDefinition, ToolResult } from './tools';
 import { canonicalQualifiedName } from '../resolution/spec-link-resolver';
 import { isNonTestEvidence } from '../resolution/test-title-links';
-import { formatCoverageLine } from '../graph/spec-coverage';
-import type { SpecCoverageReport } from '../graph/spec-coverage';
+import { formatCoverageLine, untestedCriteria, formatVerifiedSuffix } from '../graph/spec-coverage';
+import type { SpecCoverageReport, RequirementCoverage } from '../graph/spec-coverage';
 import { summarizeBriefFunnel, ideaCaptureFields } from '../resolution/brief-link-resolver';
 import type { FunnelLookup } from '../resolution/brief-link-resolver';
 import { resolveInstalledVersion, defaultGlobalNpmRoot } from '../knowledge/stale';
@@ -540,6 +540,37 @@ function deriveRequirementStatus(sq: FunnelLookup, req: Spec): RequirementStatus
   return 'in-progress';
 }
 
+/** One requirement's inventory row, in structured form (`specship spec list --json`). */
+export interface InventoryRow {
+  id: string;
+  title: string;
+  status: RequirementStatus;
+  /** REQ-LINKACC-007: ids of a verified requirement's untested criteria; null when none / not verified. */
+  untestedCriteria: string[] | null;
+  criteriaCount: number | null;
+}
+
+/** Structured inventory rows — the same status + untested rule {@link buildInventory} renders. */
+export function inventoryRows(sq: FunnelLookup, coverage?: SpecCoverageReport): InventoryRow[] {
+  const cov = new Map<string, RequirementCoverage>();
+  for (const r of coverage?.requirements ?? []) cov.set(r.specId, r);
+  return sq
+    .getAllSpecs()
+    .filter((s) => s.kind === 'requirement')
+    .map((req) => {
+      const status = deriveRequirementStatus(sq, req);
+      const c = cov.get(req.id);
+      const gap = status === 'verified' && c ? untestedCriteria(c) : null;
+      return {
+        id: req.id,
+        title: req.title,
+        status,
+        untestedCriteria: gap ? gap.untested.map((u) => u.specId) : null,
+        criteriaCount: gap ? gap.total : null,
+      };
+    });
+}
+
 /**
  * Build the flat spec inventory markdown (REQ-FUNNEL-007). Shown when
  * `specship_spec` is called with `list: true`: unlinked briefs as `idea`
@@ -548,7 +579,7 @@ function deriveRequirementStatus(sq: FunnelLookup, req: Spec): RequirementStatus
  * section, and a per-status totals line across all requirements. An empty index
  * returns a clean empty listing, never an error.
  */
-function buildInventory(sq: FunnelLookup): string {
+export function buildInventory(sq: FunnelLookup, coverage?: SpecCoverageReport): string {
   const all = sq.getAllSpecs();
   if (all.length === 0) {
     return '# Spec inventory\n\n_No specs or briefs yet. Author one with /specship:spec new._';
@@ -576,6 +607,17 @@ function buildInventory(sq: FunnelLookup): string {
     'needs-attention': 0,
   };
   for (const st of statusOf.values()) totals[st]++;
+
+  // REQ-LINKACC-007: a verified row carries its untested-criteria count, read
+  // from the coverage rollup (computed once for the project, not per row).
+  const coverageOf = new Map<string, RequirementCoverage>();
+  for (const r of coverage?.requirements ?? []) coverageOf.set(r.specId, r);
+  const statusLabel = (id: string): string => {
+    const st = statusOf.get(id) ?? 'authored';
+    if (st !== 'verified') return st;
+    const cov = coverageOf.get(id);
+    return cov ? formatVerifiedSuffix(untestedCriteria(cov)) : st;
+  };
 
   const lines: string[] = [];
   lines.push('# Spec inventory');
@@ -613,7 +655,7 @@ function buildInventory(sq: FunnelLookup): string {
       }
       for (const req of reqs) {
         grouped.add(req.id);
-        lines.push(`- ${req.id} — ${req.title}  [${statusOf.get(req.id) ?? 'authored'}]`);
+        lines.push(`- ${req.id} — ${req.title}  [${statusLabel(req.id)}]`);
       }
     }
   }
@@ -623,7 +665,7 @@ function buildInventory(sq: FunnelLookup): string {
     lines.push('');
     lines.push('## Ungrouped requirements');
     for (const req of ungrouped) {
-      lines.push(`- ${req.id} — ${req.title}  [${statusOf.get(req.id) ?? 'authored'}]`);
+      lines.push(`- ${req.id} — ${req.title}  [${statusLabel(req.id)}]`);
     }
   }
 
@@ -701,7 +743,7 @@ export async function handleSpecshipSpec(
   // between query and the no-arg funnel so query, funnel, spec_id detail, and
   // behaviour_surface are all unchanged.
   if (args.list === true) {
-    return text(buildInventory(sq));
+    return text(buildInventory(sq, cg.getSpecCoverage()));
   }
 
   // Ideas mode (REQ-IDEAS-002): `ideas: true` returns the ideas review view —
@@ -750,6 +792,20 @@ export async function handleSpecshipSpec(
   lines.push(`# ${spec.id} — ${spec.title}`);
   lines.push(`*kind: ${spec.kind}*${spec.owner ? ` · *owner: ${spec.owner}*` : ''}${spec.priority ? ` · *priority: ${spec.priority}*` : ''}`);
   lines.push(`*source: ${spec.sourcePath}${spec.startLine ? `:${spec.startLine}` : ''}*`);
+  // REQ-LINKACC-007: a verified requirement names its untested criteria. The
+  // count comes from the coverage rollup, so Review and this view agree (A3);
+  // a requirement that is not verified shows no count (A4).
+  if (spec.kind === 'requirement') {
+    const cov = cg.getSpecCoverage(spec.id).requirements.find((r) => r.specId === spec.id);
+    if (cov && deriveRequirementStatus(sq, spec) === 'verified') {
+      const gap = untestedCriteria(cov);
+      lines.push(`**Status:** ${formatVerifiedSuffix(gap)}`);
+      if (gap) {
+        lines.push('**Untested criteria:**');
+        for (const c of gap.untested) lines.push(`- ${c.specId} — ${c.title}`);
+      }
+    }
+  }
   lines.push('');
   if (parent) {
     lines.push(`**Parent:** ${parent.id} — ${parent.title}`);
