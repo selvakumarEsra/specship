@@ -4,6 +4,11 @@ title: Workflow step timing and verify test reports
 owner: workflows
 priority: medium
 version: 1
+epicKey: SSHIP-847
+jira_issue_REQ-WFGATE-001: SSHIP-848
+jira_fingerprint_REQ-WFGATE-001: f265f4833e890060
+jira_issue_REQ-WFGATE-002: SSHIP-854
+jira_fingerprint_REQ-WFGATE-002: 1ff2f6c32dea4c19
 ---
 
 <!-- id: WFGATE-DOC -->
