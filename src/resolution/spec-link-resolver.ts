@@ -56,6 +56,7 @@ import {
 } from './body-fingerprint';
 import * as fs from 'fs';
 import * as path from 'path';
+import { createHash } from 'crypto';
 
 /** Pattern: `// @implements REQ-X` or `# @implements REQ-X` etc. */
 const CODE_COMMENT_IMPL = /@implements\s+([A-Za-z][A-Za-z0-9_.-]*)/g;
@@ -188,6 +189,19 @@ export interface ResolvePassOptions {
    * target is orphaned as before.
    */
   priorNodeKeys?: Set<string>;
+}
+
+/**
+ * True for a file-level content link (REQ-LINKACC-009): what a bare-path
+ * `implementations:` bullet declares — kind `implements`, target kind `file`
+ * and an EMPTY qualified name. The empty name keeps it apart from test-title
+ * `tests` links, which also target a `file` node but carry its name and no
+ * content baseline on purpose.
+ */
+export function isFileContentLink(
+  link: Pick<SpecLink, 'targetNodeKind' | 'targetQualifiedName' | 'kind'>
+): boolean {
+  return link.targetNodeKind === 'file' && link.targetQualifiedName === '' && link.kind === 'implements';
 }
 
 /** How many earlier re-points a link's metadata keeps. */
@@ -360,6 +374,22 @@ export class SpecLinkResolver {
   }
 
   /**
+   * Re-check only the file-level links (REQ-LINKACC-009). A sync that changed
+   * no indexed code and no spec file skips {@link resolveAll}, but a bare-path
+   * link may point at a file the indexer never tracks (a command markdown
+   * file), so its content check runs on every sync. Cheap: one hash per link.
+   */
+  resolveFileLinks(): SpecLinkResolverStats {
+    const stats = this.makeStats();
+    for (const link of this.specQueries.getAllLinks()) {
+      if (!isFileContentLink(link)) continue;
+      stats.scanned++;
+      this.resolveFileLink(link, stats);
+    }
+    return stats;
+  }
+
+  /**
    * Re-resolve all links whose logical target lives in `filePath`.
    */
   private resolveLinksForFile(filePath: string, stats: SpecLinkResolverStats, pass: ResolvePass): void {
@@ -378,6 +408,13 @@ export class SpecLinkResolver {
     // recorder owns those transitions, and a code-graph re-resolve pass must
     // not flip them to orphaned.
     if (link.targetFilePath.startsWith('jira://')) {
+      return;
+    }
+
+    // File-level links (REQ-LINKACC-009) have no symbol to resolve: their
+    // baseline is a fingerprint of the whole file's content.
+    if (isFileContentLink(link)) {
+      this.resolveFileLink(link, stats);
       return;
     }
 
@@ -482,6 +519,109 @@ export class SpecLinkResolver {
           `[SpecLinkResolver] drift(code, ${driftKind}) ${link.targetQualifiedName} for spec ${link.specId}`
         );
       }
+    }
+  }
+
+  /**
+   * Re-check a file-level link against its file's content (REQ-LINKACC-009).
+   *
+   * - File missing (or no project root): `orphaned`, unless the state is sticky.
+   * - Orphaned and the file is back: `implemented`, adopting the current hash.
+   * - No baseline yet: adopt the current hash silently.
+   * - Same hash (a touch, or identical bytes rewritten): nothing changes (A3);
+   *   a reverted edit drops a body-changed marker.
+   * - Different hash on a sticky (`verified` / `broken`) link: the state is
+   *   kept — verified links never code-drift (DOM-SPECSHIP-001) — and the
+   *   REQ-LINKACC-004 marker `metadata.bodyChanged` is set once instead.
+   *   Re-verifying re-baselines the hash and clears it.
+   * - Different hash otherwise: `drifted`, axis `code`, kind `file-change` (A2).
+   */
+  private resolveFileLink(link: SpecLink, stats: SpecLinkResolverStats): void {
+    const now = Date.now();
+    const fp = this.fileFingerprint(link.targetFilePath);
+    const fileNode = this.findLogicalTarget(link.targetFilePath, link.targetFilePath, 'file');
+    this.specQueries.updateSpecLinkResolution(link.id, fileNode?.id ?? null, now);
+
+    if (fp === null) {
+      if (!STICKY_STATES.has(link.state) && link.state !== 'orphaned') {
+        this.specQueries.updateSpecLinkState(link.id, 'orphaned', null, now);
+        stats.orphaned++;
+      }
+      return;
+    }
+    stats.reresolved++;
+
+    if (link.state === 'orphaned') {
+      this.specQueries.updateSpecLinkState(link.id, 'implemented', null, now);
+      this.specQueries.updateSpecLinkSigBaseline(link.id, fp, now);
+      stats.reattached++;
+      return;
+    }
+
+    const baseline = link.nodeSigAtLink;
+    if (baseline === undefined || baseline === '') {
+      this.specQueries.updateSpecLinkSigBaseline(link.id, fp, now);
+      return;
+    }
+
+    const meta: Record<string, unknown> = { ...(link.metadata ?? {}) };
+    if (baseline === fp) {
+      if (meta.bodyChanged) {
+        delete meta.bodyChanged;
+        this.specQueries.updateSpecLinkMetadata(link.id, meta, now);
+      }
+      return;
+    }
+
+    if (STICKY_STATES.has(link.state)) {
+      if (meta.bodyChanged) return;
+      const marker: BodyChangedMarker = { at: now, since: link.state };
+      meta.bodyChanged = marker;
+      this.specQueries.updateSpecLinkMetadata(link.id, meta, now);
+      return;
+    }
+
+    if (link.state === 'drifted' && link.driftAxis === 'code' && link.driftKind === 'file-change') return;
+    this.specQueries.updateSpecLinkState(link.id, 'drifted', 'code', now, 'file-change');
+    stats.driftedCode++;
+    if (link.state !== 'drifted') {
+      this.specQueries.updateSpecLinkMetadata(
+        link.id,
+        { ...meta, preDrift: { state: link.state, at: now } },
+        now
+      );
+      stats.transitions.push({
+        specId: link.specId,
+        fromState: link.state,
+        axis: 'code',
+        symbol: link.targetFilePath,
+        kind: 'file-change',
+      });
+    }
+    if (this.opts.verbose) {
+      // eslint-disable-next-line no-console
+      console.error(`[SpecLinkResolver] drift(code, file-change) ${link.targetFilePath} for spec ${link.specId}`);
+    }
+  }
+
+  /**
+   * `sha256:<hex>` of a project file's raw bytes, or `null` when it can't be
+   * read: no project root, a path outside the root, missing, or not a file
+   * (REQ-LINKACC-009). Read from disk rather than the `files` table, which
+   * only covers indexed source files — a bare path to a command markdown file
+   * must still be fingerprinted.
+   */
+  fileFingerprint(relPath: string): string | null {
+    const root = this.opts.projectRoot;
+    if (!root || path.isAbsolute(relPath)) return null;
+    const abs = path.resolve(root, relPath);
+    const fromRoot = path.relative(root, abs);
+    if (fromRoot === '' || fromRoot.startsWith('..') || path.isAbsolute(fromRoot)) return null;
+    try {
+      const bytes = fs.readFileSync(abs);
+      return `sha256:${createHash('sha256').update(bytes).digest('hex')}`;
+    } catch {
+      return null;
     }
   }
 
@@ -675,6 +815,12 @@ export class SpecLinkResolver {
       const spec = specsByIdForHash.get(c.specId);
       if (!spec) continue; // spec hasn't been inserted yet — skip; resolver will retry on next sync.
 
+      if (isFileContentLink(c)) {
+        this.applyFileDeclaration(c, spec, now);
+        if (stats) stats.candidatesApplied++;
+        continue;
+      }
+
       const resolvedNode = this.findLogicalTarget(
         c.targetFilePath,
         c.targetQualifiedName,
@@ -706,6 +852,40 @@ export class SpecLinkResolver {
       });
       if (stats) stats.candidatesApplied++;
     }
+  }
+
+  /**
+   * Upsert a bare-path `implementations:` link (REQ-LINKACC-009): target kind
+   * `file`, empty qualified name, and the file's content fingerprint as its
+   * baseline in `nodeSigAtLink`. A missing file is `orphaned` (A4).
+   *
+   * An existing row keeps its baseline — re-extracting the spec in the same
+   * pass the file changed must not adopt the new content, or the change would
+   * never drift (A2) — and keeps a `file-change` drift. The resolve pass that
+   * follows owns every content transition ({@link resolveFileLink}).
+   */
+  private applyFileDeclaration(c: SpecLinkCandidate, spec: Spec, now: number): void {
+    const fp = this.fileFingerprint(c.targetFilePath);
+    const existing = this.specQueries.findLogicalLink(c.specId, c.targetFilePath, '', c.kind);
+    const codeDrift = existing?.state === 'drifted' && existing.driftAxis === 'code';
+    const fileNode = this.findLogicalTarget(c.targetFilePath, c.targetFilePath, 'file');
+    this.specQueries.upsertSpecLink({
+      specId: c.specId,
+      targetFilePath: c.targetFilePath,
+      targetQualifiedName: '',
+      targetNodeKind: 'file',
+      resolvedNodeId: fileNode?.id,
+      kind: c.kind,
+      state: codeDrift ? 'drifted' : fp ? 'implemented' : 'orphaned',
+      driftAxis: codeDrift ? 'code' : null,
+      driftKind: codeDrift ? existing?.driftKind ?? 'file-change' : null,
+      specHashAtLink: spec.contentHash,
+      nodeSigAtLink: existing?.nodeSigAtLink || fp || undefined,
+      provenance: 'spec-declaration' as SpecLinkProvenance,
+      confidence: 0.7,
+      createdAt: now,
+      updatedAt: now,
+    });
   }
 
   /**

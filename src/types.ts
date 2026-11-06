@@ -754,11 +754,12 @@ export type SpecLinkDriftAxis = 'spec' | 'code' | null;
  *  - `type-change`: same parameter count, but a parameter or the return type differs
  *  - `shape-change`: parameters added/removed, or any other difference
  *  - `unclassified`: a baseline or current signature is missing or cannot be parsed
+ *  - `file-change`: a file-level link's file content changed (REQ-LINKACC-009)
  *  - null when the link is not code-drifted
  *
  * An explanation only — it never changes the link's state.
  */
-export type SpecLinkDriftKind = 'rename-only' | 'type-change' | 'shape-change' | 'unclassified';
+export type SpecLinkDriftKind = 'rename-only' | 'type-change' | 'shape-change' | 'unclassified' | 'file-change';
 
 /**
  * How a spec link was created (highest confidence first).
