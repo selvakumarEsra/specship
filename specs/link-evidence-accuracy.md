@@ -251,8 +251,10 @@ implementations:
   - src/graph/spec-coverage.ts:formatVerifiedSuffix
   - src/mcp/spec-tools.ts:buildInventory
   - src/mcp/spec-tools.ts:inventoryRows
+  - src/mcp/spec-tools.ts:handleSpecshipSpec
   - ui/src/review-groups.ts:classifyRequirement
   - ui/src/review-groups.ts:untestedCriteriaCount
+  - ui/src/pages/review.tsx:ReviewRowItem
 
 verifies:
   - __tests__/spec-coverage-untested.test.ts:reqLinkacc007A1
