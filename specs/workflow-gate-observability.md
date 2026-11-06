@@ -89,8 +89,27 @@ report and the verify step's own result disagree, the view MUST show the
 outcome as failed and say that the two disagree.
 
 implementations:
+  - server/src/workflow-test-report.ts:readVerifyTestReport
+  - server/src/workflow-test-report.ts:verifyStepStatus
   - server/src/routes/workflow.ts:registerWorkflowRoutes
   - ui/src/components/run-detail.tsx:RunDetail
+  - ui/src/components/run-detail.tsx:TestReportPanel
+
+verifies:
+  - e2e/tests/run-test-report.spec.ts:reqWfgate002A1
+  - e2e/tests/run-test-report.spec.ts:reqWfgate002A2
+  - e2e/tests/run-test-report.spec.ts:reqWfgate002A3
+  - e2e/tests/run-test-report.spec.ts:reqWfgate002A4
+  - e2e/tests/run-test-report.spec.ts:reqWfgate002A5
+  - e2e/tests/run-test-report.spec.ts:reqWfgate002A6
+  - e2e/tests/run-test-report.spec.ts:reqWfgate002A7
+  - __tests__/workflow-test-report-route.test.ts:reqWfgate002A1
+  - __tests__/workflow-test-report-route.test.ts:reqWfgate002A2
+  - __tests__/workflow-test-report-route.test.ts:reqWfgate002A3
+  - __tests__/workflow-test-report-route.test.ts:reqWfgate002A4
+  - __tests__/workflow-test-report-route.test.ts:reqWfgate002A5
+  - __tests__/workflow-test-report-route.test.ts:reqWfgate002A6
+  - __tests__/workflow-test-report-route.test.ts:reqWfgate002A7
 
 ## Acceptance
 <!-- id: REQ-WFGATE-002.A1 -->
@@ -120,6 +139,10 @@ Test plan: REQ-WFGATE-001.A1–A5 are proven by the Playwright suite in
 `e2e/tests/run-step-timing.spec.ts`, which stubs the workflow API with fixed
 event timestamps. Fast unit cases for `deriveNodeViews` timing live in
 `ui/src/__tests__/runs-detail.test.tsx` but don't count as e2e evidence.
-REQ-WFGATE-002's tests don't exist yet: its UI criteria (A1–A6) need e2e
-specs of the same kind, and the report route (A1–A4 and A7) belongs in a
-server route test. Its `verifies:` block gets added when those are written.
+REQ-WFGATE-002.A1–A7 are proven by the Playwright suite in
+`e2e/tests/run-test-report.spec.ts`, which stubs the workflow API with fixed
+report bodies. What the report route really serves for each on-disk case
+(real report files, real run rows, a real purge) is proven in
+`__tests__/workflow-test-report-route.test.ts`, which also runs the bundled
+verify step's bash to show a rerun that fails before its tests leaves no
+report behind (the step deletes the previous attempt's report first).
