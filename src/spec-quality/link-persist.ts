@@ -44,6 +44,13 @@ export interface PersistLinkOptions {
    * a graph, and can miss syntax the extractor understands).
    */
   symbolResolved?: boolean;
+  /**
+   * An existing `path:Symbol` bullet this target takes the place of — the
+   * link followed its symbol to a new file or name (REQ-LINKACC-005). The old
+   * bullet is rewritten in place (or dropped, when the new target is already
+   * listed). When no such bullet exists the new one is added as usual.
+   */
+  replaces?: string;
 }
 
 export interface PersistLinkResult {
@@ -59,6 +66,13 @@ export interface PersistLinkResult {
 const ID_MARKER = /^\s*<!--\s*id:\s*([A-Za-z0-9._-]+)\s*-->\s*$/;
 const ACCEPTANCE_HEADING = /^#{1,6}\s+Acceptance\b/i;
 const BULLET = /^\s+[-*]\s+\S/;
+
+/** `path:A::b` → `path:A.b` — the separator-insensitive form bullets compare by. */
+function canonicalTarget(target: string): string {
+  const i = target.indexOf(':');
+  if (i === -1) return target;
+  return `${target.slice(0, i)}:${target.slice(i + 1).replace(/::/g, '.')}`;
+}
 
 /** `REQ-X.A1` → `REQ-X`; a requirement id is returned unchanged. */
 export function parentRequirementId(specId: string): string {
@@ -151,7 +165,8 @@ export function persistLinkToSpecFile(opts: PersistLinkOptions): PersistLinkResu
 
     const blockName = opts.kind === 'tests' ? 'verifies' : 'implementations';
     const target = `${filePath}:${symbol}`;
-    if (linkBullets(block, blockName).includes(target)) {
+    const replaces = opts.replaces?.trim();
+    if (!replaces && linkBullets(block, blockName).includes(target)) {
       return {
         status: 'unchanged',
         requirementId,
@@ -176,6 +191,43 @@ export function persistLinkToSpecFile(opts: PersistLinkOptions): PersistLinkResu
       }
     }
     if (start === -1) return refuse(`marker <!-- id: ${requirementId} --> not found`, specFile);
+
+    // A re-point rewrites the old bullet where it stands — at requirement
+    // level or under a criterion's indented block alike.
+    if (replaces) {
+      const old = canonicalTarget(replaces);
+      const want = canonicalTarget(target);
+      const bulletAt = (i: number): RegExpMatchArray | null =>
+        (lines[i] ?? '').match(/^(\s+[-*]\s+)(\S+?)\s*$/);
+      let oldIdx = -1;
+      let newListed = false;
+      for (let i = start + 1; i < end; i++) {
+        const m = bulletAt(i);
+        if (!m) continue;
+        const t = canonicalTarget(m[2]!);
+        if (t === old && oldIdx === -1) oldIdx = i;
+        else if (t === want) newListed = true;
+      }
+      if (oldIdx !== -1) {
+        if (newListed) lines.splice(oldIdx, 1);
+        else lines[oldIdx] = `${bulletAt(oldIdx)![1]}${target}`;
+        fs.writeFileSync(specAbs, lines.join(eol), 'utf8');
+        return {
+          status: 'persisted',
+          requirementId,
+          specFile,
+          detail: `${blockName}: entry ${replaces} → ${target} rewritten in ${specFile}`,
+        };
+      }
+      if (linkBullets(block, blockName).includes(target)) {
+        return {
+          status: 'unchanged',
+          requirementId,
+          specFile,
+          detail: `${blockName}: already lists ${target}`,
+        };
+      }
+    }
 
     const bullet = `  - ${target}`;
     const header = new RegExp(`^${blockName}:\\s*$`);

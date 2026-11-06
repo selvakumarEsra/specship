@@ -47,7 +47,13 @@ import {
   scanTestTitleRefs,
 } from './test-title-links';
 import { classifySignatureDrift } from './signature-drift';
-import { nodeBodyFingerprint, BODY_MARKER_STATES, type BodyChangedMarker } from './body-fingerprint';
+import {
+  nodeBodyFingerprint,
+  fingerprintBody,
+  readNodeBody,
+  BODY_MARKER_STATES,
+  type BodyChangedMarker,
+} from './body-fingerprint';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -134,11 +140,62 @@ export interface SpecLinkResolverStats {
    */
   reattached: number;
   /**
+   * Links whose target vanished and that followed their symbol to a new file
+   * or name by its body fingerprint this pass (REQ-LINKACC-005). Optional so
+   * existing stats literals keep compiling.
+   */
+  repointed?: number;
+  /** One record per re-point, so callers can name it and write it back. */
+  repoints?: LinkRepoint[];
+  /**
    * Links that TRANSITIONED into `drifted` during this pass (REQ-DRIFT-PUSH-001).
    * A link already in `drifted` that re-drifts is not recorded — consumers
    * (the sync CLI's push notice) must see each drift once, not on every sync.
    */
   transitions: DriftTransition[];
+}
+
+/** Where a re-pointed link pointed, and where it points now (REQ-LINKACC-005). */
+export interface RepointLocation {
+  file: string;
+  name: string;
+}
+
+/** One re-point, as stored in `metadata.repointed` and reported by sync. */
+export interface LinkRepoint {
+  linkId: number;
+  specId: string;
+  kind: SpecLinkKind;
+  provenance: SpecLinkProvenance;
+  from: RepointLocation;
+  to: RepointLocation;
+  at: number;
+}
+
+/** A re-point plus the spec-file edit that kept a declared link's bullet in step. */
+export interface RepointReport extends LinkRepoint {
+  /** Set for spec-declaration links only — code-comment and test-title links need no write. */
+  specFileEdit?: { status: 'persisted' | 'unchanged' | 'refused'; specFile?: string; detail: string };
+}
+
+/** Options for a resolve pass. */
+export interface ResolvePassOptions {
+  /**
+   * Logical keys ({@link nodeLogicalKey}) of every symbol that existed BEFORE
+   * the extraction pass this resolve follows. A symbol whose key is not in the
+   * set was added by the pass, and only added symbols can take over a vanished
+   * link's target (REQ-LINKACC-005). Omitted → no re-pointing; a vanished
+   * target is orphaned as before.
+   */
+  priorNodeKeys?: Set<string>;
+}
+
+/** How many earlier re-points a link's metadata keeps. */
+const REPOINT_HISTORY_CAP = 5;
+
+/** Logical identity of a node: file, canonical qualified name, kind. */
+export function nodeLogicalKey(filePath: string, qualifiedName: string, kind: string): string {
+  return `${filePath}\u0000${canonicalQualifiedName(qualifiedName)}\u0000${kind}`;
 }
 
 /** One link's transition into `drifted`, for push notification (DRIFT-PUSH-DOC). */
@@ -236,6 +293,31 @@ export function codeDerivedLinkKey(
   return `${specId}\u0000${filePath}\u0000${qualifiedName}\u0000${kind}`;
 }
 
+/** Per-pass state for a resolve: the prior-key snapshot and its derived scans. */
+interface ResolvePass {
+  priorNodeKeys?: Set<string>;
+  addedByKind: Map<NodeKind, AddedSymbol[]>;
+}
+
+/** A symbol an extraction pass added, with its source lines. */
+interface AddedSymbol {
+  node: Node;
+  body: string;
+}
+
+/** `Class.method` / `Class::method` → `method`. */
+function lastNameSegment(qualifiedName: string): string {
+  const parts = canonicalQualifiedName(qualifiedName).split('.');
+  return parts[parts.length - 1] ?? qualifiedName;
+}
+
+/** `body` with every whole-word `from` read as `to` (identity when equal). */
+function renameInBody(body: string, from: string, to: string): string {
+  if (!from || from === to) return body;
+  const escaped = from.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return body.replace(new RegExp(`(?<![\\w$])${escaped}(?![\\w$])`, 'g'), to);
+}
+
 export class SpecLinkResolver {
   private queries: QueryBuilder;
   private specQueries: SpecQueries;
@@ -255,10 +337,11 @@ export class SpecLinkResolver {
    * Re-resolve spec_links for a set of changed files. Call this from the
    * sync pipeline after code extraction completes for those files.
    */
-  resolveLinksForFiles(changedFiles: string[]): SpecLinkResolverStats {
+  resolveLinksForFiles(changedFiles: string[], opts: ResolvePassOptions = {}): SpecLinkResolverStats {
     const stats = this.makeStats();
+    const pass = this.makePass(opts);
     for (const file of changedFiles) {
-      this.resolveLinksForFile(file, stats);
+      this.resolveLinksForFile(file, stats, pass);
     }
     return stats;
   }
@@ -267,10 +350,11 @@ export class SpecLinkResolver {
    * Re-resolve every spec_link in the database. Used by `indexAll` on a
    * fresh build, and as a paranoia pass after large refactors.
    */
-  resolveAll(): SpecLinkResolverStats {
+  resolveAll(opts: ResolvePassOptions = {}): SpecLinkResolverStats {
     const stats = this.makeStats();
+    const pass = this.makePass(opts);
     for (const link of this.specQueries.getAllLinks()) {
-      this.resolveOneLink(link, stats);
+      this.resolveOneLink(link, stats, pass);
     }
     return stats;
   }
@@ -278,14 +362,14 @@ export class SpecLinkResolver {
   /**
    * Re-resolve all links whose logical target lives in `filePath`.
    */
-  private resolveLinksForFile(filePath: string, stats: SpecLinkResolverStats): void {
+  private resolveLinksForFile(filePath: string, stats: SpecLinkResolverStats, pass: ResolvePass): void {
     const links = this.specQueries.getLinksByTargetFile(filePath);
     for (const link of links) {
-      this.resolveOneLink(link, stats);
+      this.resolveOneLink(link, stats, pass);
     }
   }
 
-  private resolveOneLink(link: SpecLink, stats: SpecLinkResolverStats): void {
+  private resolveOneLink(link: SpecLink, stats: SpecLinkResolverStats, pass: ResolvePass = this.makePass({})): void {
     stats.scanned++;
 
     // External evidence pointers (REQ-JIRAREG-005) carry a scheme-prefixed
@@ -297,13 +381,25 @@ export class SpecLinkResolver {
       return;
     }
 
-    const node = this.findLogicalTarget(
+    let node = this.findLogicalTarget(
       link.targetFilePath,
       link.targetQualifiedName,
       link.targetNodeKind
     );
 
     const now = Date.now();
+
+    if (node === null) {
+      // The target vanished. Before orphaning, follow the symbol: exactly one
+      // same-kind symbol ADDED this pass with the same body fingerprint is the
+      // same code under a new file or name (REQ-LINKACC-005). The state is
+      // kept; the drift and body checks below then run against the new node.
+      const moved = this.findRepointTarget(link, pass);
+      if (moved) {
+        link = this.repointLink(link, moved, now, stats);
+        node = moved;
+      }
+    }
 
     if (node === null) {
       // Logical target vanished. Mark orphaned unless link is sticky.
@@ -387,6 +483,100 @@ export class SpecLinkResolver {
         );
       }
     }
+  }
+
+  /**
+   * The one symbol a vanished link's target moved to (REQ-LINKACC-005), or
+   * `null`. A candidate must be ADDED this pass (its logical key absent from
+   * `priorNodeKeys`), be of the link's kind, and have the link's body
+   * fingerprint (`bodyFpAtLink`, REQ-LINKACC-004) once its own name is read as
+   * the old one — the fingerprint covers the declaration line, so a rename
+   * would otherwise never match. Zero or several candidates → `null`: the link
+   * stays orphaned rather than guess (A3, A4). File-level links, links with no
+   * body baseline, and passes with no prior-key snapshot never re-point.
+   */
+  private findRepointTarget(link: SpecLink, pass: ResolvePass): Node | null {
+    const root = this.opts.projectRoot;
+    const baseline = link.metadata?.bodyFpAtLink;
+    if (!root || !pass.priorNodeKeys || link.targetNodeKind === 'file' || typeof baseline !== 'string') return null;
+    const oldName = lastNameSegment(link.targetQualifiedName);
+    const matches = this.addedSymbols(link.targetNodeKind, pass, root).filter(
+      ({ node, body }) => fingerprintBody(renameInBody(body, node.name, oldName), node.language) === baseline
+    );
+    if (matches.length !== 1) return null;
+    const target = matches[0]!.node;
+    // Never fold two links into one row: if this spec already links the new
+    // location with the same kind, leave the vanished one orphaned.
+    const newKey = nodeLogicalKey(target.filePath, target.qualifiedName, target.kind);
+    const clash = this.specQueries
+      .getLinksBySpec(link.specId)
+      .some((l) => l.id !== link.id && l.kind === link.kind &&
+        nodeLogicalKey(l.targetFilePath, l.targetQualifiedName, l.targetNodeKind) === newKey);
+    return clash ? null : target;
+  }
+
+  /**
+   * Symbols of `kind` the pass added, each with its source lines. Read once
+   * per kind per pass — every vanished link of that kind shares the scan.
+   */
+  private addedSymbols(kind: NodeKind, pass: ResolvePass, root: string): AddedSymbol[] {
+    const cached = pass.addedByKind.get(kind);
+    if (cached) return cached;
+    const out: AddedSymbol[] = [];
+    const prior = pass.priorNodeKeys!;
+    for (const node of this.queries.iterateNodesByKind(kind)) {
+      if (prior.has(nodeLogicalKey(node.filePath, node.qualifiedName, node.kind))) continue;
+      const body = readNodeBody(root, node);
+      if (body !== null) out.push({ node, body });
+    }
+    pass.addedByKind.set(kind, out);
+    return out;
+  }
+
+  /**
+   * Move `link` onto `node`: new logical target, resolved id, and a
+   * `metadata.repointed` record of the old and new location (earlier
+   * re-points kept, capped, under `history`). The state is not touched.
+   * Returns the link as it now reads, for the checks that follow.
+   */
+  private repointLink(link: SpecLink, node: Node, now: number, stats: SpecLinkResolverStats): SpecLink {
+    const from: RepointLocation = { file: link.targetFilePath, name: link.targetQualifiedName };
+    const to: RepointLocation = { file: node.filePath, name: canonicalQualifiedName(node.qualifiedName) };
+    this.specQueries.updateSpecLinkTarget(link.id, to.file, to.name, node.kind, now);
+    const meta: Record<string, unknown> = { ...(link.metadata ?? {}) };
+    const prev = meta.repointed as { from?: unknown; to?: unknown; at?: unknown; history?: unknown[] } | undefined;
+    const history: unknown[] = [];
+    if (prev && typeof prev === 'object') {
+      if (Array.isArray(prev.history)) history.push(...prev.history);
+      history.push({ from: prev.from, to: prev.to, at: prev.at });
+    }
+    meta.repointed = {
+      from,
+      to,
+      at: now,
+      ...(history.length > 0 ? { history: history.slice(-REPOINT_HISTORY_CAP) } : {}),
+    };
+    // Same evidence rule as the inbound paths: a `tests` link re-checks
+    // whether its new home is a test file (REQ-VSTATE-002.A4).
+    Object.assign(meta, nonTestEvidenceFlag(link.kind, to.file) ?? {});
+    this.specQueries.updateSpecLinkMetadata(link.id, meta, now);
+    stats.repointed = (stats.repointed ?? 0) + 1;
+    (stats.repoints ??= []).push({
+      linkId: link.id,
+      specId: link.specId,
+      kind: link.kind,
+      provenance: link.provenance,
+      from,
+      to,
+      at: now,
+    });
+    if (this.opts.verbose) {
+      // eslint-disable-next-line no-console
+      console.error(
+        `[SpecLinkResolver] re-pointed ${from.file}:${from.name} → ${to.file}:${to.name} for spec ${link.specId}`
+      );
+    }
+    return { ...link, targetFilePath: to.file, targetQualifiedName: to.name, targetNodeKind: node.kind, metadata: meta };
   }
 
   /**
@@ -778,6 +968,10 @@ export class SpecLinkResolver {
   // ===========================================================================
   // Helpers
   // ===========================================================================
+
+  private makePass(opts: ResolvePassOptions): ResolvePass {
+    return { priorNodeKeys: opts.priorNodeKeys, addedByKind: new Map() };
+  }
 
   private makeStats(): SpecLinkResolverStats {
     return {

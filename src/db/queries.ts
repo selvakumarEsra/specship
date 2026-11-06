@@ -682,6 +682,22 @@ export class QueryBuilder {
   }
 
   /**
+   * The logical identity of every non-file node (`file_path`, `qualified_name`,
+   * `kind`), as a set of keys built by `keyOf`. Taken before an extraction pass
+   * so the spec-link resolver can tell which symbols the pass ADDED
+   * (REQ-LINKACC-005). Streams rows — only the keys are kept in memory.
+   */
+  getNodeLogicalKeys(keyOf: (filePath: string, qualifiedName: string, kind: string) => string): Set<string> {
+    const out = new Set<string>();
+    const stmt = this.db.prepare("SELECT file_path, qualified_name, kind FROM nodes WHERE kind != 'file'");
+    for (const row of stmt.iterate()) {
+      const r = row as { file_path: string; qualified_name: string; kind: string };
+      out.add(keyOf(r.file_path, r.qualified_name, r.kind));
+    }
+    return out;
+  }
+
+  /**
    * Stream every node of a kind one at a time (lazy) instead of materializing
    * them all like {@link getNodesByKind}. For unbounded kinds (`function`,
    * `method`) on a symbol-dense project the full array is gigabytes; the

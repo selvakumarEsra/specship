@@ -57,8 +57,12 @@ import {
   canonicalQualifiedName,
   qualifiedNameVariants,
   codeDerivedLinkKey,
+  nodeLogicalKey,
   type CodeDerivedLinks,
+  type LinkRepoint,
+  type RepointReport,
 } from './resolution/spec-link-resolver';
+import { persistLinkToSpecFile } from './spec-quality/link-persist';
 import { computeSpecFunnel, SpecFunnel } from './resolution/brief-link-resolver';
 import { computeDomainGapSeed, DomainGapSeed } from './resolution/domain-gap-seed';
 import { nodeBodyFingerprint, rebaselineBodyMetadata } from './resolution/body-fingerprint';
@@ -1027,6 +1031,9 @@ export class SpecShip {
       }
       try {
         const before = this.queries.getNodeAndEdgeCount();
+        // Which symbols exist before extraction, so the spec pass can tell the
+        // ones this index added (REQ-LINKACC-005).
+        const priorNodeKeys = this.snapshotNodeKeysForRepoint();
         const result = await this.orchestrator.indexAll(options.onProgress, options.signal, options.verbose);
 
         // Re-detect frameworks now that the index is populated. The resolver
@@ -1078,7 +1085,7 @@ export class SpecShip {
             // Release the lock before re-acquiring inside indexSpecs (mutex
             // is re-entrant via withLock chaining; the file lock isn't).
             this.fileLock.release();
-            await this.indexSpecsInternal();
+            await this.indexSpecsInternal(true, priorNodeKeys);
             // Re-acquire so the outer finally can release once.
             this.fileLock.acquire();
           } catch (err) {
@@ -1316,8 +1323,10 @@ export class SpecShip {
    * unconditionally and relies on the hash guard).
    */
   private async indexSpecsInternal(
-    forceResolve: boolean = true
-  ): Promise<{ transitions: DriftTransition[]; errors: number; warnings: number }> {
+    forceResolve: boolean = true,
+    priorNodeKeys?: Set<string>
+  ): Promise<{ transitions: DriftTransition[]; errors: number; warnings: number; repoints: RepointReport[] }> {
+    let repoints: RepointReport[] = [];
     const transitions: DriftTransition[] = [];
     let totalErrors = 0;
     let totalWarnings = 0;
@@ -1384,10 +1393,101 @@ export class SpecShip {
       this.specLinkResolver.applyTestTitleLinks(allFiles, specStats, derived);
       // Drop code-derived links whose marker or file is gone (REQ-MULTIDEV-006).
       this.reconcileCodeDerivedLinks(derived);
-      const resolveStats = this.specLinkResolver.resolveAll();
+      const resolveStats = this.specLinkResolver.resolveAll({ priorNodeKeys });
       transitions.push(...resolveStats.transitions);
+      repoints = this.persistRepoints(resolveStats.repoints ?? []);
     }
-    return { transitions, errors: totalErrors, warnings: totalWarnings };
+    return { transitions, errors: totalErrors, warnings: totalWarnings, repoints };
+  }
+
+  /**
+   * Logical keys of every symbol in the graph, taken before an extraction pass
+   * so the spec pass can re-point a vanished link only onto a symbol the pass
+   * ADDED (REQ-LINKACC-005). `undefined` when no link could be re-pointed —
+   * the snapshot is skipped, and the resolver orphans as before.
+   */
+  private snapshotNodeKeysForRepoint(): Set<string> | undefined {
+    try {
+      if (!this.specQueries.hasRepointableLinks()) return undefined;
+      return this.queries.getNodeLogicalKeys(nodeLogicalKey);
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
+   * Keep each re-pointed spec-declared link's bullet in step with the index
+   * (REQ-LINKACC-005): the old `path:Symbol` bullet is rewritten to the new
+   * location through the same spec write-back the link-assert tool uses, so a
+   * full reindex re-declares the link where the code now is instead of bringing
+   * the orphan back. Code-comment and test-title links need no write.
+   *
+   * Each edited spec file is then re-read at once. The edit only moved a
+   * bullet, so a link whose spec-text baseline matched the old text takes the
+   * new text as its baseline — the write-back is not a spec change and must not
+   * drift the requirement's links.
+   */
+  private persistRepoints(repoints: LinkRepoint[]): RepointReport[] {
+    const out: RepointReport[] = [];
+    const edited = new Set<string>();
+    for (const r of repoints) {
+      if (r.provenance !== 'spec-declaration' || (r.kind !== 'implements' && r.kind !== 'tests')) {
+        out.push({ ...r });
+        continue;
+      }
+      const spec = this.specQueries.getSpecById(r.specId);
+      const res = persistLinkToSpecFile({
+        projectRoot: this.projectRoot,
+        specId: r.specId,
+        kind: r.kind,
+        filePath: r.to.file,
+        symbol: r.to.name,
+        specSourcePath: spec?.sourcePath,
+        symbolResolved: true,
+        replaces: `${r.from.file}:${r.from.name}`,
+      });
+      out.push({ ...r, specFileEdit: { status: res.status, specFile: res.specFile, detail: res.detail } });
+      if (res.status === 'persisted' && res.specFile) edited.add(res.specFile);
+    }
+    for (const rel of edited) this.reindexRepointedSpecFile(rel);
+    return out;
+  }
+
+  /** Re-read a spec file the re-point write-back just edited (see {@link persistRepoints}). */
+  private reindexRepointedSpecFile(rel: string): void {
+    const absPath = path.join(this.projectRoot, rel);
+    let source: string;
+    let stat: fs.Stats;
+    try {
+      source = fs.readFileSync(absPath, 'utf-8');
+      stat = fs.statSync(absPath);
+    } catch {
+      return;
+    }
+    const priorHash = new Map(this.specQueries.getSpecsByFile(rel).map((s) => [s.id, s.contentHash]));
+    const result = this.replaceSpecsForFile(rel, source);
+    this.specQueries.upsertSpecFile({
+      path: rel,
+      contentHash: createHash('sha256').update(source).digest('hex').substring(0, 32),
+      format: 'markdown',
+      size: stat.size,
+      modifiedAt: stat.mtimeMs,
+      indexedAt: Date.now(),
+      specCount: result.specs.length,
+      errors: result.errors,
+    });
+    const now = Date.now();
+    for (const spec of result.specs) {
+      const old = priorHash.get(spec.id);
+      if (!old || old === spec.contentHash) continue;
+      for (const link of this.specQueries.getLinksBySpec(spec.id)) {
+        if (link.specHashAtLink === old) this.specQueries.updateSpecLinkSpecBaseline(link.id, spec.contentHash, now);
+      }
+    }
+    this.specLinkResolver.applyDeclarationCandidates(
+      result.linkCandidates,
+      new Map(result.specs.map((s) => [s.id, s]))
+    );
   }
 
   /**
@@ -1669,6 +1769,7 @@ export class SpecShip {
         return { filesChecked: 0, filesAdded: 0, filesModified: 0, filesRemoved: 0, nodesUpdated: 0, durationMs: 0 };
       }
       try {
+        const priorNodeKeys = this.snapshotNodeKeysForRepoint();
         const result = await this.orchestrator.sync(options.onProgress);
 
         // Cross-file finalization (e.g. NestJS RouterModule prefixes). Run on
@@ -1737,8 +1838,9 @@ export class SpecShip {
             result.filesAdded > 0 || result.filesModified > 0 || result.filesRemoved > 0;
           this.fileLock.release();
           try {
-            const specPass = await this.indexSpecsInternal(codeChanged);
+            const specPass = await this.indexSpecsInternal(codeChanged, priorNodeKeys);
             result.driftedTransitions = specPass.transitions;
+            if (specPass.repoints.length > 0) result.linkRepoints = specPass.repoints;
             result.specErrors = specPass.errors;
             result.specWarnings = specPass.warnings;
           } catch {

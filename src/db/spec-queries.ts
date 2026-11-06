@@ -283,6 +283,7 @@ export class SpecQueries {
     updateSpecLinkState?: SqliteStatement;
     updateSpecLinkMetadata?: SqliteStatement;
     updateSpecLinkSigBaseline?: SqliteStatement;
+    updateSpecLinkTarget?: SqliteStatement;
     updateSpecLinkSpecBaseline?: SqliteStatement;
     updateSpecLinkResolution?: SqliteStatement;
     getLinkById?: SqliteStatement;
@@ -926,6 +927,41 @@ export class SpecQueries {
       );
     }
     this.stmts.updateSpecLinkSigBaseline.run(sig, updatedAt, id);
+  }
+
+  /**
+   * Whether any symbol-level link carries a body fingerprint baseline — the
+   * only links a pass can re-point (REQ-LINKACC-005). Lets the index skip the
+   * prior-node snapshot when nothing could use it.
+   */
+  hasRepointableLinks(): boolean {
+    const row = this.db
+      .prepare(
+        `SELECT 1 AS x FROM spec_links WHERE target_node_kind != 'file' AND metadata LIKE '%"bodyFpAtLink"%' LIMIT 1`
+      )
+      .get() as { x: number } | undefined;
+    return row !== undefined;
+  }
+
+  /**
+   * Re-point a link's logical target (`target_file_path`,
+   * `target_qualified_name`, `target_node_kind`). Used when the resolver
+   * follows a moved or renamed symbol by its body fingerprint
+   * (REQ-LINKACC-005); state, baselines and evidence are left as they are.
+   */
+  updateSpecLinkTarget(
+    id: number,
+    filePath: string,
+    qualifiedName: string,
+    kind: NodeKind,
+    updatedAt: number = Date.now()
+  ): void {
+    if (!this.stmts.updateSpecLinkTarget) {
+      this.stmts.updateSpecLinkTarget = this.db.prepare(
+        `UPDATE spec_links SET target_file_path = ?, target_qualified_name = ?, target_node_kind = ?, updated_at = ? WHERE id = ?`
+      );
+    }
+    this.stmts.updateSpecLinkTarget.run(filePath, qualifiedName, kind, updatedAt, id);
   }
 
   /**
