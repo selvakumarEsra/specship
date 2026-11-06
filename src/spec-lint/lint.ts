@@ -23,8 +23,14 @@ import { parseDeclaredEvidenceKind, EVIDENCE_KINDS } from '../spec-quality/evide
 import { parseEnforcedRules } from '../knowledge/enforce';
 import { checkVersionClaims, findVersionClaimInSource, formatVersionClaim } from './version-claims';
 import type { VersionInUseResolver } from './version-claims';
+import { findRequirementCommits, linkSuggestionFindings } from './commit-suggestions';
+import type { RequirementCommitResolver } from './commit-suggestions';
 
-export type LintSeverity = 'error' | 'warning';
+/**
+ * `suggestion` is advisory (REQ-LINKACC-010): counted in neither errorCount
+ * nor warningCount, so it never changes `hasErrors` or the exit code.
+ */
+export type LintSeverity = 'error' | 'warning' | 'suggestion';
 
 /**
  * Stable finding codes. Extractor-produced findings keep the extractor's own
@@ -49,6 +55,8 @@ export type LintCode =
   | 'spec_requirement_without_rfc2119'
   | 'spec_version_claim_stale'
   | 'spec_version_claim_unchecked'
+  // suggestions
+  | 'spec_link_suggestion'
   // pass-through from the extractor
   | string;
 
@@ -69,6 +77,8 @@ export interface LintFileReport {
   findings: LintFinding[];
   errorCount: number;
   warningCount: number;
+  /** Advisory link suggestions (REQ-LINKACC-010) — never part of the exit code. */
+  suggestionCount: number;
 }
 
 export interface LintReport {
@@ -77,6 +87,7 @@ export interface LintReport {
   filesChecked: number;
   errorCount: number;
   warningCount: number;
+  suggestionCount: number;
   /** The exit-code predicate (A3): errors fail, warnings alone do not. */
   hasErrors: boolean;
 }
@@ -500,6 +511,13 @@ export interface LintOptions {
    * node_modules → a probe configured in specship.config.json). Tests inject one.
    */
   resolveVersionInUse?: VersionInUseResolver;
+  /**
+   * Finds the commits naming a requirement, with the symbols they changed, for
+   * link suggestions (REQ-LINKACC-010). Off unless given: a programmatic caller
+   * (postcheck, tests that lint the whole repo) never pays for git history.
+   * `specship lint` passes `findRequirementCommits` unless `--no-suggest`.
+   */
+  resolveRequirementCommits?: RequirementCommitResolver | false;
 }
 
 /**
@@ -548,6 +566,7 @@ export function lintSpecs(paths: string[], options: LintOptions = {}): LintRepor
 
   const targets = paths.length > 0 ? paths : [path.join(projectRoot, 'specs')];
   const absFiles: string[] = [];
+  const lintedSources: Array<{ rel: string; source: string }> = [];
   for (const target of targets) {
     const abs = path.isAbsolute(target) ? target : path.join(projectRoot, target);
     if (!fs.existsSync(abs)) {
@@ -563,6 +582,7 @@ export function lintSpecs(paths: string[], options: LintOptions = {}): LintRepor
         ],
         errorCount: 1,
         warningCount: 0,
+        suggestionCount: 0,
       });
       continue;
     }
@@ -587,6 +607,7 @@ export function lintSpecs(paths: string[], options: LintOptions = {}): LintRepor
         ],
         errorCount: 1,
         warningCount: 0,
+        suggestionCount: 0,
       });
       continue;
     }
@@ -596,11 +617,13 @@ export function lintSpecs(paths: string[], options: LintOptions = {}): LintRepor
         ? sortFindings([...lintSpecSource(rel, source), ...claimFindings])
         : lintSpecSource(rel, source);
     recordDeclarations(rel, source);
+    lintedSources.push({ rel, source });
     files.push({
       filePath: rel,
       findings,
       errorCount: findings.filter((f) => f.severity === 'error').length,
       warningCount: findings.filter((f) => f.severity === 'warning').length,
+      suggestionCount: 0,
     });
   }
 
@@ -608,6 +631,36 @@ export function lintSpecs(paths: string[], options: LintOptions = {}): LintRepor
   // specs/ is scanned for declarations even when only a subset was linted
   // (A4), so a linted file colliding with an unlinted one still fails; the
   // unlinted file only contributes sites and gets no report entry.
+  // Link suggestions (REQ-LINKACC-010) need every requirement's links, so the
+  // corpus scan below also collects them. Read-only: nothing is written (A2).
+  const suggestResolver = options.resolveRequirementCommits || null;
+  const corpusLinks = new Map<string, Set<string>>();
+  const corpusKeys = new Map<string, string>();
+  const parsed = new Map<string, ReturnType<MarkdownSpecExtractor['extract']>>();
+  const recordLinks = (rel: string, source: string) => {
+    if (isNonSpecArtifact(rel) || isDomainFile(rel)) return;
+    let result: ReturnType<MarkdownSpecExtractor['extract']>;
+    try {
+      result = new MarkdownSpecExtractor(rel, source).extract();
+    } catch {
+      return;
+    }
+    parsed.set(rel, result);
+    const meta = (result.specs.find((s) => s.kind === 'document')?.metadata ?? {}) as Record<string, unknown>;
+    for (const spec of result.specs) {
+      if (spec.kind !== 'requirement') continue;
+      const key = meta[`jira_issue_${spec.id}`];
+      if (typeof key === 'string' && key.trim()) corpusKeys.set(spec.id, key.trim());
+    }
+    for (const c of result.linkCandidates) {
+      const owner = parseAcceptanceParentId(c.specId) ?? c.specId;
+      let keys = corpusLinks.get(owner);
+      if (!keys) corpusLinks.set(owner, (keys = new Set()));
+      keys.add(`${c.targetFilePath.replace(/\\/g, '/')}:${c.targetQualifiedName}`);
+    }
+  };
+  if (suggestResolver) for (const { rel, source } of lintedSources) recordLinks(rel, source);
+
   const linted = new Set(absFiles);
   const corpus: string[] = [];
   collectSpecFiles(path.join(projectRoot, 'specs'), corpus);
@@ -619,7 +672,9 @@ export function lintSpecs(paths: string[], options: LintOptions = {}): LintRepor
     } catch {
       continue;
     }
-    recordDeclarations(path.relative(projectRoot, abs) || abs, source);
+    const rel = path.relative(projectRoot, abs) || abs;
+    recordDeclarations(rel, source);
+    if (suggestResolver) recordLinks(rel, source);
   }
   const reportsByPath = new Map(files.map((f) => [f.filePath, f]));
   const touched = new Set<LintFileReport>();
@@ -629,6 +684,18 @@ export function lintSpecs(paths: string[], options: LintOptions = {}): LintRepor
     report.findings.push(finding);
     touched.add(report);
   }
+  if (suggestResolver) {
+    for (const { rel } of lintedSources) {
+      const result = parsed.get(rel);
+      const report = reportsByPath.get(rel);
+      if (!result || !report) continue;
+      const suggestions = linkSuggestionFindings(rel, result, corpusLinks, suggestResolver, projectRoot, corpusKeys);
+      if (suggestions.length === 0) continue;
+      report.findings.push(...suggestions);
+      report.suggestionCount = suggestions.length;
+      touched.add(report);
+    }
+  }
   for (const report of touched) {
     report.findings = sortFindings(report.findings);
     report.errorCount = report.findings.filter((f) => f.severity === 'error').length;
@@ -637,11 +704,13 @@ export function lintSpecs(paths: string[], options: LintOptions = {}): LintRepor
   files.sort((a, b) => a.filePath.localeCompare(b.filePath));
   const errorCount = files.reduce((n, f) => n + f.errorCount, 0);
   const warningCount = files.reduce((n, f) => n + f.warningCount, 0);
+  const suggestionCount = files.reduce((n, f) => n + f.suggestionCount, 0);
   return {
     files,
     filesChecked: files.length,
     errorCount,
     warningCount,
+    suggestionCount,
     hasErrors: errorCount > 0,
   };
 }
@@ -656,13 +725,22 @@ export function formatLintReport(report: LintReport): string {
   for (const file of report.files) {
     if (file.findings.length === 0) continue;
     out.push(file.filePath);
+    const suggestions = file.findings.filter((f) => f.severity === 'suggestion');
     for (const f of file.findings) {
+      if (f.severity === 'suggestion') continue;
       const where = f.line !== undefined ? `:${f.line}` : '';
       out.push(`  ${f.severity === 'error' ? 'error' : 'warn '} ${f.code}${where} — ${f.message}`);
     }
+    if (suggestions.length > 0) {
+      out.push('  Suggested links');
+      for (const f of suggestions) {
+        out.push(`    ${f.specId ?? ''}: ${f.message}`);
+      }
+    }
     out.push('');
   }
-  const counts = `${report.errorCount} error(s), ${report.warningCount} warning(s) in ${report.filesChecked} file(s)`;
+  const suggested = report.suggestionCount > 0 ? `, ${report.suggestionCount} suggestion(s)` : '';
+  const counts = `${report.errorCount} error(s), ${report.warningCount} warning(s)${suggested} in ${report.filesChecked} file(s)`;
   out.push(report.errorCount === 0 && report.warningCount === 0 ? `Clean — ${counts}` : counts);
   return out.join('\n');
 }
@@ -672,7 +750,7 @@ export function formatLintReport(report: LintReport): string {
  * `src/bin/specship.ts`. Returns the text to print and the process exit code
  * (A3) instead of writing or exiting itself — that is what makes it testable.
  *
- * Usage: `specship lint [path...] [--json]`
+ * Usage: `specship lint [path...] [--json] [--no-suggest]`
  */
 export function runLintCli(
   args: string[] = [],
@@ -680,7 +758,12 @@ export function runLintCli(
 ): { output: string; exitCode: number } {
   const json = args.includes('--json');
   const paths = args.filter((a) => !a.startsWith('--'));
-  const report = lintSpecs(paths, options);
+  const report = lintSpecs(
+    paths,
+    args.includes('--no-suggest')
+      ? { ...options, resolveRequirementCommits: false }
+      : { resolveRequirementCommits: findRequirementCommits, ...options }
+  );
   return {
     output: json ? JSON.stringify(report, null, 2) : formatLintReport(report),
     exitCode: report.hasErrors ? 1 : 0,
