@@ -55,7 +55,7 @@ afterEach(() => {
 describe('/api/projects driftCount (REQ-DESKTOP-018)', () => {
   it('reports the drifted/broken/orphaned link count for an initialized project', async () => {
     const { slug } = seedProject('with-drift', true);
-    const list = await enumerate(claudeRoot, { claudeJsonPath, claudeRoot });
+    const list = await enumerate(claudeRoot, { claudeJsonPath, claudeRoot, home: tmp });
     expect(list.find((p) => p.slug === slug)!.driftCount).toBeNull(); // pre-attach baseline
 
     await attachDriftCounts(list, sourceWithCounts({ [slug]: 3 }));
@@ -66,7 +66,7 @@ describe('/api/projects driftCount (REQ-DESKTOP-018)', () => {
     const { slug } = seedProject('no-specship', false);
     const calls: string[] = [];
     const list = await attachDriftCounts(
-      await enumerate(claudeRoot, { claudeJsonPath, claudeRoot }),
+      await enumerate(claudeRoot, { claudeJsonPath, claudeRoot, home: tmp }),
       sourceWithCounts({ [slug]: 5 }, calls),
     );
     expect(list.find((p) => p.slug === slug)!.driftCount).toBeNull();
@@ -80,7 +80,7 @@ describe('/api/projects driftCount (REQ-DESKTOP-018)', () => {
       if (slug === a.slug) return null; // registry open failure
       return { getSpecQueries: () => { throw new Error('db locked'); } };
     };
-    const list = await attachDriftCounts(await enumerate(claudeRoot, { claudeJsonPath, claudeRoot }), source);
+    const list = await attachDriftCounts(await enumerate(claudeRoot, { claudeJsonPath, claudeRoot, home: tmp }), source);
     expect(list.find((p) => p.slug === a.slug)!.driftCount).toBeNull();
     expect(list.find((p) => p.slug === b.slug)!.driftCount).toBeNull();
   });
@@ -96,7 +96,7 @@ describe('/api/projects driftCount (REQ-DESKTOP-018)', () => {
 
     const calls: string[] = [];
     const list = await attachDriftCounts(
-      await enumerate(claudeRoot, { claudeJsonPath, claudeRoot }),
+      await enumerate(claudeRoot, { claudeJsonPath, claudeRoot, home: tmp }),
       sourceWithCounts({ [first.slug]: 1, [second.slug]: 2 }, calls),
       1,
     );
@@ -108,7 +108,7 @@ describe('/api/projects driftCount (REQ-DESKTOP-018)', () => {
   it('a zero count is reported as 0, not null (UI hides the pill at zero)', async () => {
     const { slug } = seedProject('clean', true);
     const list = await attachDriftCounts(
-      await enumerate(claudeRoot, { claudeJsonPath, claudeRoot }),
+      await enumerate(claudeRoot, { claudeJsonPath, claudeRoot, home: tmp }),
       sourceWithCounts({ [slug]: 0 }),
     );
     expect(list.find((p) => p.slug === slug)!.driftCount).toBe(0);
