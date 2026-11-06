@@ -16,7 +16,7 @@ import type SpecShip from '../index';
 import type { Spec, SpecLink, SpecLinkState, SpecLinkKind, NodeKind } from '../types';
 import type { SpecQueries } from '../db/spec-queries';
 import { renderBehaviourSurface } from '../behaviour/behaviour-surface';
-import { formatRepointedFrom } from '../resolution/link-repoint';
+import { formatRepointedFrom, linkSourceLabel } from '../resolution/link-repoint';
 import type { ToolDefinition, ToolResult } from './tools';
 import { isNonTestEvidence } from '../resolution/test-title-links';
 import { evidenceLinksFor } from '../verify/report-ingest';
@@ -293,12 +293,17 @@ export function formatLink(link: SpecLink): string {
   // Drift axis + kind (REQ-LINKACC-002.A4), worded once for every surface.
   const driftLabel = formatDriftLabel(link);
   const driftSuffix = driftLabel ? ` [${driftLabel}]` : '';
-  const conf = link.confidence !== undefined ? ` (${link.confidence.toFixed(2)})` : '';
+  // Provenance + confidence on every line (REQ-LINKACC-012.A1). A link with no
+  // recorded confidence shows none rather than a made-up figure (A3).
+  const conf =
+    typeof link.confidence === 'number' && Number.isFinite(link.confidence)
+      ? ` (${link.confidence.toFixed(2)})`
+      : '';
   // Body-only change since the link's state was taken (REQ-LINKACC-004.A1):
   // advisory, shown next to an unchanged state.
   const since = bodyChangedSince(link);
   const bodySuffix = since ? ` ⚠ ${formatBodyChanged(since)}` : '';
-  const line = `  - [${link.state}${driftSuffix}] ${resolved} ${link.kind} → ${link.targetFilePath}:${link.targetQualifiedName} <${link.provenance}${conf}>  #${link.id}${bodySuffix}`;
+  const line = `  - [${link.state}${driftSuffix}] ${resolved} ${link.kind} → ${link.targetFilePath}:${link.targetQualifiedName} <${linkSourceLabel(link)}${conf}>  #${link.id}${bodySuffix}`;
   // Followed a moved / renamed symbol by its body (REQ-LINKACC-005.A5).
   const repointed = formatRepointedFrom(link);
   const head = repointed ? `${line}\n      ↳ ${repointed}` : line;

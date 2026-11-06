@@ -25,6 +25,21 @@ export function repointedFrom(
   return { from: r.from, to: r.to, at: typeof r.at === 'number' ? r.at : 0 };
 }
 
+/**
+ * Where a link came from, worded for the `specship_spec` link tag
+ * (REQ-LINKACC-012). Derived at display time so the stored provenance enum —
+ * which reconcile queries filter on — never grows a value:
+ *  - a test-title link is stored as `code-comment` with
+ *    `metadata.evidenceSource: 'test-title'`, and reads `test-title`;
+ *  - a link followed across a move (REQ-LINKACC-005) reads
+ *    `followed-move (was <origin>)`;
+ *  - anything else reads its stored provenance.
+ */
+export function linkSourceLabel(link: Pick<SpecLink, 'provenance' | 'metadata'>): string {
+  const origin = link.metadata?.evidenceSource === 'test-title' ? 'test-title' : link.provenance;
+  return repointedFrom(link) ? `followed-move (was ${origin})` : origin;
+}
+
 /** `"re-pointed from src/a.ts:foo (2026-11-06)"` — the `specship_spec` line. */
 export function formatRepointedFrom(link: Pick<SpecLink, 'metadata'>): string | null {
   const r = repointedFrom(link);
