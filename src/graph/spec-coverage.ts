@@ -336,6 +336,48 @@ export function requireKindsExitCode(report: SpecCoverageReport, requireKinds: b
   return criteriaMissingKind(report).length > 0 ? 1 : 0;
 }
 
+/** A verified requirement's untested criteria (REQ-LINKACC-007). */
+export interface UntestedCriteriaGap {
+  untested: CriterionCoverage[];
+  total: number;
+}
+
+/**
+ * True when the requirement reads `verified` in the lifecycle sense: it has at
+ * least one link (on itself or a criterion) and every implements/tests link is
+ * `verified` — the same rule `specship_spec`'s rolled-up status applies, judged
+ * from the coverage rollup so every surface reads one source.
+ */
+function rollupIsVerified(req: RequirementCoverage): boolean {
+  let count = 0;
+  for (const node of [req, ...req.criteria]) {
+    for (const r of [node.implementsLinks, node.testsLinks]) {
+      count += r.count;
+      if ((r.states.verified ?? 0) !== r.count) return false;
+    }
+  }
+  return count > 0;
+}
+
+/**
+ * The criteria of a VERIFIED requirement that have no test (REQ-LINKACC-007).
+ * `null` when the requirement is not verified (A4), has no criteria, or every
+ * criterion is tested (A2) — callers then show plain status with no count.
+ * "Untested" is the rollup's own `untested` verdict, so `specship_spec`,
+ * `specship spec list` and Review count the same criteria (A3).
+ */
+export function untestedCriteria(req: RequirementCoverage): UntestedCriteriaGap | null {
+  if (req.criteria.length === 0 || !rollupIsVerified(req)) return null;
+  const untested = req.criteria.filter((c) => c.verdict === 'untested');
+  if (untested.length === 0) return null;
+  return { untested, total: req.criteria.length };
+}
+
+/** `"verified · 2 of 4 criteria untested"`, or plain `"verified"` with no gap. */
+export function formatVerifiedSuffix(gap: UntestedCriteriaGap | null): string {
+  return gap ? `verified · ${gap.untested.length} of ${gap.total} criteria untested` : 'verified';
+}
+
 /**
  * The single coverage line the implement workflow's human gate rests on
  * (REQ-VSTATE-005.A2). Rendered here, from the same report `getSpecCoverage`

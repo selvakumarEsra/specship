@@ -3971,7 +3971,7 @@ program
 // @implements REQ-FUNNEL-004
 program
   .command('spec [id]')
-  .description('Spec lifecycle funnel (idea → spec → implemented). With an id, show that spec/brief detail.')
+  .description('Spec lifecycle funnel (idea → spec → implemented). With an id, show that spec/brief detail; `spec list` shows the flat inventory.')
   .option('--json', 'emit JSON')
   .action(async (id: string | undefined, options: { json?: boolean }) => {
     const projectRoot = path.resolve(process.cwd());
@@ -4004,6 +4004,19 @@ program
       };
       const degraded = (r: { drifted: number; broken: number; orphaned: number }) =>
         r.drifted + r.broken + r.orphaned;
+
+      // ---- Flat inventory (`spec list`, REQ-FUNNEL-007 / REQ-LINKACC-007) ----
+      // A verified row carries its untested-criteria count from the coverage rollup.
+      if (id === 'list') {
+        const { buildInventory, inventoryRows } = await import('../mcp/spec-tools');
+        const coverage = cg.getSpecCoverage();
+        if (options.json) {
+          console.log(JSON.stringify({ requirements: inventoryRows(sq, coverage) }, null, 2));
+        } else {
+          console.log(buildInventory(sq, coverage));
+        }
+        return;
+      }
 
       // ---- Detail view (an id was given) ----
       if (id) {

@@ -48,7 +48,7 @@ description: Every SpecShip command and the flags it accepts.
 | `specship pulse [path]` | Report pipeline health (release run, npm lag, JIRA auto-publish, merged run worktrees); exits non-zero on any failure. |
 | `specship drifted [path]` | List spec links in concerning states (drifted, broken, orphaned). |
 | `specship domain-gaps [path]` | List code entities and specs not yet covered by a domain fact (the domain gap-seed). Feeds the /specship:spec domain … |
-| `specship spec [id]` | Spec lifecycle funnel (idea → spec → implemented). With an id, show that spec/brief detail. |
+| `specship spec [id]` | Spec lifecycle funnel (idea → spec → implemented). With an id, show that spec/brief detail; `spec list` shows the fla… |
 | `specship workflow <action> [args...]` | Workflow engine: list \| run <name> \| run-batch <name> --specs <ids> \| merge-queue <runId...> \| gc \| resume <runId> \| … |
 | `specship update` | Update SpecShip to the latest released version |
 | `specship jira` | Connect SpecShip to a JIRA instance (Cloud or Data Center). |
