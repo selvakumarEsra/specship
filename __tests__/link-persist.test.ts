@@ -72,7 +72,7 @@ describe('persistLinkToSpecFile — REQ-THRU-005', () => {
   it('REQ-THRU-005.A1: an asserted implements link adds one bullet, creating the block before ## Acceptance', function assertedLinkIsWrittenToSpecBlock() {
     const res = persistLinkToSpecFile({
       projectRoot: root,
-      specId: 'REQ-DEMO-001.A1', // criterion id → parent requirement's block
+      specId: 'REQ-DEMO-001', // a criterion id now writes under the criterion (REQ-LINKACC-011.A3)
       kind: 'implements',
       filePath: 'src/session.ts',
       symbol: 'SessionStore.expire',
@@ -133,7 +133,7 @@ describe('persistLinkToSpecFile — REQ-THRU-005', () => {
     const pre = fs.readFileSync(specPath);
     const listed = persistLinkToSpecFile({
       projectRoot: root,
-      specId: 'REQ-DEMO-002.A1',
+      specId: 'REQ-DEMO-002',
       kind: 'implements',
       filePath: 'src/token.ts',
       symbol: 'rotate',

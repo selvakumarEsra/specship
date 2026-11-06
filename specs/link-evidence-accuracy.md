@@ -568,6 +568,7 @@ implementations:
   - server/src/routes/spec.ts:registerSpecRoutes
 
 verifies:
+  - __tests__/link-assert-writeback-required.test.ts:reqLinkacc011A3RebuiltFromFiles
   - __tests__/link-assert-writeback-required.test.ts:reqLinkacc011A1
   - __tests__/link-assert-writeback-required.test.ts:reqLinkacc011A2
   - __tests__/link-assert-writeback-required.test.ts:reqLinkacc011A3

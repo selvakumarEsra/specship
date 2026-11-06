@@ -238,4 +238,39 @@ describe.skipIf(!fts5Available)('REQ-LINKACC-011 — asserted links are written 
     expect(linkFor('REQ-WB-002', 'rounded')).toBeUndefined();
   }
   it('REQ-LINKACC-011.A3: every link reported as recorded survives a full reindex', reqLinkacc011A3);
+
+  // File-truth, not a surviving index row: the index is deleted and rebuilt
+  // from the files alone. A criterion-id assert must come back on the
+  // criterion (its bullet is written under the criterion's own bullet).
+  async function reqLinkacc011A3RebuiltFromFiles(): Promise<void> {
+    const asserts: Array<[string, string, 'implements' | 'tests']> = [
+      ['REQ-WB-001', 'total', 'implements'],
+      ['REQ-WB-001.A1', 'clamp', 'implements'],
+      ['REQ-WB-001.A1', 'rounded', 'tests'],
+    ];
+    for (const [specId, symbol, kind] of asserts) {
+      const res = await handleSpecshipLinkAssert(cg, { spec_id: specId, target_file_path: 'src/total.ts', target_qualified_name: symbol, kind });
+      expect(res.isError, text(res)).toBeFalsy();
+    }
+    const spec = fs.readFileSync(path.join(dir, 'specs', 'wb.md'), 'utf8');
+    expect(spec).toContain('- Sums two numbers.\n  implementations:\n    - src/total.ts:clamp\n  verifies:\n    - src/total.ts:rounded');
+
+    await app.close();
+    cg.close();
+    fs.rmSync(path.join(dir, '.specship'), { recursive: true, force: true });
+    cg = await SpecShip.init(dir);
+    await cg.indexAll();
+    app = Fastify({ logger: false });
+    app.decorate('activeCg', async (_req: FastifyRequest) => cg);
+    await registerSpecRoutes(app);
+    await app.ready();
+
+    for (const [specId, symbol, kind] of asserts) {
+      const l = cg.getSpecQueries().getLinksBySpec(specId).find((x) => x.targetQualifiedName === symbol && x.kind === kind);
+      expect(l, `${specId} ${kind} ${symbol} is rebuilt from the spec file`).toBeDefined();
+    }
+    // Nothing landed on the parent requirement by mistake.
+    expect(cg.getSpecQueries().getLinksBySpec('REQ-WB-001').some((x) => x.targetQualifiedName === 'clamp')).toBe(false);
+  }
+  it('REQ-LINKACC-011.A3: asserted links, criterion ones included, are rebuilt from the spec files alone', reqLinkacc011A3RebuiltFromFiles);
 });

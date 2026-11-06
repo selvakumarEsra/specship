@@ -172,7 +172,9 @@ An `implements` or `tests` link asserted through `specship_link_assert` MUST
 also be written into the requirement's `implementations:` / `verifies:` block
 in its spec file (once, idempotently), so it survives a full reindex. A
 target that is not a resolvable `path:Symbol` is refused without editing the
-file.
+file. A link asserted on an acceptance criterion (`REQ-X.A1`) is written into
+that criterion's own indented block under its bullet, so a reindex re-creates
+it on the criterion (REQ-LINKACC-011.A3).
 
 implementations:
   - src/spec-quality/link-persist.ts:persistLinkToSpecFile
