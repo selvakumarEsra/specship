@@ -492,7 +492,9 @@ either baseline.
 implementations:
   - src/mcp/spec-tools.ts:handleSpecshipLinkVerify
   - src/verify/report-ingest.ts:ingestTestReport
+  - src/verify/report-ingest.ts:rebaselineOnPass
   - src/index.ts:SpecShip.rebaselineLinkOnVerify
+  - src/index.ts:SpecShip.verifyFromReport
   - src/db/spec-queries.ts:SpecQueries.updateSpecLinkSpecBaseline
   - server/src/routes/spec.ts
 
