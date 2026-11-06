@@ -292,6 +292,13 @@ implementations:
   - src/mcp/spec-tools.ts:formatLink
 
 verifies:
+  - __tests__/link-persist.test.ts:repointRewritesBulletInPlace
+  - __tests__/link-persist.test.ts:repointDropsOldWhenNewListed
+  - __tests__/link-persist.test.ts:repointUnchangedWhenAlreadyMoved
+  - __tests__/link-persist.test.ts:repointAppendsWhenNeitherListed
+  - __tests__/link-persist.test.ts:repointMatchesDoubleColonName
+  - __tests__/link-persist.test.ts:repointKeepsCrlf
+  - __tests__/link-persist.test.ts:repointRefusedForUnknownRequirement
   - __tests__/spec-link-repoint.test.ts:reqLinkacc005A1
   - __tests__/spec-link-repoint.test.ts:reqLinkacc005A2
   - __tests__/spec-link-repoint.test.ts:reqLinkacc005A3
@@ -523,7 +530,7 @@ implementations:
   - src/index.ts:SpecShip.rebaselineLinkOnVerify
   - src/index.ts:SpecShip.verifyFromReport
   - src/db/spec-queries.ts:SpecQueries.updateSpecLinkSpecBaseline
-  - server/src/routes/spec.ts
+  - server/src/routes/spec.ts:registerSpecRoutes
 
 verifies:
   - __tests__/link-verify-spec-baseline.test.ts:reqLinkacc013A1
