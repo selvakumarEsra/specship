@@ -334,6 +334,19 @@ link.
 implementations:
   - src/mcp/spec-tools.ts:handleSpecshipLinkVerify
   - src/verify/report-ingest.ts:ingestTestReport
+  - src/verify/report-ingest.ts:coveringRun
+  - src/verify/report-ingest.ts:evidenceLinksFor
+  - src/index.ts:SpecShip.recordLinkVerification
+  - src/mcp/spec-tools.ts:formatLink
+  - src/mcp/spec-tools.ts:verificationOf
+  - server/src/routes/spec.ts:registerSpecRoutes
+
+verifies:
+  - __tests__/link-verify-run-backed.test.ts:reqLinkacc006A1
+  - __tests__/link-verify-run-backed.test.ts:reqLinkacc006A2
+  - __tests__/link-verify-run-backed.test.ts:reqLinkacc006A3
+  - __tests__/link-verify-run-backed.test.ts:reqLinkacc006A4
+  - __tests__/link-verify-run-backed.test.ts:reqLinkacc006DashboardRouteSameRecord
 
 ## Acceptance
 <!-- id: REQ-LINKACC-006.A1 -->

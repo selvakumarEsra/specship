@@ -491,6 +491,23 @@ export async function registerSpecRoutes(app: FastifyInstance): Promise<void> {
         });
       }
     }
+    const evidenceIn = (body.evidence ?? []).filter((e) => typeof e === 'string' && e.length > 0);
+    // The one rule the MCP tool uses too (REQ-LINKACC-006): a covering report
+    // run is recorded as the verification's basis, and a run in which one of
+    // the link's tests failed refuses a pass. Called on the loaded instance —
+    // the server never imports the package.
+    if (typeof cg.recordLinkVerification === 'function') {
+      const recorded = cg.recordLinkVerification(link, {
+        result: body.result,
+        reason: body.reason,
+        evidence: evidenceIn,
+      });
+      if (!recorded.ok) {
+        return reply.code(409).send({ error: recorded.error, code: recorded.code });
+      }
+      return { ok: true, state: recorded.state, basis: recorded.verification.basis };
+    }
+    // An older loaded build without the shared rule: record as before.
     sq.updateSpecLinkState(body.link_id, body.result === 'pass' ? 'verified' : 'broken', null);
     // Persist the evidence behind the verdict (REQ-REVINT-004) — same record
     // shape as the MCP tool, so both surfaces render one audit trail.
