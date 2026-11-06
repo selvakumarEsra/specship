@@ -7,7 +7,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   api, runEventsUrl,
-  type RunArtifact, type RunEvent, type WorkflowDagNode, type WorkflowRun,
+  type RunArtifact, type RunEvent, type RunTestReport, type WorkflowDagNode, type WorkflowRun,
 } from '../api';
 import { useApi } from '../hooks';
 import { go } from '../router';
@@ -328,7 +328,72 @@ function ArtifactsPanel({ artifacts, loading }: { artifacts: RunArtifact[]; load
   );
 }
 
+const REPORT_REASON: Record<NonNullable<RunTestReport['reason']>, string> = {
+  'not-run': 'The verify step has not run yet.',
+  running: 'The verify step is running — no report from this attempt yet.',
+  skipped: 'No recognised test framework — tests did not run.',
+  'build-failed': 'The build failed before the tests ran.',
+  'env-failed': 'The environment failed to install before the tests ran.',
+  'not-vitest': 'Tests ran, but this is not a vitest project, so no report was written.',
+  'no-report': 'The verify step wrote no report.',
+};
+
+/**
+ * The verify step's test report (REQ-WFGATE-002): outcome + counts when the
+ * report is readable; an explicit unavailable / unreadable state otherwise.
+ * Only an `available` report with outcome `passed` ever renders as passing.
+ */
+// @implements REQ-WFGATE-002
+export function TestReportPanel({ report, loading }: { report: RunTestReport | null; loading?: boolean }) {
+  const box = { padding: '10px 16px', borderBottom: '1px solid var(--border-subtle)', fontSize: 12 } as const;
+  if (!report) {
+    return (
+      <div className="row gap-10" data-test-report-state={loading ? 'loading' : 'unavailable'} style={box}>
+        <span style={{ fontWeight: 600 }}>Verify tests</span>
+        <span className="muted">{loading ? 'Loading test report…' : 'Test report unavailable.'}</span>
+      </div>
+    );
+  }
+  if (report.state !== 'available') {
+    const unreadable = report.state === 'unreadable';
+    return (
+      <div className="row gap-10" data-test-report-state={report.state} data-test-report-reason={report.reason ?? ''} style={box}>
+        <span style={{ fontWeight: 600 }}>Verify tests</span>
+        <span className="pill" data-test-report-outcome="none"
+          style={{ fontSize: 10.5, background: unreadable ? 'var(--warn-soft)' : 'var(--bg-hover)', color: unreadable ? 'var(--warn)' : 'var(--text-muted)' }}>
+          {unreadable ? 'unreadable' : 'unavailable'}
+        </span>
+        <span className="muted">
+          {unreadable
+            ? `The test report could not be read${report.detail ? ` (${report.detail})` : ''} — no outcome is shown.`
+            : REPORT_REASON[report.reason ?? 'no-report']}
+        </span>
+      </div>
+    );
+  }
+  const failed = report.outcome !== 'passed';
+  return (
+    <div className="row gap-10" data-test-report-state="available" data-test-report-outcome={failed ? 'failed' : 'passed'} style={{ ...box, flexWrap: 'wrap' }}>
+      <span style={{ fontWeight: 600 }}>Verify tests</span>
+      <span className="pill" style={{ fontSize: 10.5, background: failed ? 'var(--error-soft)' : 'var(--success-soft)', color: failed ? 'var(--error)' : 'var(--success)' }}>
+        {failed ? 'failed' : 'passed'}
+      </span>
+      <span className="mono tabular" data-count="passed">{report.passed} passed</span>
+      <span className="mono tabular" data-count="failed" style={{ color: (report.failed ?? 0) > 0 ? 'var(--error)' : undefined }}>{report.failed} failed</span>
+      <span className="mono tabular muted" data-count="skipped">{report.skipped} skipped</span>
+      {report.disagreement && (
+        <span data-test-report-disagreement style={{ color: 'var(--warn)' }}>
+          {report.stepStatus === 'failed'
+            ? 'The report and the step result disagree: the report shows every test passing, but the verify step failed.'
+            : 'The report and the step result disagree: the report shows failures, but the verify step passed.'}
+        </span>
+      )}
+    </div>
+  );
+}
+
 // @implements REQ-DESKTOP-023
+// @implements REQ-WFGATE-002
 export function RunDetail({ id, project }: { id: string; project: string | null }) {
   const detail = useApi(() => api.run(id, project), [id, project]);
   const workflows = useApi(() => api.workflows(project), [project]);
@@ -404,6 +469,14 @@ export function RunDetail({ id, project }: { id: string; project: string | null 
   const artifacts = useApi(
     () => (tab === 'artifacts' ? api.runArtifacts(id, project) : Promise.resolve({ artifacts: [] })),
     [id, project, tab, status],
+  );
+
+  // Verify test report (REQ-WFGATE-002): refetched whenever the verify step's
+  // own events move, so a rerun after resume shows its latest attempt (A6).
+  const verifyNode = nodes.find((n) => n.id === 'verify');
+  const testReport = useApi(
+    () => (verifyNode ? api.runTestReport(id, project) : Promise.resolve(null)),
+    [id, project, !!verifyNode, verifyNode?.state, verifyNode?.startedAt, verifyNode?.finishedAt, status],
   );
 
   const approval = run?.metadata?.approval as { message?: string } | undefined;
@@ -509,6 +582,7 @@ export function RunDetail({ id, project }: { id: string; project: string | null 
       )}
 
       {nodes.length > 0 && <RunNodeGraph nodes={nodes} />}
+      {verifyNode && <TestReportPanel report={testReport.loading ? null : testReport.data} loading={testReport.loading} />}
 
       <div className="col" style={{ flex: 1, minHeight: 0 }}>
         <div className="row gap-2" style={{ padding: '8px 14px 0', borderBottom: '1px solid var(--border-subtle)' }}>

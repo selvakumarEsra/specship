@@ -20,6 +20,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import type { SpecShipInstance } from '../project-registry.js';
+import { readVerifyTestReport } from '../workflow-test-report.js';
 
 interface ProjectQuery { project?: string }
 
@@ -199,6 +200,23 @@ export async function registerWorkflowRoutes(app: FastifyInstance): Promise<void
       } catch { /* dir vanished mid-read — return what we have */ }
     }
     return { artifacts };
+  });
+
+  /**
+   * The verify step's test report + outcome for one run (REQ-WFGATE-002).
+   * Scoped to `:id`: the report file and the step events are that run's
+   * only. A missing or unparsable report comes back unavailable / unreadable,
+   * never as a pass. Reads the artifacts dir, which purge leaves in place.
+   */
+  app.get('/api/workflows/runs/:id/test-report', async (req: FastifyRequest<{ Params: { id: string }; Querystring: ProjectQuery }>, reply) => {
+    const cg = await resolveCg(app, req, reply); if (!cg) return;
+    const { sq, projectRoot } = executorFor(cg);
+    const run = sq.getWorkflowRunById(req.params.id);
+    if (!run) return reply.code(404).send({ error: 'run not found' });
+    // Events come oldest-first under a LIMIT; streamed tool/agent events can
+    // number in the thousands, and a cut-off tail would hide the latest
+    // verify attempt (A6) — so read the whole log.
+    return readVerifyTestReport(projectRoot, run.id, sq.getEventsByRun(run.id, 1_000_000));
   });
 
   /**

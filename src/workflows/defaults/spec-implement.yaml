@@ -533,6 +533,10 @@ nodes:
       # Install and build failures fail fast with their own markers
       # (REQ-REVINT-006.A1) — a broken environment or a build break is NOT a
       # test failure, and must never be attributed to one.
+      # REQ-WFGATE-002.A6 — drop the previous attempt's report FIRST, before
+      # any env/build check: a rerun that never reaches the tests must show
+      # "unavailable" in the run view, never the earlier attempt's pass.
+      if [ -n "$SPECSHIP_ARTIFACTS_DIR" ]; then rm -f "$SPECSHIP_ARTIFACTS_DIR/test-report.json"; fi
       if [ -f package.json ]; then
         # A fresh worktree has no node_modules/ or build output — a verify
         # failure must mean the tests failed, not that the environment was

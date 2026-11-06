@@ -407,6 +407,19 @@ export interface RunArtifactsResponse {
   artifacts: RunArtifact[];
 }
 
+/** The verify step's test report for one run (REQ-WFGATE-002). */
+export interface RunTestReport {
+  state: 'available' | 'unavailable' | 'unreadable';
+  outcome: 'passed' | 'failed' | null;
+  passed: number | null;
+  failed: number | null;
+  skipped: number | null;
+  stepStatus: 'pending' | 'running' | 'completed' | 'failed' | 'skipped';
+  disagreement: boolean;
+  reason?: 'not-run' | 'running' | 'skipped' | 'build-failed' | 'env-failed' | 'not-vitest' | 'no-report';
+  detail?: string;
+}
+
 export type RunAction = 'approve' | 'reject' | 'cancel' | 'resume' | 'purge';
 
 export interface ProjectEntry {
@@ -494,6 +507,8 @@ export const api = {
     getJson<RunDetailResponse>(q(`/api/workflows/runs/${encodeURIComponent(id)}`, project)),
   runArtifacts: (id: string, project?: string | null) =>
     getJson<RunArtifactsResponse>(q(`/api/workflows/runs/${encodeURIComponent(id)}/artifacts`, project)),
+  runTestReport: (id: string, project?: string | null) =>
+    getJson<RunTestReport>(q(`/api/workflows/runs/${encodeURIComponent(id)}/test-report`, project)),
   runAction: (id: string, action: RunAction, body?: { comment?: string; reason?: string }, project?: string | null) =>
     postJson<{ ok: boolean }>(q(`/api/workflows/runs/${encodeURIComponent(id)}/${action}`, project), body),
   projects: () => getJson<ProjectsResponse>('/api/projects'),

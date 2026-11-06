@@ -155,6 +155,9 @@
     "GET /api/workflows/runs/:id/events": {
       "tested": "__tests__/surface-removal.test.ts"
     },
+    "GET /api/workflows/runs/:id/test-report": {
+      "tested": "__tests__/workflow-test-report-route.test.ts, e2e/tests/run-test-report.spec.ts"
+    },
     "PATCH /api/mcp/servers/:name": {
       "tested": "ui/src/__tests__/mcp.test.tsx"
     },
