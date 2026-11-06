@@ -529,7 +529,17 @@ NOT add any link itself. Test files and symbols already linked by another
 requirement in the same commit MUST NOT be suggested.
 
 implementations:
+  - src/spec-lint/commit-suggestions.ts:findRequirementCommits
+  - src/spec-lint/commit-suggestions.ts:linkSuggestionFindings
+  - src/spec-lint/commit-suggestions.ts:preloadCommitGrammars
   - src/spec-lint/lint.ts:lintSpecs
+  - src/spec-lint/lint.ts:formatLintReport
+
+verifies:
+  - __tests__/spec-lint-commit-suggestions.test.ts:reqLinkacc010A1
+  - __tests__/spec-lint-commit-suggestions.test.ts:reqLinkacc010A2
+  - __tests__/spec-lint-commit-suggestions.test.ts:reqLinkacc010A3
+  - __tests__/spec-lint-commit-suggestions.test.ts:reqLinkacc010A4
 
 ## Acceptance
 <!-- id: REQ-LINKACC-010.A1 -->

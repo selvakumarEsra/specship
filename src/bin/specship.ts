@@ -2066,12 +2066,19 @@ program
   .description('Lint spec files for authoring problems (exits non-zero on an error finding)')
   .option('-p, --path <path>', 'Project path (paths are resolved against it; defaults to specs/)')
   .option('-j, --json', 'Output as JSON')
-  .action(async (paths: string[], options: { path?: string; json?: boolean }) => {
+  .option('--no-suggest', 'Skip link suggestions from the requirements\' commits (faster)')
+  .action(async (paths: string[], options: { path?: string; json?: boolean; suggest?: boolean }) => {
     const projectRoot = resolveProjectPath(options.path);
     try {
       const { runLintCli } = await import('../spec-lint/lint');
+      // Link suggestions (REQ-LINKACC-010) parse changed files synchronously;
+      // load the grammars the requirement commits need first.
+      if (options.suggest !== false) {
+        const { preloadCommitGrammars } = await import('../spec-lint/commit-suggestions');
+        await preloadCommitGrammars(projectRoot);
+      }
       const { output, exitCode } = runLintCli(
-        [...(paths ?? []), ...(options.json ? ['--json'] : [])],
+        [...(paths ?? []), ...(options.json ? ['--json'] : []), ...(options.suggest === false ? ['--no-suggest'] : [])],
         { projectRoot }
       );
       console.log(output);
