@@ -231,7 +231,21 @@ describe.skipIf(!fts5Available)('verifying a link takes a new spec-text baseline
     const t = link('REQ-TB-004', 'tests');
     expect(t.state).toBe('verified');
     expect(t.specHashAtLink).toBe(specHash('REQ-TB-004'));
-    if (testSigNow) expect(t.nodeSigAtLink).toBe(testSigNow);
+    expect(testSigNow).toBeTruthy(); // the tests link targets a real function
+    expect(t.nodeSigAtLink).toBe(testSigNow);
+  }
+
+  // The report path finds the signature the way the tool does, even when the
+  // link's stored node id is stale.
+  async function reqLinkacc013A4StaleNodeId(): Promise<void> {
+    const testLink = link('REQ-TB-004', 'tests');
+    const expected = signature(testLink);
+    expect(expected).toBeTruthy();
+    const raw = cg.getSpecQueries().getRawDb();
+    raw.prepare('UPDATE spec_links SET resolved_node_id = ?, node_sig_at_link = ? WHERE id = ?').run('no-such-node', 'stale', testLink.id);
+    fs.writeFileSync(path.join(dir, 'report.json'), report(dir, 'passed'), 'utf-8');
+    cg.verifyFromReport('report.json');
+    expect(link('REQ-TB-004', 'tests').nodeSigAtLink).toBe(expected);
   }
 
   async function reqLinkacc013A5(): Promise<void> {
@@ -273,6 +287,7 @@ describe.skipIf(!fts5Available)('verifying a link takes a new spec-text baseline
   it('REQ-LINKACC-013.A2: editing another requirement in the file does not drift a verified link', reqLinkacc013A2);
   it('REQ-LINKACC-013.A3: editing the linked requirement after verify still drifts the link on the spec side', reqLinkacc013A3);
   it('REQ-LINKACC-013.A4: the dashboard verify call and a passing report take the same baseline as the tool', reqLinkacc013A4);
+  it('REQ-LINKACC-013.A4: a passing report stores the signature the tool would, even with a stale node id', reqLinkacc013A4StaleNodeId);
   it('REQ-LINKACC-013.A5: a failed verification leaves both stored baselines as they were', reqLinkacc013A5);
 });
 

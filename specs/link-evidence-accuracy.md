@@ -503,6 +503,7 @@ verifies:
   - __tests__/link-verify-spec-baseline.test.ts:reqLinkacc013A2
   - __tests__/link-verify-spec-baseline.test.ts:reqLinkacc013A3
   - __tests__/link-verify-spec-baseline.test.ts:reqLinkacc013A4
+  - __tests__/link-verify-spec-baseline.test.ts:reqLinkacc013A4StaleNodeId
   - __tests__/link-verify-spec-baseline.test.ts:reqLinkacc013A5
 
 ## Acceptance

@@ -495,7 +495,10 @@ export class SpecShip {
         // REQ-LINKACC-013: the requirement's current text hash is re-baselined
         // on a pass even when the target has no signature (e.g. a file target).
         const specHash = this.specQueries.getSpecById(link.specId)?.contentHash || undefined;
-        const node = link.resolvedNodeId ? this.queries.getNodeById(link.resolvedNodeId) : null;
+        // The same lookup the tool and dashboard use (rebaselineLinkOnVerify),
+        // so every verify path stores the same baseline (A4). A stored
+        // resolvedNodeId can be stale; the logical target is current.
+        const node = this.specLinkResolver.findLogicalTarget(link.targetFilePath, link.targetQualifiedName, link.targetNodeKind);
         if (!node || !node.signature) return specHash ? { signature: '', specHash } : undefined;
         const bodyFp = nodeBodyFingerprint(this.projectRoot, node) ?? undefined;
         return { signature: node.signature, language: node.language, bodyFp, specHash };
