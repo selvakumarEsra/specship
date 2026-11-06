@@ -10,6 +10,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
+import { execFileSync } from 'child_process';
 import * as path from 'path';
 import * as os from 'os';
 import SpecShip from '../src';
@@ -239,7 +240,7 @@ describe.skipIf(!fts5Available)('REQ-LINKACC-003 rename-only drift clearing', ()
     return 'rc-report.json';
   };
 
-  /** A `verified` implements link that then drifted with `kind`. */
+  /** An `implemented` implements link that then drifted with `kind` (verified links never code-drift). */
   const seedDrifted = (kind: 'rename-only' | 'type-change' | 'shape-change', qname: string): number => {
     const now = Date.now();
     return sq.upsertSpecLink({
@@ -255,7 +256,7 @@ describe.skipIf(!fts5Available)('REQ-LINKACC-003 rename-only drift clearing', ()
       nodeSigAtLink: RC_BASELINE,
       provenance: 'agent-asserted',
       confidence: 1.0,
-      metadata: { preDrift: { state: 'verified', at: now - 1000 } },
+      metadata: { preDrift: { state: 'implemented', at: now - 1000 } },
       createdAt: now,
       updatedAt: now,
     });
@@ -311,7 +312,7 @@ describe.skipIf(!fts5Available)('REQ-LINKACC-003 rename-only drift clearing', ()
 
     expect(result.cleared.map((c) => c.linkId)).toEqual([id]);
     const link = sq.getLinkById(id)!;
-    expect(link.state).toBe('verified');
+    expect(link.state).toBe('implemented');
     expect(link.driftKind ?? null).toBeNull();
     expect(link.driftAxis ?? null).toBeNull();
     expect(link.nodeSigAtLink).toBe(RC_RENAMED);
@@ -381,10 +382,108 @@ describe.skipIf(!fts5Available)('REQ-LINKACC-003 rename-only drift clearing', ()
     expect(link.nodeSigAtLink).toBe(RC_BASELINE);
   }
 
-  it('REQ-LINKACC-003.A1 a verified rename-only drift is verified again after a passing current-commit report', reqLinkacc003A1);
+  it('REQ-LINKACC-003.A1 a rename-only drift returns to its prior state after a passing current-commit report', reqLinkacc003A1);
   it('REQ-LINKACC-003.A2 one failing test of the requirement leaves the link drifted', reqLinkacc003A2);
   it('REQ-LINKACC-003.A3 a report recorded on an older commit clears nothing', reqLinkacc003A3);
   it('REQ-LINKACC-003.A4 a type-change or shape-change drift is not cleared by a passing report', reqLinkacc003A4);
   it('REQ-LINKACC-003.A3 a report with no known commit clears nothing', reqLinkacc003NoCommitClearsNothing);
   it('REQ-LINKACC-003.A4 a rename that has since become a type change stays drifted', reqLinkacc003KindChangedSinceDrift);
+});
+
+// End to end (REQ-LINKACC-003.A1): a real sync drifts an implemented link
+// `rename-only` (verified links are sticky and never code-drift,
+// DOM-SPECSHIP-001), then a passing report on the current commit clears it.
+describe.skipIf(!fts5Available)('REQ-LINKACC-003 end to end', () => {
+  let dir: string;
+  let cg: SpecShip | undefined;
+
+  const git = (...args: string[]) => execFileSync('git', args, { cwd: dir, encoding: 'utf-8' }).trim();
+  const write = (rel: string, body: string) => {
+    fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true });
+    fs.writeFileSync(path.join(dir, rel), body, 'utf-8');
+  };
+  const SPEC = `---
+id: E2E-DOC
+title: e2e
+---
+
+<!-- id: E2E-DOC -->
+# e2e
+
+<!-- id: REQ-E2E-001 -->
+## The flag MUST be honoured
+
+implementations:
+  - src/flag.ts:readFlag
+
+## Acceptance
+<!-- id: REQ-E2E-001.A1 -->
+- It reads the flag.
+`;
+  const TEST = "import { it } from 'vitest';\nit('reads the flag (REQ-E2E-001.A1)', () => {});\nit('honours the flag (REQ-E2E-001)', () => {});\n";
+  const report = (status: 'passed' | 'failed') =>
+    JSON.stringify({
+      testResults: [{
+        name: path.join(dir, '__tests__/flag.test.ts'),
+        assertionResults: ['reads the flag (REQ-E2E-001.A1)', 'honours the flag (REQ-E2E-001)'].map((title) => ({
+          ancestorTitles: [], title, fullName: title, status, failureMessages: status === 'failed' ? ['nope'] : [],
+        })),
+      }],
+    });
+
+  beforeEach(() => {
+    dir = tempDir();
+    git('init', '-q');
+    git('config', 'user.email', 't@example.com');
+    git('config', 'user.name', 'T');
+    write('specs/e2e.md', SPEC);
+    write('src/flag.ts', 'export function readFlag(installClaude: boolean): boolean {\n  return installClaude;\n}\n');
+    write('__tests__/flag.test.ts', TEST);
+  });
+  afterEach(() => {
+    cg?.close();
+    cg = undefined;
+    clean(dir);
+  });
+
+  async function driftByRename(): Promise<{ sq: SpecQueries; linkId: number; head: string }> {
+    cg = await SpecShip.init(dir);
+    await cg.indexAll();
+    const sq = cg.getSpecQueries();
+    const link = sq.getLinksBySpec('REQ-E2E-001').find((l) => l.kind === 'implements')!;
+    expect(link.state).toBe('implemented');
+    write('src/flag.ts', 'export function readFlag(hasStatusLine: boolean): boolean {\n  return hasStatusLine;\n}\n');
+    await cg.sync();
+    const drifted = sq.getLinkById(link.id)!;
+    expect(drifted.state).toBe('drifted');
+    expect(drifted.driftKind).toBe('rename-only');
+    git('add', '-A');
+    git('commit', '-qm', 'rename');
+    return { sq, linkId: link.id, head: git('rev-parse', 'HEAD') };
+  }
+
+  async function reqLinkacc003A1EndToEnd(): Promise<void> {
+    const { sq, linkId, head } = await driftByRename();
+    write('report.json', report('passed'));
+    const result = cg!.verifyFromReport('report.json', { commit: head });
+    expect(result.cleared.map((c) => c.linkId)).toEqual([linkId]);
+    const after = sq.getLinkById(linkId)!;
+    expect(after.state).toBe('implemented');
+    expect(after.driftKind ?? null).toBeNull();
+    expect(after.nodeSigAtLink).toContain('hasStatusLine');
+    // Re-baselined: the next sync does not drift it again.
+    await cg!.sync();
+    expect(sq.getLinkById(linkId)!.state).toBe('implemented');
+  }
+
+  async function reqLinkacc003EndToEndFailingTestKeepsDrift(): Promise<void> {
+    const { sq, linkId, head } = await driftByRename();
+    write('report.json', report('failed'));
+    const result = cg!.verifyFromReport('report.json', { commit: head });
+    expect(result.cleared).toEqual([]);
+    expect(sq.getLinkById(linkId)!.state).toBe('drifted');
+  }
+
+  it('REQ-LINKACC-003.A1: a real rename drift on an implemented link clears on a passing current-commit report', reqLinkacc003A1EndToEnd);
+  it('REQ-LINKACC-003.A2: the same path with a failing test keeps the drift', reqLinkacc003EndToEndFailingTestKeepsDrift);
 });

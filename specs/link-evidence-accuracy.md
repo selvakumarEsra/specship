@@ -163,7 +163,10 @@ A link that drifted with kind `rename-only` MUST return to the state it had
 before the drift once a recorded test run on the current commit passes for
 every test link of that requirement and its criteria (REQ-LINKACC-006). Until
 then it stays `drifted` with kind `rename-only`. A drift of any other kind
-never clears this way.
+never clears this way. A `verified` link never code-drifts in the first place
+(sticky states, DOM-SPECSHIP-001), so in practice the state restored is
+`implemented`. A link that drifted before this requirement shipped has no
+recorded prior state, so it stays `drifted` until it is verified by hand.
 
 implementations:
   - src/verify/report-ingest.ts:ingestTestReport
@@ -174,6 +177,8 @@ implementations:
 
 verifies:
   - __tests__/verify-report.test.ts:reqLinkacc003A1
+  - __tests__/verify-report.test.ts:reqLinkacc003A1EndToEnd
+  - __tests__/verify-report.test.ts:reqLinkacc003EndToEndFailingTestKeepsDrift
   - __tests__/verify-report.test.ts:reqLinkacc003A2
   - __tests__/verify-report.test.ts:reqLinkacc003A3
   - __tests__/verify-report.test.ts:reqLinkacc003A4
@@ -183,9 +188,9 @@ verifies:
 
 ## Acceptance
 <!-- id: REQ-LINKACC-003.A1 -->
-- A `verified` link that drifted `rename-only` is `verified` again after a
-  report from the current commit records all of the requirement's tests
-  passing.
+- An `implemented` link that drifted `rename-only` in a real sync is
+  `implemented` again, with its signature baseline updated, after a report
+  from the current commit records all of the requirement's tests passing.
 <!-- id: REQ-LINKACC-003.A2 -->
 - The same report with one of those tests failing leaves the link `drifted`.
 <!-- id: REQ-LINKACC-003.A3 -->
