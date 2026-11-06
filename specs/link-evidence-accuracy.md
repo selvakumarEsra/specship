@@ -99,7 +99,7 @@ type differs), or `shape-change` (parameters were added or removed, or the
 signature and the body both changed in a way that is neither of the others).
 A link with no signature baseline (file-level and test-title links carry
 none on purpose) MUST NOT start drifting because of this requirement: it keeps
-its state and adopts the current signature on its next verify. When a link
+its state. When a link
 does drift and either signature cannot be parsed or compared, the kind MUST be
 `unclassified`. SpecShip MUST NOT infer a more specific kind from a hash
 difference alone. The kind MUST appear wherever the
@@ -121,6 +121,10 @@ implementations:
   - src/resolution/signature-drift.ts:formatDriftedLine
   - src/db/spec-queries.ts:SpecQueries.updateSpecLinkState
   - src/mcp/spec-tools.ts:formatLink
+  - src/db/spec-queries.ts:SpecQueries.insertSpecLink
+  - src/db/spec-queries.ts:SpecQueries.upsertSpecLink
+  - src/db/spec-queries.ts:rowToSpecLink
+  - ui/src/pages/review.tsx:ReviewRowItem
 
 verifies:
   - __tests__/signature-drift.test.ts:reqLinkacc002A1
@@ -131,6 +135,8 @@ verifies:
   - __tests__/signature-drift.test.ts:reqLinkacc002A3Resolver
   - __tests__/signature-drift.test.ts:reqLinkacc002A4
   - __tests__/signature-drift.test.ts:reqLinkacc002A5
+  - __tests__/signature-drift.test.ts:reqLinkacc002A3WhitespaceOnly
+  - ui/src/__tests__/review.test.tsx:reviewRowShowsDriftKind
 
 ## Acceptance
 <!-- id: REQ-LINKACC-002.A1 -->

@@ -274,9 +274,10 @@ export function classifySignatureDrift(
   const nameDiffers = a.params.some((p, i) => p.name !== b.params[i]!.name);
   if (nameDiffers) return 'rename-only';
 
-  // Equal once normalised (e.g. whitespace only) — a change that is neither
-  // a rename nor a type change.
-  return 'shape-change';
+  // Equal once normalised (e.g. whitespace only): the parse finds no rename,
+  // type or shape change, so naming one would infer a kind from a raw text
+  // difference alone, which REQ-LINKACC-002 forbids.
+  return 'unclassified';
 }
 
 /** The drift fields a surface needs to label a drifted link. */

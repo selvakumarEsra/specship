@@ -115,10 +115,17 @@ function reqLinkacc002A1Classifier(): void {
   expect(classifySignatureDrift('(int a, const char *b)', '(int a, const char *name)', 'c')).toBe('rename-only');
 }
 
+/** A signature that differs only in whitespace names no specific kind. */
+function reqLinkacc002A3WhitespaceOnly(): void {
+  expect(classifySignatureDrift('(a: number, b: string): void', '(a:  number,  b: string):   void')).toBe('unclassified');
+  expect(classifySignatureDrift('(a: number): void', '(a: number):\n  void')).toBe('unclassified');
+}
+
 describe('REQ-LINKACC-002 signature drift classifier', () => {
   it('REQ-LINKACC-002.A1 renaming installClaude: boolean to hasStatusLine: boolean is rename-only', reqLinkacc002A1Classifier);
   it('REQ-LINKACC-002.A2 a type, return-type or arity change is type-change or shape-change', reqLinkacc002A2);
   it('REQ-LINKACC-002.A3 a missing baseline or unparseable signature is unclassified, never rename-only', reqLinkacc002A3);
+  it('REQ-LINKACC-002.A3: a whitespace-only signature difference is unclassified, never a specific kind', reqLinkacc002A3WhitespaceOnly);
 });
 
 // ---------------------------------------------------------------------------
