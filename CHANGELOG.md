@@ -9,6 +9,9 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixes
+
+- Verifying a requirement now counts tests that name its acceptance criteria, not only tests that name the requirement itself.
 
 ## [0.30.0] - 2026-11-05
 
@@ -32,7 +35,6 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixes
 
-- Verifying a requirement now counts tests that name its acceptance criteria, not only tests that name the requirement itself.
 - The dashboard project picker and `specship desktop` now find projects used only with Gemini CLI, not just projects with Claude Code transcripts.
 - Skills, commands and the explorer subagent installed for Gemini CLI no longer tell Gemini users to run `claude mcp add`, call Claude-only tools, or edit `CLAUDE.md`; the `design-md` skill reference is kept when Gemini has that skill.
 - The Claude Code plugin now wires the same hooks as `specship install` (it was missing the steering nudge, the search interceptor and the session drift summary), enables no integration unless you opt in, and carries the package version.
