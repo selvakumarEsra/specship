@@ -427,38 +427,52 @@ export async function registerSpecRoutes(app: FastifyInstance): Promise<void> {
     if (!body?.spec_id || !body.target_file_path || !body.target_qualified_name) {
       return reply.code(400).send({ error: 'spec_id, target_file_path, target_qualified_name required' });
     }
-    const sq = cg.getSpecQueries();
-    const spec = sq.getSpecById(body.spec_id);
-    if (!spec) return reply.code(404).send({ error: 'spec not found' });
-
-    // Validate the target against the graph before recording (REQ-REVINT-003.A3
-    // — same rule as the MCP tool). The dashboard's caller can't retry from a
-    // refusal the way an agent can, so an unresolvable target is recorded as
-    // `orphaned` and reported back as such — never as `implemented`.
-    const nodeKind = body.target_node_kind ?? 'function';
-    const node = cg
-      .getSpecLinkResolver()
-      .findLogicalTarget(body.target_file_path, body.target_qualified_name, nodeKind);
-
-    const now = Date.now();
-    const id = sq.upsertSpecLink({
+    // The MCP tool's rule, shared on the loaded instance (REQ-LINKACC-011,
+    // REQ-REVINT-003.A3): resolve the target, write it into the spec file, and
+    // only then record it. An unresolvable target or a failed write-back
+    // records nothing — an index-only link would vanish on a full reindex.
+    // The server never imports the package; an instance without the method is
+    // a stale build, refused rather than recording index-only.
+    if (typeof cg.assertSpecLink !== 'function') {
+      return reply.code(501).send({
+        error: 'this SpecShip build cannot persist asserted links to the spec file — update SpecShip',
+        code: 'unsupported',
+      });
+    }
+    const res = await cg.assertSpecLink({
       specId: body.spec_id,
       targetFilePath: body.target_file_path,
       targetQualifiedName: body.target_qualified_name,
-      targetNodeKind: nodeKind,
-      resolvedNodeId: node?.id,
+      targetNodeKind: body.target_node_kind ?? 'function',
       kind: body.kind ?? 'implements',
-      state: node ? 'implemented' : 'orphaned',
-      driftAxis: null,
-      driftKind: null,
-      specHashAtLink: spec.contentHash,
-      nodeSigAtLink: node?.signature,
-      provenance: 'agent-asserted',
-      confidence: 1.0,
-      createdAt: now,
-      updatedAt: now,
     });
-    return { id, ok: true, resolved: node !== null, state: node ? 'implemented' : 'orphaned' };
+    if (!res.ok) {
+      switch (res.code) {
+        case 'spec_not_found':
+          return reply.code(404).send({ error: 'spec not found', code: res.code });
+        case 'unsupported_kind':
+          return reply.code(400).send({ error: res.error, code: res.code });
+        case 'unresolved':
+          return reply.code(422).send({ error: res.error, code: res.code, bullet: res.bullet, blockName: res.blockName });
+        case 'write_back_failed':
+          return reply.code(409).send({
+            error: res.error,
+            code: res.code,
+            bullet: res.bullet,
+            blockName: res.blockName,
+            specFile: res.specFile,
+            requirementId: res.requirementId,
+          });
+      }
+    }
+    return {
+      id: res.linkId,
+      ok: true,
+      resolved: true,
+      state: 'implemented',
+      writeBack: res.writeBack,
+      specFile: res.specFile,
+    };
   });
 
   app.post('/api/spec/link-verify', async (req: FastifyRequest<{ Body: LinkVerifyBody; Querystring: ProjectQuery }>, reply) => {

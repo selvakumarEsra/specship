@@ -564,6 +564,12 @@ on a full re-index.
 implementations:
   - src/mcp/spec-tools.ts:handleSpecshipLinkAssert
   - src/spec-quality/link-persist.ts:persistLinkToSpecFile
+  - src/index.ts:SpecShip.assertSpecLink
+
+verifies:
+  - __tests__/link-assert-writeback-required.test.ts:reqLinkacc011A1
+  - __tests__/link-assert-writeback-required.test.ts:reqLinkacc011A2
+  - __tests__/link-assert-writeback-required.test.ts:reqLinkacc011A3
 
 ## Acceptance
 <!-- id: REQ-LINKACC-011.A1 -->

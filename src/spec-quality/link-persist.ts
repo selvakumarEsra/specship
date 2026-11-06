@@ -112,6 +112,11 @@ export function symbolDefinedInSource(source: string, symbol: string): boolean {
 /**
  * Persist an asserted link into the spec file. Never throws — failures and
  * refusals come back as `status: 'refused'` with the reason.
+ *
+ * Link assertion calls this BEFORE recording anything (REQ-LINKACC-011,
+ * `SpecShip.assertSpecLink`): `refused` means no link is recorded, so a link
+ * never exists only in the index. `requirementId` and `specFile` name where
+ * the caller tells the user to add the bullet by hand.
  */
 export function persistLinkToSpecFile(opts: PersistLinkOptions): PersistLinkResult {
   const requirementId = parentRequirementId(opts.specId);

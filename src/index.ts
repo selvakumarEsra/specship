@@ -23,6 +23,9 @@ import {
   FindRelevantContextOptions,
   SpecLink,
   SpecLinkState,
+  SpecLinkKind,
+  NodeKind,
+  Spec,
 } from './types';
 import { DatabaseConnection, getDatabasePath } from './db';
 import { QueryBuilder } from './db/queries';
@@ -92,6 +95,56 @@ import {
 } from './reflect';
 import { estimateRunEta as estimateRunEtaImpl, RunEta } from './workflows/eta';
 export type { RunEta, RunEtaAvailable, RunEtaUnavailable } from './workflows/eta';
+
+/** Link kinds that have a block in the spec file, so can be asserted (REQ-LINKACC-011). */
+export const ASSERTABLE_LINK_KINDS = ['implements', 'tests'] as const;
+
+/** Input to {@link SpecShip.assertSpecLink}. */
+export interface LinkAssertInput {
+  specId: string;
+  targetFilePath: string;
+  targetQualifiedName: string;
+  targetNodeKind?: NodeKind;
+  kind?: SpecLinkKind;
+}
+
+/**
+ * Outcome of {@link SpecShip.assertSpecLink}. Every failure records nothing.
+ * `bullet` / `blockName` / `specFile` say what to add to the spec by hand.
+ */
+export type LinkAssertResult =
+  | {
+      ok: true;
+      linkId: number;
+      kind: 'implements' | 'tests';
+      targetQualifiedName: string;
+      blockName: 'implementations' | 'verifies';
+      writeBack: 'persisted' | 'unchanged';
+      specFile: string;
+      requirementId: string;
+    }
+  | { ok: false; code: 'spec_not_found'; error: string }
+  | { ok: false; code: 'unsupported_kind'; error: string }
+  | {
+      ok: false;
+      code: 'unresolved';
+      error: string;
+      spec: Spec;
+      targetQualifiedName: string;
+      bullet: string;
+      blockName: 'implementations' | 'verifies';
+    }
+  | {
+      ok: false;
+      code: 'write_back_failed';
+      error: string;
+      detail: string;
+      targetQualifiedName: string;
+      bullet: string;
+      blockName: 'implementations' | 'verifies';
+      specFile: string;
+      requirementId: string;
+    };
 import * as os from 'os';
 import * as fs from 'fs';
 import { createHash } from 'crypto';
@@ -475,6 +528,135 @@ export class SpecShip {
    */
   verificationEvidence(link: SpecLink): SpecLink[] {
     return evidenceLinksFor(this.specQueries, link);
+  }
+
+  /**
+   * Assert a spec → code link: resolve the target, write it into the spec
+   * file, and only then record it (REQ-LINKACC-011, REQ-THRU-005,
+   * REQ-REVINT-003). A link that cannot be written into the spec file would
+   * live only in the index and vanish on the next full reindex, so a refused
+   * write-back records nothing and says what to add by hand. Kinds without a
+   * spec-file block are refused the same way. On the instance so the MCP tool
+   * and the desktop server's link-assert route share one rule.
+   */
+  async assertSpecLink(input: LinkAssertInput): Promise<LinkAssertResult> {
+    const kind = input.kind ?? 'implements';
+    const targetNodeKind = input.targetNodeKind ?? 'function';
+    const { specId, targetFilePath } = input;
+    // Canonical dotted key (REQ-LINKFIX-002): `Class::method` and
+    // `Class.method` are one logical target.
+    const targetQualifiedName = canonicalQualifiedName(input.targetQualifiedName);
+
+    if (kind !== 'implements' && kind !== 'tests') {
+      return {
+        ok: false,
+        code: 'unsupported_kind',
+        error:
+          `kind "${kind}" has no block in the spec file, so the link could not survive a reindex — no link was recorded. ` +
+          `Supported kinds: ${ASSERTABLE_LINK_KINDS.join(', ')}.`,
+      };
+    }
+    const blockName = kind === 'tests' ? 'verifies' : 'implementations';
+    const bullet = `- ${targetFilePath}:${targetQualifiedName}`;
+
+    const spec = this.specQueries.getSpecById(specId);
+    if (!spec) {
+      return {
+        ok: false,
+        code: 'spec_not_found',
+        error: `Spec "${specId}" not found. Make sure the spec file is indexed (specship index).`,
+      };
+    }
+
+    // Validate the target BEFORE writing or recording anything (REQ-REVINT-003).
+    let node = this.specLinkResolver.findLogicalTarget(targetFilePath, targetQualifiedName, targetNodeKind);
+    if (!node && !this.isIndexing()) {
+      // The index lags writes by ~1s — sync once before refusing a symbol the
+      // caller just wrote.
+      try {
+        await this.sync();
+      } catch {
+        // Fall through to the refusal.
+      }
+      node = this.specLinkResolver.findLogicalTarget(targetFilePath, targetQualifiedName, targetNodeKind);
+    }
+    if (!node) {
+      return {
+        ok: false,
+        code: 'unresolved',
+        error: `${targetFilePath}:${targetQualifiedName} does not resolve to an indexed symbol, so no link was recorded.`,
+        spec,
+        targetQualifiedName,
+        bullet,
+        blockName,
+      };
+    }
+
+    // Write into the spec file first — the file is the source of truth.
+    const persisted = persistLinkToSpecFile({
+      projectRoot: this.projectRoot,
+      specId,
+      kind,
+      filePath: targetFilePath,
+      symbol: targetQualifiedName,
+      specSourcePath: spec.sourcePath,
+      symbolResolved: true,
+    });
+    const specFile = persisted.specFile ?? spec.sourcePath;
+    if (persisted.status === 'refused') {
+      return {
+        ok: false,
+        code: 'write_back_failed',
+        error:
+          `Could not write the link into ${specFile} (${persisted.detail}), so no link was recorded — ` +
+          `an index-only link would vanish on the next full reindex. ` +
+          `Add \`${bullet}\` under \`${blockName}:\` for ${persisted.requirementId} in ${specFile}, then run specship sync.`,
+        detail: persisted.detail,
+        targetQualifiedName,
+        bullet,
+        blockName,
+        specFile,
+        requirementId: persisted.requirementId,
+      };
+    }
+
+    const now = Date.now();
+    const linkId = this.specQueries.upsertSpecLink({
+      specId,
+      targetFilePath,
+      targetQualifiedName,
+      targetNodeKind,
+      // Resolved node id + signature snapshot: the drift baseline.
+      resolvedNodeId: node.id,
+      kind,
+      state: 'implemented',
+      driftAxis: null,
+      specHashAtLink: spec.contentHash,
+      nodeSigAtLink: node.signature,
+      provenance: 'agent-asserted',
+      confidence: 1.0,
+      createdAt: now,
+      updatedAt: now,
+    });
+    // Body baseline (REQ-LINKACC-004), only when the link has none yet:
+    // re-asserting is a claim, not a verification.
+    const asserted = this.specQueries.getLinkById(linkId);
+    if (asserted && typeof asserted.metadata?.bodyFpAtLink !== 'string') {
+      const fp = nodeBodyFingerprint(this.projectRoot, node);
+      if (fp !== null) {
+        this.specQueries.updateSpecLinkMetadata(linkId, { ...(asserted.metadata ?? {}), bodyFpAtLink: fp }, now);
+      }
+    }
+    return {
+      ok: true,
+      linkId,
+      kind,
+      targetQualifiedName,
+      blockName,
+      writeBack: persisted.status,
+      specFile,
+      requirementId: persisted.requirementId,
+    };
   }
 
   recordLinkVerification(
