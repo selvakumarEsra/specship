@@ -138,6 +138,20 @@ describe('verify test report route (REQ-WFGATE-002)', () => {
       expect(body, id).toMatchObject({ state: 'unavailable', outcome: null, passed: null, failed: null, skipped: null, reason });
     }
 
+    // A vitest project whose tests ran but wrote no report (crashed) is
+    // "no report", not "not a vitest project".
+    addRun('crashed', 'step_failed');
+    writeVerifyOutput('crashed', 'VERIFY_REPORT=/x/test-report.json (ingest after merge: …)\nSegmentation fault\nVERIFY_RESULT=ran-and-failed\n');
+    expect((await getReport('crashed')).body).toMatchObject({ state: 'unavailable', outcome: null, reason: 'no-report' });
+
+    // A failed rerun with no output leaves the previous attempt's verify.md:
+    // its marker (older than the latest start) must not name the cause.
+    addRun('stale', 'step_failed');
+    writeVerifyOutput('stale', 'tsc: error\nVERIFY_RESULT=build-failed\n');
+    addEvent('stale', 'step_started', 'verify', Date.now() + 60_000);
+    addEvent('stale', 'step_failed', 'verify', Date.now() + 61_000);
+    expect((await getReport('stale')).body).toMatchObject({ state: 'unavailable', outcome: null, reason: 'no-report' });
+
     // Not run yet / mid-run: unavailable too.
     insertRun('fresh', { status: 'running' });
     expect((await getReport('fresh')).body).toMatchObject({ state: 'unavailable', outcome: null, reason: 'not-run' });
@@ -191,7 +205,11 @@ describe('verify test report route (REQ-WFGATE-002)', () => {
     // Attempt 3 is under way — the step reports itself running, and the
     // status comes from the newest event, not the first.
     addEvent('rerun', 'step_started', 'verify', 20_000);
-    expect((await getReport('rerun')).body).toMatchObject({ stepStatus: 'running' });
+    // Attempt 2's passing report is still on disk until the step's own rm
+    // runs — it must not be served as this attempt's pass.
+    expect((await getReport('rerun')).body).toMatchObject({
+      state: 'unavailable', outcome: null, passed: null, stepStatus: 'running', reason: 'running',
+    });
   }
 
   it('REQ-WFGATE-002.A7 the report is still served after the run is purged', reqWfgate002A7);

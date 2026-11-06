@@ -13,7 +13,7 @@
  */
 
 import path from 'node:path';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 
 /** The bundled workflows' verify node id. */
 export const VERIFY_STEP_ID = 'verify';
@@ -28,7 +28,7 @@ export type UnavailableReason =
   | 'build-failed'  // the build broke before the tests ran
   | 'env-failed'    // install / test tooling missing before the tests ran
   | 'not-vitest'    // tests ran, but not as a vitest project (cargo, pytest, …)
-  | 'no-report';    // ended without a report and without a known cause
+  | 'no-report';    // a vitest run that wrote no report, or no known cause
 
 export interface VerifyTestReport {
   state: 'available' | 'unavailable' | 'unreadable';
@@ -45,7 +45,7 @@ export interface VerifyTestReport {
   detail?: string;
 }
 
-interface StepEvent { eventType: string; data?: unknown }
+interface StepEvent { eventType: string; data?: unknown; createdAt?: number }
 
 function eventStep(e: StepEvent): string | undefined {
   const d = e.data as { stepId?: unknown } | undefined;
@@ -65,27 +65,52 @@ export function verifyStepStatus(events: StepEvent[], stepId = VERIFY_STEP_ID): 
   return status;
 }
 
-/** Last VERIFY_RESULT marker in the verify step's recorded output. */
-function verifyMarker(nodesDir: string, stepId: string): string | undefined {
+/** The latest `step_started` time of the verify step, when recorded. */
+function latestStart(events: StepEvent[], stepId: string): number | undefined {
+  let at: number | undefined;
+  for (const e of events) {
+    if (e.eventType === 'step_started' && eventStep(e) === stepId && typeof e.createdAt === 'number') at = e.createdAt;
+  }
+  return at;
+}
+
+interface VerifyOutput {
+  /** Last VERIFY_RESULT marker. */
+  marker?: string;
+  /** The step announced a vitest JSON report (VERIFY_REPORT=…). */
+  vitest: boolean;
+}
+
+/**
+ * The verify step's recorded output — only when it belongs to the latest
+ * attempt. A failed attempt with no output leaves the previous attempt's file
+ * in place; its marker would name the wrong cause, so it is ignored.
+ */
+function verifyOutput(nodesDir: string, stepId: string, startedAt: number | undefined): VerifyOutput {
+  const file = path.join(nodesDir, `${stepId}.md`);
   try {
-    const out = readFileSync(path.join(nodesDir, `${stepId}.md`), 'utf8');
+    if (startedAt !== undefined && statSync(file).mtimeMs < startedAt) return { vitest: false };
+    const out = readFileSync(file, 'utf8');
     const all = [...out.matchAll(/VERIFY_RESULT=([a-z-]+)/g)];
-    return all.length ? all[all.length - 1]![1] : undefined;
+    return { marker: all.length ? all[all.length - 1]![1] : undefined, vitest: /VERIFY_REPORT=/.test(out) };
   } catch {
-    return undefined;
+    return { vitest: false };
   }
 }
 
-function unavailableReason(status: VerifyStepStatus, marker: string | undefined): UnavailableReason {
+function unavailableReason(status: VerifyStepStatus, out: VerifyOutput): UnavailableReason {
   if (status === 'pending') return 'not-run';
   if (status === 'running') return 'running';
   if (status === 'skipped') return 'skipped';
-  switch (marker) {
+  switch (out.marker) {
     case 'skipped': return 'skipped';
     case 'build-failed': return 'build-failed';
     case 'env-failed': return 'env-failed';
+    // A vitest project announces its report path; tests that ran without
+    // one are a vitest run that never wrote it (crashed), not a non-vitest
+    // project.
     case 'ran-and-passed':
-    case 'ran-and-failed': return 'not-vitest';
+    case 'ran-and-failed': return out.vitest ? 'no-report' : 'not-vitest';
     default: return 'no-report';
   }
 }
@@ -107,8 +132,15 @@ export function readVerifyTestReport(
   const stepStatus = verifyStepStatus(events, stepId);
   const empty = { outcome: null, passed: null, failed: null, skipped: null, stepStatus, disagreement: false } as const;
 
+  // Not started, or (re)running: whatever is on disk belongs to no finished
+  // attempt of this step — an earlier attempt's pass must not show while the
+  // rerun is under way (A6).
+  if (stepStatus === 'pending' || stepStatus === 'running') {
+    return { state: 'unavailable', ...empty, reason: unavailableReason(stepStatus, { vitest: false }) };
+  }
   if (!existsSync(file)) {
-    return { state: 'unavailable', ...empty, reason: unavailableReason(stepStatus, verifyMarker(nodesDir, stepId)) };
+    const out = verifyOutput(nodesDir, stepId, latestStart(events, stepId));
+    return { state: 'unavailable', ...empty, reason: unavailableReason(stepStatus, out) };
   }
 
   let raw: unknown;
