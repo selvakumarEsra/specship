@@ -147,9 +147,10 @@ verifies:
 - Spec links whose targets reappear through this recovery leave `orphaned`
   in the same pass (via the existing re-attach behaviour, REQ-LINKFIX-001).
 <!-- id: REQ-HTMLLEX-002.A4 -->
-- `CHANGELOG.md` `[Unreleased]` carries a `### Fixes` entry stating that
-  functions containing HTML-comment text in a regex were missing from the
-  index and are restored automatically on the next sync.
+- `CHANGELOG.md` carries a `### Fixes` entry stating that functions
+  containing HTML-comment text in a regex were missing from the index and are
+  restored automatically on the next sync. It sits under `[Unreleased]` until a
+  release promotes it into that release's section.
 
 <!-- id: REQ-HTMLLEX-003 -->
 ## A parse error that swallows declarations MUST be reported, not silent
