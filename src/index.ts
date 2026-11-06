@@ -62,6 +62,7 @@ import { computeSpecFunnel, SpecFunnel } from './resolution/brief-link-resolver'
 import { computeDomainGapSeed, DomainGapSeed } from './resolution/domain-gap-seed';
 import { computeSpecCoverage, SpecCoverageReport } from './graph/spec-coverage';
 import { ingestTestReport, VerifyReportResult } from './verify/report-ingest';
+import { execFileSync } from 'child_process';
 import { SpecQueries } from './db/spec-queries';
 import {
   analyze as reflectAnalyzeImpl,
@@ -183,6 +184,7 @@ export {
   ingestTestReport,
   parseVitestJsonReport,
   caseMatchesLink,
+  clearRenameOnlyDrift,
   TestReportParseError,
 } from './verify/report-ingest';
 export type { VerifyReportResult, ReportedTestCase, LinkOutcome } from './verify/report-ingest';
@@ -414,8 +416,35 @@ export class SpecShip {
    * the run recorded as evidence; a failure demotes it to `broken`. A malformed
    * report throws {@link TestReportParseError} having changed nothing.
    */
-  verifyFromReport(reportPath: string, options: { runId?: string } = {}): VerifyReportResult {
-    return ingestTestReport(this.specQueries, this.projectRoot, reportPath, options);
+  verifyFromReport(
+    reportPath: string,
+    options: { runId?: string; commit?: string; headCommit?: string } = {}
+  ): VerifyReportResult {
+    // REQ-LINKACC-003: the report's commit is never defaulted (an old report
+    // read today must not look current); only the CURRENT commit comes from git.
+    let headCommit = options.headCommit;
+    if (headCommit === undefined && options.commit) {
+      try {
+        headCommit = execFileSync('git', ['rev-parse', 'HEAD'], {
+          cwd: this.projectRoot,
+          encoding: 'utf-8',
+          stdio: ['ignore', 'pipe', 'ignore'],
+        }).trim() || undefined;
+      } catch {
+        headCommit = undefined;
+      }
+    }
+    return ingestTestReport(this.specQueries, this.projectRoot, reportPath, {
+      runId: options.runId,
+      commit: options.commit,
+      headCommit,
+      currentSignature: (link) => {
+        if (!link.resolvedNodeId) return undefined;
+        const node = this.queries.getNodeById(link.resolvedNodeId);
+        if (!node || !node.signature) return undefined;
+        return { signature: node.signature, language: node.language };
+      },
+    });
   }
 
   /**

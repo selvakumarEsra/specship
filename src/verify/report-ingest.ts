@@ -15,6 +15,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import type { SpecLink } from '../types';
 import type { SpecQueries } from '../db/spec-queries';
+import { classifySignatureDrift } from '../resolution/signature-drift';
 
 /** Thrown for an unreadable / unparseable / shapeless report (REQ-VSTATE-004.A4). */
 export class TestReportParseError extends Error {
@@ -54,6 +55,12 @@ export interface VerifyReportResult {
   cases: number;
   promoted: LinkOutcome[];
   demoted: LinkOutcome[];
+  /**
+   * `rename-only` drifted links returned to their pre-drift state because this
+   * report, recorded on the current commit, passed every test of their
+   * requirement (REQ-LINKACC-003).
+   */
+  cleared: LinkOutcome[];
   /** Links matched whose state didn't move (already there, or only skips). */
   unchanged: number;
   /** Reported cases that matched no `tests` link at all (A3). */
@@ -201,11 +208,125 @@ export function caseMatchesLink(testCase: ReportedTestCase, link: SpecLink): boo
  * the report path, the ISO timestamp and the exact test names the verdict rests
  * on, so `verified` is auditable back to a specific run.
  */
+export interface IngestTestReportOptions {
+  runId?: string;
+  /**
+   * The commit the report's tests ran on. Supplied explicitly — a vitest report
+   * carries no commit, and defaulting to today's HEAD would make an old report
+   * look current (REQ-LINKACC-003.A3). Unknown → no drift is cleared.
+   */
+  commit?: string;
+  /** The current commit (git HEAD at ingest time). */
+  headCommit?: string;
+  /** The current signature of a link's target symbol, for re-baselining. */
+  currentSignature?: (link: SpecLink) => CurrentSignature | undefined;
+}
+
+/** A link target's live signature, plus its language for the classifier. */
+export interface CurrentSignature {
+  signature: string;
+  language?: string;
+}
+
+type LinkBucket = { link: SpecLink; cases: ReportedTestCase[] };
+
+/** The requirement a spec id belongs to: `REQ-X.A3` → `REQ-X`. */
+function rootRequirement(specId: string): string {
+  return specId.replace(/\.A\d+$/, '');
+}
+
+/**
+ * Clear `rename-only` code drifts the report proves harmless (REQ-LINKACC-003).
+ *
+ * Runs only when the report's commit is known and equals the current commit
+ * (A3). A candidate is a link `drifted` on the code axis with kind
+ * `rename-only` — never `type-change` / `shape-change` / `unclassified` (A4).
+ * It clears only when EVERY `tests` link of its requirement and the
+ * requirement's criteria has, in this report, at least one passed case and no
+ * failed case (A1/A2); a test link the report did not run blocks the clear.
+ * The current signature is re-classified against the baseline at clear time,
+ * so code that changed again since the drift stays drifted. Clearing restores
+ * the saved `preDrift.state`, re-baselines the signature and drops `preDrift`;
+ * without a saved state or a live signature the link stays drifted — silent
+ * beats wrong.
+ */
+export function clearRenameOnlyDrift(
+  sq: SpecQueries,
+  perLink: Map<number, LinkBucket>,
+  ctx: {
+    commit?: string;
+    headCommit?: string;
+    currentSignature?: (link: SpecLink) => CurrentSignature | undefined;
+    now?: number;
+  }
+): LinkOutcome[] {
+  const cleared: LinkOutcome[] = [];
+  if (!ctx.commit || !ctx.headCommit || ctx.commit !== ctx.headCommit) return cleared;
+  if (!ctx.currentSignature) return cleared;
+
+  const all = sq.getAllLinks();
+  const candidates = all.filter(
+    (l) => l.state === 'drifted' && l.driftAxis === 'code' && l.driftKind === 'rename-only'
+  );
+  if (candidates.length === 0) return cleared;
+
+  const testsByRoot = new Map<string, SpecLink[]>();
+  for (const l of all) {
+    if (l.kind !== 'tests') continue;
+    const root = rootRequirement(l.specId);
+    const list = testsByRoot.get(root) ?? [];
+    list.push(l);
+    testsByRoot.set(root, list);
+  }
+
+  const now = ctx.now ?? Date.now();
+  for (const link of candidates) {
+    const tests = testsByRoot.get(rootRequirement(link.specId)) ?? [];
+    if (tests.length === 0) continue;
+    const allPass = tests.every((t) => {
+      const bucket = perLink.get(t.id);
+      if (!bucket) return false;
+      const failed = bucket.cases.some((c) => c.status === 'failed');
+      const passed = bucket.cases.some((c) => c.status === 'passed');
+      return passed && !failed;
+    });
+    if (!allPass) continue;
+
+    const preDrift = link.metadata?.preDrift as { state?: unknown } | undefined;
+    const restoreTo = preDrift?.state;
+    if (typeof restoreTo !== 'string' || restoreTo === 'drifted') continue;
+
+    const current = ctx.currentSignature(link);
+    if (!current || !current.signature) continue;
+    // The code may have changed again since the drift was recorded.
+    const kindNow = classifySignatureDrift(link.nodeSigAtLink, current.signature, current.language);
+    if (kindNow !== 'rename-only') continue;
+
+    const to = restoreTo as SpecLink['state'];
+    const metadata: Record<string, unknown> = { ...(link.metadata ?? {}) };
+    delete metadata.preDrift;
+    sq.updateSpecLinkState(link.id, to, null, now);
+    sq.updateSpecLinkSigBaseline(link.id, current.signature, now);
+    sq.updateSpecLinkMetadata(link.id, metadata, now);
+    cleared.push({
+      linkId: link.id,
+      specId: link.specId,
+      file: link.targetFilePath,
+      titles: tests.flatMap((t) =>
+        (perLink.get(t.id)?.cases ?? []).filter((c) => c.status === 'passed').map((c) => c.fullName)
+      ),
+      from: link.state,
+      to,
+    });
+  }
+  return cleared;
+}
+
 export function ingestTestReport(
   sq: SpecQueries,
   projectRoot: string,
   reportPath: string,
-  options: { runId?: string } = {}
+  options: IngestTestReportOptions = {}
 ): VerifyReportResult {
   let raw: string;
   try {
@@ -223,7 +344,7 @@ export function ingestTestReport(
   const testsLinks = sq.getAllLinks().filter((l) => l.kind === 'tests');
 
   // Bucket the cases per link, and track which cases matched something.
-  const perLink = new Map<number, { link: SpecLink; cases: ReportedTestCase[] }>();
+  const perLink = new Map<number, LinkBucket>();
   const matchedCases = new Set<ReportedTestCase>();
   for (const link of testsLinks) {
     for (const c of cases) {
@@ -261,7 +382,13 @@ export function ingestTestReport(
           : (failed[0]?.failureMessage?.split('\n')[0] ??
              `${failed.length} test(s) failed in ${path.basename(reportPath)}`),
         evidence: relevant.map((c) => `${c.file}:${c.fullName}`),
-        run: { id: runId, report: reportPath, source: 'vitest-json', ranAt: verifiedAt },
+        run: {
+          id: runId,
+          report: reportPath,
+          source: 'vitest-json',
+          ranAt: verifiedAt,
+          ...(options.commit ? { commit: options.commit } : {}),
+        },
       },
     };
 
@@ -280,6 +407,12 @@ export function ingestTestReport(
     else demoted.push(outcome);
   }
 
+  const cleared = clearRenameOnlyDrift(sq, perLink, {
+    commit: options.commit,
+    headCommit: options.headCommit,
+    currentSignature: options.currentSignature,
+  });
+
   const unmatchedCases = cases.filter((c) => !matchedCases.has(c));
   return {
     runId,
@@ -287,6 +420,7 @@ export function ingestTestReport(
     cases: cases.length,
     promoted,
     demoted,
+    cleared,
     unchanged,
     unmatched: unmatchedCases.length,
     unmatchedSample: unmatchedCases.slice(0, 10).map((c) => `${c.file}:${c.fullName}`),

@@ -354,6 +354,14 @@ export class SpecLinkResolver {
       this.specQueries.updateSpecLinkState(link.id, 'drifted', 'code', now, driftKind);
       stats.driftedCode++;
       if (state !== 'drifted') {
+        // REQ-LINKACC-003: remember the state the drift interrupted, so a
+        // rename-only drift can be cleared back to it by a passing test run.
+        // A re-drift keeps the first-saved value.
+        this.specQueries.updateSpecLinkMetadata(
+          link.id,
+          { ...(link.metadata ?? {}), preDrift: { state, at: now } },
+          now
+        );
         // A genuine transition, not a re-drift — record for push notification.
         stats.transitions.push({
           specId: link.specId,

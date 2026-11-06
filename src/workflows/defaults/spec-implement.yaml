@@ -550,7 +550,14 @@ nodes:
           mkdir -p "$SPECSHIP_ARTIFACTS_DIR"
           REPORT="$SPECSHIP_ARTIFACTS_DIR/test-report.json"
           TEST_ARGS="-- --reporter=default --reporter=json --outputFile.json=$REPORT"
-          echo "VERIFY_REPORT=$REPORT (ingest after merge: specship verify --report $REPORT)"
+          # REQ-LINKACC-003.A3 — the tests run on this HEAD, so the report's
+          # commit is known here; name it so the ingest can trust it.
+          REPORT_COMMIT=$(git rev-parse HEAD 2>/dev/null || true)
+          if [ -n "$REPORT_COMMIT" ]; then
+            echo "VERIFY_REPORT=$REPORT (ingest after merge: specship verify --report $REPORT --commit $REPORT_COMMIT)"
+          else
+            echo "VERIFY_REPORT=$REPORT (ingest after merge: specship verify --report $REPORT)"
+          fi
         fi
         if npm test $TEST_ARGS; then echo "VERIFY_RESULT=ran-and-passed"; else echo "VERIFY_RESULT=ran-and-failed"; exit 1; fi
       elif [ -f Cargo.toml ]; then

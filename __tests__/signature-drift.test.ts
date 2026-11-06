@@ -277,6 +277,21 @@ describe.skipIf(!fts5Available)('REQ-LINKACC-002 drift kind on stored links', ()
     expect(sq.getLinkById(id)!.driftKind ?? null).toBeNull();
   }
 
+  function reqLinkacc003PreDriftSaved(): void {
+    const sq = h.cg.getSpecQueries();
+    const queries = (h.cg as unknown as { queries: import('../src/db/queries').QueryBuilder }).queries;
+    const id = h.seed({ specId: 'REQ-R-8', qname: 'pre', baseline: '(installClaude: boolean)', current: '(hasStatusLine: boolean)' });
+    const first = sq.getLinkById(id)!.metadata?.preDrift as { state: string; at: number };
+    expect(first.state).toBe('implemented');
+    expect(typeof first.at).toBe('number');
+    // A second drift of an already-drifted link keeps the first-saved state.
+    queries.deleteNodesByFile('src/pre.ts');
+    queries.insertNode(makeNode('src/pre.ts', 'pre', 'function', '(other: boolean)'));
+    h.cg.getSpecLinkResolver().resolveLinksForFiles(['src/pre.ts']);
+    expect(sq.getLinkById(id)!.metadata?.preDrift).toEqual(first);
+  }
+
+  it('REQ-LINKACC-003 a first code drift saves the pre-drift state; a re-drift keeps it', reqLinkacc003PreDriftSaved);
   it('REQ-LINKACC-002.A1 a resolved parameter rename stores kind rename-only', reqLinkacc002A1);
   it('REQ-LINKACC-002.A2 type and shape changes store their kind', reqLinkacc002A2Stored);
   it('REQ-LINKACC-002.A3 a no-baseline link stays put; an unparseable drift stores unclassified', reqLinkacc002A3Resolver);

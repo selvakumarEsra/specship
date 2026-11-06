@@ -2259,7 +2259,11 @@ program
   .option('-p, --path <path>', 'Project path')
   .option('-j, --json', 'Output as JSON')
   .option('--run-id <id>', 'Identifier recorded as the run behind the verdict')
-  .action(async (options: { report: string; path?: string; json?: boolean; runId?: string }) => {
+  .option(
+    '--commit <sha>',
+    'Commit the report\'s tests ran on; a rename-only drift clears only when it equals the current HEAD'
+  )
+  .action(async (options: { report: string; path?: string; json?: boolean; runId?: string; commit?: string }) => {
     const projectPath = resolveProjectPath(options.path);
     try {
       if (!isInitialized(projectPath)) {
@@ -2270,7 +2274,7 @@ program
       const cg = await SpecShip.open(projectPath);
       let result;
       try {
-        result = cg.verifyFromReport(options.report, { runId: options.runId });
+        result = cg.verifyFromReport(options.report, { runId: options.runId, commit: options.commit });
       } catch (err) {
         cg.destroy();
         error(`verify failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -2290,9 +2294,14 @@ program
         for (const d of result.demoted) {
           console.log(`  ${chalk.red('✗')} ${d.specId} ${chalk.dim(`${d.from} → broken`)} — ${d.titles[0] ?? ''}`);
         }
+        for (const c of result.cleared) {
+          console.log(
+            `  ${chalk.green('↺')} ${c.specId} ${chalk.dim(`drifted (rename-only) → ${c.to}`)} — ${c.file}`
+          );
+        }
         console.log();
         info(
-          `${result.promoted.length} verified, ${result.demoted.length} broken, ${result.unchanged} unchanged, ${result.unmatched} unmatched.`
+          `${result.promoted.length} verified, ${result.demoted.length} broken, ${result.cleared.length} drift cleared, ${result.unchanged} unchanged, ${result.unmatched} unmatched.`
         );
         // Unmatched cases are reported, never silently dropped (A3).
         for (const u of result.unmatchedSample) console.log(chalk.dim(`    unmatched: ${u}`));
