@@ -21,6 +21,7 @@ import {
   SpecLinkKind,
   SpecLinkProvenance,
   SpecLinkDriftAxis,
+  SpecLinkDriftKind,
   NodeKind,
   WorkflowRun,
   WorkflowRunStatus,
@@ -76,6 +77,7 @@ interface SpecLinkRow {
   kind: string;
   state: string;
   drift_axis: string | null;
+  drift_kind?: string | null;
   spec_hash_at_link: string;
   node_sig_at_link: string | null;
   provenance: string;
@@ -188,6 +190,7 @@ function rowToSpecLink(row: SpecLinkRow): SpecLink {
     kind: row.kind as SpecLinkKind,
     state: row.state as SpecLinkState,
     driftAxis: (row.drift_axis as SpecLinkDriftAxis) ?? null,
+    driftKind: (row.drift_kind as SpecLinkDriftKind | null | undefined) ?? null,
     specHashAtLink: row.spec_hash_at_link,
     nodeSigAtLink: row.node_sig_at_link ?? undefined,
     provenance: row.provenance as SpecLinkProvenance,
@@ -744,12 +747,12 @@ export class SpecQueries {
       this.stmts.insertSpecLink = this.db.prepare(`
         INSERT INTO spec_links (
           spec_id, target_file_path, target_qualified_name, target_node_kind,
-          resolved_node_id, kind, state, drift_axis,
+          resolved_node_id, kind, state, drift_axis, drift_kind,
           spec_hash_at_link, node_sig_at_link,
           provenance, confidence, metadata, created_at, updated_at
         ) VALUES (
           @specId, @targetFilePath, @targetQualifiedName, @targetNodeKind,
-          @resolvedNodeId, @kind, @state, @driftAxis,
+          @resolvedNodeId, @kind, @state, @driftAxis, @driftKind,
           @specHashAtLink, @nodeSigAtLink,
           @provenance, @confidence, @metadata, @createdAt, @updatedAt
         )
@@ -764,6 +767,7 @@ export class SpecQueries {
       kind: link.kind,
       state: link.state,
       driftAxis: link.driftAxis ?? null,
+      driftKind: link.state === 'drifted' ? link.driftKind ?? null : null,
       specHashAtLink: link.specHashAtLink,
       nodeSigAtLink: link.nodeSigAtLink ?? null,
       provenance: link.provenance,
@@ -829,6 +833,7 @@ export class SpecQueries {
           SET resolved_node_id = @resolvedNodeId,
               state            = @state,
               drift_axis       = @driftAxis,
+              drift_kind       = @driftKind,
               spec_hash_at_link = @specHashAtLink,
               node_sig_at_link  = @nodeSigAtLink,
               provenance       = @provenance,
@@ -843,6 +848,11 @@ export class SpecQueries {
           resolvedNodeId: link.resolvedNodeId ?? null,
           state: preserve ? existing.state : link.state,
           driftAxis: preserve ? existing.driftAxis ?? null : link.driftAxis ?? null,
+          driftKind: preserve
+            ? existing.driftKind ?? null
+            : link.state === 'drifted'
+              ? link.driftKind ?? null
+              : null,
           specHashAtLink: preserve ? existing.specHashAtLink : link.specHashAtLink,
           nodeSigAtLink: link.nodeSigAtLink ?? null,
           provenance: link.provenance,
@@ -881,18 +891,25 @@ export class SpecQueries {
     this.stmts.deleteSpecLink.run(id);
   }
 
+  /**
+   * Set a link's state. `driftKind` (REQ-LINKACC-002) explains a drift and is
+   * stored only when the new state is `drifted`; any other state clears it.
+   * The kind never influences the state written.
+   */
   updateSpecLinkState(
     id: number,
     state: SpecLinkState,
     driftAxis: SpecLinkDriftAxis = null,
-    updatedAt: number = Date.now()
+    updatedAt: number = Date.now(),
+    driftKind: SpecLinkDriftKind | null = null
   ): void {
     if (!this.stmts.updateSpecLinkState) {
       this.stmts.updateSpecLinkState = this.db.prepare(
-        `UPDATE spec_links SET state = ?, drift_axis = ?, updated_at = ? WHERE id = ?`
+        `UPDATE spec_links SET state = ?, drift_axis = ?, drift_kind = ?, updated_at = ? WHERE id = ?`
       );
     }
-    this.stmts.updateSpecLinkState.run(state, driftAxis, updatedAt, id);
+    const kind = state === 'drifted' ? driftKind : null;
+    this.stmts.updateSpecLinkState.run(state, driftAxis, kind, updatedAt, id);
   }
 
   /**

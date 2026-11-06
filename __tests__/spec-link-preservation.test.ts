@@ -219,7 +219,7 @@ describe.skipIf(!fts5Available)('spec link preservation across re-extraction (RE
     const { updatedAt: _u2, resolvedNodeId: _r2, ...afterRest } = after;
     expect(afterRest).toEqual(beforeRest);
     expect(Object.keys(afterRest).sort()).toEqual(
-      ['confidence', 'createdAt', 'driftAxis', 'id', 'kind', 'metadata', 'nodeSigAtLink',
+      ['confidence', 'createdAt', 'driftAxis', 'driftKind', 'id', 'kind', 'metadata', 'nodeSigAtLink',
        'provenance', 'specHashAtLink', 'specId', 'state', 'targetFilePath',
        'targetNodeKind', 'targetQualifiedName'].sort()
     );

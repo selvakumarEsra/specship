@@ -3890,12 +3890,11 @@ program
         // eslint-disable-next-line no-console
         console.log(`No links in states: ${states.join(', ')}. ✨ Drift queue is clean.`);
       } else {
+        // The drift kind (REQ-LINKACC-002.A4) rides in the shared label.
+        const { formatDriftedLine } = await import('../resolution/signature-drift');
         for (const link of links) {
-          const drift = link.driftAxis ? ` [drift=${link.driftAxis}]` : '';
           // eslint-disable-next-line no-console
-          console.log(
-            `#${link.id} [${link.state}${drift}] ${link.specId} → ${link.targetFilePath}:${link.targetQualifiedName} <${link.provenance}>`
-          );
+          console.log(formatDriftedLine(link));
         }
       }
 

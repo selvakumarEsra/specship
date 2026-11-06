@@ -206,6 +206,7 @@ CREATE TABLE IF NOT EXISTS spec_links (
     kind        TEXT NOT NULL,          -- 'implements' | 'tests' | 'validates' | 'documents' | 'depends_on'
     state       TEXT NOT NULL,          -- 'drafted' | 'implementing' | 'implemented' | 'verified' | 'drifted' | 'broken' | 'orphaned'
     drift_axis  TEXT,                   -- 'spec' | 'code' | NULL
+    drift_kind  TEXT,                   -- 'rename-only' | 'type-change' | 'shape-change' | 'unclassified' | NULL (REQ-LINKACC-002)
     spec_hash_at_link    TEXT NOT NULL,
     node_sig_at_link     TEXT,
     provenance  TEXT NOT NULL,          -- 'agent-asserted' | 'code-comment' | 'spec-declaration' | 'resolver'

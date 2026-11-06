@@ -748,6 +748,19 @@ export const STICKY_SPEC_LINK_STATES: ReadonlySet<SpecLinkState> = new Set([
 export type SpecLinkDriftAxis = 'spec' | 'code' | null;
 
 /**
+ * What changed in a code-drifted link's signature (REQ-LINKACC-002).
+ *  - `rename-only`: same parameter count, parameter types and return type;
+ *    only parameter names differ
+ *  - `type-change`: same parameter count, but a parameter or the return type differs
+ *  - `shape-change`: parameters added/removed, or any other difference
+ *  - `unclassified`: a baseline or current signature is missing or cannot be parsed
+ *  - null when the link is not code-drifted
+ *
+ * An explanation only — it never changes the link's state.
+ */
+export type SpecLinkDriftKind = 'rename-only' | 'type-change' | 'shape-change' | 'unclassified';
+
+/**
  * How a spec link was created (highest confidence first).
  *  - `agent-asserted`: coding agent called specship_link_assert (confidence 1.0)
  *  - `code-comment`:   extractor found `// @implements REQ-X` (confidence 0.9)
@@ -805,6 +818,9 @@ export interface SpecLink {
 
   /** Which side moved when state is `drifted` */
   driftAxis?: SpecLinkDriftAxis;
+
+  /** What changed when the link is code-drifted (REQ-LINKACC-002); null otherwise */
+  driftKind?: SpecLinkDriftKind | null;
 
   /** Spec content_hash at the time the link was established (drift baseline) */
   specHashAtLink: string;

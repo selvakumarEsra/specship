@@ -37,6 +37,7 @@ import {
   SpecLinkProvenance,
   SpecLinkKind,
   STICKY_SPEC_LINK_STATES,
+  SpecLinkDriftKind,
 } from '../types';
 import { QueryBuilder } from '../db/queries';
 import { SpecQueries } from '../db/spec-queries';
@@ -45,6 +46,7 @@ import {
   isRecognizedTestFile,
   scanTestTitleRefs,
 } from './test-title-links';
+import { classifySignatureDrift } from './signature-drift';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -145,6 +147,8 @@ export interface DriftTransition {
   axis: 'code' | 'spec';
   /** The linked symbol (`targetQualifiedName`). */
   symbol: string;
+  /** What changed, for a code drift (REQ-LINKACC-002). */
+  kind?: SpecLinkDriftKind;
 }
 
 /** One code link inherited by a spec through a spec→spec dependency edge. */
@@ -334,8 +338,8 @@ export class SpecLinkResolver {
 
     // Code-side drift detection. We compare the node's current signature
     // to the snapshot taken at link creation. If the link has no baseline
-    // (older link), don't trip drift — just adopt the current signature
-    // on the next link_verify.
+    // (older link, file-level or test-title link), don't trip drift — just
+    // adopt the current signature on the next link_verify (REQ-LINKACC-002.A3).
     if (
       link.nodeSigAtLink !== undefined &&
       link.nodeSigAtLink !== '' &&
@@ -343,7 +347,11 @@ export class SpecLinkResolver {
       node.signature !== link.nodeSigAtLink &&
       !STICKY_STATES.has(state)
     ) {
-      this.specQueries.updateSpecLinkState(link.id, 'drifted', 'code', now);
+      // REQ-LINKACC-002: record WHAT changed. The kind is an explanation
+      // only — the state written is `drifted` for every kind, `rename-only`
+      // included; only a recorded passing test run clears it (REQ-LINKACC-003).
+      const driftKind = classifySignatureDrift(link.nodeSigAtLink, node.signature, node.language);
+      this.specQueries.updateSpecLinkState(link.id, 'drifted', 'code', now, driftKind);
       stats.driftedCode++;
       if (state !== 'drifted') {
         // A genuine transition, not a re-drift — record for push notification.
@@ -352,12 +360,13 @@ export class SpecLinkResolver {
           fromState: state,
           axis: 'code',
           symbol: link.targetQualifiedName,
+          kind: driftKind,
         });
       }
       if (this.opts.verbose) {
         // eslint-disable-next-line no-console
         console.error(
-          `[SpecLinkResolver] drift(code) ${link.targetQualifiedName} for spec ${link.specId}`
+          `[SpecLinkResolver] drift(code, ${driftKind}) ${link.targetQualifiedName} for spec ${link.specId}`
         );
       }
     }

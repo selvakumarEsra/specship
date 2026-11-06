@@ -97,9 +97,12 @@ change: `rename-only` (same parameter count and types, and the same return
 type, with different parameter names), `type-change` (any parameter or return
 type differs), or `shape-change` (parameters were added or removed, or the
 signature and the body both changed in a way that is neither of the others).
-When the baseline or the current snapshot is missing, or a signature cannot be
-parsed, the kind MUST be `unclassified`. SpecShip MUST NOT infer a more
-specific kind from a hash difference alone. The kind MUST appear wherever the
+A link with no signature baseline (file-level and test-title links carry
+none on purpose) MUST NOT start drifting because of this requirement: it keeps
+its state and adopts the current signature on its next verify. When a link
+does drift and either signature cannot be parsed or compared, the kind MUST be
+`unclassified`. SpecShip MUST NOT infer a more specific kind from a hash
+difference alone. The kind MUST appear wherever the
 drifted link is shown: `specship_spec`, `specship drifted` and the dashboard's
 Review screen.
 
@@ -112,6 +115,22 @@ drift (REQ-LINKACC-004). This requirement absorbs REQ-CODEDRIFT-001, merged on
 implementations:
   - src/resolution/spec-link-resolver.ts:SpecLinkResolver.resolveOneLink
   - ui/src/review-groups.ts:driftReason
+  - src/resolution/signature-drift.ts:classifySignatureDrift
+  - src/resolution/signature-drift.ts:parseSignature
+  - src/resolution/signature-drift.ts:formatDriftLabel
+  - src/resolution/signature-drift.ts:formatDriftedLine
+  - src/db/spec-queries.ts:SpecQueries.updateSpecLinkState
+  - src/mcp/spec-tools.ts:formatLink
+
+verifies:
+  - __tests__/signature-drift.test.ts:reqLinkacc002A1
+  - __tests__/signature-drift.test.ts:reqLinkacc002A1Classifier
+  - __tests__/signature-drift.test.ts:reqLinkacc002A2
+  - __tests__/signature-drift.test.ts:reqLinkacc002A2Stored
+  - __tests__/signature-drift.test.ts:reqLinkacc002A3
+  - __tests__/signature-drift.test.ts:reqLinkacc002A3Resolver
+  - __tests__/signature-drift.test.ts:reqLinkacc002A4
+  - __tests__/signature-drift.test.ts:reqLinkacc002A5
 
 ## Acceptance
 <!-- id: REQ-LINKACC-002.A1 -->
@@ -121,8 +140,9 @@ implementations:
 - Changing a parameter's type, the return type, or the number of parameters
   drifts the link with kind `type-change` or `shape-change`.
 <!-- id: REQ-LINKACC-002.A3 -->
-- A link with no signature baseline, or whose signature cannot be parsed,
-  drifts with kind `unclassified`, never `rename-only`.
+- A link with no signature baseline does not start drifting. A link that
+  drifts while either signature cannot be parsed drifts with kind
+  `unclassified`, never `rename-only`.
 <!-- id: REQ-LINKACC-002.A4 -->
 - `specship drifted` and `specship_spec` print the kind next to each drifted
   link.

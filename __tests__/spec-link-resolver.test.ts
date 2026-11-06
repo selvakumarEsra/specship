@@ -682,7 +682,7 @@ describe.skipIf(!fts5Available)('SpecLinkResolver drift transitions (REQ-DRIFT-P
 
     const stats = resolver.resolveLinksForFiles(['src/t.ts']);
     expect(stats.transitions).toEqual([
-      { specId: 'REQ-T1', fromState: 'implemented', axis: 'code', symbol: 'foo' },
+      { specId: 'REQ-T1', fromState: 'implemented', axis: 'code', symbol: 'foo', kind: 'shape-change' },
     ]);
   });
 
@@ -939,7 +939,7 @@ describe.skipIf(!fts5Available)('SpecLinkResolver orphan reattach (REQ-LINKFIX-0
     expect(link.state).toBe('drifted');
     expect(link.driftAxis).toBe('code');
     expect(stats.transitions).toEqual([
-      { specId: 'REQ-R2', fromState: 'implemented', axis: 'code', symbol: 'shifty' },
+      { specId: 'REQ-R2', fromState: 'implemented', axis: 'code', symbol: 'shifty', kind: 'shape-change' },
     ]);
   });
 

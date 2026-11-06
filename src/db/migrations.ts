@@ -10,7 +10,7 @@ import { specshipToolPrefix } from '../analytics/canonical-tools';
 /**
  * Current schema version
  */
-export const CURRENT_SCHEMA_VERSION = 12;
+export const CURRENT_SCHEMA_VERSION = 13;
 
 /**
  * Migration definition
@@ -473,6 +473,15 @@ const migrations: Migration[] = [
         db.exec(`ALTER TABLE claude_tool_calls ADD COLUMN host TEXT NOT NULL DEFAULT 'claude';`);
       if (!hasColumn(db, 'claude_tool_calls', 'raw_tool_name'))
         db.exec(`ALTER TABLE claude_tool_calls ADD COLUMN raw_tool_name TEXT;`);
+    },
+  },
+  {
+    version: 13,
+    description:
+      'Code drift kind (REQ-LINKACC-002): drift_kind on spec_links records what changed in a code-drifted signature (rename-only / type-change / shape-change / unclassified). Existing drifted links keep NULL until the next resolve pass reclassifies them.',
+    up: (db) => {
+      if (!hasColumn(db, 'spec_links', 'drift_kind'))
+        db.exec(`ALTER TABLE spec_links ADD COLUMN drift_kind TEXT;`);
     },
   },
 ];
