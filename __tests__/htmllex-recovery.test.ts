@@ -192,15 +192,22 @@ describe.skipIf(!fts5Available)('stale-extraction recovery on sync (REQ-HTMLLEX-
 });
 
 describe('REQ-HTMLLEX-002 changelog', () => {
-  it('REQ-HTMLLEX-002.A4: [Unreleased] carries a Fixes entry for the HTML-comment regex recovery', function reqHtmllex002A4() {
+  it('REQ-HTMLLEX-002.A4: CHANGELOG carries a Fixes entry for the HTML-comment regex recovery', function reqHtmllex002A4() {
     const changelog = fs.readFileSync(repoChangelog, 'utf-8');
-    const start = changelog.indexOf('## [Unreleased]');
-    expect(start).toBeGreaterThanOrEqual(0);
-    const next = changelog.indexOf('\n## [', start + 1);
-    const unreleased = changelog.slice(start, next === -1 ? undefined : next);
+    // The entry sits under [Unreleased] until a release promotes it into that
+    // release's block, so look in every version section, not only [Unreleased].
+    const sections = changelog.split(/\n(?=## \[)/).filter((sec) => sec.startsWith('## ['));
+    expect(sections.length).toBeGreaterThan(0);
+    const home = sections.find((sec) => sec.split('\n').some((l) => /HTML-comment/i.test(l) && /regex/i.test(l)));
+    expect(home, 'no version section mentions the HTML-comment regex recovery').toBeDefined();
 
-    expect(unreleased).toMatch(/^### Fixes$/m);
-    const entry = unreleased.split('\n').find((l) => /HTML-comment/i.test(l)) ?? '';
+    // The entry is a Fixes item: the nearest ### heading above it is ### Fixes.
+    const lines = home!.split('\n');
+    const at = lines.findIndex((l) => /HTML-comment/i.test(l) && /regex/i.test(l));
+    const heading = lines.slice(0, at).reverse().find((l) => /^### /.test(l));
+    expect(heading).toBe('### Fixes');
+
+    const entry = lines[at]!;
     expect(entry).toMatch(/regex/i);
     expect(entry).toMatch(/missing from the index/i);
     expect(entry).toMatch(/next sync/i);
