@@ -534,6 +534,7 @@ implementations:
   - src/spec-lint/commit-suggestions.ts:preloadCommitGrammars
   - src/spec-lint/lint.ts:lintSpecs
   - src/spec-lint/lint.ts:formatLintReport
+  - src/spec-lint/lint.ts:runLintCli
 
 verifies:
   - __tests__/spec-lint-commit-suggestions.test.ts:reqLinkacc010A1
