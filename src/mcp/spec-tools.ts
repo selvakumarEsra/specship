@@ -16,10 +16,8 @@ import type SpecShip from '../index';
 import type { Spec, SpecLink, SpecLinkState, SpecLinkKind, NodeKind } from '../types';
 import type { SpecQueries } from '../db/spec-queries';
 import { renderBehaviourSurface } from '../behaviour/behaviour-surface';
-import { persistLinkToSpecFile } from '../spec-quality/link-persist';
 import { formatRepointedFrom } from '../resolution/link-repoint';
 import type { ToolDefinition, ToolResult } from './tools';
-import { canonicalQualifiedName } from '../resolution/spec-link-resolver';
 import { isNonTestEvidence } from '../resolution/test-title-links';
 import { evidenceLinksFor } from '../verify/report-ingest';
 import { formatCoverageLine, untestedCriteria, formatVerifiedSuffix } from '../graph/spec-coverage';
@@ -30,7 +28,7 @@ import { resolveInstalledVersion, defaultGlobalNpmRoot } from '../knowledge/stal
 import { parseEnforcedRules } from '../knowledge/enforce';
 import { checkVersionClaims, formatVersionClaim, resolveVersionInUse } from '../spec-lint/version-claims';
 import { formatDriftLabel } from '../resolution/signature-drift';
-import { bodyChangedSince, formatBodyChanged, nodeBodyFingerprint } from '../resolution/body-fingerprint';
+import { bodyChangedSince, formatBodyChanged } from '../resolution/body-fingerprint';
 
 const projectPathProperty = {
   type: 'string',
@@ -126,7 +124,7 @@ export const specToolDefinitions: ToolDefinition[] = [
   {
     name: 'specship_link_assert',
     description:
-      'Declare that a code symbol implements (or tests / documents / validates) a spec. Call this AFTER editing code in response to a spec — before reporting done. Idempotent: calling it again refreshes the link with the latest signature snapshot. The target is validated against the graph: a file:symbol that does not resolve is REFUSED with near-miss suggestions rather than recorded, so pass the fully-qualified name exactly as indexed (specship_search if unsure). Higher-priority signal than the // @implements REQ-X comment backstop (the extractor catches comment-only links automatically).',
+      'Declare that a code symbol implements (or tests) a spec. Call this AFTER editing code in response to a spec — before reporting done. Idempotent: calling it again refreshes the link with the latest signature snapshot. The target is validated against the graph: a file:symbol that does not resolve is REFUSED with near-miss suggestions rather than recorded, so pass the fully-qualified name exactly as indexed (specship_search if unsure). The link is written into the spec file\'s implementations:/verifies: block; if that write fails, NOTHING is recorded and the error names the bullet to add by hand. Higher-priority signal than the // @implements REQ-X comment backstop (the extractor catches comment-only links automatically).',
     inputSchema: {
       type: 'object',
       properties: {
@@ -150,7 +148,7 @@ export const specToolDefinitions: ToolDefinition[] = [
         kind: {
           type: 'string',
           description: 'How this code relates to the spec',
-          enum: ['implements', 'tests', 'validates', 'documents', 'depends_on'],
+          enum: ['implements', 'tests'],
           default: 'implements',
         },
         projectPath: projectPathProperty,
@@ -1071,99 +1069,37 @@ export async function handleSpecshipLinkAssert(
   if (typeof rawQualifiedName !== 'string' || rawQualifiedName.length === 0) {
     return error('target_qualified_name is required');
   }
-  // Canonical dotted key (REQ-LINKFIX-002): the agent may assert `Class.method`
-  // while the extractor indexed `Class::method` (or vice versa) — normalizing
-  // here keeps one logical row per symbol regardless of separator style.
-  const targetQualifiedName = canonicalQualifiedName(rawQualifiedName);
 
-  const sq = cg.getSpecQueries();
-  const spec = sq.getSpecById(specId);
-  if (!spec) {
-    return error(`Spec "${specId}" not found. Make sure the spec file is indexed (specship index).`);
-  }
-
-  // Validate the target BEFORE recording anything (REQ-REVINT-003): a typo'd
-  // or invented symbol used to land as `implemented` and poison the funnel
-  // until a later resolver pass demoted it.
-  const resolver = cg.getSpecLinkResolver();
-  let node = resolver.findLogicalTarget(targetFilePath, targetQualifiedName, targetNodeKind);
-  if (!node && !cg.isIndexing()) {
-    // The index lags writes by ~1s, so a symbol the agent just wrote may not be
-    // extracted yet. Sync before refusing — otherwise a correct assertion made
-    // immediately after an edit would be rejected on a timing artifact.
-    try {
-      await cg.sync();
-    } catch {
-      // Sync failure isn't the agent's problem here — fall through to the
-      // refusal, which tells it what to do next either way.
-    }
-    node = resolver.findLogicalTarget(targetFilePath, targetQualifiedName, targetNodeKind);
-  }
-  if (!node) {
-    return error(
-      `${targetFilePath}:${targetQualifiedName} does not resolve to an indexed symbol, so no link was recorded ` +
-        `(a link to a symbol that doesn't exist is indistinguishable from an orphan).\n` +
-        nearMissSuggestions(cg, targetFilePath, targetQualifiedName) +
-        `\nRe-call specship_link_assert with a target that exists, or add a \`- ${targetFilePath}:${targetQualifiedName}\` ` +
-        `bullet under \`implementations:\` in ${spec.sourcePath} once the symbol is written.`
-    );
-  }
-
-  const now = Date.now();
-  const linkId = sq.upsertSpecLink({
+  // Resolve → write into the spec file → record, in that order, shared with
+  // the dashboard route (REQ-LINKACC-011, REQ-REVINT-003): a link the spec
+  // file can't hold is never recorded, so no index-only link vanishes on a
+  // full reindex (LINK-TRUTH-DOC, REQ-THRU-005).
+  const res = await cg.assertSpecLink({
     specId,
     targetFilePath,
-    targetQualifiedName,
+    targetQualifiedName: rawQualifiedName,
     targetNodeKind,
-    // Resolved node id + signature snapshot (A1): the signature is the drift
-    // baseline the resolver compares against on every later pass.
-    resolvedNodeId: node.id,
     kind,
-    state: 'implemented',
-    driftAxis: null,
-    specHashAtLink: spec.contentHash,
-    nodeSigAtLink: node.signature,
-    provenance: 'agent-asserted',
-    confidence: 1.0,
-    createdAt: now,
-    updatedAt: now,
   });
-  // Body baseline next to the signature baseline (REQ-LINKACC-004). Only when
-  // the link has none yet: re-asserting is a claim, not a verification, so it
-  // must not wipe a body-changed marker by re-baselining.
-  const asserted = sq.getLinkById(linkId);
-  if (asserted && typeof asserted.metadata?.bodyFpAtLink !== 'string') {
-    const fp = nodeBodyFingerprint(cg.getProjectRoot(), node);
-    if (fp !== null) sq.updateSpecLinkMetadata(linkId, { ...(asserted.metadata ?? {}), bodyFpAtLink: fp }, now);
+  if (!res.ok) {
+    if (res.code === 'unresolved') {
+      return error(
+        `${targetFilePath}:${res.targetQualifiedName} does not resolve to an indexed symbol, so no link was recorded ` +
+          `(a link to a symbol that doesn't exist is indistinguishable from an orphan).\n` +
+          nearMissSuggestions(cg, targetFilePath, res.targetQualifiedName) +
+          `\nRe-call specship_link_assert with a target that exists, or add a \`${res.bullet}\` ` +
+          `bullet under \`${res.blockName}:\` in ${res.spec.sourcePath} once the symbol is written.`
+      );
+    }
+    return error(res.error);
   }
 
-  // Persist the assertion into the spec file — the file is the source of
-  // truth; the DB row alone would vanish on a full reindex (LINK-TRUTH-DOC,
-  // REQ-THRU-005). `implements` → `implementations:`, `tests` → `verifies:`;
-  // a criterion id persists into its parent requirement's block. The graph
-  // already resolved the target above, so the textual check is skipped.
-  let writeBackNote = '';
-  if (kind === 'implements' || kind === 'tests') {
-    const persisted = persistLinkToSpecFile({
-      projectRoot: cg.getProjectRoot(),
-      specId,
-      kind,
-      filePath: targetFilePath,
-      symbol: targetQualifiedName,
-      specSourcePath: spec.sourcePath,
-      symbolResolved: true,
-    });
-    const blockName = kind === 'tests' ? 'verifies' : 'implementations';
-    writeBackNote =
-      persisted.status === 'persisted'
-        ? ` — persisted to ${persisted.specFile ?? spec.sourcePath} (${blockName}: under ${persisted.requirementId})`
-        : persisted.status === 'unchanged'
-          ? ` — already persisted in ${persisted.specFile ?? spec.sourcePath}`
-          : `\n⚠ Link stored in the index but NOT persisted to the spec file (${persisted.detail}). It will not survive a full reindex — add \`- ${targetFilePath}:${targetQualifiedName}\` under \`${blockName}:\` for ${persisted.requirementId} in ${spec.sourcePath}.`;
-  }
-
+  const writeBackNote =
+    res.writeBack === 'persisted'
+      ? ` — persisted to ${res.specFile} (${res.blockName}: under ${res.requirementId})`
+      : ` — already persisted in ${res.specFile}`;
   return text(
-    `Asserted ${kind} link: ${specId} → ${targetFilePath}:${targetQualifiedName} (link #${linkId})${writeBackNote}`
+    `Asserted ${kind} link: ${specId} → ${targetFilePath}:${res.targetQualifiedName} (link #${res.linkId})${writeBackNote}`
   );
 }
 

@@ -63,7 +63,13 @@ export const MAX_PACKED_BYTES = 2_600_000;
 // claim checker (dist/spec-lint/version-claims.*, 28,353 B / 4 files incl.
 // maps) plus its lint and specship_spec wiring is the growth. Measured with
 // `npm pack --dry-run`; no stale dist assets.
-export const MAX_UNPACKED_BYTES = 6_850_000;
+// Raised 6.85 MB → 6.90 MB (2026-11-06, REQ-LINKACC-011): clean builds (fresh
+// worktrees, no prior dist/) unpack to 6,846,415 B at the merge of
+// REQ-LINKACC-010 and 6,851,285 B after (+4,870 B): the shared
+// SpecShip.assertSpecLink (resolve → spec write-back → record) and its typed
+// result, also compiled into the bundled desktop server. Measured with
+// `npm pack --dry-run`; no stale dist assets.
+export const MAX_UNPACKED_BYTES = 6_900_000;
 // Raised 530 → 560 (2026-10-26) after investigating a 531-file build: no stale
 // dist assets; the growth is new feature modules (dist/spec-quality/,
 // dist/pulse/, and the 0.30/0.31 knowledge + throughput modules that follow).

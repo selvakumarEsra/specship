@@ -7,7 +7,8 @@
  * `tests`) block in its spec file, so the parser re-asserts it on every index.
  *
  * Rules:
- *   - an acceptance-criterion id (`REQ-X.A1`) persists into its parent
+ *   - an acceptance-criterion id (`REQ-X.A1`) persists into that criterion's
+ *     own indented block (REQ-LINKACC-011.A3) — formerly into its parent
  *     requirement's block — link blocks live under the requirement, never in
  *     the Acceptance section;
  *   - one bullet per target; a missing block is created right before the
@@ -112,6 +113,11 @@ export function symbolDefinedInSource(source: string, symbol: string): boolean {
 /**
  * Persist an asserted link into the spec file. Never throws — failures and
  * refusals come back as `status: 'refused'` with the reason.
+ *
+ * Link assertion calls this BEFORE recording anything (REQ-LINKACC-011,
+ * `SpecShip.assertSpecLink`): `refused` means no link is recorded, so a link
+ * never exists only in the index. `requirementId` and `specFile` name where
+ * the caller tells the user to add the bullet by hand.
  */
 export function persistLinkToSpecFile(opts: PersistLinkOptions): PersistLinkResult {
   const requirementId = parentRequirementId(opts.specId);
@@ -166,6 +172,53 @@ export function persistLinkToSpecFile(opts: PersistLinkOptions): PersistLinkResu
     const blockName = opts.kind === 'tests' ? 'verifies' : 'implementations';
     const target = `${filePath}:${symbol}`;
     const replaces = opts.replaces?.trim();
+
+    // A criterion id writes into the criterion's OWN indented block, under its
+    // bullet (REQ-VSTATE-003), so a reindex re-creates the link on the
+    // criterion, not on its parent requirement (REQ-LINKACC-011.A3).
+    const criterionId = opts.specId !== requirementId ? opts.specId.trim() : null;
+    if (criterionId && !replaces) {
+      const eol = source.includes('\r\n') ? '\r\n' : '\n';
+      const lines = source.split(/\r?\n/);
+      const markerIdx = lines.findIndex((l) => l.match(ID_MARKER)?.[1] === criterionId);
+      if (markerIdx === -1) {
+        return { status: 'refused', requirementId: criterionId, specFile, detail: `marker <!-- id: ${criterionId} --> not found` };
+      }
+      const bulletIdx = markerIdx + 1;
+      if (!/^\s*[-*]\s+\S/.test(lines[bulletIdx] ?? '')) {
+        return { status: 'refused', requirementId: criterionId, specFile, detail: `criterion ${criterionId} has no bullet under its marker` };
+      }
+      // The criterion's region: its bullet plus the indented lines that follow.
+      let end = bulletIdx + 1;
+      while (end < lines.length && /^\s+\S/.test(lines[end] ?? '') && !ID_MARKER.test(lines[end] ?? '')) end++;
+      let header = -1;
+      for (let k = bulletIdx + 1; k < end; k++) {
+        if ((lines[k] ?? '').trim() === `${blockName}:`) { header = k; break; }
+      }
+      const want = canonicalTarget(target);
+      if (header !== -1) {
+        let last = header;
+        for (let k = header + 1; k < end; k++) {
+          const m = (lines[k] ?? '').match(/^\s+[-*]\s+(\S+?)\s*$/);
+          if (!m) break;
+          if (canonicalTarget(m[1]!) === want) {
+            return { status: 'unchanged', requirementId: criterionId, specFile, detail: `${blockName}: already lists ${target}` };
+          }
+          last = k;
+        }
+        lines.splice(last + 1, 0, `    - ${target}`);
+      } else {
+        lines.splice(end, 0, `  ${blockName}:`, `    - ${target}`);
+      }
+      fs.writeFileSync(specAbs, lines.join(eol), 'utf8');
+      return {
+        status: 'persisted',
+        requirementId: criterionId,
+        specFile,
+        detail: `${blockName}: entry ${target} added under ${criterionId} in ${specFile}`,
+      };
+    }
+
     if (!replaces && linkBullets(block, blockName).includes(target)) {
       return {
         status: 'unchanged',

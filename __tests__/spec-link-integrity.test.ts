@@ -128,6 +128,16 @@ describe.skipIf(!fts5Available)('REVINT-DOC — spec link integrity', () => {
 
   beforeEach(async () => {
     dir = fs.mkdtempSync(path.join(os.tmpdir(), 'revint-'));
+    // The spec file the inserted specs point at: an asserted link is recorded
+    // only once it is written into its spec file (REQ-LINKACC-011).
+    fs.mkdirSync(path.join(dir, 'specs'));
+    fs.writeFileSync(
+      path.join(dir, 'specs', 'demo.md'),
+      ['1', '2', '3', '4', '5', '6', '7']
+        .map((n) => `<!-- id: REQ-R-${n} -->\n## Spec REQ-R-${n}\n\nbody\n`)
+        .join('\n'),
+      'utf-8',
+    );
     cg = await SpecShip.init(dir);
   });
 

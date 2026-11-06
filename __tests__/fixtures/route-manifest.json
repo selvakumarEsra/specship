@@ -186,7 +186,7 @@
       "tested": "waived: no direct test yet"
     },
     "POST /api/spec/link-assert": {
-      "tested": "waived: no direct test yet"
+      "tested": "__tests__/link-assert-writeback-required.test.ts"
     },
     "POST /api/spec/link-verify": {
       "tested": "waived: no direct test yet"
