@@ -20,6 +20,7 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixes
 
+- `specship_spec` now shows when a link followed a moved or renamed symbol ("followed-move") or came from a test title ("test-title"), and a link with no recorded confidence no longer shows a made-up 1.00.
 - Verifying a requirement now counts tests that name its acceptance criteria, not only tests that name the requirement itself.
 - A spec bullet that names only a file, such as `- scripts/build-gemini-extension.mjs` under `implementations:`, now tracks that file and flags it when its content changes. The link drifts with kind `file-change`; touching the file without changing it does not. A path to a file that doesn't exist leaves the link orphaned. A verified file link is not drifted: it shows "body changed since verified" until you verify it again. The lint warning for such a bullet now says the link is file-level.
 - A link that drifted only because parameters were renamed now clears itself. Ingest a test report with `specship verify --report <file> --commit <sha>`: when the commit is the current one and every test of the requirement passed, the link returns to the state it had before the drift. A failing test, a report from another commit or without `--commit`, or a type or shape change leaves the link drifted.

@@ -179,6 +179,16 @@ function rowToSpecFile(row: SpecFileRow): SpecFile {
   };
 }
 
+/**
+ * The confidence a link ranks at when two signals compete for one logical
+ * link (`upsertSpecLink`'s "equal or higher wins"). A link with no recorded
+ * confidence ranks as 1.0 — the behaviour before missing confidences were
+ * stored as missing (REQ-LINKACC-012.A3). Ranking only: never written back.
+ */
+export function confidenceRank(confidence: number | null | undefined): number {
+  return typeof confidence === 'number' && Number.isFinite(confidence) ? confidence : 1.0;
+}
+
 function rowToSpecLink(row: SpecLinkRow): SpecLink {
   return {
     id: row.id,
@@ -774,7 +784,7 @@ export class SpecQueries {
       specHashAtLink: link.specHashAtLink,
       nodeSigAtLink: link.nodeSigAtLink ?? null,
       provenance: link.provenance,
-      confidence: link.confidence ?? 1.0,
+      confidence: link.confidence ?? null,
       metadata: link.metadata ? JSON.stringify(link.metadata) : null,
       createdAt: link.createdAt,
       updatedAt: link.updatedAt,
@@ -801,8 +811,10 @@ export class SpecQueries {
     const now = link.updatedAt;
     if (existing) {
       // Only overwrite if new signal has equal or higher confidence.
-      const newConfidence = link.confidence ?? 1.0;
-      const existingConfidence = existing.confidence ?? 1.0;
+      // A missing confidence ranks as 1.0 here (as it always has) — for this
+      // comparison only; it is stored as missing, never as 1.0 (REQ-LINKACC-012.A3).
+      const newConfidence = confidenceRank(link.confidence);
+      const existingConfidence = confidenceRank(existing.confidence);
       if (newConfidence < existingConfidence) {
         return existing.id;
       }
@@ -859,7 +871,7 @@ export class SpecQueries {
           specHashAtLink: preserve ? existing.specHashAtLink : link.specHashAtLink,
           nodeSigAtLink: link.nodeSigAtLink ?? null,
           provenance: link.provenance,
-          confidence: link.confidence ?? 1.0,
+          confidence: link.confidence ?? null,
           metadata: mergedMetadata ? JSON.stringify(mergedMetadata) : null,
           updatedAt: now,
         });
