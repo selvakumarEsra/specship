@@ -48,7 +48,8 @@ implementations:
   - ui/src/components/run-detail.tsx:RunDetail
   - ui/src/components/run-detail.tsx:StepTiming
   - ui/src/components/run-detail.tsx:fmtClock
-  - ui/src/pages/runs.tsx:RunsPage
+  - ui/src/components/run-detail.tsx:NodeView
+  - ui/src/App.tsx:App
 
 verifies:
   - e2e/tests/run-step-timing.spec.ts:reqWfgate001A1

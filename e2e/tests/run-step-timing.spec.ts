@@ -8,8 +8,8 @@ import { captureConsoleErrors } from '../lib/console';
  *
  * The workflow API is stubbed with `page.route` (as api-failure.spec.ts heals
  * its route), so every event timestamp is fixed and every assertion is exact.
- * The live SSE tail is answered with an immediate `done` frame so it never
- * appends anything the stub didn't declare.
+ * The live SSE tail sends the frames in LIVE (each run's own live events),
+ * then a `done` frame, so it never appends anything the stub didn't declare.
  */
 
 const T0 = Date.UTC(2026, 10, 7, 9, 0, 0); // fixed, well clear of "now"
@@ -39,7 +39,7 @@ const ev = (runId: string, id: number, eventType: string, stepId: string | null,
 });
 
 /**
- * A paused run at its gate: plan completed, lint failed (later resumed past),
+ * A paused run at its gate: plan completed, lint failed,
  * docs skipped, gate awaiting approval, verify never started.
  */
 function pausedRun(runId: string, base: number) {
@@ -82,9 +82,45 @@ const RUN_B = (() => {
   return r;
 })();
 
+// A resumed run: lint failed, the run was resumed, and lint ran again and passed.
+const RUN_C = (() => {
+  const base = T0 + 120_000;
+  const r = pausedRun('run-gamma', base);
+  r.run.status = 'completed';
+  r.run.metadata = {} as typeof r.run.metadata;
+  r.events = [
+    ev('run-gamma', 301, 'run_started', null, base),
+    ev('run-gamma', 302, 'step_started', 'lint', base + 1_000),
+    ev('run-gamma', 303, 'step_failed', 'lint', base + 4_000),
+    ev('run-gamma', 304, 'step_started', 'lint', base + 60_000),
+    ev('run-gamma', 305, 'step_completed', 'lint', base + 62_000),
+  ];
+  return r;
+})();
+
+// A live run whose verify step starts on the SSE tail, after the fetched log.
+// A view that kept its live tail after switching to run-beta would show
+// verify as running there (REQ-WFGATE-001.A3).
+const LIVE_VERIFY_START = T0 + 50_000;
+const RUN_D = (() => {
+  const r = pausedRun('run-delta', T0);
+  r.run.status = 'running';
+  r.run.metadata = {} as typeof r.run.metadata;
+  r.events = r.events.filter((e) => e.eventType !== 'approval_requested')
+    .map((e) => ({ ...e, id: e.id + 400, workflowRunId: 'run-delta' }));
+  return r;
+})();
+
 const RUNS: Record<string, { run: Record<string, unknown>; events: Ev[] }> = {
   'run-alpha': RUN_A,
   'run-beta': RUN_B,
+  'run-gamma': RUN_C,
+  'run-delta': RUN_D,
+};
+
+// Events each run's live SSE tail delivers after its fetched log.
+const LIVE: Record<string, Ev[]> = {
+  'run-delta': [ev('run-delta', 499, 'step_started', 'verify', LIVE_VERIFY_START)],
 };
 
 async function stubWorkflowApi(page: Page): Promise<void> {
@@ -97,7 +133,8 @@ async function stubWorkflowApi(page: Page): Promise<void> {
     const r = m ? RUNS[decodeURIComponent(m[1]!)] : undefined;
     if (!r) return route.fulfill({ status: 404, contentType: 'application/json', body: '{"error":"not found"}' });
     if (m![2] === '/events') {
-      return route.fulfill({ status: 200, contentType: 'text/event-stream', body: 'event: done\ndata: {}\n\n' });
+      const frames = (LIVE[decodeURIComponent(m![1]!)] ?? []).map((e) => `event: ${e.eventType}\ndata: ${JSON.stringify(e)}\n\n`);
+      return route.fulfill({ status: 200, contentType: 'text/event-stream', body: `${frames.join('')}event: done\ndata: {}\n\n` });
     }
     if (m![2] === '/artifacts') return json({ artifacts: [] });
     return json(r);
@@ -152,17 +189,32 @@ async function reqWfgate001A2({ page }: { page: Page }) {
   await expect(running.locator('[data-step-started]')).toHaveAttribute('data-step-started', String(T0 + 7_000 + 15_000));
   await expect(running.locator('[data-step-finished]')).toHaveCount(0);
   await expect(running.locator('[data-step-duration]')).toHaveCount(0);
+
+  // A step rerun after a resume shows its latest attempt, not the failed one.
+  await openRun(page, 'run-gamma');
+  const rerun = chip(page, 'lint');
+  const C = T0 + 120_000;
+  await expect(rerun).toHaveAttribute('data-node-state', 'completed');
+  await expect(rerun.locator('[data-step-started]')).toHaveAttribute('data-step-started', String(C + 60_000));
+  await expect(rerun.locator('[data-step-finished]')).toHaveAttribute('data-step-finished', String(C + 62_000));
+  await expect(rerun.locator('[data-step-duration]')).toHaveAttribute('data-step-duration', '2000');
 }
 
 async function reqWfgate001A3({ page }: { page: Page }) {
   await stubWorkflowApi(page);
-  await openRun(page, 'run-alpha');
+  await openRun(page, 'run-delta');
   await expect(chip(page, 'plan').locator('[data-step-started]')).toHaveAttribute('data-step-started', String(T0 + 1_000));
   await expect(chip(page, 'lint')).toHaveAttribute('data-node-state', 'failed');
+  // run-delta's live tail has arrived: verify started live.
+  await expect(chip(page, 'verify').locator('[data-step-started]')).toHaveAttribute('data-step-started', String(LIVE_VERIFY_START));
 
-  // In-app navigation to the other concurrent run of the same workflow.
-  await page.getByRole('button', { name: 'Runs' }).first().click();
-  await page.getByText('run-beta', { exact: true }).click();
+  // Switch straight to the other concurrent run of the same workflow, as a
+  // browser back/forward between two runs does: the route changes without the
+  // run view passing through the runs list, so nothing remounts it for free.
+  await page.evaluate(() => {
+    history.pushState(null, '', '/runs/run-beta');
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  });
   await expect(page).toHaveURL(/\/runs\/run-beta$/);
 
   const B = T0 + 7_000;
@@ -170,10 +222,13 @@ async function reqWfgate001A3({ page }: { page: Page }) {
   await expect(chip(page, 'plan').locator('[data-step-finished]')).toHaveAttribute('data-step-finished', String(B + 14_000));
   await expect(chip(page, 'plan').locator('[data-step-duration]')).toHaveAttribute('data-step-duration', '12000');
   await expect(chip(page, 'lint')).toHaveAttribute('data-node-state', 'running');
-  // Nothing of run-alpha's survives: docs/gate never ran in run-beta.
+  // Nothing of run-delta's survives: docs/gate never ran in run-beta.
   await expect(chip(page, 'docs')).toHaveAttribute('data-node-state', 'pending');
   await expect(chip(page, 'gate')).toHaveAttribute('data-node-state', 'pending');
   await expect(chip(page, 'docs').locator('[data-step-timing]')).toHaveCount(0);
+  // run-delta's live verify start must not follow us into run-beta.
+  await expect(chip(page, 'verify')).toHaveAttribute('data-node-state', 'pending');
+  await expect(chip(page, 'verify').locator('[data-step-timing]')).toHaveCount(0);
   const allStarts = await page.locator('[data-step-started]').evaluateAll((els) => els.map((e) => Number(e.getAttribute('data-step-started'))));
   expect(allStarts).toEqual([B + 2_000, B + 15_000]);
 }
