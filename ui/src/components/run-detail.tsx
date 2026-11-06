@@ -28,6 +28,12 @@ export interface NodeView {
   kind: string;
   state: string;
   costUsd?: number;
+  /** This step's own latest `step_started` time (REQ-WFGATE-001.A2). */
+  startedAt?: number;
+  /** This step's own `step_completed` / `step_failed` / `step_skipped` time. */
+  finishedAt?: number;
+  /** finishedAt − startedAt, only when both come from this step's events. */
+  durationMs?: number;
 }
 
 /**
@@ -86,13 +92,22 @@ export function deriveNodeViews(
 
   const states = new Map<string, string>(ordered.map((id) => [id, persisted[id] ?? 'pending']));
   const costs = new Map<string, number>();
+  // Step timing comes only from the step's OWN events — never the run's
+  // startedAt/lastActivityAt or a neighbour's (REQ-WFGATE-001.A5).
+  const started = new Map<string, number>();
+  const finished = new Map<string, number>();
   for (const e of events) {
     const id = eventStepId(e);
     if (!id || !seen.has(id)) continue;
-    if (e.eventType === 'step_started') states.set(id, 'running');
-    else if (e.eventType === 'step_completed') states.set(id, 'completed');
-    else if (e.eventType === 'step_failed') states.set(id, 'failed');
-    else if (e.eventType === 'step_skipped') states.set(id, 'skipped');
+    if (e.eventType === 'step_started') {
+      states.set(id, 'running');
+      // A rerun (resume) restarts the step: show the current attempt.
+      started.set(id, e.createdAt);
+      finished.delete(id);
+    } else if (e.eventType === 'step_completed' || e.eventType === 'step_failed' || e.eventType === 'step_skipped') {
+      states.set(id, e.eventType === 'step_completed' ? 'completed' : e.eventType === 'step_failed' ? 'failed' : 'skipped');
+      finished.set(id, e.createdAt);
+    }
     if (e.eventType === 'step_completed') {
       const stats = e.data?.stats as { costUsd?: number } | undefined;
       if (typeof stats?.costUsd === 'number') costs.set(id, stats.costUsd);
@@ -103,12 +118,19 @@ export function deriveNodeViews(
   if (run?.status === 'paused' && approval?.nodeId && states.get(approval.nodeId) !== 'completed') {
     states.set(approval.nodeId, 'paused');
   }
-  return ordered.map((id) => ({
-    id,
-    kind: kinds.get(id) ?? 'prompt',
-    state: states.get(id) ?? 'pending',
-    costUsd: costs.get(id),
-  }));
+  return ordered.map((id) => {
+    const s = started.get(id);
+    const f = finished.get(id);
+    return {
+      id,
+      kind: kinds.get(id) ?? 'prompt',
+      state: states.get(id) ?? 'pending',
+      costUsd: costs.get(id),
+      startedAt: s,
+      finishedAt: f,
+      durationMs: s !== undefined && f !== undefined ? f - s : undefined,
+    };
+  });
 }
 
 /** Run-total cost + model, summed/picked from `step_completed` stats. */
@@ -175,6 +197,7 @@ function RunNodeGraph({ nodes }: { nodes: NodeView[] }) {
                 <div className="mono muted" style={{ fontSize: 9 }}>
                   {n.kind}{n.costUsd !== undefined && <span className="tabular"> · {fmtCost(n.costUsd)}</span>}
                 </div>
+                <StepTiming node={n} />
               </div>
             </div>
           </div>
@@ -207,9 +230,34 @@ export function eventText(e: RunEvent): string {
   return '';
 }
 
-function fmtClock(ms: number): string {
+export function fmtClock(ms: number): string {
   const d = new Date(ms);
   return Number.isNaN(d.getTime()) ? '' : d.toLocaleTimeString();
+}
+
+/**
+ * A step chip's own timing line: start, then finish · duration once ended.
+ * Renders nothing for a step with no events of its own (REQ-WFGATE-001.A5).
+ * Raw ms ride on data-* attributes so tests can assert exact values.
+ */
+// @implements REQ-WFGATE-001
+export function StepTiming({ node }: { node: NodeView }) {
+  if (node.startedAt === undefined && node.finishedAt === undefined) return null;
+  return (
+    <div className="mono muted tabular" data-step-timing={node.id} style={{ fontSize: 9 }}>
+      {node.startedAt !== undefined && (
+        <span data-step-started={node.startedAt} title="Step started">{fmtClock(node.startedAt)}</span>
+      )}
+      {node.finishedAt !== undefined && (
+        <span data-step-finished={node.finishedAt} title="Step finished">
+          {node.startedAt !== undefined ? ' → ' : ''}{fmtClock(node.finishedAt)}
+        </span>
+      )}
+      {node.durationMs !== undefined && (
+        <span data-step-duration={node.durationMs} title="Step duration"> · {fmtDuration(node.durationMs)}</span>
+      )}
+    </div>
+  );
 }
 
 /** Scrolling event log; sticks to the tail unless the user scrolls away. */

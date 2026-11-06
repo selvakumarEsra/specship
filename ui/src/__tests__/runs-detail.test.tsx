@@ -8,6 +8,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RunsPage } from '../pages/runs';
+import { deriveNodeViews } from '../components/run-detail';
 
 const NOW = Date.now();
 
@@ -228,5 +229,43 @@ describe('RunDetail (REQ-DESKTOP-023.A1/A2/A3)', () => {
     fireEvent.click(screen.getByText('Inspect artifacts'));
     await screen.findByText('plan.md');
     expect(screen.getByText(/## Plan: fix the link/)).toBeTruthy();
+  });
+});
+
+describe('deriveNodeViews step timing (REQ-WFGATE-001, unit — fast feedback)', () => {
+  const nodes = DEFINITION.workflow.nodes;
+  const ev = (id: number, eventType: string, stepId: string, createdAt: number) =>
+    ({ id, workflowRunId: 'r1', eventType, data: { stepId }, createdAt });
+
+  it('takes start/finish/duration from the step\'s own events only', () => {
+    const views = deriveNodeViews(nodes, PAUSED_RUN, [
+      ev(1, 'step_started', 'plan', 1_000),
+      ev(2, 'step_completed', 'plan', 4_500),
+      ev(3, 'step_started', 'gate', 5_000),
+    ]);
+    const by = Object.fromEntries(views.map((v) => [v.id, v]));
+    expect(by.plan).toMatchObject({ state: 'completed', startedAt: 1_000, finishedAt: 4_500, durationMs: 3_500 });
+    expect(by.gate).toMatchObject({ state: 'paused', startedAt: 5_000 });
+    expect(by.gate!.finishedAt).toBeUndefined();
+    // A5: never borrowed from run.startedAt or a neighbour.
+    expect(by.verify).toMatchObject({ state: 'pending' });
+    expect(by.verify!.startedAt).toBeUndefined();
+    expect(by.verify!.finishedAt).toBeUndefined();
+    expect(by.verify!.durationMs).toBeUndefined();
+  });
+
+  it('a rerun replaces the earlier attempt; a skip with no start has no duration', () => {
+    const views = deriveNodeViews(nodes, { ...PAUSED_RUN, status: 'running' }, [
+      ev(1, 'step_started', 'plan', 1_000),
+      ev(2, 'step_failed', 'plan', 2_000),
+      ev(3, 'step_started', 'plan', 9_000),
+      ev(4, 'step_skipped', 'verify', 9_500),
+    ]);
+    const by = Object.fromEntries(views.map((v) => [v.id, v]));
+    expect(by.plan).toMatchObject({ state: 'running', startedAt: 9_000 });
+    expect(by.plan!.finishedAt).toBeUndefined();
+    expect(by.verify).toMatchObject({ state: 'skipped', finishedAt: 9_500 });
+    expect(by.verify!.startedAt).toBeUndefined();
+    expect(by.verify!.durationMs).toBeUndefined();
   });
 });
