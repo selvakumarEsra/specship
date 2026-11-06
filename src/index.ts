@@ -59,6 +59,7 @@ import {
   qualifiedNameVariants,
   codeDerivedLinkKey,
   nodeLogicalKey,
+  isFileContentLink,
   type CodeDerivedLinks,
   type LinkRepoint,
   type RepointReport,
@@ -428,12 +429,23 @@ export class SpecShip {
    * the desktop server's verify route share one rule.
    */
   rebaselineLinkOnVerify(
-    link: Pick<SpecLink, 'id' | 'specId' | 'targetFilePath' | 'targetQualifiedName' | 'targetNodeKind'>,
+    link: Pick<SpecLink, 'id' | 'specId' | 'targetFilePath' | 'targetQualifiedName' | 'targetNodeKind'> &
+      Partial<Pick<SpecLink, 'kind'>>,
     metadata: Record<string, unknown>
   ): { specHash: boolean; sig: boolean; body: boolean } {
     const now = Date.now();
     const specHash = this.specQueries.getSpecById(link.specId)?.contentHash;
     if (specHash) this.specQueries.updateSpecLinkSpecBaseline(link.id, specHash, now);
+    // A file-level link's baseline is its file's content hash (REQ-LINKACC-009):
+    // verifying adopts the current content and clears a body-changed marker.
+    if (isFileContentLink({ ...link, kind: link.kind ?? 'implements' })) {
+      const fp = this.specLinkResolver.fileFingerprint(link.targetFilePath);
+      if (fp) {
+        this.specQueries.updateSpecLinkSigBaseline(link.id, fp, now);
+        delete metadata.bodyChanged;
+      }
+      return { specHash: !!specHash, sig: !!fp, body: !!fp };
+    }
     const node = this.specLinkResolver.findLogicalTarget(
       link.targetFilePath,
       link.targetQualifiedName,
@@ -1462,6 +1474,10 @@ export class SpecShip {
       const resolveStats = this.specLinkResolver.resolveAll({ priorNodeKeys });
       transitions.push(...resolveStats.transitions);
       repoints = this.persistRepoints(resolveStats.repoints ?? []);
+    } else {
+      // Nothing indexed changed, but a file-level link's file may be one the
+      // indexer never tracks — check those on every sync (REQ-LINKACC-009).
+      transitions.push(...this.specLinkResolver.resolveFileLinks().transitions);
     }
     return { transitions, errors: totalErrors, warnings: totalWarnings, repoints };
   }

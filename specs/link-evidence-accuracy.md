@@ -486,6 +486,26 @@ change to say that the link is file-level.
 
 implementations:
   - src/resolution/spec-link-resolver.ts:SpecLinkResolver.applyDeclarationCandidates
+  - src/resolution/spec-link-resolver.ts:SpecLinkResolver.applyFileDeclaration
+  - src/resolution/spec-link-resolver.ts:SpecLinkResolver.resolveOneLink
+  - src/resolution/spec-link-resolver.ts:SpecLinkResolver.resolveFileLink
+  - src/resolution/spec-link-resolver.ts:SpecLinkResolver.resolveFileLinks
+  - src/resolution/spec-link-resolver.ts:SpecLinkResolver.fileFingerprint
+  - src/resolution/spec-link-resolver.ts:isFileContentLink
+  - src/extraction/specs/markdown-spec-extractor.ts:MarkdownSpecExtractor.extractLinkRefBlock
+  - src/index.ts:SpecShip.rebaselineLinkOnVerify
+  - src/index.ts:SpecShip.indexSpecsInternal
+
+verifies:
+  - __tests__/spec-link-file-level.test.ts:reqLinkacc009A1
+  - __tests__/spec-link-file-level.test.ts:reqLinkacc009A2
+  - __tests__/spec-link-file-level.test.ts:reqLinkacc009A3
+  - __tests__/spec-link-file-level.test.ts:reqLinkacc009A4
+  - __tests__/spec-link-file-level.test.ts:verifiedFileLinkFlagsBodyChangeWithoutDrifting
+  - __tests__/spec-link-file-level.test.ts:untrackedFileEditDriftsWithNoCodeChange
+  - __tests__/spec-link-file-level.test.ts:specEditInSameSyncDoesNotHideFileChange
+  - __tests__/spec-link-file-level.test.ts:bareImplementationsBulletIsFileLevel
+  - __tests__/spec-link-file-level.test.ts:bareVerifiesBulletStaysNoEdge
 
 ## Acceptance
 <!-- id: REQ-LINKACC-009.A1 -->

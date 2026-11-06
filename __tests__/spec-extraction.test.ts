@@ -126,10 +126,13 @@ Body text ends the block.
   - src/never/reached.ts:tooLate
 `;
     const result = new MarkdownSpecExtractor('specs/x.md', source).extract();
+    // The bare path is a file-level link (REQ-LINKACC-009), listed first.
     expect(result.linkCandidates.map((c) => c.targetQualifiedName)).toEqual([
+      '',
       'authenticate',
       'enforce',
     ]);
+    expect(result.linkCandidates[0]).toMatchObject({ targetFilePath: 'commands/specship/jira.md', targetNodeKind: 'file' });
   });
 
   // REQ-REVINT-002 — the skip stays, but it is no longer silent: a no-edge
@@ -158,8 +161,11 @@ verifies:
     expect(warnings[1]!.message).toContain('__tests__/auth.test.ts');
     // The bullet's own line, not the block header's.
     expect(source.split('\n')[warnings[0]!.line! - 1]).toContain('commands/specship/jira.md');
-    // Warning-only: the well-formed bullet still links (REQ-LINKWB-002.A3).
-    expect(result.linkCandidates.map((c) => c.targetQualifiedName)).toEqual(['authenticate']);
+    // The implementations: bare path links at file level (REQ-LINKACC-009);
+    // the verifies: one does not, and the well-formed bullet still links.
+    expect(warnings[0]!.message).toContain('linked at file level');
+    expect(warnings[1]!.message).toContain('no link edge created');
+    expect(result.linkCandidates.map((c) => c.targetQualifiedName)).toEqual(['', 'authenticate']);
   });
 
   it('well-formed path:Symbol bullets produce no warnings (REQ-REVINT-002.A3)', () => {

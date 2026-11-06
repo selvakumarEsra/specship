@@ -49,6 +49,13 @@ const HEADING = /^(#{1,6})\s+(.+?)\s*$/;
 /** Pattern: implementation reference inside an `implementations:` block */
 const IMPL_REF = /^[-*]\s+([^\s:]+)\s*:\s*([A-Za-z0-9_$.]+)\s*$/;
 
+/**
+ * Pattern: a bullet naming only a file (`- scripts/build.mjs`, optionally in
+ * backticks). Under `implementations:` it becomes a file-level link that
+ * drifts on a content change (REQ-LINKACC-009).
+ */
+const BARE_PATH_REF = /^[-*]\s+`?([^\s:`]+\.[A-Za-z0-9]+)`?\s*$/;
+
 /** Pattern: a Markdown list bullet (`- foo` / `* foo`, indentation tolerant). */
 const BULLET = /^\s*[-*]\s+(.*\S)\s*$/;
 
@@ -848,9 +855,31 @@ export class MarkdownSpecExtractor {
         if (subline === '') continue;
         const m = subline.match(IMPL_REF);
         if (!m) {
-          // A bullet that isn't `path:Symbol` (e.g. a bare-path pointer to a
-          // command markdown file) is a documented no-edge entry — skip it
-          // WITHOUT ending the block, so bullets after it still link
+          // A bare-path `implementations:` bullet (e.g. a command markdown
+          // file or a build script) links at FILE level: the resolver
+          // fingerprints the file's content and drifts the link with kind
+          // `file-change` when it changes (REQ-LINKACC-009). Still a warning,
+          // so the author knows the link is coarser than a symbol link.
+          const bare = kind === 'implements' ? subline.match(BARE_PATH_REF) : null;
+          if (bare && bare[1]) {
+            errors.push({
+              message: `${specId}: ${keyword} bullet "${subline}" names a file only — linked at file level; it drifts on any content change`,
+              filePath: this.filePath,
+              line: bodyStartLine + j,
+              severity: 'warning',
+              code: 'spec_bare_path_ref',
+            });
+            out.push({
+              specId,
+              targetFilePath: bare[1],
+              targetQualifiedName: '',
+              targetNodeKind: 'file',
+              kind,
+            });
+            continue;
+          }
+          // Any other bullet that isn't `path:Symbol` is a no-edge entry —
+          // skip it WITHOUT ending the block, so bullets after it still link
           // (REQ-LINKWB-002.A3). Only a non-bullet line ends the block.
           // The skip is intentional but no longer silent: it produces no edge,
           // so the author gets a warning naming the bullet (REQ-REVINT-002.A1).
