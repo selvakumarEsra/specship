@@ -125,6 +125,12 @@ export interface SyncResult {
    */
   driftedTransitions?: import('../resolution/spec-link-resolver').DriftTransition[];
   /**
+   * Links that followed a moved or renamed symbol by its body fingerprint in
+   * this sync's spec pass (REQ-LINKACC-005), each with the spec-file edit made
+   * for a spec-declared link. Absent when nothing was re-pointed.
+   */
+  linkRepoints?: import('../resolution/spec-link-resolver').RepointReport[];
+  /**
    * Spec-extraction error/warning counts from this sync's spec pass
    * (REQ-REVINT-002.A2). Absent when the spec pass didn't run; zeroed when it
    * ran and every changed spec parsed cleanly.

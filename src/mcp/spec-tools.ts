@@ -17,6 +17,7 @@ import type { Spec, SpecLink, SpecLinkState, SpecLinkKind, NodeKind } from '../t
 import type { SpecQueries } from '../db/spec-queries';
 import { renderBehaviourSurface } from '../behaviour/behaviour-surface';
 import { persistLinkToSpecFile } from '../spec-quality/link-persist';
+import { formatRepointedFrom } from '../resolution/link-repoint';
 import type { ToolDefinition, ToolResult } from './tools';
 import { canonicalQualifiedName } from '../resolution/spec-link-resolver';
 import { isNonTestEvidence } from '../resolution/test-title-links';
@@ -269,7 +270,10 @@ export function formatLink(link: SpecLink): string {
   // advisory, shown next to an unchanged state.
   const since = bodyChangedSince(link);
   const bodySuffix = since ? ` ⚠ ${formatBodyChanged(since)}` : '';
-  const head = `  - [${link.state}${driftSuffix}] ${resolved} ${link.kind} → ${link.targetFilePath}:${link.targetQualifiedName} <${link.provenance}${conf}>  #${link.id}${bodySuffix}`;
+  const line = `  - [${link.state}${driftSuffix}] ${resolved} ${link.kind} → ${link.targetFilePath}:${link.targetQualifiedName} <${link.provenance}${conf}>  #${link.id}${bodySuffix}`;
+  // Followed a moved / renamed symbol by its body (REQ-LINKACC-005.A5).
+  const repointed = formatRepointedFrom(link);
+  const head = repointed ? `${line}\n      ↳ ${repointed}` : line;
   const v = verificationOf(link);
   if (!v || !v.verifiedAt) return head;
   const parts = [`verified ${v.verifiedAt}`];

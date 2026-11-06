@@ -176,3 +176,70 @@ describe('persistLinkToSpecFile — REQ-THRU-005', () => {
     expect(fs.readFileSync(specPath).equals(before)).toBe(true);
   });
 });
+
+// ---------------------------------------------------------------------------
+// REQ-LINKACC-005 — a re-point rewrites the spec's bullet. These pin the file
+// byte for byte, since a wrong edit lands in the user's spec.
+// ---------------------------------------------------------------------------
+
+describe('persistLinkToSpecFile replaces — REQ-LINKACC-005', () => {
+  const repoint = (replaces: string, filePath: string, symbol: string) =>
+    persistLinkToSpecFile({
+      projectRoot: root, specId: 'REQ-DEMO-002', kind: 'implements',
+      filePath, symbol, replaces, symbolResolved: true,
+    });
+
+  it('REQ-LINKACC-005.A1: the old bullet is rewritten in place; nothing else in the file changes', function repointRewritesBulletInPlace() {
+    const res = repoint('src/token.ts:rotate', 'src/keys.ts', 'rotate');
+    expect(res.status).toBe('persisted');
+    expect(fs.readFileSync(specPath, 'utf8')).toBe(SPEC.replace('  - src/token.ts:rotate', '  - src/keys.ts:rotate'));
+  });
+
+  it('REQ-LINKACC-005.A1: when the new location is already listed, the old bullet is dropped, never duplicated', function repointDropsOldWhenNewListed() {
+    const withBoth = SPEC.replace('  - src/token.ts:rotate', '  - src/token.ts:rotate\n  - src/keys.ts:rotate');
+    fs.writeFileSync(specPath, withBoth);
+    expect(repoint('src/token.ts:rotate', 'src/keys.ts', 'rotate').status).toBe('persisted');
+    const after = fs.readFileSync(specPath, 'utf8');
+    expect(after).toBe(SPEC.replace('  - src/token.ts:rotate', '  - src/keys.ts:rotate'));
+    expect(after.match(/src\/keys\.ts:rotate/g)).toHaveLength(1);
+  });
+
+  it('REQ-LINKACC-005.A1: old bullet gone and new one present is unchanged, and the file is untouched', function repointUnchangedWhenAlreadyMoved() {
+    const moved = SPEC.replace('  - src/token.ts:rotate', '  - src/keys.ts:rotate');
+    fs.writeFileSync(specPath, moved);
+    expect(repoint('src/token.ts:rotate', 'src/keys.ts', 'rotate').status).toBe('unchanged');
+    expect(fs.readFileSync(specPath, 'utf8')).toBe(moved);
+  });
+
+  it('REQ-LINKACC-005.A1: old bullet gone and new one absent adds the new bullet once', function repointAppendsWhenNeitherListed() {
+    const none = SPEC.replace('  - src/token.ts:rotate\n', '  - src/token.ts:mint\n');
+    fs.writeFileSync(specPath, none);
+    expect(repoint('src/token.ts:rotate', 'src/keys.ts', 'rotate').status).toBe('persisted');
+    const after = fs.readFileSync(specPath, 'utf8');
+    expect(after.match(/src\/keys\.ts:rotate/g)).toHaveLength(1);
+    expect(after).toContain('  - src/token.ts:mint');
+  });
+
+  it('REQ-LINKACC-005.A1: a `::`-qualified old name matches its dotted bullet', function repointMatchesDoubleColonName() {
+    const cls = SPEC.replace('  - src/token.ts:rotate', '  - src/token.ts:Tokens.rotate');
+    fs.writeFileSync(specPath, cls);
+    expect(repoint('src/token.ts:Tokens::rotate', 'src/keys.ts', 'Tokens.rotate').status).toBe('persisted');
+    expect(fs.readFileSync(specPath, 'utf8')).toBe(cls.replace('src/token.ts:Tokens.rotate', 'src/keys.ts:Tokens.rotate'));
+  });
+
+  it('REQ-LINKACC-005.A1: CRLF line endings are kept', function repointKeepsCrlf() {
+    fs.writeFileSync(specPath, SPEC.replace(/\n/g, '\r\n'));
+    expect(repoint('src/token.ts:rotate', 'src/keys.ts', 'rotate').status).toBe('persisted');
+    const after = fs.readFileSync(specPath, 'utf8');
+    expect(after).toBe(SPEC.replace('  - src/token.ts:rotate', '  - src/keys.ts:rotate').replace(/\n/g, '\r\n'));
+  });
+
+  it('REQ-LINKACC-005.A3: a requirement the spec file does not declare is refused and the file is untouched', function repointRefusedForUnknownRequirement() {
+    const res = persistLinkToSpecFile({
+      projectRoot: root, specId: 'REQ-DEMO-999', kind: 'implements', filePath: 'src/keys.ts', symbol: 'rotate',
+      replaces: 'src/token.ts:rotate', symbolResolved: true, specSourcePath: 'specs/demo.md',
+    });
+    expect(res.status).toBe('refused');
+    expect(fs.readFileSync(specPath, 'utf8')).toBe(SPEC);
+  });
+});

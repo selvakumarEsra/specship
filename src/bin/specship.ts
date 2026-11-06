@@ -44,6 +44,7 @@ import { resolveLatestVersion } from '../update/resolve-latest';
 import { runInstaller } from '../update/run-installer';
 import { relaunchWithWasmRuntimeFlagsIfNeeded } from '../extraction/wasm-runtime-flags';
 import { formatParseWarningSummary } from '../extraction/parse-warnings';
+import { formatRepointNotices } from '../resolution/link-repoint';
 
 // Lazy-load heavy modules (SpecShip, runInstaller) to keep CLI startup fast.
 async function loadSpecShip(): Promise<typeof import('../index')> {
@@ -828,6 +829,13 @@ program
       }
     };
 
+    // One line per link that followed a moved or renamed symbol this sync
+    // (REQ-LINKACC-005), naming the spec-file edit for a declared link —
+    // printed under --quiet too, so the auto-sync hook surfaces it.
+    const pushRepointNotices = (result: { linkRepoints?: import('../resolution/spec-link-resolver').RepointReport[] }) => {
+      for (const line of formatRepointNotices(result.linkRepoints ?? [])) console.log(line);
+    };
+
     // JIRA push (REQ-JIRAPUB-006): a genuine drift transition on a JIRA-backed
     // spec is commented onto its issue — best-effort, transition events only
     // (so an ongoing drift never repeats a comment), never blocks the sync.
@@ -971,6 +979,7 @@ program
       if (options.quiet) {
         const result = await cg.sync();
         pushDriftNotices(result);
+        pushRepointNotices(result);
         await pushJiraDriftComments(cg, result);
         await pushJiraAutoPublish(result);
         pushDriftSummary(cg);
@@ -1020,6 +1029,7 @@ program
       if (parseWarning) clack.log.warn(parseWarning);
 
       pushDriftNotices(result);
+      pushRepointNotices(result);
       await pushJiraDriftComments(cg, result);
       await pushJiraAutoPublish(result);
       pushDriftSummary(cg);

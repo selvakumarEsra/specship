@@ -93,7 +93,12 @@ const SRC_MAIN = [
   'export function foo(): number {', '  return 1;', '}', '',
   'export class Greeter {', '  hello(): string {', "    return 'hi';", '  }', '}', '',
 ].join('\n');
-const SRC_BRANCH = SRC_MAIN.replace('function foo(', 'function fooRenamed(').replace('hello(): string', 'greet(): string');
+// Renamed AND changed: a same-body rename is followed by the link
+// (REQ-LINKACC-005), so the branch must also change each body for the link to
+// break — which is what branch-broken reports.
+const SRC_BRANCH = SRC_MAIN
+  .replace('function foo(', 'function fooRenamed(').replace('return 1;', 'return 2;')
+  .replace('hello(): string', 'greet(): string').replace("return 'hi';", "return 'hey';");
 
 const SPEC = `---
 id: DEMO-DOC

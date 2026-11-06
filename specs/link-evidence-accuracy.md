@@ -271,6 +271,40 @@ finds none, or more than one, the link MUST stay `orphaned`, as it does today.
 implementations:
   - src/resolution/spec-link-resolver.ts:SpecLinkResolver.resolveOneLink
   - src/resolution/spec-link-resolver.ts:SpecLinkResolver.findLogicalTarget
+  - src/resolution/spec-link-resolver.ts:SpecLinkResolver.findRepointTarget
+  - src/resolution/spec-link-resolver.ts:SpecLinkResolver.addedSymbols
+  - src/resolution/spec-link-resolver.ts:SpecLinkResolver.repointLink
+  - src/resolution/spec-link-resolver.ts:SpecLinkResolver.resolveAll
+  - src/resolution/spec-link-resolver.ts:SpecLinkResolver.resolveLinksForFiles
+  - src/resolution/spec-link-resolver.ts:nodeLogicalKey
+  - src/db/spec-queries.ts:SpecQueries.updateSpecLinkTarget
+  - src/db/spec-queries.ts:SpecQueries.hasRepointableLinks
+  - src/db/queries.ts:QueryBuilder.getNodeLogicalKeys
+  - src/index.ts:SpecShip.indexAll
+  - src/index.ts:SpecShip.sync
+  - src/index.ts:SpecShip.snapshotNodeKeysForRepoint
+  - src/index.ts:SpecShip.persistRepoints
+  - src/index.ts:SpecShip.reindexRepointedSpecFile
+  - src/spec-quality/link-persist.ts:persistLinkToSpecFile
+  - src/resolution/link-repoint.ts:repointedFrom
+  - src/resolution/link-repoint.ts:formatRepointedFrom
+  - src/resolution/link-repoint.ts:formatRepointNotices
+  - src/mcp/spec-tools.ts:formatLink
+
+verifies:
+  - __tests__/link-persist.test.ts:repointRewritesBulletInPlace
+  - __tests__/link-persist.test.ts:repointDropsOldWhenNewListed
+  - __tests__/link-persist.test.ts:repointUnchangedWhenAlreadyMoved
+  - __tests__/link-persist.test.ts:repointAppendsWhenNeitherListed
+  - __tests__/link-persist.test.ts:repointMatchesDoubleColonName
+  - __tests__/link-persist.test.ts:repointKeepsCrlf
+  - __tests__/link-persist.test.ts:repointRefusedForUnknownRequirement
+  - __tests__/spec-link-repoint.test.ts:reqLinkacc005A1
+  - __tests__/spec-link-repoint.test.ts:reqLinkacc005A2
+  - __tests__/spec-link-repoint.test.ts:reqLinkacc005A3
+  - __tests__/spec-link-repoint.test.ts:reqLinkacc005A4
+  - __tests__/spec-link-repoint.test.ts:reqLinkacc005A5
+  - __tests__/spec-link-repoint.test.ts:reqLinkacc005SpecWriteBack
 
 ## Acceptance
 <!-- id: REQ-LINKACC-005.A1 -->
@@ -496,7 +530,7 @@ implementations:
   - src/index.ts:SpecShip.rebaselineLinkOnVerify
   - src/index.ts:SpecShip.verifyFromReport
   - src/db/spec-queries.ts:SpecQueries.updateSpecLinkSpecBaseline
-  - server/src/routes/spec.ts
+  - server/src/routes/spec.ts:registerSpecRoutes
 
 verifies:
   - __tests__/link-verify-spec-baseline.test.ts:reqLinkacc013A1
