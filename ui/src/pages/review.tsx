@@ -166,6 +166,11 @@ function ReviewRowItem({ row, active, onOpen }: { row: ReviewRow; active: boolea
         <span className="mono" style={{ ...ELLIPSIS, fontSize: 'var(--fs-sm)', color: 'var(--node-spec)' }}>{row.specId}</span>
         <span className="secondary grow" style={{ ...ELLIPSIS, fontSize: 'var(--fs-sm)' }}>{row.title}</span>
         {row.tag && <Pill>{row.tag}</Pill>}
+        {row.untestedCount && (
+          <span data-testid="untested-count">
+            <Pill>{`${row.untestedCount.untested} of ${row.untestedCount.total} criteria untested`}</Pill>
+          </span>
+        )}
       </div>
       {row.driftReasons.length > 0 && (
         <div className="col gap-4" data-testid="drift-reasons" style={{ paddingTop: 'var(--space-xs)' }}>

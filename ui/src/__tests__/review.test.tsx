@@ -335,6 +335,31 @@ function fixCommandsExistInCli(): void {
   expect(readFileSync(join(REPO, 'src', 'workflows', 'defaults', 'spec-fix.yaml'), 'utf8')).toMatch(/name: SPEC_ID/);
 }
 
+// ---- REQ-LINKACC-007: the untested-criteria pill on a verified row ----
+
+async function reviewRowShowsUntestedPill(): Promise<void> {
+  // Verified in the lifecycle sense: every link verified, 2 of 3 criteria untested.
+  const gap = req('REQ-G-1', {
+    code: 1, codeState: 'verified',
+    criteria: [crit('REQ-G-1.A1', 'verified'), crit('REQ-G-1.A2', 'untested'), crit('REQ-G-1.A3', 'untested')],
+    title: 'Verified with a gap',
+  });
+  const notVerified = req('REQ-G-2', { code: 1, criteria: [crit('REQ-G-2.A1', 'untested')], title: 'Not verified' });
+  expect(classifyRequirement(gap, []).untestedCount).toEqual({ untested: 2, total: 3 });
+  expect(classifyRequirement(notVerified, []).untestedCount).toBeUndefined();
+
+  mockFetch({ ...REVIEW_ROUTES, '/api/spec/coverage': { ...COVERAGE, requirements: [gap, notVerified] }, '/api/drift': { links: [] } });
+  render(<ReviewPage project={null} query={{}} />);
+  await screen.findByTestId('review-group-pending');
+  const pills = screen.getAllByTestId('untested-count');
+  expect(pills.map((p) => p.textContent)).toEqual(['2 of 3 criteria untested']);
+  expect(pills[0]!.closest('[data-review-row]')?.getAttribute('data-review-row')).toBe('REQ-G-1');
+}
+
+describe('Review untested-criteria count (REQ-LINKACC-007)', () => {
+  it('REQ-LINKACC-007: a verified row shows "N of M criteria untested"; an unverified row shows none', reviewRowShowsUntestedPill);
+});
+
 describe('Review screen (REQ-DASHSIMPLE-004)', () => {
   it('REQ-DASHSIMPLE-004.A1: every requirement appears in exactly one group and the counts add up', reqDashsimple004A1);
   it('REQ-DASHSIMPLE-004.A2: implemented code plus every criterion verified is Completed', reqDashsimple004A2);

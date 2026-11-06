@@ -44,6 +44,35 @@ export interface ReviewRow {
   group: ReviewGroup;
   tag?: PendingTag;
   driftReasons: DriftReason[];
+  /** REQ-LINKACC-007: a verified requirement's untested criteria. */
+  untestedCount?: UntestedCount;
+}
+
+/** `untested` of `total` criteria have no test (REQ-LINKACC-007). */
+export interface UntestedCount {
+  untested: number;
+  total: number;
+}
+
+/**
+ * Port of `untestedCriteria` (src/graph/spec-coverage.ts) — the UI only mirrors
+ * the types, so the rule is repeated here and MUST stay identical (the
+ * REQ-LINKACC-007.A3 test feeds one fixture to both). Null unless the
+ * requirement is verified (≥1 link, every implements/tests link `verified`) and
+ * at least one criterion's verdict is `untested`.
+ */
+export function untestedCriteriaCount(req: RequirementCoverage): UntestedCount | null {
+  if (req.criteria.length === 0) return null;
+  let count = 0;
+  for (const node of [req, ...req.criteria]) {
+    for (const r of [node.implementsLinks, node.testsLinks]) {
+      count += r.count;
+      if ((r.states.verified ?? 0) !== r.count) return null;
+    }
+  }
+  if (count === 0) return null;
+  const untested = req.criteria.filter((c) => c.verdict === 'untested').length;
+  return untested > 0 ? { untested, total: req.criteria.length } : null;
 }
 
 /**
@@ -78,6 +107,15 @@ export function driftReason(link: DriftLink, reqId: string): DriftReason {
 
 // @implements REQ-DASHSIMPLE-004
 export function classifyRequirement(
+  req: RequirementCoverage,
+  driftLinks: DriftLink[],
+): { group: ReviewGroup; tag?: PendingTag; driftReasons: DriftReason[]; untestedCount?: UntestedCount } {
+  const base = classifyGroup(req, driftLinks);
+  const gap = untestedCriteriaCount(req);
+  return gap ? { ...base, untestedCount: gap } : base;
+}
+
+function classifyGroup(
   req: RequirementCoverage,
   driftLinks: DriftLink[],
 ): { group: ReviewGroup; tag?: PendingTag; driftReasons: DriftReason[] } {
