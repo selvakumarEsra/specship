@@ -148,3 +148,137 @@ describe.skipIf(!fts5Available)('evidence gate end-to-end (REQ-VEVID-001/002)', 
     expect(JSON.stringify(evidenced)).not.toContain('No test evidence');
   });
 });
+
+/**
+ * REQ-LINKACC-001 (specs/link-evidence-accuracy.md): the verify gate counts
+ * file-derived test evidence on a requirement's own acceptance criteria, not
+ * only links on the requirement itself.
+ */
+const CRIT_SPEC = `---
+id: LA-DOC
+---
+
+<!-- id: LA-DOC -->
+# Criterion evidence demo
+
+<!-- id: REQ-LA-001 -->
+## Criterion-evidenced thing MUST be promotable
+
+Body.
+
+implementations:
+  - src/la.ts:laOne
+
+## Acceptance
+<!-- id: REQ-LA-001.A1 -->
+- First criterion.
+<!-- id: REQ-LA-001.A2 -->
+- Second criterion.
+
+<!-- id: REQ-LA-002 -->
+## Unevidenced thing MUST stay refused
+
+Body.
+
+implementations:
+  - src/la.ts:laTwo
+
+## Acceptance
+<!-- id: REQ-LA-002.A1 -->
+- Only criterion.
+
+<!-- id: REQ-LA-003 -->
+## Agent-asserted criterion evidence MUST NOT count
+
+Body.
+
+implementations:
+  - src/la.ts:laThree
+
+## Acceptance
+<!-- id: REQ-LA-003.A1 -->
+- Only criterion.
+`;
+
+describe.skipIf(!fts5Available)('REQ-LINKACC-001 — criterion-level test evidence', () => {
+  let dir: string;
+  let cg: SpecShip;
+
+  beforeEach(async () => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-linkacc-'));
+    fs.mkdirSync(path.join(dir, 'specs'));
+    fs.mkdirSync(path.join(dir, 'src'));
+    fs.mkdirSync(path.join(dir, 'tests'));
+    fs.writeFileSync(path.join(dir, 'specs', 'la.md'), CRIT_SPEC, 'utf-8');
+    fs.writeFileSync(
+      path.join(dir, 'src', 'la.ts'),
+      'export function laOne() { return 1; }\nexport function laTwo() { return 2; }\nexport function laThree() { return 3; }\n',
+      'utf-8'
+    );
+    fs.writeFileSync(
+      path.join(dir, 'tests', 'la.test.ts'),
+      "import { it } from 'vitest';\nit('REQ-LA-001.A1: first criterion holds', () => {});\nit('REQ-LA-001.A2: second criterion holds', () => {});\n",
+      'utf-8'
+    );
+    cg = await SpecShip.init(dir);
+    await cg.indexAll();
+  });
+
+  afterEach(() => {
+    cg?.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  const implOf = (specId: string) =>
+    cg.getSpecQueries().getLinksBySpec(specId).find((l) => l.kind === 'implements');
+
+  it('REQ-LINKACC-001.A1: criterion test-title evidence promotes the requirement to verified', async function reqLinkacc001A1() {
+    const sq = cg.getSpecQueries();
+    // No tests links on the requirement itself…
+    expect(sq.getLinksBySpec('REQ-LA-001').filter((l) => l.kind === 'tests')).toHaveLength(0);
+    // …but file-derived ones on its criteria.
+    expect(sq.getLinksBySpec('REQ-LA-001.A1').filter((l) => l.kind === 'tests').length).toBeGreaterThanOrEqual(1);
+    const impl = implOf('REQ-LA-001');
+    expect(impl).toBeDefined();
+    const res = await handleSpecshipLinkVerify(cg, { link_id: impl!.id, result: 'pass' });
+    expect(JSON.stringify(res)).not.toContain('no test evidence');
+    expect(sq.getLinkById(impl!.id)!.state).toBe('verified');
+  });
+
+  it('REQ-LINKACC-001.A2: no evidence on the requirement or its criteria is still refused', async function reqLinkacc001A2() {
+    const impl = implOf('REQ-LA-002');
+    expect(impl).toBeDefined();
+    const before = cg.getSpecQueries().getLinkById(impl!.id)!.state;
+    const res = await handleSpecshipLinkVerify(cg, { link_id: impl!.id, result: 'pass' });
+    expect(JSON.stringify(res)).toContain('no test evidence is linked to it');
+    expect(cg.getSpecQueries().getLinkById(impl!.id)!.state).toBe(before);
+    expect(cg.getSpecQueries().getLinkById(impl!.id)!.state).not.toBe('verified');
+  });
+
+  it('REQ-LINKACC-001.A3: an agent-asserted tests link on a criterion does not count', async function reqLinkacc001A3() {
+    const sq = cg.getSpecQueries();
+    const crit = sq.getSpecById('REQ-LA-003.A1');
+    expect(crit).toBeDefined();
+    const now = Date.now();
+    sq.upsertSpecLink({
+      specId: 'REQ-LA-003.A1',
+      targetFilePath: 'tests/la.test.ts',
+      targetQualifiedName: 'tests/la.test.ts',
+      targetNodeKind: 'file',
+      kind: 'tests',
+      state: 'implemented',
+      driftAxis: null,
+      specHashAtLink: crit!.contentHash,
+      provenance: 'agent-asserted',
+      confidence: 1,
+      createdAt: now,
+      updatedAt: now,
+    });
+    expect(sq.getLinksBySpec('REQ-LA-003.A1').some((l) => l.kind === 'tests' && l.provenance === 'agent-asserted')).toBe(true);
+    const impl = implOf('REQ-LA-003');
+    expect(impl).toBeDefined();
+    const res = await handleSpecshipLinkVerify(cg, { link_id: impl!.id, result: 'pass' });
+    expect(JSON.stringify(res)).toContain('no test evidence is linked to it');
+    expect(sq.getLinkById(impl!.id)!.state).not.toBe('verified');
+  });
+});

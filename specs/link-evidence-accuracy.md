@@ -70,6 +70,11 @@ to it".
 implementations:
   - src/mcp/spec-tools.ts:handleSpecshipLinkVerify
 
+verifies:
+  - __tests__/verified-evidence.test.ts:reqLinkacc001A1
+  - __tests__/verified-evidence.test.ts:reqLinkacc001A2
+  - __tests__/verified-evidence.test.ts:reqLinkacc001A3
+
 ## Acceptance
 <!-- id: REQ-LINKACC-001.A1 -->
 - A requirement with no test links of its own, whose criteria have

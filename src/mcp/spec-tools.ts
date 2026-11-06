@@ -1052,10 +1052,20 @@ export async function handleSpecshipLinkVerify(
   // `implemented` (REQ-VEVID-002.A2). Only FILE-DERIVED evidence counts
   // (REQ-REVINT-005.A2): an agent-asserted tests link is a DB-only row the
   // implementing agent can mint for itself, so it would let a run promote past
-  // its own gate.
+  // its own gate. Evidence on the requirement's own acceptance criteria counts
+  // too (REQ-LINKACC-001): test titles name criteria (`REQ-X.A3`), so the
+  // requirement's evidence is its own links plus its criteria's — children by
+  // parent id, never an id-prefix match — under the same file-derived filter.
   if (result === 'pass' && link.kind === 'implements') {
-    const evidenceLinks = sq
-      .getLinksBySpec(link.specId)
+    const evidenceIds = [
+      link.specId,
+      ...sq
+        .getSpecsByParent(link.specId)
+        .filter((s) => s.kind === 'acceptance')
+        .map((s) => s.id),
+    ];
+    const evidenceLinks = evidenceIds
+      .flatMap((id) => sq.getLinksBySpec(id))
       .filter((l) => l.kind === 'tests' && isFileDerivedEvidence(l));
     if (evidenceLinks.length === 0) {
       return error(
