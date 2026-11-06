@@ -74,6 +74,8 @@ verifies:
   - __tests__/verified-evidence.test.ts:reqLinkacc001A1
   - __tests__/verified-evidence.test.ts:reqLinkacc001A2
   - __tests__/verified-evidence.test.ts:reqLinkacc001A3
+  - __tests__/verified-evidence.test.ts:reqLinkacc001NestedRequirementExcluded
+  - __tests__/verified-evidence.test.ts:reqLinkacc001LookalikeIdExcluded
 
 ## Acceptance
 <!-- id: REQ-LINKACC-001.A1 -->

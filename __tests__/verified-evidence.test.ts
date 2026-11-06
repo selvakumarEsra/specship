@@ -282,3 +282,123 @@ describe.skipIf(!fts5Available)('REQ-LINKACC-001 — criterion-level test eviden
     expect(sq.getLinkById(impl!.id)!.state).not.toBe('verified');
   });
 });
+
+// A requirement written as an H1 can hold another requirement (H2) as its
+// child: the only way a requirement has a child that is not an acceptance
+// criterion (the extractor makes every H3+ under an H2 an acceptance).
+const NESTED_SPEC = `---
+id: LC-DOC
+title: Nested requirements
+---
+
+<!-- id: REQ-LB-001 -->
+# Parent requirement MUST be gated on its own criteria
+
+implementations:
+  - src/lb.ts:lbOne
+
+<!-- id: REQ-LB-SUB-001 -->
+## Nested requirement MUST keep its evidence to itself
+
+implementations:
+  - src/lb.ts:lbSub
+`;
+
+const LOOKALIKE_SPEC = `---
+id: LB-DOC
+title: Look-alike ids
+---
+
+<!-- id: LB-DOC -->
+# Look-alike ids
+
+<!-- id: REQ-LB-002 -->
+## Short-id requirement MUST NOT borrow a look-alike's evidence
+
+implementations:
+  - src/lb.ts:lbTwo
+
+## Acceptance
+<!-- id: REQ-LB-002.A1 -->
+- Short criterion.
+
+<!-- id: REQ-LB-0020 -->
+## Look-alike requirement with evidence
+
+implementations:
+  - src/lb.ts:lbTwenty
+
+## Acceptance
+<!-- id: REQ-LB-0020.A1 -->
+- Look-alike criterion.
+`;
+
+describe.skipIf(!fts5Available)('REQ-LINKACC-001 — evidence gathering is scoped to the requirement’s own criteria', () => {
+  let dir: string;
+  let cg: SpecShip;
+
+  beforeEach(async () => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-linkacc-edge-'));
+    for (const d of ['specs', 'src', 'tests']) fs.mkdirSync(path.join(dir, d));
+    fs.writeFileSync(path.join(dir, 'specs', 'lc.md'), NESTED_SPEC, 'utf-8');
+    fs.writeFileSync(path.join(dir, 'specs', 'lb.md'), LOOKALIKE_SPEC, 'utf-8');
+    fs.writeFileSync(
+      path.join(dir, 'src', 'lb.ts'),
+      ['lbOne', 'lbSub', 'lbTwo', 'lbTwenty'].map((f) => `export function ${f}() { return 1; }`).join('\n') + '\n',
+      'utf-8'
+    );
+    // Evidence exists only for the nested requirement and for the look-alike.
+    fs.writeFileSync(
+      path.join(dir, 'tests', 'lb.test.ts'),
+      "import { it } from 'vitest';\nit('REQ-LB-SUB-001: nested requirement holds', () => {});\nit('REQ-LB-0020.A1: look-alike criterion holds', () => {});\n",
+      'utf-8'
+    );
+    cg = await SpecShip.init(dir);
+    await cg.indexAll();
+  });
+
+  afterEach(() => {
+    cg?.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  const implOf = (specId: string) =>
+    cg.getSpecQueries().getLinksBySpec(specId).find((l) => l.kind === 'implements');
+  const hasTitleEvidence = (specId: string) =>
+    cg.getSpecQueries().getLinksBySpec(specId).some((l) => l.kind === 'tests' && l.metadata?.evidenceSource === 'test-title');
+
+  it('REQ-LINKACC-001.A2: a nested requirement’s evidence does not count for its parent', async function reqLinkacc001NestedRequirementExcluded() {
+    const sq = cg.getSpecQueries();
+    // Setup is what it claims: the nested spec is a child of REQ-LB-001, is a
+    // requirement (not an acceptance criterion), and carries title evidence.
+    const nested = sq.getSpecById('REQ-LB-SUB-001');
+    expect(nested?.parentId).toBe('REQ-LB-001');
+    expect(nested?.kind).toBe('requirement');
+    expect(hasTitleEvidence('REQ-LB-SUB-001')).toBe(true);
+    expect(sq.getLinksBySpec('REQ-LB-001').some((l) => l.kind === 'tests')).toBe(false);
+
+    const impl = implOf('REQ-LB-001');
+    expect(impl).toBeDefined();
+    const res = await handleSpecshipLinkVerify(cg, { link_id: impl!.id, result: 'pass' });
+    expect(JSON.stringify(res)).toContain('no test evidence is linked to it');
+    expect(sq.getLinkById(impl!.id)!.state).not.toBe('verified');
+  });
+
+  it('REQ-LINKACC-001.A2: a look-alike id’s evidence does not count', async function reqLinkacc001LookalikeIdExcluded() {
+    const sq = cg.getSpecQueries();
+    expect(hasTitleEvidence('REQ-LB-0020.A1')).toBe(true);
+    expect(hasTitleEvidence('REQ-LB-002.A1')).toBe(false);
+
+    const impl = implOf('REQ-LB-002');
+    expect(impl).toBeDefined();
+    const res = await handleSpecshipLinkVerify(cg, { link_id: impl!.id, result: 'pass' });
+    expect(JSON.stringify(res)).toContain('no test evidence is linked to it');
+    expect(sq.getLinkById(impl!.id)!.state).not.toBe('verified');
+
+    // The look-alike itself does promote — the fixture's evidence is real.
+    const twenty = implOf('REQ-LB-0020');
+    const ok = await handleSpecshipLinkVerify(cg, { link_id: twenty!.id, result: 'pass' });
+    expect(JSON.stringify(ok)).not.toContain('no test evidence');
+    expect(sq.getLinkById(twenty!.id)!.state).toBe('verified');
+  });
+});
