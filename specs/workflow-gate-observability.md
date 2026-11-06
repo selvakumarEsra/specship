@@ -46,6 +46,16 @@ later resumed, or a skipped step in a completed run, reads correctly.
 implementations:
   - ui/src/components/run-detail.tsx:deriveNodeViews
   - ui/src/components/run-detail.tsx:RunDetail
+  - ui/src/components/run-detail.tsx:StepTiming
+  - ui/src/components/run-detail.tsx:fmtClock
+  - ui/src/pages/runs.tsx:RunsPage
+
+verifies:
+  - e2e/tests/run-step-timing.spec.ts:reqWfgate001A1
+  - e2e/tests/run-step-timing.spec.ts:reqWfgate001A2
+  - e2e/tests/run-step-timing.spec.ts:reqWfgate001A3
+  - e2e/tests/run-step-timing.spec.ts:reqWfgate001A4
+  - e2e/tests/run-step-timing.spec.ts:reqWfgate001A5
 
 ## Acceptance
 <!-- id: REQ-WFGATE-001.A1 -->
@@ -105,8 +115,10 @@ implementations:
 <!-- id: REQ-WFGATE-002.A7 -->
 - After the run is purged, its report is still shown.
 
-Test plan: the tests for both requirements don't exist yet. The UI criteria
-(REQ-WFGATE-001.A1–A5, REQ-WFGATE-002.A1–A6) belong in
-`ui/src/__tests__/runs-detail.test.tsx`, and the report route
-(REQ-WFGATE-002.A1–A4 and A7) belongs in a server route test. The
-`verifies:` blocks get added when those tests are written.
+Test plan: REQ-WFGATE-001.A1–A5 are proven by the Playwright suite in
+`e2e/tests/run-step-timing.spec.ts`, which stubs the workflow API with fixed
+event timestamps. Fast unit cases for `deriveNodeViews` timing live in
+`ui/src/__tests__/runs-detail.test.tsx` but don't count as e2e evidence.
+REQ-WFGATE-002's tests don't exist yet: its UI criteria (A1–A6) need e2e
+specs of the same kind, and the report route (A1–A4 and A7) belongs in a
+server route test. Its `verifies:` block gets added when those are written.

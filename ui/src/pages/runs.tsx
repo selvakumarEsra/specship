@@ -30,7 +30,9 @@ function rowDuration(r: WorkflowRun): string {
 
 // @implements REQ-DESKTOP-023
 export function RunsPage({ project, param }: PageProps) {
-  if (param) return <RunDetail id={param} project={project} />;
+  // Keyed by run id: switching runs remounts, so no live-event tail or
+  // step timing from the previous run can leak in (REQ-WFGATE-001.A3).
+  if (param) return <RunDetail key={param} id={param} project={project} />;
   return <RunsList project={project} />;
 }
 
