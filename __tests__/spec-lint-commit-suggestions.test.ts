@@ -122,7 +122,7 @@ function reqLinkacc010A3(): void {
   // The real resolver on a directory that is not a git repository.
   expect(() => findRequirementCommits(['REQ-T-001', 'PROJ-1'], dir)).not.toThrow();
   expect(findRequirementCommits(['REQ-T-001'], dir)).toEqual([]);
-  const real = lintSpecs(['specs'], { projectRoot: dir });
+  const real = lintSpecs(['specs'], { projectRoot: dir, resolveRequirementCommits: findRequirementCommits });
   expect(real.suggestionCount).toBe(0);
   expect(real.errorCount).toBe(0);
 
@@ -177,7 +177,15 @@ function reqLinkacc010A4(): void {
   expect(changed.some((c) => c.includes('__tests__/'))).toBe(false);
 
   writeSpecs(dir, { 'a.md': specFile('REQ-T-001', 'PROJ-9', ['src/a.ts:Box']) });
-  const report = lintSpecs(['specs'], { projectRoot: dir });
+  const report = lintSpecs(['specs'], { projectRoot: dir, resolveRequirementCommits: findRequirementCommits });
+
+  // A programmatic caller that does not ask for suggestions gets none, and
+  // pays for no git history (postcheck, tests that lint the whole repo).
+  const plain = lintSpecs(['specs'], { projectRoot: dir });
+  expect(plain.suggestionCount).toBe(0);
+  // `specship lint` (runLintCli) asks for them by default.
+  const viaCli = runLintCli(['--json'], { projectRoot: dir });
+  expect(JSON.parse(viaCli.output).suggestionCount).toBe(2);
   const msgs = report.files.flatMap((f) => f.findings).filter((f) => f.code === 'spec_link_suggestion').map((f) => f.message.split('`')[1]);
   expect([...msgs].sort()).toEqual(['src/a.ts:Box.open', 'src/a.ts:added']);
 }

@@ -513,8 +513,9 @@ export interface LintOptions {
   resolveVersionInUse?: VersionInUseResolver;
   /**
    * Finds the commits naming a requirement, with the symbols they changed, for
-   * link suggestions (REQ-LINKACC-010). Defaults to `findRequirementCommits`
-   * (git log + tree-sitter); tests inject one. Pass `false` to turn it off.
+   * link suggestions (REQ-LINKACC-010). Off unless given: a programmatic caller
+   * (postcheck, tests that lint the whole repo) never pays for git history.
+   * `specship lint` passes `findRequirementCommits` unless `--no-suggest`.
    */
   resolveRequirementCommits?: RequirementCommitResolver | false;
 }
@@ -632,9 +633,7 @@ export function lintSpecs(paths: string[], options: LintOptions = {}): LintRepor
   // unlinted file only contributes sites and gets no report entry.
   // Link suggestions (REQ-LINKACC-010) need every requirement's links, so the
   // corpus scan below also collects them. Read-only: nothing is written (A2).
-  const suggestResolver = options.resolveRequirementCommits === false
-    ? null
-    : options.resolveRequirementCommits ?? findRequirementCommits;
+  const suggestResolver = options.resolveRequirementCommits || null;
   const corpusLinks = new Map<string, Set<string>>();
   const corpusKeys = new Map<string, string>();
   const parsed = new Map<string, ReturnType<MarkdownSpecExtractor['extract']>>();
@@ -761,7 +760,9 @@ export function runLintCli(
   const paths = args.filter((a) => !a.startsWith('--'));
   const report = lintSpecs(
     paths,
-    args.includes('--no-suggest') ? { ...options, resolveRequirementCommits: false } : options
+    args.includes('--no-suggest')
+      ? { ...options, resolveRequirementCommits: false }
+      : { resolveRequirementCommits: findRequirementCommits, ...options }
   );
   return {
     output: json ? JSON.stringify(report, null, 2) : formatLintReport(report),
