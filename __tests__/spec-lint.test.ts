@@ -16,6 +16,7 @@ import {
   runLintCli,
 } from '../src/spec-lint/lint';
 import type { LintFinding } from '../src/spec-lint/lint';
+import { resolveVersionInUse, clearVersionProbeCache } from '../src/spec-lint/version-claims';
 
 const codes = (findings: LintFinding[]) => findings.map((f) => f.code);
 const byCode = (findings: LintFinding[], code: string) => findings.filter((f) => f.code === code);
@@ -525,4 +526,145 @@ describe('spec lint — cross-file duplicate ids (REQ-MULTIDEV-001)', () => {
   it('a collision introduced by merging two branches is reported on the merged checkout (REQ-MULTIDEV-001.A2)', reqMultidev001A2);
   it('unique ids add no finding and the within-file duplicate check is unchanged (REQ-MULTIDEV-001.A3)', reqMultidev001A3);
   it('linting a subset still detects a collision with an unlinted spec file (REQ-MULTIDEV-001.A4)', reqMultidev001A4);
+});
+
+// ---------------------------------------------------------------------------
+// REQ-LINKACC-008 — a spec's `checked_against` dependency-version claim is
+// compared with the version the project uses. The resolver is injected for
+// the criteria; the real resolver (lockfile → node_modules → a probe named in
+// specship.config.json) is covered separately below.
+// ---------------------------------------------------------------------------
+
+/** CLEAN with a `checked_against` frontmatter line. */
+function claimSpec(claim: string): string {
+  return CLEAN.replace('id: CLEAN-DOC\n---', `id: CLEAN-DOC\nchecked_against: ${claim}\n---`);
+}
+
+const claimFindings = (report: ReturnType<typeof lintSpecs>) =>
+  report.files.flatMap((f) => f.findings).filter((f) => f.code.startsWith('spec_version_claim_'));
+
+function reqLinkacc008A1() {
+  const dir = tmpSpecDir({ 'specs/a.md': claimSpec('"@google/gemini-cli@0.28.0"') });
+  const report = lintSpecs([], {
+    projectRoot: dir,
+    resolveVersionInUse: (pkg) => (pkg === '@google/gemini-cli' ? '0.67.0' : null),
+  });
+  const found = claimFindings(report);
+  expect(found).toHaveLength(1);
+  expect(found[0]!.code).toBe('spec_version_claim_stale');
+  expect(found[0]!.severity).toBe('warning');
+  expect(found[0]!.message).toContain('@google/gemini-cli');
+  expect(found[0]!.message).toContain('0.28.0');
+  expect(found[0]!.message).toContain('0.67.0');
+  expect(found[0]!.line).toBe(3);
+}
+
+function reqLinkacc008A2() {
+  const dir = tmpSpecDir({ 'specs/a.md': claimSpec('"@google/gemini-cli@0.28.0"') });
+  const report = lintSpecs([], { projectRoot: dir, resolveVersionInUse: () => '0.28.0' });
+  expect(claimFindings(report)).toEqual([]);
+}
+
+function reqLinkacc008A3() {
+  const dir = tmpSpecDir({ 'specs/a.md': claimSpec('"@google/gemini-cli@0.28.0"') });
+  const report = lintSpecs([], { projectRoot: dir, resolveVersionInUse: () => null });
+  const found = claimFindings(report);
+  expect(found).toHaveLength(1);
+  expect(found[0]!.code).toBe('spec_version_claim_unchecked');
+  expect(found[0]!.message).toContain('unchecked');
+  expect(found[0]!.message.toLowerCase()).not.toContain('current');
+  expect(report.hasErrors).toBe(false);
+}
+
+function reqLinkacc008A4() {
+  const findings = lintSpecSource('specs/a.md', claimSpec('"gemini-cli@abc"'));
+  const malformed = byCode(findings, 'spec_version_claim_malformed');
+  expect(malformed).toHaveLength(1);
+  expect(malformed[0]!.severity).toBe('error');
+  expect(malformed[0]!.message).toContain('checked_against');
+  // Through lintSpecs too, the malformed claim fails the run and is not also
+  // reported as stale or unchecked.
+  const dir = tmpSpecDir({ 'specs/a.md': claimSpec('"gemini-cli@abc"') });
+  const report = lintSpecs([], { projectRoot: dir, resolveVersionInUse: () => '9.9.9' });
+  expect(claimFindings(report).map((f) => f.code)).toEqual(['spec_version_claim_malformed']);
+  expect(report.hasErrors).toBe(true);
+}
+
+function versionInUseFromLockfile() {
+  const dir = tmpSpecDir({
+    'package-lock.json': JSON.stringify({
+      packages: { 'node_modules/@google/gemini-cli': { version: '0.67.0' } },
+    }),
+    'node_modules/@google/gemini-cli/package.json': JSON.stringify({ version: '0.1.0' }),
+  });
+  clearVersionProbeCache();
+  expect(resolveVersionInUse(dir, '@google/gemini-cli')).toBe('0.67.0');
+}
+
+function versionInUseFromNodeModules() {
+  const dir = tmpSpecDir({ 'node_modules/left-pad/package.json': JSON.stringify({ version: '1.3.0' }) });
+  clearVersionProbeCache();
+  expect(resolveVersionInUse(dir, 'left-pad')).toBe('1.3.0');
+}
+
+function configuredProbeResolvesVersion() {
+  const dir = tmpSpecDir({
+    'specship.config.json': JSON.stringify({
+      versionProbes: { '@google/gemini-cli': `node -e "console.log('gemini v0.67.0 (build 1.2.3)')"` },
+    }),
+    'specs/a.md': claimSpec('"@google/gemini-cli@0.28.0"'),
+  });
+  clearVersionProbeCache();
+  expect(resolveVersionInUse(dir, '@google/gemini-cli')).toBe('0.67.0');
+  // `specship lint` uses the same resolver when none is injected.
+  const found = claimFindings(lintSpecs([], { projectRoot: dir }));
+  expect(found.map((f) => f.code)).toEqual(['spec_version_claim_stale']);
+}
+
+function failingOrTimingOutProbeIsUnchecked() {
+  const dir = tmpSpecDir({
+    'specship.config.json': JSON.stringify({
+      versionProbes: {
+        fails: `node -e "process.exit(3)"`,
+        nomatch: `node -e "console.log('no version here')"`,
+        slow: `node -e "setTimeout(() => console.log('1.0.0'), 5000)"`,
+        missing: 'specship-no-such-binary-xyz --version',
+      },
+    }),
+  });
+  clearVersionProbeCache();
+  expect(resolveVersionInUse(dir, 'fails')).toBeNull();
+  expect(resolveVersionInUse(dir, 'nomatch')).toBeNull();
+  expect(resolveVersionInUse(dir, 'missing')).toBeNull();
+  const t0 = Date.now();
+  expect(resolveVersionInUse(dir, 'slow', { probeTimeoutMs: 300 })).toBeNull();
+  expect(Date.now() - t0).toBeLessThan(4000);
+}
+
+function specCannotCauseACommandToRun() {
+  const marker = path.join(os.tmpdir(), `specship-probe-marker-${process.pid}-${Date.now()}`);
+  const cmd = `node -e "require('fs').writeFileSync('${marker.replace(/\\/g, '/')}', 'ran')"`;
+  // A spec naming a probe — in its frontmatter or as the claimed "package" —
+  // is never executed: only specship.config.json may name probes.
+  const spec = CLEAN.replace(
+    'id: CLEAN-DOC\n---',
+    `id: CLEAN-DOC\nversionProbes: ${cmd}\nversion_probe: ${cmd}\nchecked_against: "evil-pkg@1.0.0"\n---`
+  );
+  const dir = tmpSpecDir({ 'specs/a.md': spec });
+  clearVersionProbeCache();
+  const found = claimFindings(lintSpecs([], { projectRoot: dir }));
+  expect(found.map((f) => f.code)).toEqual(['spec_version_claim_unchecked']);
+  expect(fs.existsSync(marker)).toBe(false);
+}
+
+describe('spec lint — dependency-version claims (REQ-LINKACC-008)', () => {
+  it('a claim of @google/gemini-cli 0.28.0 is flagged when 0.67.0 is in use, naming both (REQ-LINKACC-008.A1)', reqLinkacc008A1);
+  it('the same claim is not flagged while 0.28.0 is still in use (REQ-LINKACC-008.A2)', reqLinkacc008A2);
+  it('a claim whose version in use cannot be found is reported as unchecked (REQ-LINKACC-008.A3)', reqLinkacc008A3);
+  it('a malformed claim is a lint error naming the frontmatter key (REQ-LINKACC-008.A4)', reqLinkacc008A4);
+  it('the version in use comes from package-lock.json first (REQ-LINKACC-008)', versionInUseFromLockfile);
+  it('then from node_modules/<pkg>/package.json (REQ-LINKACC-008)', versionInUseFromNodeModules);
+  it('then from a probe the project configures in specship.config.json (REQ-LINKACC-008)', configuredProbeResolvesVersion);
+  it('a failing, non-matching, missing or timing-out probe leaves the claim unchecked (REQ-LINKACC-008)', failingOrTimingOutProbeIsUnchecked);
+  it('a spec file cannot cause a command to run (REQ-LINKACC-008)', specCannotCauseACommandToRun);
 });

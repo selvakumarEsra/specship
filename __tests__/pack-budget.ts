@@ -58,7 +58,12 @@ export const MAX_PACKED_BYTES = 2_600_000;
 // `npm pack --dry-run` on a fresh dist; headroom covers REQ-AGENTSWITCH-005/010.
 // Raised 6.60 MB → 6.80 MB (2026-11-05, REQ-AGENTSWITCH-016): clean build
 // unpacks to 6,679,578 B, of which the Gemini extension is 109,610 B.
-export const MAX_UNPACKED_BYTES = 6_800_000;
+// Raised 6.80 MB → 6.85 MB (2026-11-06, REQ-LINKACC-008): a clean build (fresh
+// worktree, no prior dist/) unpacks to 6,807,938 B; the dependency-version
+// claim checker (dist/spec-lint/version-claims.*, 28,353 B / 4 files incl.
+// maps) plus its lint and specship_spec wiring is the growth. Measured with
+// `npm pack --dry-run`; no stale dist assets.
+export const MAX_UNPACKED_BYTES = 6_850_000;
 // Raised 530 → 560 (2026-10-26) after investigating a 531-file build: no stale
 // dist assets; the growth is new feature modules (dist/spec-quality/,
 // dist/pulse/, and the 0.30/0.31 knowledge + throughput modules that follow).

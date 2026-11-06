@@ -414,12 +414,45 @@ A spec MAY record, in its frontmatter, the version of an external tool or
 package its requirements were checked against. SpecShip MUST compare that
 claim with the version the project now uses and flag the spec in
 `specship lint` and `specship_spec` when the version in use is newer. A claim
-SpecShip cannot check MUST be reported as unchecked, never as current. How the
-version in use is found (the lockfile for a package, a probe command for an
-installed CLI) is [needs review].
+SpecShip cannot check MUST be reported as unchecked, never as current.
+
+The claim is written `checked_against: "<package>@<x.y.z>"` (several claims
+comma-separated; each is split at its last `@`). The version in use is found
+in this order: (1) `package-lock.json` `packages["node_modules/<pkg>"].version`,
+(2) `node_modules/<pkg>/package.json`, (3) a probe the project opts into in
+`specship.config.json`: `"versionProbes": { "<pkg>": "<command>" }` — the
+first x.y.z in its stdout is the version in use. A command named in a spec
+file MUST never run; only the config may name probes. A probe has a 3 s
+timeout, runs without a shell for its arguments beyond what the command string
+needs, and is memoised per process; a failure, a timeout or no match leaves the
+claim unchecked. `specship lint` and `specship_spec` use the same resolver.
 
 implementations:
+  - src/spec-lint/version-claims.ts:checkVersionClaims
+  - src/spec-lint/version-claims.ts:parseVersionClaims
+  - src/spec-lint/version-claims.ts:resolveVersionInUse
+  - src/spec-lint/version-claims.ts:findVersionClaimInSource
+  - src/spec-lint/version-claims.ts:formatVersionClaim
+  - src/spec-lint/version-claims.ts:splitCommand
   - src/spec-lint/lint.ts:lintSpecs
+  - src/spec-lint/lint.ts:lintSpecSource
+  - src/spec-lint/lint.ts:versionClaimFindings
+  - src/mcp/spec-tools.ts:renderVersionClaims
+  - src/mcp/spec-tools.ts:handleSpecshipSpec
+
+verifies:
+  - __tests__/spec-lint.test.ts:reqLinkacc008A1
+  - __tests__/spec-lint.test.ts:reqLinkacc008A2
+  - __tests__/spec-lint.test.ts:reqLinkacc008A3
+  - __tests__/spec-lint.test.ts:reqLinkacc008A4
+  - __tests__/spec-lint.test.ts:versionInUseFromLockfile
+  - __tests__/spec-lint.test.ts:versionInUseFromNodeModules
+  - __tests__/spec-lint.test.ts:configuredProbeResolvesVersion
+  - __tests__/spec-lint.test.ts:failingOrTimingOutProbeIsUnchecked
+  - __tests__/spec-lint.test.ts:specCannotCauseACommandToRun
+  - __tests__/spec-version-claims-mcp.test.ts:specToolShowsStaleClaimOfParentDocument
+  - __tests__/spec-version-claims-mcp.test.ts:specToolHidesCurrentClaim
+  - __tests__/spec-version-claims-mcp.test.ts:specToolShowsUncheckedNeverCurrent
 
 ## Acceptance
 <!-- id: REQ-LINKACC-008.A1 -->
