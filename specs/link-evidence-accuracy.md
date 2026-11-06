@@ -492,6 +492,16 @@ either baseline.
 implementations:
   - src/mcp/spec-tools.ts:handleSpecshipLinkVerify
   - src/verify/report-ingest.ts:ingestTestReport
+  - src/index.ts:SpecShip.rebaselineLinkOnVerify
+  - src/db/spec-queries.ts:SpecQueries.updateSpecLinkSpecBaseline
+  - server/src/routes/spec.ts
+
+verifies:
+  - __tests__/link-verify-spec-baseline.test.ts:reqLinkacc013A1
+  - __tests__/link-verify-spec-baseline.test.ts:reqLinkacc013A2
+  - __tests__/link-verify-spec-baseline.test.ts:reqLinkacc013A3
+  - __tests__/link-verify-spec-baseline.test.ts:reqLinkacc013A4
+  - __tests__/link-verify-spec-baseline.test.ts:reqLinkacc013A5
 
 ## Acceptance
 <!-- id: REQ-LINKACC-013.A1 -->

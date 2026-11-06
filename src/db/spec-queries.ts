@@ -283,6 +283,7 @@ export class SpecQueries {
     updateSpecLinkState?: SqliteStatement;
     updateSpecLinkMetadata?: SqliteStatement;
     updateSpecLinkSigBaseline?: SqliteStatement;
+    updateSpecLinkSpecBaseline?: SqliteStatement;
     updateSpecLinkResolution?: SqliteStatement;
     getLinkById?: SqliteStatement;
     getLinksBySpec?: SqliteStatement;
@@ -925,6 +926,21 @@ export class SpecQueries {
       );
     }
     this.stmts.updateSpecLinkSigBaseline.run(sig, updatedAt, id);
+  }
+
+  /**
+   * Re-baseline a link's spec-text snapshot (`spec_hash_at_link`) only. Used by
+   * every verify path on a pass (REQ-LINKACC-013): verifying a link against the
+   * requirement's current text makes that text the new baseline, so the next
+   * sync of the spec file doesn't drift the link again on the spec side.
+   */
+  updateSpecLinkSpecBaseline(id: number, specHash: string, updatedAt: number = Date.now()): void {
+    if (!this.stmts.updateSpecLinkSpecBaseline) {
+      this.stmts.updateSpecLinkSpecBaseline = this.db.prepare(
+        `UPDATE spec_links SET spec_hash_at_link = ?, updated_at = ? WHERE id = ?`
+      );
+    }
+    this.stmts.updateSpecLinkSpecBaseline.run(specHash, updatedAt, id);
   }
 
   /**

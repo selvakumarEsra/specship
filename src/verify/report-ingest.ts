@@ -229,6 +229,11 @@ export interface CurrentSignature {
   language?: string;
   /** The symbol's current body fingerprint (REQ-LINKACC-004), when it can be taken. */
   bodyFp?: string;
+  /**
+   * The linked requirement's current text hash (REQ-LINKACC-013). `signature`
+   * is empty when the target has no signature but this is still known.
+   */
+  specHash?: string;
 }
 
 /**
@@ -238,6 +243,24 @@ export interface CurrentSignature {
  */
 function rebaselineBody(metadata: Record<string, unknown>, current: CurrentSignature | undefined): void {
   rebaselineBodyMetadata(metadata, current?.bodyFp);
+}
+
+/**
+ * Everything a passing report re-baselines on a link (REQ-LINKACC-013): the
+ * body fingerprint (in `metadata`, persisted by the caller), the code signature
+ * and the requirement's current text hash, each when known. Never called for a
+ * failed run, so a failure keeps both stored baselines (A5).
+ */
+function rebaselineOnPass(
+  sq: SpecQueries,
+  link: SpecLink,
+  metadata: Record<string, unknown>,
+  current: CurrentSignature | undefined,
+  now: number
+): void {
+  rebaselineBody(metadata, current);
+  if (current?.signature) sq.updateSpecLinkSigBaseline(link.id, current.signature, now);
+  if (current?.specHash) sq.updateSpecLinkSpecBaseline(link.id, current.specHash, now);
 }
 
 type LinkBucket = { link: SpecLink; cases: ReportedTestCase[] };
@@ -407,8 +430,8 @@ export function ingestTestReport(
       },
     };
 
-    // A passing run is a re-verification (REQ-LINKACC-004.A3).
-    if (pass) rebaselineBody(metadata, options.currentSignature?.(link));
+    // A passing run is a re-verification (REQ-LINKACC-004.A3, REQ-LINKACC-013).
+    if (pass) rebaselineOnPass(sq, link, metadata, options.currentSignature?.(link), now);
     const to: SpecLink['state'] = pass ? 'verified' : 'broken';
     sq.updateSpecLinkState(link.id, to, null, now);
     sq.updateSpecLinkMetadata(link.id, metadata, now);
