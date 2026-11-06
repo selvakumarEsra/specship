@@ -1164,11 +1164,7 @@ export async function handleSpecshipLinkVerify(
   const metadata: Record<string, unknown> = { ...(link.metadata ?? {}), verification };
   // Re-verifying takes a new body baseline and removes the body-changed
   // marker (REQ-LINKACC-004.A3).
-  if (result === 'pass') {
-    const fp = cg.linkBodyFingerprint(link);
-    if (fp !== null) metadata.bodyFpAtLink = fp;
-    delete metadata.bodyChanged;
-  }
+  if (result === 'pass') cg.rebaselineLinkBody(link, metadata);
   sq.updateSpecLinkMetadata(linkId, metadata);
 
   // JIRA push (REQ-JIRAPUB-005): a verified acceptance criterion on a

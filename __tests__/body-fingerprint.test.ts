@@ -15,7 +15,7 @@ import SpecShip from '../src';
 import type { Node, NodeKind, SpecLinkState } from '../src/types';
 import type { QueryBuilder } from '../src/db/queries';
 import { generateNodeId } from '../src/extraction/tree-sitter-helpers';
-import { fingerprintBody, stripCommentsAndWhitespace } from '../src/resolution/body-fingerprint';
+import { fingerprintBody, rebaselineBodyMetadata, stripCommentsAndWhitespace } from '../src/resolution/body-fingerprint';
 import { formatLink, handleSpecshipLinkVerify } from '../src/mcp/spec-tools';
 import { computeSpecCoverage } from '../src/graph/spec-coverage';
 
@@ -280,6 +280,41 @@ describe.skipIf(!fts5Available)('REQ-LINKACC-004 body-changed marker', () => {
     expect(link(id).metadata?.bodyChanged).toMatchObject({ since: 'verified' });
   }
 
+  // The exact call the desktop server's link-verify route makes on a pass.
+  async function reqLinkacc004A3DashboardPath(): Promise<void> {
+    const id = f.seed({ source: TS_V1, state: 'verified' });
+    f.edit(TS_BODY_CHANGED);
+    expect(link(id).metadata?.bodyChanged).toMatchObject({ since: 'verified' });
+    const before = link(id);
+    const metadata: Record<string, unknown> = { ...(before.metadata ?? {}) };
+    expect(f.cg.rebaselineLinkBody(before, metadata)).toBe(true);
+    f.cg.getSpecQueries().updateSpecLinkMetadata(id, metadata);
+    expect(link(id).metadata?.bodyChanged).toBeUndefined();
+    expect(link(id).metadata?.bodyFpAtLink).toBe(fingerprintBody(TS_BODY_CHANGED, 'typescript'));
+    f.edit(TS_BODY_CHANGED); // a later sync with no further change
+    expect(link(id).metadata?.bodyChanged).toBeUndefined();
+  }
+
+  async function reqLinkacc004A3NoFingerprintKeepsMarker(): Promise<void> {
+    // The shared rule: no fingerprint means nothing changes.
+    const meta: Record<string, unknown> = { bodyFpAtLink: 'old', bodyChanged: { at: 1, since: 'verified' } };
+    expect(rebaselineBodyMetadata(meta, null)).toBe(false);
+    expect(meta).toEqual({ bodyFpAtLink: 'old', bodyChanged: { at: 1, since: 'verified' } });
+    expect(rebaselineBodyMetadata(meta, undefined)).toBe(false);
+
+    // Through the instance: the linked file is gone, so no fingerprint.
+    const id = f.seed({ source: TS_V1, state: 'verified' });
+    f.edit(TS_BODY_CHANGED);
+    const marked = link(id);
+    const oldBaseline = marked.metadata?.bodyFpAtLink;
+    f.queries.deleteNodesByFile(marked.targetFilePath);
+    fs.rmSync(path.join(dir, marked.targetFilePath));
+    const metadata: Record<string, unknown> = { ...(marked.metadata ?? {}) };
+    expect(f.cg.rebaselineLinkBody(marked, metadata)).toBe(false);
+    expect(metadata.bodyChanged).toMatchObject({ since: 'verified' });
+    expect(metadata.bodyFpAtLink).toBe(oldBaseline);
+  }
+
   async function reqLinkacc004A3(): Promise<void> {
     const id = f.seed({ source: TS_V1, state: 'implemented' });
     // File-derived test evidence, so the verify gate lets the pass through.
@@ -322,5 +357,7 @@ describe.skipIf(!fts5Available)('REQ-LINKACC-004 body-changed marker', () => {
   it('REQ-LINKACC-004.A2: Python # comments and re-indent set no marker; a statement change does', reqLinkacc004A2Python);
   it('REQ-LINKACC-004: an unknown-language body change is still marked', reqLinkacc004UnknownLanguageMarked);
   it('REQ-LINKACC-004.A3: verifying the link again takes a new baseline and removes the marker', reqLinkacc004A3);
+  it('REQ-LINKACC-004.A3: the dashboard verify route\'s call re-baselines, so the next sync sets no marker', reqLinkacc004A3DashboardPath);
+  it('REQ-LINKACC-004.A3: with no current fingerprint the marker and old baseline both stay (no flapping)', reqLinkacc004A3NoFingerprintKeepsMarker);
   it('REQ-LINKACC-004.A4: a body-only change creates no drift-queue entry', reqLinkacc004A4);
 });

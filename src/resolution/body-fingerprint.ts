@@ -205,3 +205,17 @@ export function bodyChangedSince(link: Pick<SpecLink, 'state' | 'metadata'>): Sp
 export function formatBodyChanged(since: string): string {
   return `body changed since ${since}`;
 }
+
+/**
+ * Re-baseline a verified link's body (REQ-LINKACC-004.A3), in place on its
+ * metadata. The marker is removed only when a new baseline was taken: with no
+ * current fingerprint (an unreadable file, a missing node) the old baseline
+ * stays and so does the marker, otherwise the next sync would set it again.
+ * Every verify path calls this one rule. Returns whether it re-baselined.
+ */
+export function rebaselineBodyMetadata(metadata: Record<string, unknown>, fingerprint: string | null | undefined): boolean {
+  if (!fingerprint) return false;
+  metadata.bodyFpAtLink = fingerprint;
+  delete metadata.bodyChanged;
+  return true;
+}

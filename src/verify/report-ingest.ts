@@ -16,6 +16,7 @@ import * as path from 'path';
 import type { SpecLink } from '../types';
 import type { SpecQueries } from '../db/spec-queries';
 import { classifySignatureDrift } from '../resolution/signature-drift';
+import { rebaselineBodyMetadata } from '../resolution/body-fingerprint';
 
 /** Thrown for an unreadable / unparseable / shapeless report (REQ-VSTATE-004.A4). */
 export class TestReportParseError extends Error {
@@ -236,8 +237,7 @@ export interface CurrentSignature {
  * current fingerprint can't be taken keeps its old baseline, marker dropped.
  */
 function rebaselineBody(metadata: Record<string, unknown>, current: CurrentSignature | undefined): void {
-  if (current?.bodyFp) metadata.bodyFpAtLink = current.bodyFp;
-  delete metadata.bodyChanged;
+  rebaselineBodyMetadata(metadata, current?.bodyFp);
 }
 
 type LinkBucket = { link: SpecLink; cases: ReportedTestCase[] };

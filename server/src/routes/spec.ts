@@ -504,11 +504,7 @@ export async function registerSpecRoutes(app: FastifyInstance): Promise<void> {
     const metadata: Record<string, unknown> = { ...(link.metadata ?? {}), verification };
     // Re-verifying takes a new body baseline and removes the body-changed
     // marker (REQ-LINKACC-004.A3) — same rule as the MCP tool.
-    if (body.result === 'pass') {
-      const fp = typeof cg.linkBodyFingerprint === 'function' ? cg.linkBodyFingerprint(link) : null;
-      if (fp !== null) metadata.bodyFpAtLink = fp;
-      delete metadata.bodyChanged;
-    }
+    if (body.result === 'pass' && typeof cg.rebaselineLinkBody === 'function') cg.rebaselineLinkBody(link, metadata);
     sq.updateSpecLinkMetadata(body.link_id, metadata);
     return { ok: true, state: body.result === 'pass' ? 'verified' : 'broken' };
   });

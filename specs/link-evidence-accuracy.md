@@ -209,6 +209,8 @@ baseline and remove the marker. Whitespace-only and comment-only edits MUST
 NOT set the marker.
 
 implementations:
+  - src/resolution/body-fingerprint.ts:rebaselineBodyMetadata
+  - src/index.ts:SpecShip.rebaselineLinkBody
   - src/resolution/spec-link-resolver.ts:SpecLinkResolver.resolveOneLink
   - src/resolution/spec-link-resolver.ts:SpecLinkResolver.checkBodyChange
   - src/resolution/body-fingerprint.ts:fingerprintBody
@@ -229,6 +231,8 @@ implementations:
   - ui/src/pages/review.tsx:ReviewRowItem
 
 verifies:
+  - __tests__/body-fingerprint.test.ts:reqLinkacc004A3DashboardPath
+  - __tests__/body-fingerprint.test.ts:reqLinkacc004A3NoFingerprintKeepsMarker
   - __tests__/body-fingerprint.test.ts:reqLinkacc004A1
   - __tests__/body-fingerprint.test.ts:reqLinkacc004A1Implemented
   - __tests__/body-fingerprint.test.ts:reqLinkacc004A2
