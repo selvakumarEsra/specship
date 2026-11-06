@@ -16,6 +16,7 @@ import * as path from 'path';
 import type { SpecLink } from '../types';
 import type { SpecQueries } from '../db/spec-queries';
 import { classifySignatureDrift } from '../resolution/signature-drift';
+import { rebaselineBodyMetadata } from '../resolution/body-fingerprint';
 
 /** Thrown for an unreadable / unparseable / shapeless report (REQ-VSTATE-004.A4). */
 export class TestReportParseError extends Error {
@@ -226,6 +227,17 @@ export interface IngestTestReportOptions {
 export interface CurrentSignature {
   signature: string;
   language?: string;
+  /** The symbol's current body fingerprint (REQ-LINKACC-004), when it can be taken. */
+  bodyFp?: string;
+}
+
+/**
+ * Re-baseline a link's body fingerprint and drop its body-changed marker
+ * (REQ-LINKACC-004.A3) — what a passing verification does. A link whose
+ * current fingerprint can't be taken keeps its old baseline, marker dropped.
+ */
+function rebaselineBody(metadata: Record<string, unknown>, current: CurrentSignature | undefined): void {
+  rebaselineBodyMetadata(metadata, current?.bodyFp);
 }
 
 type LinkBucket = { link: SpecLink; cases: ReportedTestCase[] };
@@ -305,6 +317,9 @@ export function clearRenameOnlyDrift(
     const to = restoreTo as SpecLink['state'];
     const metadata: Record<string, unknown> = { ...(link.metadata ?? {}) };
     delete metadata.preDrift;
+    // The signature is re-baselined below; the body baseline moves with it so a
+    // cleared link doesn't come back carrying a stale body-changed marker.
+    rebaselineBody(metadata, current);
     sq.updateSpecLinkState(link.id, to, null, now);
     sq.updateSpecLinkSigBaseline(link.id, current.signature, now);
     sq.updateSpecLinkMetadata(link.id, metadata, now);
@@ -392,6 +407,8 @@ export function ingestTestReport(
       },
     };
 
+    // A passing run is a re-verification (REQ-LINKACC-004.A3).
+    if (pass) rebaselineBody(metadata, options.currentSignature?.(link));
     const to: SpecLink['state'] = pass ? 'verified' : 'broken';
     sq.updateSpecLinkState(link.id, to, null, now);
     sq.updateSpecLinkMetadata(link.id, metadata, now);

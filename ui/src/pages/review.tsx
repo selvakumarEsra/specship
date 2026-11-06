@@ -10,7 +10,7 @@ import { api, isNoProject } from '../api';
 import { useApi } from '../hooks';
 import { SpecDetail, type SpecDetailCache } from '../components/spec-detail';
 import { Button, Empty, ErrorState, PageHead, Pill, Segmented, StatePill } from '../components/ui';
-import { DRIFT_STATES, REVIEW_GROUPS, groupRequirements, type ReviewGroup, type ReviewRow } from '../review-groups';
+import { DRIFT_STATES, REVIEW_GROUPS, formatBodyChangedNote, groupRequirements, type ReviewGroup, type ReviewRow } from '../review-groups';
 import type { PageProps } from './types';
 
 type Tab = 'all' | ReviewGroup;
@@ -171,6 +171,11 @@ function ReviewRowItem({ row, active, onOpen }: { row: ReviewRow; active: boolea
             <Pill>{`${row.untestedCount.untested} of ${row.untestedCount.total} criteria untested`}</Pill>
           </span>
         )}
+        {row.bodyChanged?.map((n) => (
+          <span key={n.since} data-testid="body-changed">
+            <Pill>{formatBodyChangedNote(n)}</Pill>
+          </span>
+        ))}
       </div>
       {row.driftReasons.length > 0 && (
         <div className="col gap-4" data-testid="drift-reasons" style={{ paddingTop: 'var(--space-xs)' }}>

@@ -209,7 +209,40 @@ baseline and remove the marker. Whitespace-only and comment-only edits MUST
 NOT set the marker.
 
 implementations:
+  - src/resolution/body-fingerprint.ts:rebaselineBodyMetadata
+  - src/index.ts:SpecShip.rebaselineLinkBody
   - src/resolution/spec-link-resolver.ts:SpecLinkResolver.resolveOneLink
+  - src/resolution/spec-link-resolver.ts:SpecLinkResolver.checkBodyChange
+  - src/resolution/body-fingerprint.ts:fingerprintBody
+  - src/resolution/body-fingerprint.ts:stripCommentsAndWhitespace
+  - src/resolution/body-fingerprint.ts:readNodeBody
+  - src/resolution/body-fingerprint.ts:nodeBodyFingerprint
+  - src/resolution/body-fingerprint.ts:bodyChangedSince
+  - src/index.ts:SpecShip.linkBodyFingerprint
+  - src/mcp/spec-tools.ts:handleSpecshipLinkVerify
+  - src/mcp/spec-tools.ts:handleSpecshipLinkAssert
+  - src/mcp/spec-tools.ts:formatLink
+  - src/verify/report-ingest.ts:clearRenameOnlyDrift
+  - src/verify/report-ingest.ts:ingestTestReport
+  - src/graph/spec-coverage.ts:rollup
+  - server/src/routes/spec.ts:registerSpecRoutes
+  - ui/src/review-groups.ts:bodyChangedNotes
+  - ui/src/review-groups.ts:classifyRequirement
+  - ui/src/pages/review.tsx:ReviewRowItem
+
+verifies:
+  - __tests__/body-fingerprint.test.ts:reqLinkacc004A3DashboardPath
+  - __tests__/body-fingerprint.test.ts:reqLinkacc004A3NoFingerprintKeepsMarker
+  - __tests__/body-fingerprint.test.ts:reqLinkacc004A1
+  - __tests__/body-fingerprint.test.ts:reqLinkacc004A1Implemented
+  - __tests__/body-fingerprint.test.ts:reqLinkacc004A2
+  - __tests__/body-fingerprint.test.ts:reqLinkacc004A2Normalizer
+  - __tests__/body-fingerprint.test.ts:reqLinkacc004A2Python
+  - __tests__/body-fingerprint.test.ts:reqLinkacc004UnknownLanguage
+  - __tests__/body-fingerprint.test.ts:reqLinkacc004UnknownLanguageMarked
+  - __tests__/body-fingerprint.test.ts:reqLinkacc004A3
+  - __tests__/body-fingerprint.test.ts:reqLinkacc004A4
+  - ui/src/__tests__/review.test.tsx:reqLinkacc004A1Review
 
 ## Acceptance
 <!-- id: REQ-LINKACC-004.A1 -->

@@ -47,6 +47,7 @@ import {
   scanTestTitleRefs,
 } from './test-title-links';
 import { classifySignatureDrift } from './signature-drift';
+import { nodeBodyFingerprint, BODY_MARKER_STATES, type BodyChangedMarker } from './body-fingerprint';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -340,6 +341,14 @@ export class SpecLinkResolver {
     // to the snapshot taken at link creation. If the link has no baseline
     // (older link, file-level or test-title link), don't trip drift — just
     // adopt the current signature on the next link_verify (REQ-LINKACC-002.A3).
+    const signatureDrifted =
+      link.nodeSigAtLink !== undefined &&
+      link.nodeSigAtLink !== '' &&
+      node.signature !== undefined &&
+      node.signature !== link.nodeSigAtLink;
+    if (!signatureDrifted) {
+      this.checkBodyChange(link, node, state, now);
+    }
     if (
       link.nodeSigAtLink !== undefined &&
       link.nodeSigAtLink !== '' &&
@@ -377,6 +386,42 @@ export class SpecLinkResolver {
           `[SpecLinkResolver] drift(code, ${driftKind}) ${link.targetQualifiedName} for spec ${link.specId}`
         );
       }
+    }
+  }
+
+  /**
+   * Body-change marker (REQ-LINKACC-004). Runs only when the signature is
+   * unchanged. Writes metadata ONLY — never the state, never a drift
+   * transition — so a body-only change can't enter the drift queue (A4).
+   *
+   * - No baseline (older link, or one re-created by a reindex): take one
+   *   silently, set no marker.
+   * - Fingerprint differs on an `implemented` / `verified` link: set
+   *   `bodyChanged = { at, since }` once; a later pass keeps the first one.
+   * - Fingerprint matches again (the edit was reverted): drop the marker.
+   */
+  private checkBodyChange(link: SpecLink, node: Node, state: SpecLinkState, now: number): void {
+    const root = this.opts.projectRoot;
+    if (!root || link.targetNodeKind === 'file') return;
+    const fp = nodeBodyFingerprint(root, node);
+    if (fp === null) return;
+    const meta: Record<string, unknown> = { ...(link.metadata ?? {}) };
+    const baseline = meta.bodyFpAtLink;
+    if (typeof baseline !== 'string') {
+      meta.bodyFpAtLink = fp;
+      this.specQueries.updateSpecLinkMetadata(link.id, meta, now);
+      return;
+    }
+    if (baseline !== fp) {
+      if (meta.bodyChanged || !BODY_MARKER_STATES.has(state)) return;
+      const marker: BodyChangedMarker = { at: now, since: state };
+      meta.bodyChanged = marker;
+      this.specQueries.updateSpecLinkMetadata(link.id, meta, now);
+      return;
+    }
+    if (meta.bodyChanged) {
+      delete meta.bodyChanged;
+      this.specQueries.updateSpecLinkMetadata(link.id, meta, now);
     }
   }
 

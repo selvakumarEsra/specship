@@ -52,6 +52,40 @@ export interface ReviewRow {
   driftReasons: DriftReason[];
   /** REQ-LINKACC-007: a verified requirement's untested criteria. */
   untestedCount?: UntestedCount;
+  /** REQ-LINKACC-004: links whose body changed since their state was taken. Never moves the group. */
+  bodyChanged?: BodyChangedNote[];
+}
+
+/** `count` links whose body changed since `since` (REQ-LINKACC-004). */
+export interface BodyChangedNote {
+  since: string;
+  count: number;
+}
+
+/**
+ * Body-changed notes for a requirement and its criteria, read from the coverage
+ * rollup's `bodyChanged` counts (REQ-LINKACC-004) — the server decides which
+ * links carry a marker, the UI only sums. Ordered verified first, then
+ * implemented, then any other state. Empty when nothing changed.
+ */
+export function bodyChangedNotes(req: RequirementCoverage): BodyChangedNote[] {
+  const totals = new Map<string, number>();
+  for (const node of [req, ...req.criteria]) {
+    for (const r of [node.implementsLinks, node.testsLinks, node.otherLinks ?? NO_LINKS]) {
+      for (const [since, n] of Object.entries(r.bodyChanged ?? {})) {
+        if (n > 0) totals.set(since, (totals.get(since) ?? 0) + n);
+      }
+    }
+  }
+  const order = (s: string) => (s === 'verified' ? 0 : s === 'implemented' ? 1 : 2);
+  return [...totals.entries()]
+    .map(([since, count]) => ({ since, count }))
+    .sort((a, b) => order(a.since) - order(b.since));
+}
+
+/** `"body changed since verified"`, with a count when more than one link changed. */
+export function formatBodyChangedNote(n: BodyChangedNote): string {
+  return n.count > 1 ? `${n.count} bodies changed since ${n.since}` : `body changed since ${n.since}`;
 }
 
 /** `untested` of `total` criteria have no test (REQ-LINKACC-007). */
@@ -119,10 +153,23 @@ export function driftReason(link: DriftLink, reqId: string): DriftReason {
 export function classifyRequirement(
   req: RequirementCoverage,
   driftLinks: DriftLink[],
-): { group: ReviewGroup; tag?: PendingTag; driftReasons: DriftReason[]; untestedCount?: UntestedCount } {
+): {
+  group: ReviewGroup;
+  tag?: PendingTag;
+  driftReasons: DriftReason[];
+  untestedCount?: UntestedCount;
+  bodyChanged?: BodyChangedNote[];
+} {
+  // The group is decided without the body-changed notes: a body-only change
+  // never moves a requirement into Drifted (REQ-LINKACC-004.A4).
   const base = classifyGroup(req, driftLinks);
   const gap = untestedCriteriaCount(req);
-  return gap ? { ...base, untestedCount: gap } : base;
+  const body = bodyChangedNotes(req);
+  return {
+    ...base,
+    ...(gap ? { untestedCount: gap } : {}),
+    ...(body.length ? { bodyChanged: body } : {}),
+  };
 }
 
 function classifyGroup(

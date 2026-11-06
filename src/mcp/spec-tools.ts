@@ -27,6 +27,7 @@ import type { FunnelLookup } from '../resolution/brief-link-resolver';
 import { resolveInstalledVersion, defaultGlobalNpmRoot } from '../knowledge/stale';
 import { parseEnforcedRules } from '../knowledge/enforce';
 import { formatDriftLabel } from '../resolution/signature-drift';
+import { bodyChangedSince, formatBodyChanged, nodeBodyFingerprint } from '../resolution/body-fingerprint';
 
 const projectPathProperty = {
   type: 'string',
@@ -264,7 +265,11 @@ export function formatLink(link: SpecLink): string {
   const driftLabel = formatDriftLabel(link);
   const driftSuffix = driftLabel ? ` [${driftLabel}]` : '';
   const conf = link.confidence !== undefined ? ` (${link.confidence.toFixed(2)})` : '';
-  const head = `  - [${link.state}${driftSuffix}] ${resolved} ${link.kind} → ${link.targetFilePath}:${link.targetQualifiedName} <${link.provenance}${conf}>  #${link.id}`;
+  // Body-only change since the link's state was taken (REQ-LINKACC-004.A1):
+  // advisory, shown next to an unchanged state.
+  const since = bodyChangedSince(link);
+  const bodySuffix = since ? ` ⚠ ${formatBodyChanged(since)}` : '';
+  const head = `  - [${link.state}${driftSuffix}] ${resolved} ${link.kind} → ${link.targetFilePath}:${link.targetQualifiedName} <${link.provenance}${conf}>  #${link.id}${bodySuffix}`;
   const v = verificationOf(link);
   if (!v || !v.verifiedAt) return head;
   const parts = [`verified ${v.verifiedAt}`];
@@ -1046,6 +1051,14 @@ export async function handleSpecshipLinkAssert(
     createdAt: now,
     updatedAt: now,
   });
+  // Body baseline next to the signature baseline (REQ-LINKACC-004). Only when
+  // the link has none yet: re-asserting is a claim, not a verification, so it
+  // must not wipe a body-changed marker by re-baselining.
+  const asserted = sq.getLinkById(linkId);
+  if (asserted && typeof asserted.metadata?.bodyFpAtLink !== 'string') {
+    const fp = nodeBodyFingerprint(cg.getProjectRoot(), node);
+    if (fp !== null) sq.updateSpecLinkMetadata(linkId, { ...(asserted.metadata ?? {}), bodyFpAtLink: fp }, now);
+  }
 
   // Persist the assertion into the spec file — the file is the source of
   // truth; the DB row alone would vanish on a full reindex (LINK-TRUTH-DOC,
@@ -1148,7 +1161,11 @@ export async function handleSpecshipLinkVerify(
   };
   if (reason) verification.reason = reason;
   if (evidence.length > 0) verification.evidence = evidence;
-  sq.updateSpecLinkMetadata(linkId, { ...(link.metadata ?? {}), verification });
+  const metadata: Record<string, unknown> = { ...(link.metadata ?? {}), verification };
+  // Re-verifying takes a new body baseline and removes the body-changed
+  // marker (REQ-LINKACC-004.A3).
+  if (result === 'pass') cg.rebaselineLinkBody(link, metadata);
+  sq.updateSpecLinkMetadata(linkId, metadata);
 
   // JIRA push (REQ-JIRAPUB-005): a verified acceptance criterion on a
   // JIRA-backed spec advances its published Sub-task (and, when all Sub-tasks

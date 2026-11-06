@@ -21,6 +21,7 @@ import {
   TaskContext,
   BuildContextOptions,
   FindRelevantContextOptions,
+  SpecLink,
 } from './types';
 import { DatabaseConnection, getDatabasePath } from './db';
 import { QueryBuilder } from './db/queries';
@@ -60,6 +61,7 @@ import {
 } from './resolution/spec-link-resolver';
 import { computeSpecFunnel, SpecFunnel } from './resolution/brief-link-resolver';
 import { computeDomainGapSeed, DomainGapSeed } from './resolution/domain-gap-seed';
+import { nodeBodyFingerprint, rebaselineBodyMetadata } from './resolution/body-fingerprint';
 import { computeSpecCoverage, SpecCoverageReport } from './graph/spec-coverage';
 import { ingestTestReport, VerifyReportResult } from './verify/report-ingest';
 import { execFileSync } from 'child_process';
@@ -387,6 +389,32 @@ export class SpecShip {
   }
 
   /**
+   * The current body fingerprint of a link's target symbol (REQ-LINKACC-004),
+   * or `null` when it can't be taken (target gone, a `file` node, unreadable
+   * file). Every verify surface re-baselines through this one method.
+   */
+  linkBodyFingerprint(link: Pick<SpecLink, 'targetFilePath' | 'targetQualifiedName' | 'targetNodeKind'>): string | null {
+    const node = this.specLinkResolver.findLogicalTarget(
+      link.targetFilePath,
+      link.targetQualifiedName,
+      link.targetNodeKind
+    );
+    return node ? nodeBodyFingerprint(this.projectRoot, node) : null;
+  }
+
+  /**
+   * Apply the shared re-verify body rule (REQ-LINKACC-004.A3) to a link's
+   * metadata, in place. On the instance so the desktop server's verify route
+   * uses the same rule without importing the package.
+   */
+  rebaselineLinkBody(
+    link: Pick<SpecLink, 'targetFilePath' | 'targetQualifiedName' | 'targetNodeKind'>,
+    metadata: Record<string, unknown>
+  ): boolean {
+    return rebaselineBodyMetadata(metadata, this.linkBodyFingerprint(link));
+  }
+
+  /**
    * The project-wide spec lifecycle funnel: brainstormed ideas → specs →
    * implemented, with per-document rollups (REQ-FUNNEL-006). Exposed on the
    * instance so the desktop server can serve it without runtime-importing the
@@ -442,7 +470,8 @@ export class SpecShip {
         if (!link.resolvedNodeId) return undefined;
         const node = this.queries.getNodeById(link.resolvedNodeId);
         if (!node || !node.signature) return undefined;
-        return { signature: node.signature, language: node.language };
+        const bodyFp = nodeBodyFingerprint(this.projectRoot, node) ?? undefined;
+        return { signature: node.signature, language: node.language, bodyFp };
       },
     });
   }
