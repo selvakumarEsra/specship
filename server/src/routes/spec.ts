@@ -450,6 +450,7 @@ export async function registerSpecRoutes(app: FastifyInstance): Promise<void> {
       kind: body.kind ?? 'implements',
       state: node ? 'implemented' : 'orphaned',
       driftAxis: null,
+      driftKind: null,
       specHashAtLink: spec.contentHash,
       nodeSigAtLink: node?.signature,
       provenance: 'agent-asserted',

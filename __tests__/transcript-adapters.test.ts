@@ -211,7 +211,7 @@ describe('REQ-AGENTSWITCH-004 — per-agent transcript adapters', () => {
                  VALUES ('p1', 's1', 'a1', 'Read', 'x.ts', 10, 1)`).run();
 
     runMigrations(raw, 11);
-    expect(getCurrentVersion(raw)).toBe(12);
+    expect(getCurrentVersion(raw)).toBe(13);
     expect(raw.prepare('SELECT host FROM claude_sessions WHERE id = ?').get('s1')).toEqual({ host: 'claude' });
     expect(raw.prepare('SELECT host, raw_tool_name, tool_name FROM claude_tool_calls').get()).toEqual({
       host: 'claude',

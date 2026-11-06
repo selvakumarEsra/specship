@@ -179,6 +179,7 @@ function ReviewRowItem({ row, active, onOpen }: { row: ReviewRow; active: boolea
               <StatePill state={d.state} />
               <span className="mono" data-testid="drift-target">{d.target}</span>
               <Pill>{d.changed} changed</Pill>
+              {d.kind && <span data-testid="drift-kind"><Pill>{d.kind}</Pill></span>}
               <span className="muted">fix:</span>
               <code className="mono" data-testid="drift-fix">{d.fix}</code>
             </div>

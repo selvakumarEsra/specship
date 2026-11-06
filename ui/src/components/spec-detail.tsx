@@ -385,7 +385,7 @@ function SpecRead({ data, project, notice, onEdit, onReload }: {
         <div key={i} className="row gap-10" style={{ padding: '11px 14px', borderTop: i ? '1px solid var(--border-subtle)' : 'none' }}>
           <StatePill state={l.state} />
           <Pill>{l.kind || 'implements'}</Pill>
-          {l.driftAxis && <Pill color="var(--warn)" bg="var(--warn-soft)">{l.driftAxis + ' drift'}</Pill>}
+          {l.driftAxis && <Pill color="var(--warn)" bg="var(--warn-soft)">{l.driftAxis + ' drift' + (typeof l.driftKind === 'string' && l.driftKind ? ` · ${l.driftKind}` : '')}</Pill>}
           <span className="mono grow" style={{ fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{linkTarget(l)}</span>
           {/* Drift age per link — how stale this evidence is (010.A2). */}
           <span className="mono muted tabular" title="Last state change" style={{ fontSize: 11, flexShrink: 0 }}>

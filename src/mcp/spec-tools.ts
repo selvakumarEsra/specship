@@ -26,6 +26,7 @@ import { summarizeBriefFunnel, ideaCaptureFields } from '../resolution/brief-lin
 import type { FunnelLookup } from '../resolution/brief-link-resolver';
 import { resolveInstalledVersion, defaultGlobalNpmRoot } from '../knowledge/stale';
 import { parseEnforcedRules } from '../knowledge/enforce';
+import { formatDriftLabel } from '../resolution/signature-drift';
 
 const projectPathProperty = {
   type: 'string',
@@ -257,9 +258,11 @@ function verificationOf(link: SpecLink): { verifiedAt?: string; reason?: string;
  * A verified / broken link renders its persisted evidence on a second line
  * (REQ-REVINT-004.A2) so the state is auditable wherever links are shown.
  */
-function formatLink(link: SpecLink): string {
+export function formatLink(link: SpecLink): string {
   const resolved = link.resolvedNodeId ? '✓' : '✗';
-  const driftSuffix = link.driftAxis ? ` [drift=${link.driftAxis}]` : '';
+  // Drift axis + kind (REQ-LINKACC-002.A4), worded once for every surface.
+  const driftLabel = formatDriftLabel(link);
+  const driftSuffix = driftLabel ? ` [${driftLabel}]` : '';
   const conf = link.confidence !== undefined ? ` (${link.confidence.toFixed(2)})` : '';
   const head = `  - [${link.state}${driftSuffix}] ${resolved} ${link.kind} → ${link.targetFilePath}:${link.targetQualifiedName} <${link.provenance}${conf}>  #${link.id}`;
   const v = verificationOf(link);
@@ -1295,7 +1298,7 @@ export function renderLinkedSpecsForNode(cg: SpecShip, nodeId: string): string {
     const spec = sq.getSpecById(link.specId);
     const title = spec ? ` — ${spec.title}` : '';
     lines.push(
-      `- **${link.specId}**${title} · ${link.state}${link.driftAxis ? ` (drift=${link.driftAxis})` : ''} · ${link.kind} <${link.provenance}>`
+      `- **${link.specId}**${title} · ${link.state}${link.driftAxis ? ` (${formatDriftLabel(link)})` : ''} · ${link.kind} <${link.provenance}>`
     );
   }
   return lines.join('\n');

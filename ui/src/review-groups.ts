@@ -34,6 +34,12 @@ export interface DriftReason {
   /** The link's target — qualified name, else file path. */
   target: string;
   changed: DriftSide;
+  /**
+   * What changed in a code drift (REQ-LINKACC-002): `rename-only`,
+   * `type-change`, `shape-change` or `unclassified`. Absent when the link
+   * carries no kind (spec drift, or a drift recorded before kinds existed).
+   */
+  kind?: string;
   /** The command (or step) that repairs this link. */
   fix: string;
 }
@@ -100,11 +106,13 @@ function ownsLink(reqId: string, l: DriftLink): boolean {
   return l.specId === reqId || l.specId.startsWith(reqId + '.');
 }
 
-/** Which link drifted and which side changed (spec, code or test). */
+/** Which link drifted, which side changed (spec, code or test), and what kind of change (REQ-LINKACC-002). */
 export function driftReason(link: DriftLink, reqId: string): DriftReason {
   const target = link.targetQualifiedName || link.targetFilePath || '(unknown target)';
   const changed: DriftSide = link.driftAxis === 'spec' ? 'spec' : link.kind === 'tests' ? 'test' : 'code';
-  return { state: link.state, target, changed, fix: fixCommand(link.state, reqId) };
+  const reason: DriftReason = { state: link.state, target, changed, fix: fixCommand(link.state, reqId) };
+  if (typeof link.driftKind === 'string' && link.driftKind) reason.kind = link.driftKind;
+  return reason;
 }
 
 // @implements REQ-DASHSIMPLE-004

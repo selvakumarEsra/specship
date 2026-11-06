@@ -114,6 +114,8 @@ export interface LinkedSpec {
   targetFilePath?: string;
   targetQualifiedName?: string;
   driftAxis?: string | null;
+  /** What changed in a code drift (REQ-LINKACC-002): rename-only / type-change / shape-change / unclassified. */
+  driftKind?: string | null;
   provenance?: string;
   resolvedNodeId?: string;
   updatedAt?: number;
@@ -302,6 +304,8 @@ export interface DriftLink {
   targetFilePath?: string;
   targetQualifiedName?: string;
   driftAxis?: string | null;
+  /** What changed in a code drift (REQ-LINKACC-002). */
+  driftKind?: string | null;
   provenance?: string;
   resolvedNodeId?: string;
   updatedAt?: number;

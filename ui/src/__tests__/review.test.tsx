@@ -13,7 +13,7 @@ import type { CoverageVerdict, CriterionCoverage, DriftLink, RequirementCoverage
 import { App } from '../App';
 import { __clearApiCache } from '../hooks';
 import { ReviewPage } from '../pages/review';
-import { DRIFT_STATES, classifyRequirement, fixCommand, groupRequirements } from '../review-groups';
+import { DRIFT_STATES, classifyRequirement, driftReason, fixCommand, groupRequirements } from '../review-groups';
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 
@@ -355,6 +355,30 @@ async function reviewRowShowsUntestedPill(): Promise<void> {
   expect(pills.map((p) => p.textContent)).toEqual(['2 of 3 criteria untested']);
   expect(pills[0]!.closest('[data-review-row]')?.getAttribute('data-review-row')).toBe('REQ-G-1');
 }
+
+// ---- REQ-LINKACC-002: the drift kind on a drifted Review row ----
+
+async function reviewRowShowsDriftKind(): Promise<void> {
+  const drifted = req('REQ-K-1', { code: 1, codeState: 'drifted', criteria: [crit('REQ-K-1.A1', 'verified')], title: 'Renamed param' });
+  const specDrift = req('REQ-K-2', { code: 1, codeState: 'drifted', criteria: [crit('REQ-K-2.A1', 'verified')], title: 'Spec moved' });
+  const links: DriftLink[] = [
+    { id: 21, specId: 'REQ-K-1', kind: 'implements', state: 'drifted', specTitle: 'Renamed param', targetFilePath: 'src/a.ts', targetQualifiedName: 'resolveStatusLine', driftAxis: 'code', driftKind: 'rename-only' },
+    { id: 22, specId: 'REQ-K-2', kind: 'implements', state: 'drifted', specTitle: 'Spec moved', targetFilePath: 'src/b.ts', targetQualifiedName: 'other', driftAxis: 'spec', driftKind: null },
+  ];
+  expect(driftReason(links[0]!, 'REQ-K-1').kind).toBe('rename-only');
+  expect(driftReason(links[1]!, 'REQ-K-2').kind).toBeUndefined();
+
+  mockFetch({ ...REVIEW_ROUTES, '/api/spec/coverage': { ...COVERAGE, requirements: [drifted, specDrift] }, '/api/drift': { links } });
+  render(<ReviewPage project={null} query={{}} />);
+  await screen.findByTestId('review-group-drifted');
+  const kinds = screen.getAllByTestId('drift-kind');
+  expect(kinds.map((k) => k.textContent)).toEqual(['rename-only']);
+  expect(kinds[0]!.closest('[data-review-row]')?.getAttribute('data-review-row')).toBe('REQ-K-1');
+}
+
+describe('Review drift kind (REQ-LINKACC-002)', () => {
+  it('REQ-LINKACC-002.A4: a drifted row names the drift kind; a spec-side drift shows none', reviewRowShowsDriftKind);
+});
 
 describe('Review untested-criteria count (REQ-LINKACC-007)', () => {
   it('REQ-LINKACC-007: a verified row shows "N of M criteria untested"; an unverified row shows none', reviewRowShowsUntestedPill);
