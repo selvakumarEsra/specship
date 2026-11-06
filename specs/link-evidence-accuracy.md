@@ -497,6 +497,7 @@ implementations:
   - src/index.ts:SpecShip.indexSpecsInternal
 
 verifies:
+  - __tests__/spec-link-file-level.test.ts:reqLinkacc009ExtensionlessPaths
   - __tests__/spec-link-file-level.test.ts:reqLinkacc009A1
   - __tests__/spec-link-file-level.test.ts:reqLinkacc009A2
   - __tests__/spec-link-file-level.test.ts:reqLinkacc009A3

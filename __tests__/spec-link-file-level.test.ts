@@ -138,6 +138,23 @@ describe.skipIf(!fts5Available)('REQ-LINKACC-009 bare-path implementations drift
     expect(fileLink(COMMAND).nodeSigAtLink).toMatch(/^sha256:/);
   }
 
+  async function reqLinkacc009ExtensionlessPaths(): Promise<void> {
+    write('Dockerfile', 'FROM node:24\n');
+    write('bin/specship', '#!/bin/sh\nexec node dist/bin/specship.js "$@"\n');
+    write('specs/fl.md', spec([SCRIPT, COMMAND, MISSING, 'Dockerfile', 'bin/specship']));
+    await cg.sync();
+    for (const p of ['Dockerfile', 'bin/specship']) {
+      const l = fileLink(p);
+      expect(l.targetNodeKind).toBe('file');
+      expect(l.state).toBe('implemented');
+      expect(l.nodeSigAtLink).toMatch(/^sha256:/);
+    }
+    write('Dockerfile', 'FROM node:22\n');
+    await cg.sync();
+    expect(fileLink('Dockerfile')).toMatchObject({ state: 'drifted', driftKind: 'file-change' });
+    expect(fileLink('bin/specship').state).toBe('implemented');
+  }
+
   async function reqLinkacc009A2(): Promise<void> {
     const before = fileLink(SCRIPT);
     write(SCRIPT, SCRIPT_V2);
@@ -224,6 +241,7 @@ describe.skipIf(!fts5Available)('REQ-LINKACC-009 bare-path implementations drift
   }
 
   it('REQ-LINKACC-009.A1: a bare-path bullet gets a file-level link after sync', reqLinkacc009A1);
+  it('REQ-LINKACC-009.A1: an extensionless bare path (Dockerfile, bin/specship) is linked and drifts too', reqLinkacc009ExtensionlessPaths);
   it('REQ-LINKACC-009.A2: editing the file drifts the link with kind file-change', reqLinkacc009A2);
   it('REQ-LINKACC-009.A3: touching the file without changing its content does not drift it', reqLinkacc009A3);
   it('REQ-LINKACC-009.A4: a bare path to a missing file leaves the link orphaned', reqLinkacc009A4);

@@ -50,11 +50,14 @@ const HEADING = /^(#{1,6})\s+(.+?)\s*$/;
 const IMPL_REF = /^[-*]\s+([^\s:]+)\s*:\s*([A-Za-z0-9_$.]+)\s*$/;
 
 /**
- * Pattern: a bullet naming only a file (`- scripts/build.mjs`, optionally in
- * backticks). Under `implementations:` it becomes a file-level link that
+ * Pattern: a bullet naming only a file (`- scripts/build.mjs`, `- Dockerfile`,
+ * optionally in backticks). Under `implementations:` it becomes a file-level link that
  * drifts on a content change (REQ-LINKACC-009).
  */
-const BARE_PATH_REF = /^[-*]\s+`?([^\s:`]+\.[A-Za-z0-9]+)`?\s*$/;
+// Any single path-like token without a `:` (so not `path:Symbol`), with or
+// without an extension: `Dockerfile` and `bin/specship` are files too. A token
+// that names no real file becomes an orphaned link (A4), never a silent gap.
+const BARE_PATH_REF = /^[-*]\s+`?([A-Za-z0-9_.@~+\/-]*[A-Za-z][A-Za-z0-9_.@~+\/-]*)`?\s*$/;
 
 /** Pattern: a Markdown list bullet (`- foo` / `* foo`, indentation tolerant). */
 const BULLET = /^\s*[-*]\s+(.*\S)\s*$/;
