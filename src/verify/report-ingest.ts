@@ -17,6 +17,103 @@ import type { SpecLink } from '../types';
 import type { SpecQueries } from '../db/spec-queries';
 import { classifySignatureDrift } from '../resolution/signature-drift';
 import { rebaselineBodyMetadata } from '../resolution/body-fingerprint';
+import { isNonTestEvidence } from '../resolution/test-title-links';
+
+/** One test's outcome in a recorded run (REQ-LINKACC-006). */
+export interface RunTestResult {
+  test: string;
+  status: ReportedTestCase['status'];
+}
+
+/** The recorded report run a link's evidence rests on (REQ-LINKACC-006). */
+export interface CoveringRun {
+  id: string;
+  report?: string;
+  ranAt: string;
+  commit?: string;
+  results: RunTestResult[];
+  /** Tests whose most recent recorded result is a failure, in any run. */
+  failed: string[];
+  /** True when every evidence link has a recorded run (otherwise only some are covered). */
+  complete: boolean;
+}
+
+/**
+ * The file-derived test evidence of a link (REQ-VEVID-002, REQ-REVINT-005.A2,
+ * REQ-LINKACC-001): `tests` links on the link's spec and on that spec's
+ * acceptance criteria, declared in a file and pointing into a test file. An
+ * agent-asserted tests link is a DB-only row and never counts.
+ */
+export function evidenceLinksFor(sq: SpecQueries, link: Pick<SpecLink, 'specId'>): SpecLink[] {
+  const ids = [
+    link.specId,
+    ...sq
+      .getSpecsByParent(link.specId)
+      .filter((s) => s.kind === 'acceptance')
+      .map((s) => s.id),
+  ];
+  return ids
+    .flatMap((id) => sq.getLinksBySpec(id))
+    .filter(
+      (l) =>
+        l.kind === 'tests' &&
+        (l.provenance === 'spec-declaration' || l.provenance === 'code-comment') &&
+        !isNonTestEvidence(l)
+    );
+}
+
+/**
+ * The newest recorded report run across a link's evidence links, with the
+ * per-test results those links hold for it (REQ-LINKACC-006). Newest by
+ * `ranAt` wins: an older passing run never outvotes a newer failing one.
+ * `null` when no evidence link carries a run — the verify is by hand.
+ */
+export function coveringRun(evidenceLinks: SpecLink[]): CoveringRun | null {
+  type Rec = { run: Record<string, unknown>; v: Record<string, unknown> };
+  const recs: Rec[] = [];
+  for (const l of evidenceLinks) {
+    const v = l.metadata?.verification as Record<string, unknown> | undefined;
+    const run = v?.run as Record<string, unknown> | undefined;
+    if (!run || typeof run.id !== 'string' || typeof run.ranAt !== 'string') continue;
+    recs.push({ run, v: v! });
+  }
+  if (recs.length === 0) return null;
+  // The newest run names the record; the results are every evidence link's
+  // OWN latest result (an ingest rewrites only the links its report ran), so a
+  // test that failed in an older run and was not re-run still counts as failed.
+  const newest = recs.reduce((a, b) => ((b.run.ranAt as string) > (a.run.ranAt as string) ? b : a));
+  const id = newest.run.id as string;
+
+  const seen = new Map<string, RunTestResult['status']>();
+  for (const { v } of recs) {
+    let results: RunTestResult[] = [];
+    if (Array.isArray(v.results)) {
+      results = v.results.filter(
+        (r): r is RunTestResult =>
+          !!r && typeof (r as RunTestResult).test === 'string' && typeof (r as RunTestResult).status === 'string'
+      );
+    } else if (Array.isArray(v.evidence)) {
+      // A record written before per-test results were stored: its evidence is
+      // the cases behind its verdict.
+      const status: RunTestResult['status'] = v.result === 'fail' ? 'failed' : 'passed';
+      results = v.evidence.filter((e): e is string => typeof e === 'string').map((test) => ({ test, status }));
+    }
+    for (const r of results) {
+      // A test failing in its latest recorded result stays failed.
+      if (seen.get(r.test) !== 'failed') seen.set(r.test, r.status);
+    }
+  }
+  const results = [...seen].map(([test, status]) => ({ test, status }));
+  return {
+    id,
+    report: typeof newest.run.report === 'string' ? newest.run.report : undefined,
+    ranAt: newest.run.ranAt as string,
+    commit: typeof newest.run.commit === 'string' ? newest.run.commit : undefined,
+    results,
+    complete: recs.length === evidenceLinks.length,
+    failed: results.filter((r) => r.status === 'failed').map((r) => r.test),
+  };
+}
 
 /** Thrown for an unreadable / unparseable / shapeless report (REQ-VSTATE-004.A4). */
 export class TestReportParseError extends Error {
@@ -420,6 +517,9 @@ export function ingestTestReport(
           : (failed[0]?.failureMessage?.split('\n')[0] ??
              `${failed.length} test(s) failed in ${path.basename(reportPath)}`),
         evidence: relevant.map((c) => `${c.file}:${c.fullName}`),
+        // Every case the link matched, pass or fail, so a later verify can
+        // copy the run's per-test results (REQ-LINKACC-006.A1).
+        results: linkCases.map((c) => ({ test: `${c.file}:${c.fullName}`, status: c.status })),
         run: {
           id: runId,
           report: reportPath,

@@ -22,6 +22,7 @@ import {
   BuildContextOptions,
   FindRelevantContextOptions,
   SpecLink,
+  SpecLinkState,
 } from './types';
 import { DatabaseConnection, getDatabasePath } from './db';
 import { QueryBuilder } from './db/queries';
@@ -67,7 +68,7 @@ import { computeSpecFunnel, SpecFunnel } from './resolution/brief-link-resolver'
 import { computeDomainGapSeed, DomainGapSeed } from './resolution/domain-gap-seed';
 import { nodeBodyFingerprint, rebaselineBodyMetadata } from './resolution/body-fingerprint';
 import { computeSpecCoverage, SpecCoverageReport } from './graph/spec-coverage';
-import { ingestTestReport, VerifyReportResult } from './verify/report-ingest';
+import { ingestTestReport, VerifyReportResult, coveringRun, evidenceLinksFor, CoveringRun } from './verify/report-ingest';
 import { execFileSync } from 'child_process';
 import { SpecQueries } from './db/spec-queries';
 import {
@@ -441,6 +442,71 @@ export class SpecShip {
     if (node?.signature) this.specQueries.updateSpecLinkSigBaseline(link.id, node.signature, now);
     const body = this.rebaselineLinkBody(link, metadata);
     return { specHash: !!specHash, sig: !!node?.signature, body };
+  }
+
+  /**
+   * Record a verification on a link (REQ-LINKACC-006, REQ-REVINT-004). When a
+   * recorded report run covers the link's test evidence, the verification is
+   * `basis: 'run'` and stores the run's id, commit, time and per-test results
+   * — no reason needed (A1). A `pass` against a run in which one of those tests
+   * failed is refused and changes nothing (A3). With no covering run it is
+   * `basis: 'hand'`, the reason optional and kept when given (A2). A pass also
+   * re-baselines (REQ-LINKACC-013, REQ-LINKACC-004.A3).
+   *
+   * Evidence gates (REQ-VEVID-002) stay with the caller. On the instance so the
+   * MCP tool and the desktop server's verify route share one rule.
+   */
+  /**
+   * The file-derived test evidence a promotion needs (REQ-VEVID-002,
+   * REQ-LINKACC-001): the link's spec and its criteria. On the instance so the
+   * desktop server's verify route applies the same gate as the MCP tool.
+   */
+  verificationEvidence(link: SpecLink): SpecLink[] {
+    return evidenceLinksFor(this.specQueries, link);
+  }
+
+  recordLinkVerification(
+    link: SpecLink,
+    input: { result: 'pass' | 'fail'; reason?: string; evidence?: string[] }
+  ):
+    | { ok: true; state: SpecLinkState; verification: Record<string, unknown>; run: CoveringRun | null }
+    | { ok: false; code: 'run_failed'; error: string; run: CoveringRun } {
+    const run = coveringRun(evidenceLinksFor(this.specQueries, link));
+    if (input.result === 'pass' && run && run.failed.length > 0) {
+      return {
+        ok: false,
+        code: 'run_failed',
+        run,
+        error:
+          `Cannot verify ${link.specId}: ${run.failed.join(', ')} failed in run ${run.id} ` +
+          `(commit ${run.commit ?? 'unknown'}). Fix the test and ingest a new report — the link stays '${link.state}'.`,
+      };
+    }
+    const state: SpecLinkState = input.result === 'pass' ? 'verified' : 'broken';
+    const verification: Record<string, unknown> = {
+      result: input.result,
+      verifiedAt: new Date().toISOString(),
+      // Run-backed only when a run covers ALL of the link's evidence; a run
+      // covering some of it still refuses a pass on a failure (A3).
+      basis: run?.complete ? 'run' : 'hand',
+    };
+    if (input.reason) verification.reason = input.reason;
+    const evidence = (input.evidence ?? []).filter((e) => typeof e === 'string' && e.length > 0);
+    if (evidence.length > 0) verification.evidence = evidence;
+    if (run?.complete) {
+      verification.run = {
+        id: run.id,
+        ...(run.commit ? { commit: run.commit } : {}),
+        ranAt: run.ranAt,
+        ...(run.report ? { report: run.report } : {}),
+        results: run.results,
+      };
+    }
+    this.specQueries.updateSpecLinkState(link.id, state, null);
+    const metadata: Record<string, unknown> = { ...(link.metadata ?? {}), verification };
+    if (input.result === 'pass') this.rebaselineLinkOnVerify(link, metadata);
+    this.specQueries.updateSpecLinkMetadata(link.id, metadata);
+    return { ok: true, state, verification, run };
   }
 
   /**

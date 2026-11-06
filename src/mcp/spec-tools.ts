@@ -21,6 +21,7 @@ import { formatRepointedFrom } from '../resolution/link-repoint';
 import type { ToolDefinition, ToolResult } from './tools';
 import { canonicalQualifiedName } from '../resolution/spec-link-resolver';
 import { isNonTestEvidence } from '../resolution/test-title-links';
+import { evidenceLinksFor } from '../verify/report-ingest';
 import { formatCoverageLine, untestedCriteria, formatVerifiedSuffix } from '../graph/spec-coverage';
 import type { SpecCoverageReport, RequirementCoverage } from '../graph/spec-coverage';
 import { summarizeBriefFunnel, ideaCaptureFields } from '../resolution/brief-link-resolver';
@@ -159,7 +160,7 @@ export const specToolDefinitions: ToolDefinition[] = [
   {
     name: 'specship_link_verify',
     description:
-      'Report the outcome of verifying a spec→code link (e.g., after running tests). pass → state moves to "verified"; fail → "broken". The reason, an ISO timestamp, and any test names passed as `evidence` are persisted on the link and shown wherever it is rendered — pass the test name(s) you actually ran. Use this in spec-verify / spec-fix workflows or after manual test runs.',
+      'Report the outcome of verifying a spec→code link (e.g., after running tests). pass → state moves to "verified"; fail → "broken". The reason, an ISO timestamp, and any test names passed as `evidence` are persisted on the link and shown wherever it is rendered — pass the test name(s) you actually ran. When an ingested test report (`specship verify --report`) covers the link\'s tests, the verification records that run (commit, time, per-test results) and needs no reason; a pass is refused if one of those tests failed in the newest run. Otherwise it is recorded as verified by hand. Use this in spec-verify / spec-fix workflows or after manual test runs.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -241,17 +242,45 @@ function isFileDerivedEvidence(link: SpecLink): boolean {
  * The persisted verification record on a link, if any (REQ-REVINT-004). Shaped
  * by the verify handlers; read defensively because `metadata` is free-form.
  */
-function verificationOf(link: SpecLink): { verifiedAt?: string; reason?: string; evidence?: string[] } | null {
+interface VerificationView {
+  verifiedAt?: string;
+  reason?: string;
+  evidence?: string[];
+  /** What the verification rests on (REQ-LINKACC-006): a recorded run, or a person. */
+  basis: 'run' | 'hand';
+  run?: { id?: string; commit?: string; passed: number; failed: number };
+}
+
+function verificationOf(link: SpecLink): VerificationView | null {
   const v = (link.metadata as Record<string, unknown> | undefined)?.verification;
   if (!v || typeof v !== 'object') return null;
   const rec = v as Record<string, unknown>;
   const evidence = Array.isArray(rec.evidence)
     ? rec.evidence.filter((e): e is string => typeof e === 'string')
     : undefined;
+  const rawRun = rec.run && typeof rec.run === 'object' ? (rec.run as Record<string, unknown>) : undefined;
+  // A record written before `basis` existed is run-backed iff it carries a run.
+  const basis: 'run' | 'hand' = rec.basis === 'run' || rec.basis === 'hand' ? rec.basis : rawRun ? 'run' : 'hand';
+  let run: VerificationView['run'];
+  if (rawRun) {
+    // Per-test results: the run's own (a verify), else the record's (a report ingest).
+    const source = Array.isArray(rawRun.results) ? rawRun.results : Array.isArray(rec.results) ? rec.results : null;
+    const statuses = source
+      ? source.map((r) => (r && typeof r === 'object' ? (r as Record<string, unknown>).status : undefined))
+      : (evidence ?? []).map(() => (rec.result === 'fail' ? 'failed' : 'passed'));
+    run = {
+      id: typeof rawRun.id === 'string' ? rawRun.id : undefined,
+      commit: typeof rawRun.commit === 'string' ? rawRun.commit : undefined,
+      passed: statuses.filter((s) => s === 'passed').length,
+      failed: statuses.filter((s) => s === 'failed').length,
+    };
+  }
   return {
     verifiedAt: typeof rec.verifiedAt === 'string' ? rec.verifiedAt : undefined,
     reason: typeof rec.reason === 'string' ? rec.reason : undefined,
     evidence,
+    basis,
+    run,
   };
 }
 
@@ -276,7 +305,17 @@ export function formatLink(link: SpecLink): string {
   const head = repointed ? `${line}\n      ↳ ${repointed}` : line;
   const v = verificationOf(link);
   if (!v || !v.verifiedAt) return head;
-  const parts = [`verified ${v.verifiedAt}`];
+  // Which of the two backs the verification (REQ-LINKACC-006.A4): the recorded
+  // run, by id and commit, or a person.
+  const parts: string[] = [];
+  if (v.basis === 'run' && v.run) {
+    parts.push(`verified ${v.verifiedAt}`, `run ${v.run.id ?? 'unknown'}`, `commit ${v.run.commit ?? 'unknown'}`);
+    const tally = [`${v.run.passed} passed`];
+    if (v.run.failed > 0) tally.push(`${v.run.failed} failed`);
+    parts.push(tally.join(', '));
+  } else {
+    parts.push(`verified by hand ${v.verifiedAt}`);
+  }
   if (v.evidence?.length) parts.push(`evidence: ${v.evidence.join(', ')}`);
   if (v.reason) parts.push(v.reason);
   return `${head}\n      ↳ ${parts.join(' · ')}`;
@@ -1133,17 +1172,7 @@ export async function handleSpecshipLinkVerify(
   // requirement's evidence is its own links plus its criteria's — children by
   // parent id, never an id-prefix match — under the same file-derived filter.
   if (result === 'pass' && link.kind === 'implements') {
-    const evidenceIds = [
-      link.specId,
-      ...sq
-        .getSpecsByParent(link.specId)
-        .filter((s) => s.kind === 'acceptance')
-        .map((s) => s.id),
-    ];
-    const evidenceLinks = evidenceIds
-      .flatMap((id) => sq.getLinksBySpec(id))
-      .filter((l) => l.kind === 'tests' && isFileDerivedEvidence(l));
-    if (evidenceLinks.length === 0) {
+    if (evidenceLinksFor(sq, link).length === 0) {
       return error(
         `Cannot promote ${link.specId} to verified: no test evidence is linked to it. ` +
           `Declare the test(s) that prove this requirement — add a \`verifies:\` block to the spec ` +
@@ -1153,24 +1182,19 @@ export async function handleSpecshipLinkVerify(
     }
   }
 
-  const newState: SpecLinkState = result === 'pass' ? 'verified' : 'broken';
-  sq.updateSpecLinkState(linkId, newState, null);
-  // Persist the verification evidence (REQ-REVINT-004): `verified` is a proof
-  // claim, so the reason, the moment it was made, and any test identity the
-  // caller supplied have to outlive the call. The timestamp is recorded even
-  // with no reason (A3) — evidence is never silently absent.
-  const verification: Record<string, unknown> = {
-    result,
-    verifiedAt: new Date().toISOString(),
-  };
-  if (reason) verification.reason = reason;
-  if (evidence.length > 0) verification.evidence = evidence;
-  const metadata: Record<string, unknown> = { ...(link.metadata ?? {}), verification };
-  // Re-verifying takes a new baseline: the requirement's current text hash and
-  // code signature (REQ-LINKACC-013) and the body fingerprint, removing the
-  // body-changed marker (REQ-LINKACC-004.A3). A failed verify changes none.
-  if (result === 'pass') cg.rebaselineLinkOnVerify(link, metadata);
-  sq.updateSpecLinkMetadata(linkId, metadata);
+  // Persist the verification (REQ-REVINT-004) through the one rule every
+  // verify surface shares (REQ-LINKACC-006): a covering report run is recorded
+  // as the basis (commit, time, per-test results; no reason needed), a run in
+  // which one of the link's tests failed refuses a pass, and otherwise the
+  // verify is by hand. The timestamp is always recorded; a pass re-baselines.
+  const recorded = cg.recordLinkVerification(link, { result, reason, evidence });
+  if (!recorded.ok) return error(recorded.error);
+  const newState = recorded.state;
+  const basisNote = recorded.run
+    ? ` (run ${recorded.run.id} @ ${recorded.run.commit ?? 'unknown commit'})`
+    : newState === 'verified'
+      ? ' by hand'
+      : '';
 
   // JIRA push (REQ-JIRAPUB-005): a verified acceptance criterion on a
   // JIRA-backed spec advances its published Sub-task (and, when all Sub-tasks
@@ -1182,7 +1206,7 @@ export async function handleSpecshipLinkVerify(
   }
 
   return text(
-    `Link #${linkId} (${link.specId} → ${link.targetQualifiedName}): ${newState}${
+    `Link #${linkId} (${link.specId} → ${link.targetQualifiedName}): ${newState}${basisNote}${
       reason ? ` — ${reason}` : ''
     }${jiraNote}`
   );
