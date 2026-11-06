@@ -28,6 +28,7 @@ import { summarizeBriefFunnel, ideaCaptureFields } from '../resolution/brief-lin
 import type { FunnelLookup } from '../resolution/brief-link-resolver';
 import { resolveInstalledVersion, defaultGlobalNpmRoot } from '../knowledge/stale';
 import { parseEnforcedRules } from '../knowledge/enforce';
+import { checkVersionClaims, formatVersionClaim, resolveVersionInUse } from '../spec-lint/version-claims';
 import { formatDriftLabel } from '../resolution/signature-drift';
 import { bodyChangedSince, formatBodyChanged, nodeBodyFingerprint } from '../resolution/body-fingerprint';
 
@@ -771,6 +772,32 @@ export function renderDomainFactsInline(facts: Spec[], projectRoot: string): str
   return lines;
 }
 
+/**
+ * The `## Version claims` section for a spec: its document's `checked_against`
+ * claims that are stale, unchecked or malformed (REQ-LINKACC-008). Empty when
+ * every claim is current or there are none.
+ */
+export function renderVersionClaims(sq: SpecQueries, spec: Spec, projectRoot: string): string[] {
+  let doc: Spec | null = spec;
+  for (let hops = 0; doc && doc.kind !== 'document' && hops < 8; hops++) {
+    doc = doc.parentId ? sq.getSpecById(doc.parentId) : null;
+  }
+  if (!doc) return [];
+  const reported = checkVersionClaims(doc.metadata as Record<string, unknown> | undefined, projectRoot, (pkg) =>
+    // Never run a probe inside an MCP request: read the result lint saved.
+    resolveVersionInUse(projectRoot, pkg, { probes: 'cached' }))
+    .map((r) => ({ r, msg: formatVersionClaim(r) }))
+    .filter((x): x is { r: (typeof x)['r']; msg: string } => x.msg !== null);
+  if (reported.length === 0) return [];
+  const label = { stale: 'STALE', unchecked: 'unchecked', malformed: 'malformed' } as Record<string, string>;
+  return [
+    '',
+    '## Version claims',
+    `_From ${doc.id}'s \`checked_against\` frontmatter._`,
+    ...reported.map(({ r, msg }) => `- **${label[r.status] ?? r.status}** — ${msg}`),
+  ];
+}
+
 export async function handleSpecshipSpec(
   cg: SpecShip,
   args: Record<string, unknown>
@@ -942,6 +969,13 @@ export async function handleSpecshipSpec(
   // `parent_id`), so querying the *requirement* must surface the domain
   // knowledge layered on top of it — not just its code. Domain facts are few
   // and human-confirmed, so we render each fact's body inline (no extra call).
+  // Version claims (REQ-LINKACC-008): the owning document's `checked_against`
+  // frontmatter, checked with the same resolver and wording as `specship lint`.
+  // Current claims are not shown; unchecked is never shown as current.
+  if (spec.kind !== 'domain') {
+    lines.push(...renderVersionClaims(sq, spec, cg.getProjectRoot()));
+  }
+
   if (spec.kind !== 'domain') {
     const dependentFacts = sq.getSpecsByKind('domain').filter((f) => {
       if (f.id === spec.id) return false;

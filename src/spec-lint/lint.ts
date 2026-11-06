@@ -21,6 +21,8 @@ import { MarkdownSpecExtractor, parseAcceptanceParentId } from '../extraction/sp
 import { Spec } from '../types';
 import { parseDeclaredEvidenceKind, EVIDENCE_KINDS } from '../spec-quality/evidence-kind';
 import { parseEnforcedRules } from '../knowledge/enforce';
+import { checkVersionClaims, findVersionClaimInSource, formatVersionClaim } from './version-claims';
+import type { VersionInUseResolver } from './version-claims';
 
 export type LintSeverity = 'error' | 'warning';
 
@@ -39,11 +41,14 @@ export type LintCode =
   | 'spec_unknown_evidence_kind'
   | 'spec_external_fact_missing_provenance'
   | 'spec_malformed_enforced_rule'
+  | 'spec_version_claim_malformed'
   // warnings
   | 'spec_no_negative_case'
   | 'spec_missing_non_goals'
   | 'spec_missing_test_plan'
   | 'spec_requirement_without_rfc2119'
+  | 'spec_version_claim_stale'
+  | 'spec_version_claim_unchecked'
   // pass-through from the extractor
   | string;
 
@@ -294,6 +299,17 @@ export function lintSpecSource(filePath: string, source: string): LintFinding[] 
     return sortFindings(findings);
   }
 
+  // A malformed `checked_against` claim (REQ-LINKACC-008.A4) needs no project
+  // root, so it is checked here; stale / unchecked claims need the version in
+  // use and are checked by lintSpecs.
+  const claimEntry = findVersionClaimInSource(source);
+  if (claimEntry) {
+    for (const r of checkVersionClaims(claimEntry.meta, '', () => null)) {
+      if (r.status !== 'malformed') continue;
+      add({ code: 'spec_version_claim_malformed', severity: 'error', line: claimEntry.line, message: formatVersionClaim(r)! });
+    }
+  }
+
   const declared = new Set<string>([...seen.keys(), ...result.specs.map((s) => s.id)]);
   const acceptance = result.specs.filter((s) => s.kind === 'acceptance');
   const requirements = result.specs.filter((s) => s.kind === 'requirement');
@@ -478,6 +494,39 @@ function collectSpecFiles(target: string, out: string[]): void {
 export interface LintOptions {
   /** Root that finding paths are made relative to. Defaults to `process.cwd()`. */
   projectRoot?: string;
+  /**
+   * Looks up the version of a package the project uses, for `checked_against`
+   * claims (REQ-LINKACC-008). Defaults to `resolveVersionInUse` (lockfile →
+   * node_modules → a probe configured in specship.config.json). Tests inject one.
+   */
+  resolveVersionInUse?: VersionInUseResolver;
+}
+
+/**
+ * Stale and unchecked `checked_against` claims of one spec file
+ * (REQ-LINKACC-008.A1/A3). Malformed claims are lintSpecSource's (A4).
+ */
+function versionClaimFindings(
+  rel: string,
+  source: string,
+  projectRoot: string,
+  resolver: VersionInUseResolver | undefined
+): LintFinding[] {
+  if (isNonSpecArtifact(rel) || isDomainFile(rel)) return [];
+  const entry = findVersionClaimInSource(source);
+  if (!entry) return [];
+  const out: LintFinding[] = [];
+  for (const r of checkVersionClaims(entry.meta, projectRoot, resolver)) {
+    if (r.status !== 'stale' && r.status !== 'unchecked') continue;
+    out.push({
+      code: r.status === 'stale' ? 'spec_version_claim_stale' : 'spec_version_claim_unchecked',
+      severity: 'warning',
+      filePath: rel,
+      line: entry.line,
+      message: `This spec was ${formatVersionClaim(r)!}`,
+    });
+  }
+  return out;
 }
 
 /**
@@ -541,7 +590,11 @@ export function lintSpecs(paths: string[], options: LintOptions = {}): LintRepor
       });
       continue;
     }
-    const findings = lintSpecSource(rel, source);
+    const claimFindings = versionClaimFindings(rel, source, projectRoot, options.resolveVersionInUse);
+    const findings =
+      claimFindings.length > 0
+        ? sortFindings([...lintSpecSource(rel, source), ...claimFindings])
+        : lintSpecSource(rel, source);
     recordDeclarations(rel, source);
     files.push({
       filePath: rel,
