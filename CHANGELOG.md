@@ -13,6 +13,7 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - A verified requirement that still has acceptance criteria with no test now says so: `specship_spec` shows "verified · 2 of 4 criteria untested" and lists the untested criteria, the new `specship spec list` and the Review screen show the same count, and a requirement whose criteria are all tested still reads plain "verified".
 - A drifted link now says what changed in the code: `rename-only` when only parameter names changed, `type-change` when a parameter or return type changed, `shape-change` when parameters were added or removed, or `unclassified` when the signature can't be read. `specship drifted`, `specship_spec` and the dashboard show the kind next to each drifted link. A rename still leaves the link drifted until a passing test run clears it.
+- A change inside a linked function's body, with its signature unchanged, is now noticed: the link keeps its state but `specship_spec` and the Review screen show "body changed since verified" (or "since implemented"). Re-indenting or editing only comments does not set it, and verifying the link again clears it. It never puts the link in the drift queue.
 
 ### Fixes
 

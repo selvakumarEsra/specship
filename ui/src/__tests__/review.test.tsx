@@ -376,6 +376,39 @@ async function reviewRowShowsDriftKind(): Promise<void> {
   expect(kinds[0]!.closest('[data-review-row]')?.getAttribute('data-review-row')).toBe('REQ-K-1');
 }
 
+// ---- REQ-LINKACC-004: the body-changed note on a non-drifted row ----
+
+async function reqLinkacc004A1Review(): Promise<void> {
+  // A completed requirement whose verified link's body changed: the note shows,
+  // the row stays Completed (A4 — never Drifted).
+  const changed = req('REQ-B-1', {
+    code: 1, codeState: 'verified',
+    criteria: [crit('REQ-B-1.A1', 'verified')],
+    title: 'Body edited',
+  });
+  changed.implementsLinks = { ...changed.implementsLinks, bodyChanged: { verified: 1 } };
+  const implemented = req('REQ-B-2', { code: 1, criteria: [crit('REQ-B-2.A1', 'untested')], title: 'Implemented edit' });
+  implemented.implementsLinks = { ...implemented.implementsLinks, bodyChanged: { implemented: 1 } };
+  const plain = req('REQ-B-3', { code: 1, codeState: 'verified', criteria: [crit('REQ-B-3.A1', 'verified')], title: 'Untouched' });
+
+  expect(classifyRequirement(changed, []).group).toBe('completed');
+  expect(classifyRequirement(changed, []).bodyChanged).toEqual([{ since: 'verified', count: 1 }]);
+  expect(classifyRequirement(implemented, []).group).toBe('pending');
+  expect(classifyRequirement(plain, []).bodyChanged).toBeUndefined();
+
+  mockFetch({ ...REVIEW_ROUTES, '/api/spec/coverage': { ...COVERAGE, requirements: [changed, implemented, plain] }, '/api/drift': { links: [] } });
+  render(<ReviewPage project={null} query={{}} />);
+  await screen.findByTestId('review-group-completed');
+  const notes = screen.getAllByTestId('body-changed');
+  const byRow = Object.fromEntries(notes.map((n) => [n.closest('[data-review-row]')?.getAttribute('data-review-row'), n.textContent]));
+  expect(byRow).toEqual({ 'REQ-B-1': 'body changed since verified', 'REQ-B-2': 'body changed since implemented' });
+  expect(notes[0]!.closest('[data-group]')?.getAttribute('data-group')).not.toBe('drifted');
+}
+
+describe('Review body-changed note (REQ-LINKACC-004)', () => {
+  it('REQ-LINKACC-004.A1: a row whose linked body changed shows "body changed since <state>" without moving group', reqLinkacc004A1Review);
+});
+
 describe('Review drift kind (REQ-LINKACC-002)', () => {
   it('REQ-LINKACC-002.A4: a drifted row names the drift kind; a spec-side drift shows none', reviewRowShowsDriftKind);
 });

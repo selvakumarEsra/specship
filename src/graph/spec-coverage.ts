@@ -14,6 +14,7 @@
 import type { Spec, SpecLink, SpecLinkState } from '../types';
 import type { SpecQueries } from '../db/spec-queries';
 import { isNonTestEvidence } from '../resolution/test-title-links';
+import { bodyChangedSince } from '../resolution/body-fingerprint';
 import * as path from 'path';
 import {
   classifyTestEvidence,
@@ -40,6 +41,12 @@ export interface LinkRollup {
   count: number;
   /** Per-state counts, e.g. `{ verified: 2, drifted: 1 }`. Only non-zero keys. */
   states: Partial<Record<SpecLinkState, number>>;
+  /**
+   * Links carrying a body-changed marker (REQ-LINKACC-004), keyed by the state
+   * the body changed since, e.g. `{ verified: 1 }`. Absent when none — Review
+   * reads it here so it and `specship_spec` judge the marker by one rule.
+   */
+  bodyChanged?: Partial<Record<SpecLinkState, number>>;
 }
 
 /** Coverage for one acceptance criterion (or any leaf spec). */
@@ -119,8 +126,17 @@ export interface SpecCoverageReport {
 
 function rollup(links: SpecLink[]): LinkRollup {
   const states: Partial<Record<SpecLinkState, number>> = {};
-  for (const l of links) states[l.state] = (states[l.state] ?? 0) + 1;
-  return { count: links.length, states };
+  const bodyChanged: Partial<Record<SpecLinkState, number>> = {};
+  let marked = 0;
+  for (const l of links) {
+    states[l.state] = (states[l.state] ?? 0) + 1;
+    const since = bodyChangedSince(l);
+    if (since) {
+      bodyChanged[since] = (bodyChanged[since] ?? 0) + 1;
+      marked++;
+    }
+  }
+  return marked > 0 ? { count: links.length, states, bodyChanged } : { count: links.length, states };
 }
 
 /**

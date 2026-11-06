@@ -209,6 +209,8 @@ export type CoverageVerdict = 'untested' | 'tested' | 'verified' | 'broken';
 export interface LinkRollup {
   count: number;
   states: Record<string, number>;
+  /** REQ-LINKACC-004: links with a body-changed marker, keyed by the state it changed since. */
+  bodyChanged?: Record<string, number>;
 }
 
 export interface CriterionCoverage {

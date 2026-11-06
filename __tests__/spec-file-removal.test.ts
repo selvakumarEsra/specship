@@ -233,10 +233,18 @@ describe.skipIf(!fts5Available)('spec files no longer in the checkout are pruned
     expect(after).not.toBeNull();
     expect(after.state).toBe('verified');
     expect(after.driftAxis).toBeNull();
-    expect(after.metadata).toEqual(evidence);
+    // The resolver's body baseline (REQ-LINKACC-004) is its own bookkeeping;
+    // the verification evidence itself must be untouched.
+    const withoutBodyFp = (m: Record<string, unknown> | undefined) => {
+      const { bodyFpAtLink: _fp, ...rest } = m ?? {};
+      return rest;
+    };
+    expect(withoutBodyFp(after.metadata)).toEqual(evidence);
+    expect(after.metadata?.bodyChanged).toBeUndefined();
     // Nothing but the resolver's own bookkeeping may move.
-    const { updatedAt: _u1, resolvedNodeId: _r1, ...beforeRest } = before;
-    const { updatedAt: _u2, resolvedNodeId: _r2, ...afterRest } = after;
+    const { updatedAt: _u1, resolvedNodeId: _r1, metadata: m1, ...beforeRest } = before;
+    const { updatedAt: _u2, resolvedNodeId: _r2, metadata: m2, ...afterRest } = after;
+    expect(withoutBodyFp(m2)).toEqual(withoutBodyFp(m1));
     expect(afterRest).toEqual(beforeRest);
     expect(sq.getSpecById('REQ-BAR-001')).toEqual(barSpec);
     expect(sq.getSpecFileByPath('specs/bar.md')).not.toBeNull();
