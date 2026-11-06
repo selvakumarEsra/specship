@@ -28,7 +28,7 @@ import { summarizeBriefFunnel, ideaCaptureFields } from '../resolution/brief-lin
 import type { FunnelLookup } from '../resolution/brief-link-resolver';
 import { resolveInstalledVersion, defaultGlobalNpmRoot } from '../knowledge/stale';
 import { parseEnforcedRules } from '../knowledge/enforce';
-import { checkVersionClaims, formatVersionClaim } from '../spec-lint/version-claims';
+import { checkVersionClaims, formatVersionClaim, resolveVersionInUse } from '../spec-lint/version-claims';
 import { formatDriftLabel } from '../resolution/signature-drift';
 import { bodyChangedSince, formatBodyChanged, nodeBodyFingerprint } from '../resolution/body-fingerprint';
 
@@ -783,7 +783,9 @@ export function renderVersionClaims(sq: SpecQueries, spec: Spec, projectRoot: st
     doc = doc.parentId ? sq.getSpecById(doc.parentId) : null;
   }
   if (!doc) return [];
-  const reported = checkVersionClaims(doc.metadata as Record<string, unknown> | undefined, projectRoot)
+  const reported = checkVersionClaims(doc.metadata as Record<string, unknown> | undefined, projectRoot, (pkg) =>
+    // Never run a probe inside an MCP request: read the result lint saved.
+    resolveVersionInUse(projectRoot, pkg, { probes: 'cached' }))
     .map((r) => ({ r, msg: formatVersionClaim(r) }))
     .filter((x): x is { r: (typeof x)['r']; msg: string } => x.msg !== null);
   if (reported.length === 0) return [];

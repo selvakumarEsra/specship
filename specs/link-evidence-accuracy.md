@@ -425,7 +425,10 @@ first x.y.z in its stdout is the version in use. A command named in a spec
 file MUST never run; only the config may name probes. A probe has a 3 s
 timeout, runs without a shell for its arguments beyond what the command string
 needs, and is memoised per process; a failure, a timeout or no match leaves the
-claim unchecked. `specship lint` and `specship_spec` use the same resolver.
+claim unchecked. Only `specship lint` runs probes; it saves each result in
+`.specship/version-probes.json`. `specship_spec` MUST NOT run a probe (a
+retrieval call never waits on a process): it reads the result lint saved, and
+a claim lint has not probed yet is unchecked.
 
 implementations:
   - src/spec-lint/version-claims.ts:checkVersionClaims
@@ -434,6 +437,10 @@ implementations:
   - src/spec-lint/version-claims.ts:findVersionClaimInSource
   - src/spec-lint/version-claims.ts:formatVersionClaim
   - src/spec-lint/version-claims.ts:splitCommand
+  - src/spec-lint/version-claims.ts:versionFromLockfile
+  - src/spec-lint/version-claims.ts:versionFromNodeModules
+  - src/spec-lint/version-claims.ts:configuredProbe
+  - src/spec-lint/version-claims.ts:runProbe
   - src/spec-lint/lint.ts:lintSpecs
   - src/spec-lint/lint.ts:lintSpecSource
   - src/spec-lint/lint.ts:versionClaimFindings
@@ -441,6 +448,9 @@ implementations:
   - src/mcp/spec-tools.ts:handleSpecshipSpec
 
 verifies:
+  - __tests__/spec-version-claims-mcp.test.ts:specToolNeverRunsAProbe
+  - __tests__/spec-version-claims-mcp.test.ts:specToolShowsTheResultLintSaved
+  - __tests__/spec-version-claims-mcp.test.ts:parseHandlesListsAndBadValues
   - __tests__/spec-lint.test.ts:reqLinkacc008A1
   - __tests__/spec-lint.test.ts:reqLinkacc008A2
   - __tests__/spec-lint.test.ts:reqLinkacc008A3

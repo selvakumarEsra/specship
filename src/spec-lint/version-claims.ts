@@ -215,6 +215,38 @@ export function clearVersionProbeCache(): void {
   probeCache.clear();
 }
 
+/**
+ * Where `specship lint` keeps the last result of each configured probe, so
+ * `specship_spec` can show it without ever running a command (a retrieval
+ * call must not wait on a process — CLAUDE.md "Retrieval performance").
+ */
+export function versionProbeCachePath(projectRoot: string): string {
+  return path.join(projectRoot, '.specship', 'version-probes.json');
+}
+
+type ProbeRecord = { version: string | null; at: string };
+
+function readProbeRecords(projectRoot: string): Record<string, ProbeRecord> {
+  try {
+    const parsed: unknown = JSON.parse(fs.readFileSync(versionProbeCachePath(projectRoot), 'utf8'));
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? (parsed as Record<string, ProbeRecord>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveProbeRecord(projectRoot: string, command: string, version: string | null): void {
+  try {
+    const dir = path.join(projectRoot, '.specship');
+    if (!fs.existsSync(dir)) return; // not an initialised project: nothing to keep
+    const all = readProbeRecords(projectRoot);
+    all[command] = { version, at: new Date().toISOString() };
+    fs.writeFileSync(versionProbeCachePath(projectRoot), JSON.stringify(all, null, 2) + '\n', 'utf8');
+  } catch {
+    /* the cache is advisory */
+  }
+}
+
 function runProbe(projectRoot: string, command: string, timeoutMs: number): string | null {
   const key = `${path.resolve(projectRoot)}\0${command}\0${timeoutMs}`;
   if (probeCache.has(key)) return probeCache.get(key) ?? null;
@@ -237,12 +269,18 @@ function runProbe(projectRoot: string, command: string, timeoutMs: number): stri
     }
   }
   probeCache.set(key, result);
+  saveProbeRecord(projectRoot, command, result);
   return result;
 }
 
 export interface ResolveVersionInUseOptions {
   /** Probe timeout in ms. Defaults to {@link VERSION_PROBE_TIMEOUT_MS}. */
   probeTimeoutMs?: number;
+  /**
+   * `run` (lint, the default) runs a configured probe; `cached` (the MCP
+   * server) only reads the result lint last saved and never runs a command.
+   */
+  probes?: 'run' | 'cached';
 }
 
 /**
@@ -262,6 +300,7 @@ export function resolveVersionInUse(
   if (fromModules) return fromModules;
   const probe = configuredProbe(projectRoot, name);
   if (!probe) return null;
+  if (opts.probes === 'cached') return readProbeRecords(projectRoot)[probe]?.version ?? null;
   return runProbe(projectRoot, probe, opts.probeTimeoutMs ?? VERSION_PROBE_TIMEOUT_MS);
 }
 
