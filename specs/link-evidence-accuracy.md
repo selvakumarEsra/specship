@@ -29,6 +29,8 @@ jira_issue_REQ-LINKACC-011: SSHIP-833
 jira_fingerprint_REQ-LINKACC-011: 493c90bb852e1563
 jira_issue_REQ-LINKACC-012: SSHIP-837
 jira_fingerprint_REQ-LINKACC-012: bc4c977a40760aef
+jira_issue_REQ-LINKACC-013: SSHIP-841
+jira_fingerprint_REQ-LINKACC-013: 4179c2137f99e58b
 ---
 
 <!-- id: LINKACC-DOC -->
@@ -469,3 +471,41 @@ implementations:
 <!-- id: REQ-LINKACC-012.A3 -->
 - A link with no recorded confidence shows its provenance without a
   confidence figure, rather than a made-up one.
+
+<!-- id: REQ-LINKACC-013 -->
+## Verifying a link MUST take a new spec-text baseline
+
+A link stores the hash of its requirement's text from when the link was made,
+and a sync drifts the link on the spec side when the requirement's current hash
+differs. Verifying a link never updated that stored hash, so a link created
+before its requirement's text last changed stayed out of step for good: every
+later sync of that spec file drifted it again, although the requirement's text
+had not changed since it was verified. On 2026-11-06 nine verified links in
+this repository were in that state.
+
+Every way of verifying a link (the `specship_link_verify` tool, the dashboard's
+verify action, and a passing test report that promotes a link) MUST store the
+requirement's current text hash on the link, and the code signature it
+resolves to now when there is one. A failed verification MUST NOT change
+either baseline.
+
+implementations:
+  - src/mcp/spec-tools.ts:handleSpecshipLinkVerify
+  - src/verify/report-ingest.ts:ingestTestReport
+
+## Acceptance
+<!-- id: REQ-LINKACC-013.A1 -->
+- A link created before its requirement's text changed, then verified, does not
+  drift on the next sync of its spec file when that requirement's text is
+  unchanged.
+<!-- id: REQ-LINKACC-013.A2 -->
+- Editing another requirement in the same spec file does not drift a verified
+  link of an unchanged requirement.
+<!-- id: REQ-LINKACC-013.A3 -->
+- Editing the linked requirement's own text after it was verified still drifts
+  the link on the spec side.
+<!-- id: REQ-LINKACC-013.A4 -->
+- The dashboard's verify action and a passing test report take the same new
+  baseline as the `specship_link_verify` tool.
+<!-- id: REQ-LINKACC-013.A5 -->
+- A failed verification leaves both stored baselines as they were.
