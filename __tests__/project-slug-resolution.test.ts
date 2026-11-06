@@ -135,7 +135,7 @@ describe('projects enumerate (REQ-SLUGRES-002)', () => {
     fs.mkdirSync(path.join(claudeRoot, slug), { recursive: true });
     fs.writeFileSync(path.join(claudeRoot, slug, 's.jsonl'), '{}\n');
 
-    const list = await enumerate(claudeRoot, { claudeJsonPath, claudeRoot });
+    const list = await enumerate(claudeRoot, { claudeJsonPath, claudeRoot, home: tmp });
     const entry = list.find((p) => p.slug === slug);
     expect(entry).toBeDefined();
     expect(entry!.path).toBe(real);
