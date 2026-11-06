@@ -565,6 +565,7 @@ implementations:
   - src/mcp/spec-tools.ts:handleSpecshipLinkAssert
   - src/spec-quality/link-persist.ts:persistLinkToSpecFile
   - src/index.ts:SpecShip.assertSpecLink
+  - server/src/routes/spec.ts:registerSpecRoutes
 
 verifies:
   - __tests__/link-assert-writeback-required.test.ts:reqLinkacc011A1
