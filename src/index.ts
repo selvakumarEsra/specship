@@ -415,6 +415,31 @@ export class SpecShip {
   }
 
   /**
+   * Everything a passing verification re-baselines (REQ-LINKACC-013): the
+   * requirement's current text hash, the target's current code signature (when
+   * it has one) and the body fingerprint (REQ-LINKACC-004.A3, applied to
+   * `metadata` in place — the caller persists it). Call it on a pass only; a
+   * failed verification changes no baseline. On the instance so the MCP tool and
+   * the desktop server's verify route share one rule.
+   */
+  rebaselineLinkOnVerify(
+    link: Pick<SpecLink, 'id' | 'specId' | 'targetFilePath' | 'targetQualifiedName' | 'targetNodeKind'>,
+    metadata: Record<string, unknown>
+  ): { specHash: boolean; sig: boolean; body: boolean } {
+    const now = Date.now();
+    const specHash = this.specQueries.getSpecById(link.specId)?.contentHash;
+    if (specHash) this.specQueries.updateSpecLinkSpecBaseline(link.id, specHash, now);
+    const node = this.specLinkResolver.findLogicalTarget(
+      link.targetFilePath,
+      link.targetQualifiedName,
+      link.targetNodeKind
+    );
+    if (node?.signature) this.specQueries.updateSpecLinkSigBaseline(link.id, node.signature, now);
+    const body = this.rebaselineLinkBody(link, metadata);
+    return { specHash: !!specHash, sig: !!node?.signature, body };
+  }
+
+  /**
    * The project-wide spec lifecycle funnel: brainstormed ideas → specs →
    * implemented, with per-document rollups (REQ-FUNNEL-006). Exposed on the
    * instance so the desktop server can serve it without runtime-importing the
@@ -467,11 +492,16 @@ export class SpecShip {
       commit: options.commit,
       headCommit,
       currentSignature: (link) => {
-        if (!link.resolvedNodeId) return undefined;
-        const node = this.queries.getNodeById(link.resolvedNodeId);
-        if (!node || !node.signature) return undefined;
+        // REQ-LINKACC-013: the requirement's current text hash is re-baselined
+        // on a pass even when the target has no signature (e.g. a file target).
+        const specHash = this.specQueries.getSpecById(link.specId)?.contentHash || undefined;
+        // The same lookup the tool and dashboard use (rebaselineLinkOnVerify),
+        // so every verify path stores the same baseline (A4). A stored
+        // resolvedNodeId can be stale; the logical target is current.
+        const node = this.specLinkResolver.findLogicalTarget(link.targetFilePath, link.targetQualifiedName, link.targetNodeKind);
+        if (!node || !node.signature) return specHash ? { signature: '', specHash } : undefined;
         const bodyFp = nodeBodyFingerprint(this.projectRoot, node) ?? undefined;
-        return { signature: node.signature, language: node.language, bodyFp };
+        return { signature: node.signature, language: node.language, bodyFp, specHash };
       },
     });
   }

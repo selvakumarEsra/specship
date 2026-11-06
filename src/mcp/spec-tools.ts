@@ -1162,9 +1162,10 @@ export async function handleSpecshipLinkVerify(
   if (reason) verification.reason = reason;
   if (evidence.length > 0) verification.evidence = evidence;
   const metadata: Record<string, unknown> = { ...(link.metadata ?? {}), verification };
-  // Re-verifying takes a new body baseline and removes the body-changed
-  // marker (REQ-LINKACC-004.A3).
-  if (result === 'pass') cg.rebaselineLinkBody(link, metadata);
+  // Re-verifying takes a new baseline: the requirement's current text hash and
+  // code signature (REQ-LINKACC-013) and the body fingerprint, removing the
+  // body-changed marker (REQ-LINKACC-004.A3). A failed verify changes none.
+  if (result === 'pass') cg.rebaselineLinkOnVerify(link, metadata);
   sq.updateSpecLinkMetadata(linkId, metadata);
 
   // JIRA push (REQ-JIRAPUB-005): a verified acceptance criterion on a
