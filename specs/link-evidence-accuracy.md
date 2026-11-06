@@ -167,6 +167,19 @@ never clears this way.
 
 implementations:
   - src/verify/report-ingest.ts:ingestTestReport
+  - src/verify/report-ingest.ts:clearRenameOnlyDrift
+  - src/resolution/spec-link-resolver.ts:SpecLinkResolver.resolveOneLink
+  - src/db/spec-queries.ts:SpecQueries.updateSpecLinkSigBaseline
+  - src/index.ts:SpecShip.verifyFromReport
+
+verifies:
+  - __tests__/verify-report.test.ts:reqLinkacc003A1
+  - __tests__/verify-report.test.ts:reqLinkacc003A2
+  - __tests__/verify-report.test.ts:reqLinkacc003A3
+  - __tests__/verify-report.test.ts:reqLinkacc003A4
+  - __tests__/verify-report.test.ts:reqLinkacc003NoCommitClearsNothing
+  - __tests__/verify-report.test.ts:reqLinkacc003KindChangedSinceDrift
+  - __tests__/signature-drift.test.ts:reqLinkacc003PreDriftSaved
 
 ## Acceptance
 <!-- id: REQ-LINKACC-003.A1 -->

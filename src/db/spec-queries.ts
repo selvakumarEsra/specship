@@ -282,6 +282,7 @@ export class SpecQueries {
     deleteSpecLinksByFile?: SqliteStatement;
     updateSpecLinkState?: SqliteStatement;
     updateSpecLinkMetadata?: SqliteStatement;
+    updateSpecLinkSigBaseline?: SqliteStatement;
     updateSpecLinkResolution?: SqliteStatement;
     getLinkById?: SqliteStatement;
     getLinksBySpec?: SqliteStatement;
@@ -910,6 +911,20 @@ export class SpecQueries {
     }
     const kind = state === 'drifted' ? driftKind : null;
     this.stmts.updateSpecLinkState.run(state, driftAxis, kind, updatedAt, id);
+  }
+
+  /**
+   * Re-baseline a link's signature snapshot (`node_sig_at_link`) only. Used
+   * when a rename-only drift is cleared (REQ-LINKACC-003): the baseline must
+   * become the renamed signature, or the next resolve drifts the link again.
+   */
+  updateSpecLinkSigBaseline(id: number, sig: string, updatedAt: number = Date.now()): void {
+    if (!this.stmts.updateSpecLinkSigBaseline) {
+      this.stmts.updateSpecLinkSigBaseline = this.db.prepare(
+        `UPDATE spec_links SET node_sig_at_link = ?, updated_at = ? WHERE id = ?`
+      );
+    }
+    this.stmts.updateSpecLinkSigBaseline.run(sig, updatedAt, id);
   }
 
   /**

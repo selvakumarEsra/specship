@@ -17,6 +17,7 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Fixes
 
 - Verifying a requirement now counts tests that name its acceptance criteria, not only tests that name the requirement itself.
+- A link that drifted only because parameters were renamed now clears itself. Ingest a test report with `specship verify --report <file> --commit <sha>`: when the commit is the current one and every test of the requirement passed, the link returns to the state it had before the drift. A failing test, a report from another commit or without `--commit`, or a type or shape change leaves the link drifted.
 
 ## [0.30.0] - 2026-11-05
 

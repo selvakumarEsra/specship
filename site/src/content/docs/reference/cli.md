@@ -192,11 +192,11 @@ specship coverage REQ-AUTH-005
 
 ### verify
 
-Turns a real test run into verification. `specship verify --report <file>` reads a vitest JSON report (`vitest run --reporter=json`), matches the reported test cases to the spec's declared test links, and marks each matched link `verified` (passed) or `broken` (failed), recording which run produced the result (see [Test evidence](/specs/test-evidence/)). Unmatched cases are reported, not silently dropped, and a malformed report changes nothing. `--run-id` sets the run identifier that gets recorded.
+Turns a real test run into verification. `specship verify --report <file>` reads a vitest JSON report (`vitest run --reporter=json`), matches the reported test cases to the spec's declared test links, and marks each matched link `verified` (passed) or `broken` (failed), recording which run produced the result (see [Test evidence](/specs/test-evidence/)). Unmatched cases are reported, not silently dropped, and a malformed report changes nothing. `--run-id` sets the run identifier that gets recorded. `--commit <sha>` names the commit the tests ran on. When it matches the current HEAD and every test of a requirement passed, a link that drifted only because parameters were renamed (`rename-only`) goes back to the state it had before the drift. A report without `--commit`, or from another commit, clears nothing.
 
 ```bash
 npx vitest run --reporter=json --outputFile=report.json
-specship verify --report report.json --run-id "$GITHUB_RUN_ID"
+specship verify --report report.json --run-id "$GITHUB_RUN_ID" --commit "$(git rev-parse HEAD)"
 ```
 
 ### fitness
