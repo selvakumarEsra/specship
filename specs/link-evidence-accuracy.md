@@ -261,6 +261,8 @@ verifies:
   - __tests__/spec-coverage-untested.test.ts:reqLinkacc007A2
   - __tests__/spec-coverage-untested.test.ts:reqLinkacc007A3
   - __tests__/spec-coverage-untested.test.ts:reqLinkacc007A4
+  - __tests__/spec-coverage-untested.test.ts:reqLinkacc007A3OtherLinkKinds
+  - __tests__/spec-coverage-untested.test.ts:reqLinkacc007A1SpecListCli
 
 ## Acceptance
 <!-- id: REQ-LINKACC-007.A1 -->

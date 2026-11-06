@@ -54,18 +54,20 @@ export interface UntestedCount {
   total: number;
 }
 
+const NO_LINKS: LinkRollup = { count: 0, states: {} };
+
 /**
  * Port of `untestedCriteria` (src/graph/spec-coverage.ts) — the UI only mirrors
  * the types, so the rule is repeated here and MUST stay identical (the
  * REQ-LINKACC-007.A3 test feeds one fixture to both). Null unless the
- * requirement is verified (≥1 link, every implements/tests link `verified`) and
+ * requirement is verified (≥1 link, every link of every kind `verified`) and
  * at least one criterion's verdict is `untested`.
  */
 export function untestedCriteriaCount(req: RequirementCoverage): UntestedCount | null {
   if (req.criteria.length === 0) return null;
   let count = 0;
   for (const node of [req, ...req.criteria]) {
-    for (const r of [node.implementsLinks, node.testsLinks]) {
+    for (const r of [node.implementsLinks, node.testsLinks, node.otherLinks ?? NO_LINKS]) {
       count += r.count;
       if ((r.states.verified ?? 0) !== r.count) return null;
     }

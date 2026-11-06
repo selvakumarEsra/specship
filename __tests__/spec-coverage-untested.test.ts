@@ -7,6 +7,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -165,6 +166,55 @@ async function reqLinkacc007A3(): Promise<void> {
   expect(await detail('REQ-V-3')).toContain(`verified · ${ui3!.untested} of ${ui3!.total} criteria untested`);
 }
 
+// Review once judged "verified" from implements/tests links only, while
+// specship_spec counted every kind, so a requirement with one unverified
+// `validates` link got a pill on Review and no count in specship_spec.
+async function reqLinkacc007A3OtherLinkKinds(): Promise<void> {
+  seedReq('REQ-V-6', { n: 3, tested: 1 });
+  link('REQ-V-6', 'validates', 'implemented', 'contract');
+  seedReq('REQ-V-7', { n: 3, tested: 1 });
+  link('REQ-V-7', 'validates', 'verified', 'contract');
+
+  // Unverified other-kind link: no count anywhere.
+  const cov6 = coverageOf('REQ-V-6');
+  expect(cov6.otherLinks).toEqual({ count: 1, states: { implemented: 1 } });
+  expect(untestedCriteria(cov6)).toBeNull();
+  expect(untestedCriteriaCount(cov6 as unknown as UiRequirementCoverage)).toBeNull();
+  expect(classifyRequirement(cov6 as unknown as UiRequirementCoverage, []).untestedCount ?? null).toBeNull();
+  expect(await detail('REQ-V-6')).not.toMatch(/criteria untested/);
+
+  // Verified other-kind link: the same count everywhere.
+  const cov7 = coverageOf('REQ-V-7');
+  const ui7 = untestedCriteriaCount(cov7 as unknown as UiRequirementCoverage);
+  expect(ui7).toEqual({ untested: 2, total: 3 });
+  expect(classifyRequirement(cov7 as unknown as UiRequirementCoverage, []).untestedCount).toEqual(ui7);
+  expect(await detail('REQ-V-7')).toContain('verified · 2 of 3 criteria untested');
+}
+
+// The real CLI (`specship spec list`), not only the function behind it.
+async function reqLinkacc007A1SpecListCli(): Promise<void> {
+  seedReq('REQ-V-8', { n: 4, tested: 2 });
+  seedReq('REQ-N-8', { n: 2, tested: 0, implState: 'implemented' });
+  const bin = path.resolve(__dirname, '../dist/bin/specship.js');
+  const run = (...args: string[]) =>
+    spawnSync(process.execPath, [bin, 'spec', 'list', ...args], {
+      cwd: dir,
+      encoding: 'utf-8',
+      env: { ...process.env, SPECSHIP_NO_DAEMON: '1', SPECSHIP_AUTO_MIGRATE: '0' },
+    });
+
+  const text = run();
+  expect(text.status).toBe(0);
+  expect(inventoryLine(text.stdout, 'REQ-V-8')).toContain('verified · 2 of 4 criteria untested');
+  expect(inventoryLine(text.stdout, 'REQ-N-8')).not.toMatch(/criteria untested/);
+
+  const json = run('--json');
+  expect(json.status).toBe(0);
+  const rows = JSON.parse(json.stdout).requirements as Array<{ id: string; untestedCriteria: string[] | null }>;
+  expect(rows.find((r) => r.id === 'REQ-V-8')?.untestedCriteria).toEqual(['REQ-V-8.A3', 'REQ-V-8.A4']);
+  expect(rows.find((r) => r.id === 'REQ-N-8')?.untestedCriteria).toBeNull();
+}
+
 // ---- A4 ----
 async function reqLinkacc007A4(): Promise<void> {
   // Implemented (not verified) code link, two of four criteria untested.
@@ -195,5 +245,7 @@ describe.skipIf(!fts5Available)('verified requirement untested-criteria count (R
   it('REQ-LINKACC-007.A1: a verified requirement with 2 of 4 criteria tested shows the count and names the untested two', reqLinkacc007A1);
   it('REQ-LINKACC-007.A2: a verified requirement whose criteria are all tested shows plain "verified"', reqLinkacc007A2);
   it('REQ-LINKACC-007.A3: the count comes from the coverage rollup, so Review and specship_spec agree', reqLinkacc007A3);
+  it('REQ-LINKACC-007.A3: a link of another kind decides "verified" the same way on every surface', reqLinkacc007A3OtherLinkKinds);
+  it('REQ-LINKACC-007.A1: the specship spec list command shows the count, as text and as JSON', reqLinkacc007A1SpecListCli);
   it('REQ-LINKACC-007.A4: a requirement that is not verified shows no untested-criteria count', reqLinkacc007A4);
 });

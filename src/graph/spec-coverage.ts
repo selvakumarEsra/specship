@@ -49,6 +49,12 @@ export interface CriterionCoverage {
   kind: Spec['kind'];
   implementsLinks: LinkRollup;
   testsLinks: LinkRollup;
+  /**
+   * Every other link kind (`validates`, …). Not evidence, but part of whether
+   * the requirement counts as verified, the same as `specship_spec`'s status
+   * (REQ-LINKACC-007.A3).
+   */
+  otherLinks: LinkRollup;
   verdict: CoverageVerdict;
   /**
    * The evidence kind this criterion requires (REQ-PIPETRUST-001) — declared
@@ -193,6 +199,7 @@ function coverageOf(
   const links = sq.getLinksBySpec(spec.id);
   const testsLinks = links.filter((l) => l.kind === 'tests');
   const implementsLinks = links.filter((l) => l.kind === 'implements');
+  const otherLinks = links.filter((l) => l.kind !== 'tests' && l.kind !== 'implements');
   const kinds = evidenceKindCoverage(spec.body ?? spec.title, testsLinks, {
     ...kindOpts,
     implementsLinks: [...(kindOpts.extraImplements ?? []), ...implementsLinks],
@@ -203,6 +210,7 @@ function coverageOf(
     kind: spec.kind,
     implementsLinks: rollup(implementsLinks),
     testsLinks: rollup(testsLinks),
+    otherLinks: rollup(otherLinks),
     verdict: verdictFor(testsLinks),
     ...kinds,
   };
@@ -351,7 +359,8 @@ export interface UntestedCriteriaGap {
 function rollupIsVerified(req: RequirementCoverage): boolean {
   let count = 0;
   for (const node of [req, ...req.criteria]) {
-    for (const r of [node.implementsLinks, node.testsLinks]) {
+    // Every link kind, as `specship_spec`'s status counts them (A3).
+    for (const r of [node.implementsLinks, node.testsLinks, node.otherLinks]) {
       count += r.count;
       if ((r.states.verified ?? 0) !== r.count) return false;
     }
