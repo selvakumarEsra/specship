@@ -6,9 +6,9 @@ priority: medium
 version: 1
 epicKey: SSHIP-847
 jira_issue_REQ-WFGATE-001: SSHIP-848
-jira_fingerprint_REQ-WFGATE-001: f265f4833e890060
+jira_fingerprint_REQ-WFGATE-001: cccb364328ad0d23
 jira_issue_REQ-WFGATE-002: SSHIP-854
-jira_fingerprint_REQ-WFGATE-002: 1ff2f6c32dea4c19
+jira_fingerprint_REQ-WFGATE-002: ef488e95839fae70
 ---
 
 <!-- id: WFGATE-DOC -->
