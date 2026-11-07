@@ -1880,7 +1880,7 @@ export async function handleSpecshipJiraPublish(
 
   const acceptance = (sq.getSpecsByParent?.(specId) ?? [])
     .filter((c) => c.kind === 'acceptance')
-    .map((c) => ({ id: c.id, text: (c.title || c.body || '').trim() }))
+    .map((c) => ({ id: c.id, text: (c.title || c.body || '').trim(), fullText: c.body ?? undefined }))
     .filter((c) => c.text.length > 0);
 
   const source: SpecPublishSource = {
@@ -2523,7 +2523,7 @@ function loadSpecView(
   if (!spec || spec.kind !== 'requirement') return null;
   const acceptance = (sq.getSpecsByParent?.(requirementId) ?? [])
     .filter((c) => c.kind === 'acceptance')
-    .map((c) => ({ id: c.id, text: (c.title || c.body || '').trim() }))
+    .map((c) => ({ id: c.id, text: (c.title || c.body || '').trim(), fullText: c.body ?? undefined }))
     .filter((c) => c.text.length > 0);
   return {
     specRelPath,

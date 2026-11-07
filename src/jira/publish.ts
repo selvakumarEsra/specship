@@ -137,8 +137,13 @@ export interface SpecPublishSource {
   body: string;
   /** Repo-relative path of the spec file (embedded in the description). */
   specRelPath: string;
-  /** Acceptance criteria in order, each becoming a Sub-task. */
-  acceptance: Array<{ id: string; text: string }>;
+  /**
+   * Acceptance criteria in order, each becoming a Sub-task. `text` is the
+   * Sub-task summary and what an existing Sub-task is matched on, so it must
+   * stay stable; `fullText`, when given, is the criterion's whole text for the
+   * description's list (REQ-JIRAPUB-001.A6).
+   */
+  acceptance: Array<{ id: string; text: string; fullText?: string }>;
 }
 
 export interface PublishOptions {
@@ -251,7 +256,10 @@ export function buildIssueFields(source: SpecPublishSource): {
   if (prose) lines.push(prose, '');
   if (source.acceptance.length > 0) {
     lines.push('Acceptance criteria:');
-    for (const a of source.acceptance) lines.push(`* ${subtaskSummary(a.text)}`);
+    for (const a of source.acceptance) {
+      const full = a.fullText?.replace(/\s+/g, ' ').trim();
+      lines.push(`* ${full || subtaskSummary(a.text)}`);
+    }
     lines.push('');
   }
   lines.push(`Spec: ${source.specRelPath} (${source.specId}, published by SpecShip)`);

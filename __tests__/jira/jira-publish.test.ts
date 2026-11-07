@@ -20,6 +20,7 @@ import {
   type ReleaseJiraClient,
 } from '../../src/jira/publish';
 import { readSpecJiraKey, findSpecForIssueKey } from '../../src/jira/spec-writer';
+import { MarkdownSpecExtractor } from '../../src/extraction/specs/markdown-spec-extractor';
 import {
   jiraToolDefinitions,
   handleSpecshipJiraPublish,
@@ -759,6 +760,40 @@ describe('handleSpecshipJiraPublish', () => {
     expect(fs.existsSync(renamed)).toBe(true);
     expect(readSpecJiraKey(renamed)).toBe('PROJ-100');
   });
+
+  /** A long criterion: full text in the description, no duplicate Sub-task. @verifies REQ-JIRAPUB-001 */
+  async function longCriterionKeepsFullTextAndSubtask(): Promise<void> {
+    const long =
+      'A verify step that wrote no report shows an explicit unavailable state and no passing outcome, ' +
+      'including for a project that is not a vitest project.';
+    const md = SPEC_MD.replace('- A 6th attempt returns 429.', `- ${long}`);
+    const specPath = writeSpecFile(tmp, 'specs/foo.md', md);
+    const extracted = new MarkdownSpecExtractor('specs/foo.md', md).extract().specs;
+    const criteria = extracted.filter((x) => x.kind === 'acceptance');
+    const req = extracted.find((x) => x.id === 'REQ-FOO-001')!;
+    expect(criteria[0]!.title.endsWith('…')).toBe(true); // the stored title is cut short
+    const { client, created, updated } = makePublishFake({
+      existingSubtasks: criteria.map((c, i) => ({ key: `PROJ-${200 + i}`, summary: c.title, status: 'To Do' })),
+    });
+    const sq = {
+      getSpecById: (id: string) => (id === req.id ? { ...req, kind: 'requirement', sourcePath: 'specs/foo.md' } : null),
+      getSpecsByParent: () => criteria,
+      getLinksBySpec: () => [{ id: 1 }],
+      getAllSpecs: () => [{ id: req.id, kind: 'requirement', sourcePath: 'specs/foo.md' }],
+    };
+    fs.writeFileSync(specPath, md.replace('format: markdown\n', 'format: markdown\njira_issue: PROJ-9\n'));
+    const result = await handleSpecshipJiraPublish(
+      { spec_id: 'REQ-FOO-001' },
+      { specQueries: sq, projectRoot: tmp, makeJiraClient: () => client },
+    );
+    expect(result.isError).toBeUndefined();
+    expect(created).toHaveLength(0);
+    const description = String(updated[0]!.fields.description);
+    expect(description).toContain(`* ${long}`);
+    expect(description).not.toContain('…');
+  }
+
+  it('A6: a long criterion is listed in full and keeps its existing Sub-task', longCriterionKeepsFullTextAndSubtask);
 
   it('keeps id + filename when the spec already has links', async () => {
     const specPath = writeSpecFile(tmp, 'specs/foo.md', SPEC_MD);

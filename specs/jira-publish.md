@@ -79,6 +79,11 @@ implementations:
   requirement's), no `## Acceptance` heading or criterion bullets (the
   criteria appear once, in the acceptance list), and no `implementations:` or
   `verifies:` block.
+<!-- id: REQ-JIRAPUB-001.A6 -->
+- Each criterion in the description's acceptance list is its full text, even
+  when the criterion is too long to show whole elsewhere. Republishing a Story
+  after this change creates no second Sub-task for a criterion that already
+  has one.
 
 <!-- id: REQ-JIRAPUB-002 -->
 ## A successful publish MUST write the JIRA identity back into the spec

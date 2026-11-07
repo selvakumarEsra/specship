@@ -288,7 +288,7 @@ export async function runAutoPublish(
     const acceptance = deps.specQueries
       .getSpecsByParent(spec.id)
       .filter((c) => c.kind === 'acceptance')
-      .map((c) => ({ id: c.id, text: (c.title || c.body || '').trim() }))
+      .map((c) => ({ id: c.id, text: (c.title || c.body || '').trim(), fullText: c.body ?? undefined }))
       .filter((c) => c.text.length > 0);
 
     const source: SpecPublishSource = {
@@ -449,7 +449,7 @@ function planAutoPublish(deps: AutoPublishDeps): AutoPublishResultRow[] {
         const acceptance = deps.specQueries
           .getSpecsByParent(spec.id)
           .filter((c) => c.kind === 'acceptance')
-          .map((c) => ({ id: c.id, text: (c.title || c.body || '').trim() }))
+          .map((c) => ({ id: c.id, text: (c.title || c.body || '').trim(), fullText: c.body ?? undefined }))
           .filter((c) => c.text.length > 0);
         const fields = buildIssueFields({
           specId: spec.id,

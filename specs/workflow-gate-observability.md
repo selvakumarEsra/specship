@@ -33,6 +33,18 @@ formats other than the vitest JSON report the verify step already writes, and
 no ingest of the report into spec links (that stays `specship verify
 --report`).
 
+Test plan: REQ-WFGATE-001.A1–A5 are proven by the Playwright suite in
+`e2e/tests/run-step-timing.spec.ts`, which stubs the workflow API with fixed
+event timestamps. Fast unit cases for `deriveNodeViews` timing live in
+`ui/src/__tests__/runs-detail.test.tsx` but don't count as e2e evidence.
+REQ-WFGATE-002.A1–A7 are proven by the Playwright suite in
+`e2e/tests/run-test-report.spec.ts`, which stubs the workflow API with fixed
+report bodies. What the report route really serves for each on-disk case
+(real report files, real run rows, a real purge) is proven in
+`__tests__/workflow-test-report-route.test.ts`, which also runs the bundled
+verify step's bash to show a rerun that fails before its tests leaves no
+report behind (the step deletes the previous attempt's report first).
+
 <!-- id: REQ-WFGATE-001 -->
 ## The run view MUST show each step's own timing and status, separate from the run's status
 
@@ -134,15 +146,3 @@ verifies:
   attempt's report.
 <!-- id: REQ-WFGATE-002.A7 -->
 - After the run is purged, its report is still shown.
-
-Test plan: REQ-WFGATE-001.A1–A5 are proven by the Playwright suite in
-`e2e/tests/run-step-timing.spec.ts`, which stubs the workflow API with fixed
-event timestamps. Fast unit cases for `deriveNodeViews` timing live in
-`ui/src/__tests__/runs-detail.test.tsx` but don't count as e2e evidence.
-REQ-WFGATE-002.A1–A7 are proven by the Playwright suite in
-`e2e/tests/run-test-report.spec.ts`, which stubs the workflow API with fixed
-report bodies. What the report route really serves for each on-disk case
-(real report files, real run rows, a real purge) is proven in
-`__tests__/workflow-test-report-route.test.ts`, which also runs the bundled
-verify step's bash to show a rerun that fails before its tests leaves no
-report behind (the step deletes the previous attempt's report first).
