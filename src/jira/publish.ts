@@ -205,6 +205,41 @@ export function subtaskSummary(text: string): string {
     : oneLine;
 }
 
+const ID_MARKER_LINE = /^\s*<!--\s*id:\s*[^>]*-->\s*$/;
+const LINK_BLOCK_KEYWORD = /^\s*(implementations|verifies):\s*$/;
+const BULLET_LINE = /^\s*[-*+]\s+/;
+const ACCEPTANCE_HEADING = /^#{1,6}\s+acceptance(\s+criteria)?\s*:?\s*$/i;
+
+/**
+ * The requirement's prose, without the spec markup its stored body carries
+ * (REQ-JIRAPUB-001.A5): `<!-- id: -->` markers (the requirement's, its
+ * criteria's, and the next heading's, which the extracted body runs up to),
+ * the `## Acceptance` container with its criterion bullets (the description
+ * lists the criteria itself), and the `implementations:` / `verifies:` blocks.
+ */
+export function requirementProse(body: string): string {
+  const out: string[] = [];
+  const lines = body.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!;
+    if (ACCEPTANCE_HEADING.test(line)) continue;
+    if (LINK_BLOCK_KEYWORD.test(line)) {
+      while (i + 1 < lines.length && BULLET_LINE.test(lines[i + 1]!)) i++;
+      continue;
+    }
+    if (ID_MARKER_LINE.test(line)) {
+      // A marked bullet is a criterion: drop it with its continuation lines.
+      if (i + 1 < lines.length && BULLET_LINE.test(lines[i + 1]!)) {
+        i++;
+        while (i + 1 < lines.length && /^\s+\S/.test(lines[i + 1]!) && !BULLET_LINE.test(lines[i + 1]!)) i++;
+      }
+      continue;
+    }
+    out.push(line);
+  }
+  return out.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
 /** Build the Story's summary + description from the spec source. */
 export function buildIssueFields(source: SpecPublishSource): {
   summary: string;
@@ -212,7 +247,8 @@ export function buildIssueFields(source: SpecPublishSource): {
 } {
   const summary = subtaskSummary(source.title || source.specId);
   const lines: string[] = [];
-  if (source.body.trim()) lines.push(source.body.trim(), '');
+  const prose = requirementProse(source.body);
+  if (prose) lines.push(prose, '');
   if (source.acceptance.length > 0) {
     lines.push('Acceptance criteria:');
     for (const a of source.acceptance) lines.push(`* ${subtaskSummary(a.text)}`);

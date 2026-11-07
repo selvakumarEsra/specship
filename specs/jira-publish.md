@@ -57,6 +57,8 @@ implementations:
   - src/jira/client.ts:JiraClient.createIssue
   - src/jira/client.ts:JiraClient.updateIssue
   - src/jira/publish.ts:publishSpecToJira
+  - src/jira/publish.ts:buildIssueFields
+  - src/jira/publish.ts:requirementProse
 
 ## Acceptance
 <!-- id: REQ-JIRAPUB-001.A1 -->
@@ -71,6 +73,12 @@ implementations:
 <!-- id: REQ-JIRAPUB-001.A4 -->
 - A create/update against an unreachable or unauthorized host surfaces the
   client's existing credential-free error and writes nothing to the spec file.
+<!-- id: REQ-JIRAPUB-001.A5 -->
+- The description's requirement text is the requirement's prose only. It
+  contains no `<!-- id: … -->` markers (its own, its criteria's, or the next
+  requirement's), no `## Acceptance` heading or criterion bullets (the
+  criteria appear once, in the acceptance list), and no `implementations:` or
+  `verifies:` block.
 
 <!-- id: REQ-JIRAPUB-002 -->
 ## A successful publish MUST write the JIRA identity back into the spec

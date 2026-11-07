@@ -135,6 +135,48 @@ afterEach(() => {
 // REQ-JIRAPUB-001 — Story + Sub-tasks
 // ---------------------------------------------------------------------------
 
+/** A stored section body, as extracted, becomes prose-only description text. @verifies REQ-JIRAPUB-001 */
+function descriptionIsProseOnly(): void {
+  const body = [
+    'The login endpoint MUST reject more than 5 attempts per minute.',
+    '',
+    'implementations:',
+    '  - src/auth/login.ts:authenticate',
+    '',
+    'verifies:',
+    '  - __tests__/auth.test.ts:rejectsSixth',
+    '',
+    '## Acceptance',
+    '<!-- id: REQ-FOO-001.A1 -->',
+    '- A 6th attempt',
+    '  returns 429.',
+    '<!-- id: REQ-FOO-001.A2 -->',
+    '- A success resets the counter.',
+    '',
+    'Counts reset at midnight UTC.',
+    '',
+    '<!-- id: REQ-FOO-002 -->',
+  ].join('\n');
+  const { description } = buildIssueFields({ ...SOURCE, body });
+  expect(description).not.toMatch(/<!--/);
+  expect(description).not.toMatch(/## Acceptance|implementations:|verifies:|login\.ts|rejectsSixth/);
+  expect(description.match(/A 6th attempt/g)).toHaveLength(1);
+  expect(description).toBe(
+    [
+      'The login endpoint MUST reject more than 5 attempts per minute.',
+      '',
+      'Counts reset at midnight UTC.',
+      '',
+      'Acceptance criteria:',
+      '* A 6th attempt returns 429.',
+      '* A success resets the counter.',
+      '* The limit is per IP.',
+      '',
+      'Spec: specs/foo.md (REQ-FOO-001, published by SpecShip)',
+    ].join('\n'),
+  );
+}
+
 describe('publishSpecToJira (REQ-JIRAPUB-001)', () => {
   it('A1: creates one Story and one Sub-task per acceptance criterion, parented', async () => {
     const { client, created } = makePublishFake();
@@ -203,6 +245,8 @@ describe('publishSpecToJira (REQ-JIRAPUB-001)', () => {
       publishSpecToJira(client, SOURCE, { projectKey: 'PROJ' }, null),
     ).rejects.toThrow(/HTTP 503/);
   });
+
+  it('A5: the description carries the requirement prose without spec markup', descriptionIsProseOnly);
 
   it('bounds Sub-task summaries to a JIRA-safe length', () => {
     const long = 'x'.repeat(500);
