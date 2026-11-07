@@ -19,7 +19,7 @@
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
-import { JiraEpicRequiredError, type JiraIssueResult, type JiraTransitionResult } from './types';
+import { JiraEpicRequiredError, JiraError, type JiraIssueResult, type JiraTransitionResult } from './types';
 import { reqIdForIssue } from './spec-generator';
 import {
   postMilestoneComment,
@@ -245,6 +245,44 @@ export function requirementProse(body: string): string {
   return out.join('\n').replace(/\n{3,}/g, '\n\n').trim();
 }
 
+/** The footer `buildIssueFields` ends every description with. */
+const SPEC_FOOTER = /\nSpec: \S+ \(([^,()\s]+), published by SpecShip\)\s*$/;
+
+/** Thrown when a recorded key is not this spec's Story (REQ-JIRAPUB-001.A7). */
+export class JiraPublishTargetError extends JiraError {
+  constructor(message: string) {
+    super(message, 'JIRA_PUBLISH_TARGET');
+    this.name = 'JiraPublishTargetError';
+  }
+}
+
+/**
+ * Refuse to publish onto an issue that can't be this spec's Story: a Sub-task,
+ * or an issue whose SpecShip footer names another spec (REQ-JIRAPUB-001.A7).
+ * Runs before any write, so a wrong `jira_issue` key changes nothing.
+ */
+export function assertPublishTarget(
+  key: string,
+  issue: { issueType?: string; isSubtask?: boolean; description?: string },
+  specId: string,
+): void {
+  if (issue.isSubtask) {
+    throw new JiraPublishTargetError(
+      `Refusing to publish ${specId} to ${key}: it is a ${issue.issueType || 'Sub-task'}, not a Story. ` +
+        `Fix the spec's jira_issue key for ${specId}.`,
+    );
+  }
+  const owner = SPEC_FOOTER.exec(issue.description ?? '')?.[1];
+  // A spec re-id'd on its first publish carries this key's id while the
+  // footer still names the id it had then (REQ-JIRAPUB-002).
+  if (owner && owner !== specId && specId !== reqIdForIssue(key)) {
+    throw new JiraPublishTargetError(
+      `Refusing to publish ${specId} to ${key}: SpecShip published it for ${owner}. ` +
+        `Fix the spec's jira_issue key for ${specId}.`,
+    );
+  }
+}
+
 /** Build the Story's summary + description from the spec source. */
 export function buildIssueFields(source: SpecPublishSource): {
   summary: string;
@@ -331,10 +369,11 @@ export async function publishSpecToJira(
   }
 
   if (existingKey) {
+    const detail = await client.getIssue(existingKey);
+    assertPublishTarget(existingKey, detail.issue, source.specId);
     await client.updateIssue(existingKey, fields);
     key = existingKey;
     created = false;
-    const detail = await client.getIssue(existingKey);
     existingSummaries = new Set(
       (detail.issue.subtasks ?? []).map(s => s.summary.trim()),
     );

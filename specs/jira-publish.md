@@ -59,6 +59,7 @@ implementations:
   - src/jira/publish.ts:publishSpecToJira
   - src/jira/publish.ts:buildIssueFields
   - src/jira/publish.ts:requirementProse
+  - src/jira/publish.ts:assertPublishTarget
 
 ## Acceptance
 <!-- id: REQ-JIRAPUB-001.A1 -->
@@ -84,6 +85,11 @@ implementations:
   when the criterion is too long to show whole elsewhere. Republishing a Story
   after this change creates no second Sub-task for a criterion that already
   has one.
+<!-- id: REQ-JIRAPUB-001.A7 -->
+- Re-publishing to a recorded key that is a Sub-task, or whose description
+  says SpecShip published it for a different spec, is refused before anything
+  is written to JIRA or the spec file. The refusal names the issue and the
+  reason. An issue with no SpecShip footer can still be published to.
 
 <!-- id: REQ-JIRAPUB-002 -->
 ## A successful publish MUST write the JIRA identity back into the spec

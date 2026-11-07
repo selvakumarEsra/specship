@@ -21,6 +21,7 @@ import {
 } from '../../src/jira/publish';
 import { readSpecJiraKey, findSpecForIssueKey } from '../../src/jira/spec-writer';
 import { MarkdownSpecExtractor } from '../../src/extraction/specs/markdown-spec-extractor';
+import { reqIdForIssue } from '../../src/jira/spec-generator';
 import {
   jiraToolDefinitions,
   handleSpecshipJiraPublish,
@@ -56,6 +57,8 @@ const SOURCE: SpecPublishSource = {
 function makePublishFake(opts?: {
   existingSubtasks?: Array<{ key: string; summary: string; status: string }>;
   failCreate?: boolean;
+  /** Live fields of the issue `getIssue` returns (type, Sub-task flag, description). */
+  live?: { issueType?: string; isSubtask?: boolean; description?: string };
   projects?: Array<{ key: string; name: string }>;
 }) {
   let next = 100;
@@ -80,7 +83,9 @@ function makePublishFake(opts?: {
           id: '1',
           summary: 'x',
           status: 'To Do',
-          issueType: 'Story',
+          issueType: opts?.live?.issueType ?? 'Story',
+          ...(opts?.live?.isSubtask ? { isSubtask: true } : {}),
+          ...(opts?.live?.description !== undefined ? { description: opts.live.description } : {}),
           subtasks: opts?.existingSubtasks ?? [],
         },
       };
@@ -178,6 +183,36 @@ function descriptionIsProseOnly(): void {
   );
 }
 
+/** A recorded key that isn't this spec's Story is refused before any write. @verifies REQ-JIRAPUB-001 */
+async function refusesForeignPublishTarget(): Promise<void> {
+  const footer = (id: string) => `Body.\n\nSpec: specs/other.md (${id}, published by SpecShip)`;
+
+  const sub = makePublishFake({ live: { issueType: 'Subtask', isSubtask: true } });
+  await expect(publishSpecToJira(sub.client, SOURCE, { projectKey: 'PROJ' }, 'PROJ-570')).rejects.toThrow(
+    /Refusing to publish REQ-FOO-001 to PROJ-570: it is a Subtask/,
+  );
+  expect(sub.updated).toHaveLength(0);
+  expect(sub.created).toHaveLength(0);
+
+  const other = makePublishFake({ live: { description: footer('REQ-BAR-003') } });
+  await expect(publishSpecToJira(other.client, SOURCE, { projectKey: 'PROJ' }, 'PROJ-9')).rejects.toThrow(
+    /published it for REQ-BAR-003/,
+  );
+  expect(other.updated).toHaveLength(0);
+  expect(other.created).toHaveLength(0);
+
+  // Its own footer, no footer at all, and a spec re-id'd to this key are all fine.
+  for (const [live, specId] of [
+    [{ description: footer('REQ-FOO-001') }, 'REQ-FOO-001'],
+    [{ description: 'Written by hand in JIRA.' }, 'REQ-FOO-001'],
+    [{ description: footer('REQ-FOO-001') }, reqIdForIssue('PROJ-9')],
+  ] as const) {
+    const ok = makePublishFake({ live });
+    await publishSpecToJira(ok.client, { ...SOURCE, specId }, { projectKey: 'PROJ' }, 'PROJ-9');
+    expect(ok.updated).toHaveLength(1);
+  }
+}
+
 describe('publishSpecToJira (REQ-JIRAPUB-001)', () => {
   it('A1: creates one Story and one Sub-task per acceptance criterion, parented', async () => {
     const { client, created } = makePublishFake();
@@ -248,6 +283,8 @@ describe('publishSpecToJira (REQ-JIRAPUB-001)', () => {
   });
 
   it('A5: the description carries the requirement prose without spec markup', descriptionIsProseOnly);
+
+  it('A7: refuses a recorded key that is a Sub-task or another spec\'s Story', refusesForeignPublishTarget);
 
   it('bounds Sub-task summaries to a JIRA-safe length', () => {
     const long = 'x'.repeat(500);
@@ -794,6 +831,20 @@ describe('handleSpecshipJiraPublish', () => {
   }
 
   it('A6: a long criterion is listed in full and keeps its existing Sub-task', longCriterionKeepsFullTextAndSubtask);
+
+  it('A7: a refused target names the reason and leaves the spec file untouched', async () => {
+    const md = SPEC_MD.replace('format: markdown\n', 'format: markdown\njira_issue: PROJ-570\n');
+    const specPath = writeSpecFile(tmp, 'specs/foo.md', md);
+    const { client, updated } = makePublishFake({ live: { issueType: 'Subtask', isSubtask: true } });
+    const result = await handleSpecshipJiraPublish(
+      { spec_id: 'REQ-FOO-001' },
+      { specQueries: specQueriesFor(specPath, { links: [{ id: 1 }] }), projectRoot: tmp, makeJiraClient: () => client },
+    );
+    expect(result.isError).toBe(true);
+    expect(result.content[0]!.text).toMatch(/PROJ-570: it is a Subtask/);
+    expect(updated).toHaveLength(0);
+    expect(fs.readFileSync(specPath, 'utf8')).toBe(md);
+  });
 
   it('keeps id + filename when the spec already has links', async () => {
     const specPath = writeSpecFile(tmp, 'specs/foo.md', SPEC_MD);
