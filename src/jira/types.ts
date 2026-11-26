@@ -197,6 +197,8 @@ export interface JiraIssue {
    * issue has no parent.
    */
   parentKey?: string;
+  /** Detail path: true when the issue type is a Sub-task type (`issuetype.subtask`). */
+  isSubtask?: boolean;
 }
 
 /**

@@ -308,6 +308,7 @@ export class JiraClient {
       summary: String(fields.summary ?? ''),
       status: String(fields.status?.name ?? ''),
       issueType: String(fields.issuetype?.name ?? ''),
+      ...(fields.issuetype?.subtask === true ? { isSubtask: true } : {}),
       description,
       subtasks,
       ...(parentKey ? { parentKey } : {}),

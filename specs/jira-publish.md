@@ -4,24 +4,25 @@ title: Spec→JIRA publishing and tracking
 owner: core
 priority: high
 version: 1
-jira_issue_REQ-JIRAPUB-001: SSHIP-570
-jira_fingerprint_REQ-JIRAPUB-001: 8d6d384bd2856ec3
-jira_issue_REQ-JIRAPUB-002: SSHIP-575
-jira_fingerprint_REQ-JIRAPUB-002: d871d09c19d14568
-jira_issue_REQ-JIRAPUB-003: SSHIP-579
-jira_fingerprint_REQ-JIRAPUB-003: 0375dd185a111b12
-jira_issue_REQ-JIRAPUB-004: SSHIP-582
-jira_fingerprint_REQ-JIRAPUB-004: 57a1366aab3249be
-jira_issue_REQ-JIRAPUB-005: SSHIP-585
-jira_fingerprint_REQ-JIRAPUB-005: e78b1efb8802f923
-jira_issue_REQ-JIRAPUB-006: SSHIP-589
-jira_fingerprint_REQ-JIRAPUB-006: 47df4ec09bbfe751
-jira_issue_REQ-JIRAPUB-007: SSHIP-593
-jira_fingerprint_REQ-JIRAPUB-007: fdd1aa091ea644bd
-jira_issue_REQ-JIRAPUB-009: SSHIP-596
-jira_fingerprint_REQ-JIRAPUB-009: 75872e208451b00c
-jira_issue_REQ-JIRAPUB-008: SSHIP-601
-jira_fingerprint_REQ-JIRAPUB-008: be920d7aa5cf0d9c
+epicKey: SSHIP-862
+jira_issue_REQ-JIRAPUB-001: SSHIP-863
+jira_fingerprint_REQ-JIRAPUB-001: b06fd544e0901e52
+jira_issue_REQ-JIRAPUB-002: SSHIP-871
+jira_fingerprint_REQ-JIRAPUB-002: 472c36570431b16b
+jira_issue_REQ-JIRAPUB-003: SSHIP-875
+jira_fingerprint_REQ-JIRAPUB-003: 059941b7770be0ec
+jira_issue_REQ-JIRAPUB-004: SSHIP-878
+jira_fingerprint_REQ-JIRAPUB-004: 331cae2b0a43c65d
+jira_issue_REQ-JIRAPUB-005: SSHIP-881
+jira_fingerprint_REQ-JIRAPUB-005: df1a259e62e7aec5
+jira_issue_REQ-JIRAPUB-006: SSHIP-885
+jira_fingerprint_REQ-JIRAPUB-006: 1b4cd9eb8938141b
+jira_issue_REQ-JIRAPUB-007: SSHIP-889
+jira_fingerprint_REQ-JIRAPUB-007: 1f2ac6c78d6e98c6
+jira_issue_REQ-JIRAPUB-008: SSHIP-892
+jira_fingerprint_REQ-JIRAPUB-008: 53e60f369ced3d74
+jira_issue_REQ-JIRAPUB-009: SSHIP-896
+jira_fingerprint_REQ-JIRAPUB-009: 3f291530037f9762
 ---
 
 <!-- id: JIRAPUB-DOC -->
@@ -59,6 +60,7 @@ implementations:
   - src/jira/publish.ts:publishSpecToJira
   - src/jira/publish.ts:buildIssueFields
   - src/jira/publish.ts:requirementProse
+  - src/jira/publish.ts:assertPublishTarget
 
 ## Acceptance
 <!-- id: REQ-JIRAPUB-001.A1 -->
@@ -84,6 +86,11 @@ implementations:
   when the criterion is too long to show whole elsewhere. Republishing a Story
   after this change creates no second Sub-task for a criterion that already
   has one.
+<!-- id: REQ-JIRAPUB-001.A7 -->
+- Re-publishing to a recorded key that is a Sub-task, or whose description
+  says SpecShip published it for a different spec, is refused before anything
+  is written to JIRA or the spec file. The refusal names the issue and the
+  reason. An issue with no SpecShip footer can still be published to.
 
 <!-- id: REQ-JIRAPUB-002 -->
 ## A successful publish MUST write the JIRA identity back into the spec
