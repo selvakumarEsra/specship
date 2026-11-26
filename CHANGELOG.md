@@ -9,6 +9,9 @@ and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+
+## [0.31.0] - 2026-11-26
+
 ### New Features
 
 - A verified requirement that still has acceptance criteria with no test now says so: `specship_spec` shows "verified · 2 of 4 criteria untested" and lists the untested criteria, the new `specship spec list` and the Review screen show the same count, and a requirement whose criteria are all tested still reads plain "verified".
@@ -976,3 +979,4 @@ Thanks @andreinknv for the substantive draft this release was based on.
 [0.28.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.28.0
 [0.29.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.29.0
 [0.30.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.30.0
+[0.31.0]: https://github.com/selvakumarEsra/specship/releases/tag/v0.31.0
